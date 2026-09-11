@@ -1,0 +1,8 @@
+packages:
+  - 'packages/*'
+  - 'services/*'
+  - 'tools/*'
+  - 'tests/*'
+
+# The Flutter console (apps/console) is built by its own toolchain from CI and
+# is deliberately not a pnpm workspace member (D-001).

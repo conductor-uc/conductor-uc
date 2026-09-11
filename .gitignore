@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Tooling caches
+.turbo/
+coverage/
+.vitest/
+.eslintcache
+
+# Flutter / Dart
+apps/console/.dart_tool/
+apps/console/build/
+apps/console/.flutter-plugins
+apps/console/.flutter-plugins-dependencies
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
