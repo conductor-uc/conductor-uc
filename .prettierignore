@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+pnpm-lock.yaml
+
+# The Flutter console is formatted by `dart format`, not Prettier.
+apps/console/
+
+# Markdown is hand-authored (wide tables, Mermaid blocks); Prettier reflows it.
+**/*.md
