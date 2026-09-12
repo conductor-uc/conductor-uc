@@ -6,3 +6,12 @@ packages:
 
 # The Flutter console (apps/console) is built by its own toolchain from CI and
 # is deliberately not a pnpm workspace member (D-001).
+
+# Testcontainers pulls these in transitively. None of them needs its build step
+# for our use: cpu-features and ssh2's native addon are optional performance
+# paths, and protobufjs only precompiles type helpers. Listing them here keeps
+# `pnpm install` deterministic and quiet instead of prompting on every machine.
+ignoredBuiltDependencies:
+  - cpu-features
+  - protobufjs
+  - ssh2

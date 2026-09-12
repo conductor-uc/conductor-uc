@@ -1,0 +1,38 @@
+{
+  "name": "@cuc/testing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@cuc/logger": "workspace:*",
+    "@testcontainers/mysql": "^12.1.0",
+    "kysely": "^0.29.5",
+    "mysql2": "^3.24.4"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
+  },
+  "peerDependencies": {
+    "vitest": "^5.0.0"
+  }
+}
