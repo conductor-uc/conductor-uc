@@ -43,6 +43,54 @@ export default tseslint.config(
       ],
     },
   },
+  // Raw SQL is allowed only in migrations and inside @cuc/db (05 §2.2).
+  // Everywhere else, tenant-owned data goes through scoped(ctx), and a raw
+  // query is exactly what silently skips the tenant_id predicate.
+  {
+    files: ['packages/**/*.ts', 'services/**/*.ts', 'apps/**/*.ts', 'tools/**/*.ts'],
+    ignores: ['packages/db/**', '**/migrations/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'kysely',
+              importNames: ['sql'],
+              message:
+                'Raw SQL belongs in migrations/ or @cuc/db. Use scoped(ctx) for tenant-owned tables, or unscoped(ctx, reason) when a query legitimately spans tenants.',
+            },
+            {
+              name: 'mysql2',
+              message: 'Talk to MariaDB through @cuc/db, which enforces tenant scoping.',
+            },
+            {
+              name: 'mysql2/promise',
+              message: 'Talk to MariaDB through @cuc/db, which enforces tenant scoping.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'TSEnumDeclaration',
+          message: 'Use a union of string literals or an object literal instead of an enum.',
+        },
+        {
+          selector: 'TaggedTemplateExpression[tag.name="sql"]',
+          message:
+            'Raw SQL belongs in migrations/ or @cuc/db. Use scoped(ctx), or unscoped(ctx, reason) for a deliberate cross-tenant query.',
+        },
+        {
+          selector:
+            'MemberExpression[property.name=/^(executeQuery|raw)$/][object.property.name="kysely"]',
+          message:
+            'Reaching past scoped(ctx) into the raw Kysely instance skips tenant scoping. Use scoped(ctx), or unscoped(ctx, reason) if the query really spans tenants.',
+        },
+      ],
+    },
+  },
   {
     files: ['**/*.js', '**/*.cjs', '**/*.mjs'],
     extends: [tseslint.configs.disableTypeChecked],
