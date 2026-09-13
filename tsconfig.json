@@ -25,6 +25,9 @@
     },
     {
       "path": "./packages/testing/tsconfig.build.json"
+    },
+    {
+      "path": "./tools/brand-leak/tsconfig.build.json"
     }
   ]
 }

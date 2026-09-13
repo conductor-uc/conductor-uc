@@ -106,6 +106,11 @@ jobs:
         if: github.event_name != 'pull_request'
         run: pnpm check
 
+      - name: Brand-leak scan
+        # Rule 1 in CLAUDE.md: no branding on any user-facing or network-visible
+        # surface. Runs after build so it sees built artifacts as well as sources.
+        run: pnpm brand-leak
+
       - name: Show NATS logs on failure
         if: failure()
         run: docker logs nats || true
@@ -114,5 +119,4 @@ jobs:
   # does not hold up the fast feedback:
   #   - SIP smoke against the compose stack (S1)
   #   - Flutter console build and widget tests (S3)
-  #   - brand-leak scan of built artifacts (S0-07)
   #   - container image builds, pushed on main (S1)
