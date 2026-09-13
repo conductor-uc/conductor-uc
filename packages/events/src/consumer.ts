@@ -3,6 +3,7 @@ import { parseSubject } from '@cuc/api-contracts';
 import type { Logger } from '@cuc/logger';
 import { AckPolicy, DeliverPolicy } from '@nats-io/jetstream';
 import type { JsMsg } from '@nats-io/jetstream';
+import { isDuplicateKeyError } from '@cuc/db';
 import type { Kysely, Transaction } from 'kysely';
 
 import type { Bus } from './bus.js';
@@ -124,7 +125,7 @@ export function createConsumer<TDb extends EventTables>(
         .execute();
       return false;
     } catch (error) {
-      if (isDuplicateKey(error)) return true;
+      if (isDuplicateKeyError(error)) return true;
       throw error;
     }
   }
@@ -245,14 +246,4 @@ export function createConsumer<TDb extends EventTables>(
       stopped = true;
     },
   };
-}
-
-/** MariaDB reports a primary-key collision as ER_DUP_ENTRY / SQLSTATE 23000. */
-function isDuplicateKey(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  const candidate = error as { code?: unknown; errno?: unknown; cause?: unknown };
-
-  if (candidate.code === 'ER_DUP_ENTRY' || candidate.errno === 1062) return true;
-  // Kysely wraps driver errors, so the driver's own code may be one level down.
-  return candidate.cause === undefined ? false : isDuplicateKey(candidate.cause);
 }
