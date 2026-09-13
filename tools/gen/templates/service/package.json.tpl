@@ -1,0 +1,32 @@
+{
+  "name": "@cuc/{{name}}",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/main.js",
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "start": "node dist/src/main.js",
+    "dev": "node --watch dist/src/main.js",
+    "migrate": "cuc-db latest --dir dist/migrations",
+    "clean": "rm -rf dist *.tsbuildinfo"
+  },
+  "dependencies": {
+    "@cuc/api-contracts": "workspace:*",
+    "@cuc/config": "workspace:*",
+    "@cuc/db": "workspace:*",
+    "@cuc/events": "workspace:*",
+    "@cuc/http": "workspace:*",
+    "@cuc/logger": "workspace:*",
+    "kysely": "^0.29.5"
+  },
+  "devDependencies": {
+    "@cuc/testing": "workspace:*",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
+  }
+}
