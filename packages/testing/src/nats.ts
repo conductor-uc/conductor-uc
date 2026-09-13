@@ -54,7 +54,21 @@ export async function startTestNats(): Promise<TestNatsHandle> {
  * than reporting green with everything skipped.
  */
 export async function natsOrSkipReason(): Promise<string | undefined> {
-  if ((process.env[NATS_URL_ENV] ?? '') !== '') return undefined;
+  const required = (process.env[REQUIRE_NATS_ENV] ?? '') !== '';
+  const configured = process.env[NATS_URL_ENV] ?? '';
+
+  if (configured !== '') {
+    // Probed rather than trusted. An unreachable URL would otherwise surface as
+    // every test in the file "skipping" because the suite's beforeAll threw,
+    // which says nothing about the actual cause.
+    const [host, port] = splitHostPort(configured);
+    if (await isReachable(host, port, 2_000)) return undefined;
+
+    const reason = `${NATS_URL_ENV} is set to ${configured}, but nothing is listening there`;
+    if (required) throw new Error(`${REQUIRE_NATS_ENV} is set and ${reason}.`);
+    return reason;
+  }
+
   if (await hasBinary('nats-server')) return undefined;
   if (await hasBinary('docker')) return undefined;
 
@@ -62,10 +76,36 @@ export async function natsOrSkipReason(): Promise<string | undefined> {
     `no JetStream server available: set ${NATS_URL_ENV}, install nats-server, or ` +
     `make a Docker daemon reachable for Testcontainers`;
 
-  if ((process.env[REQUIRE_NATS_ENV] ?? '') !== '') {
-    throw new Error(`${REQUIRE_NATS_ENV} is set, but ${reason}.`);
-  }
+  if (required) throw new Error(`${REQUIRE_NATS_ENV} is set, but ${reason}.`);
   return reason;
+}
+
+/** Splits `host:port`, defaulting to the NATS client port. */
+function splitHostPort(value: string): [string, number] {
+  const stripped = stripScheme(value);
+  const index = stripped.lastIndexOf(':');
+  if (index === -1) return [stripped, 4222];
+  return [stripped.slice(0, index), Number(stripped.slice(index + 1)) || 4222];
+}
+
+async function isReachable(host: string, port: number, timeoutMs: number): Promise<boolean> {
+  const { connect } = await import('node:net');
+  return new Promise<boolean>((resolve) => {
+    const socket = connect({ host, port, timeout: timeoutMs });
+    const settle = (value: boolean): void => {
+      socket.destroy();
+      resolve(value);
+    };
+    socket.once('connect', () => {
+      settle(true);
+    });
+    socket.once('timeout', () => {
+      settle(false);
+    });
+    socket.once('error', () => {
+      settle(false);
+    });
+  });
 }
 
 async function startLocalServer(): Promise<TestNatsHandle | undefined> {

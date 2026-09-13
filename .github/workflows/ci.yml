@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to a PR makes the previous run irrelevant. Runs on main are never
+# cancelled: `main` being green is a claim about every commit, not just the tip.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Integration tests skip when no database or broker is reachable, so that
+  # `pnpm test` stays usable on a laptop without Docker. In CI a missing
+  # dependency must fail the run instead: without these, a broken service
+  # container would report green with every integration test silently skipped.
+  REQUIRE_DB_TESTS: '1'
+  REQUIRE_NATS_TESTS: '1'
+  TEST_DATABASE_URL: mysql://root:ci@127.0.0.1:3306
+  TEST_NATS_URL: 127.0.0.1:4222
+  TURBO_TELEMETRY_DISABLED: '1'
+
+jobs:
+  check:
+    name: lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mariadb:
+        # Matches production (05 §1). A test that passes against a different
+        # major is not evidence about production.
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Turbo's --affected compares against the base branch, so it needs
+          # more than the tip commit.
+          fetch-depth: 0
+
+      - name: Start NATS with JetStream
+        # Not a `services:` entry: JetStream needs the `-js` argument, and a
+        # service container has no way to pass one.
+        run: |
+          docker run -d --name nats -p 4222:4222 nats:2.10-alpine -js
+          for _ in $(seq 1 30); do
+            if (exec 3<>/dev/tcp/127.0.0.1/4222) 2>/dev/null; then
+              echo "NATS is accepting connections"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "NATS did not start in time" >&2
+          docker logs nats >&2
+          exit 1
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      # On a pull request only the affected packages are built and tested; on
+      # main everything is, because that is the run the branch's green tick
+      # actually claims something about.
+      #
+      # `--affected` is safe here because turbo.json lists the root configs
+      # (tsconfig.base.json, eslint.config.js, .prettierrc.json,
+      # vitest.shared.ts, .nvmrc) as globalDependencies, so changing one marks
+      # every package affected rather than none. If that list ever drifts, the
+      # full run on main is the backstop that catches it.
+      - name: Lint, typecheck, test, build (affected)
+        if: github.event_name == 'pull_request'
+        run: pnpm exec turbo run lint typecheck test build --affected
+
+      - name: Lint, typecheck, test, build (all)
+        if: github.event_name != 'pull_request'
+        run: pnpm check
+
+      - name: Show NATS logs on failure
+        if: failure()
+        run: docker logs nats || true
+
+  # Later stages plug in here rather than in the job above, so one slow suite
+  # does not hold up the fast feedback:
+  #   - SIP smoke against the compose stack (S1)
+  #   - Flutter console build and widget tests (S3)
+  #   - brand-leak scan of built artifacts (S0-07)
+  #   - container image builds, pushed on main (S1)

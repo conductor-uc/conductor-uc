@@ -18,11 +18,13 @@
     },
     "test": {
       "dependsOn": ["^build"],
-      "outputs": []
+      "outputs": [],
+      "env": ["TEST_DATABASE_URL", "TEST_NATS_URL", "REQUIRE_DB_TESTS", "REQUIRE_NATS_TESTS"]
     },
     "test:coverage": {
       "dependsOn": ["^build"],
-      "outputs": ["coverage/**"]
+      "outputs": ["coverage/**"],
+      "env": ["TEST_DATABASE_URL", "TEST_NATS_URL", "REQUIRE_DB_TESTS", "REQUIRE_NATS_TESTS"]
     },
     "clean": {
       "cache": false
