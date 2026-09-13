@@ -56,8 +56,19 @@ export interface ScopedDb<DB> {
   updateTable<T extends TenantOwnedTable<DB>>(table: T): UpdateQueryBuilder<DB, T, T, UpdateResult>;
   deleteFrom<T extends TenantOwnedTable<DB>>(table: T): DeleteQueryBuilder<DB, T, DeleteResult>;
 
-  /** Runs `fn` in a transaction, still scoped to the same tenant. */
-  transaction<R>(fn: (trx: ScopedDb<DB>) => Promise<R>): Promise<R>;
+  /**
+   * Runs `fn` in a transaction, still scoped to the same tenant.
+   *
+   * The second argument is the same transaction, unscoped. It exists for the
+   * infrastructure tables that are not tenant-owned — above all the `outbox`,
+   * whose `tenant_id` is nullable because master-level events belong to no
+   * tenant. Writing the business rows and the outbox row in one transaction is
+   * the point of the outbox (CLAUDE.md rule 6), and this is how a repository
+   * does that without reaching past `scoped(ctx)` for the whole connection.
+   *
+   * Do not use it to touch a tenant-owned table.
+   */
+  transaction<R>(fn: (trx: ScopedDb<DB>, raw: Transaction<DB>) => Promise<R>): Promise<R>;
 }
 
 /**
@@ -123,13 +134,16 @@ export function scopedFor<DB>(
       return builder.where(`${table}.tenant_id` as never, '=', tenantId as never);
     },
 
-    async transaction<R>(fn: (trx: ScopedDb<DB>) => Promise<R>): Promise<R> {
+    async transaction<R>(fn: (trx: ScopedDb<DB>, raw: Transaction<DB>) => Promise<R>): Promise<R> {
       if (executor.isTransaction) {
         // MariaDB has no true nested transactions, so joining the open one is
         // the honest behaviour rather than pretending to start a new one.
-        return fn(scopedFor(executor, tenantCtx));
+        // `isTransaction` has narrowed this, but not in a way TypeScript follows
+        // across the union.
+        const open = executor as Transaction<DB>;
+        return fn(scopedFor(open, tenantCtx), open);
       }
-      return executor.transaction().execute((trx) => fn(scopedFor(trx, tenantCtx)));
+      return executor.transaction().execute((trx) => fn(scopedFor(trx, tenantCtx), trx));
     },
   };
 }

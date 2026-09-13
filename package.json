@@ -8,15 +8,16 @@
     "node": ">=22.0.0 <23"
   },
   "scripts": {
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "test": "turbo run test",
+    "brand-leak": "turbo run build --filter=@cuc/brand-leak && node tools/brand-leak/bin/brand-leak.mjs",
     "build": "turbo run build",
     "check": "turbo run lint typecheck test build",
     "clean": "turbo run clean && rm -rf node_modules/.cache .turbo",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "brand-leak": "turbo run build --filter=@cuc/brand-leak && node tools/brand-leak/bin/brand-leak.mjs"
+    "gen:service": "turbo run build --filter=@cuc/gen && node tools/gen/bin/cuc-gen.mjs service",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
