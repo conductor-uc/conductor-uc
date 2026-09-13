@@ -1,5 +1,6 @@
 export { createDatabase, type Database, type DatabaseOptions } from './client.js';
 export { dbEnvSchema } from './config.js';
+export { isDuplicateKeyError } from './errors.js';
 export {
   MissingTenantContextError,
   requireTenant,
