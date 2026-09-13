@@ -15,7 +15,8 @@
     "check": "turbo run lint typecheck test build",
     "clean": "turbo run clean && rm -rf node_modules/.cache .turbo",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "brand-leak": "turbo run build --filter=@cuc/brand-leak && node tools/brand-leak/bin/brand-leak.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
