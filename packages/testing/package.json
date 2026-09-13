@@ -26,7 +26,8 @@
     "@cuc/logger": "workspace:*",
     "@testcontainers/mysql": "^12.1.0",
     "kysely": "^0.29.5",
-    "mysql2": "^3.24.4"
+    "mysql2": "^3.24.4",
+    "testcontainers": "^12.1.0"
   },
   "devDependencies": {
     "typescript": "~5.9.3",

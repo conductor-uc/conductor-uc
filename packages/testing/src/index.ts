@@ -16,4 +16,11 @@ export {
   stopSharedContainer,
   type TestDatabaseHandle,
 } from './mariadb.js';
+export {
+  natsOrSkipReason,
+  NATS_URL_ENV,
+  REQUIRE_NATS_ENV,
+  startTestNats,
+  type TestNatsHandle,
+} from './nats.js';
 export { crossTenantProbe } from './probe-suite.js';

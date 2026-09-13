@@ -3,10 +3,16 @@
   "files": [],
   "references": [
     {
+      "path": "./packages/api-contracts/tsconfig.build.json"
+    },
+    {
       "path": "./packages/config/tsconfig.build.json"
     },
     {
       "path": "./packages/db/tsconfig.build.json"
+    },
+    {
+      "path": "./packages/events/tsconfig.build.json"
     },
     {
       "path": "./packages/example/tsconfig.build.json"

@@ -81,14 +81,19 @@ still covers the paths it should.
 ## Migrations
 
 ```sh
-cuc-db latest                 # apply everything pending
-cuc-db status                 # what has run, and what has not
-cuc-db up                     # one step forward
-cuc-db down                   # one step back (development only)
-cuc-db create add_extensions  # new timestamped migration
+pnpm exec cuc-db latest                 # apply everything pending
+pnpm exec cuc-db status                 # what has run, and what has not
+pnpm exec cuc-db up                     # one step forward
+pnpm exec cuc-db down                   # one step back (development only)
+pnpm exec cuc-db create add_extensions  # new timestamped migration
 ```
 
-Connection settings come from `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME`.
+Run it from a package that depends on `@cuc/db` — pnpm links a package's bin into its *dependents'*
+`node_modules/.bin`, not its own, so `pnpm exec cuc-db` from the repository root will not find it.
+A service's own `package.json` should wrap it: `"migrate": "cuc-db latest"`.
+
+Connection settings come from `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, and `DB_NAME`, and an
+incomplete environment fails before a connection is attempted, listing every missing variable.
 Kysely holds a lock for the run, so several instances starting at once is safe: one migrates and
 the others wait.
 
