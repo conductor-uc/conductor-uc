@@ -25,6 +25,7 @@
   "dependencies": {
     "@cuc/authz": "workspace:*",
     "@cuc/config": "workspace:*",
+    "@cuc/crypto": "workspace:*",
     "@cuc/logger": "workspace:*",
     "@fastify/swagger": "^9.8.1",
     "@fastify/type-provider-typebox": "^6.1.0",

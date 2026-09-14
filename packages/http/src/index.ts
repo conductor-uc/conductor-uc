@@ -2,14 +2,18 @@ export { registerHardRules } from './authz.js';
 export {
   buildRequestContext,
   INTERNAL_CONTEXT_HEADERS,
+  INTERNAL_SIGNATURE_HEADER,
+  INTERNAL_SIGNATURE_MAX_AGE_MS,
   parseTraceparent,
   REQUEST_ID_HEADER,
+  signInternalHeaders,
   TRACEPARENT_HEADER,
   type ActorType,
   type ContextOptions,
   type OrgType,
   type RequestContext,
 } from './context.js';
+export { httpEnvSchema } from './config.js';
 export {
   DATA_CLASSES,
   isDataClass,

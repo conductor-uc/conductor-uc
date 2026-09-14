@@ -19,12 +19,30 @@
     "test": {
       "dependsOn": ["^build"],
       "outputs": [],
-      "env": ["TEST_DATABASE_URL", "TEST_NATS_URL", "REQUIRE_DB_TESTS", "REQUIRE_NATS_TESTS"]
+      "env": [
+        "TEST_DATABASE_URL",
+        "TEST_NATS_URL",
+        "TEST_S3_URL",
+        "TEST_REDIS_URL",
+        "REQUIRE_DB_TESTS",
+        "REQUIRE_NATS_TESTS",
+        "REQUIRE_S3_TESTS",
+        "REQUIRE_REDIS_TESTS"
+      ]
     },
     "test:coverage": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"],
-      "env": ["TEST_DATABASE_URL", "TEST_NATS_URL", "REQUIRE_DB_TESTS", "REQUIRE_NATS_TESTS"]
+      "env": [
+        "TEST_DATABASE_URL",
+        "TEST_NATS_URL",
+        "TEST_S3_URL",
+        "TEST_REDIS_URL",
+        "REQUIRE_DB_TESTS",
+        "REQUIRE_NATS_TESTS",
+        "REQUIRE_S3_TESTS",
+        "REQUIRE_REDIS_TESTS"
+      ]
     },
     "clean": {
       "cache": false

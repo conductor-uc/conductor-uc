@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase, migrateToLatest, type Database } from '@cuc/db';
 import { databaseOrSkipReason, silentLogger, startTestDatabase } from '@cuc/testing';
-import { createServer, type Server } from '@cuc/http';
+import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 
 import { migrations } from '../migrations/index.js';
 import { createOrgRepo, type OrgRepo } from '../src/repo/org.repo.js';
@@ -11,6 +11,7 @@ import type { AdminUserCreator, AdminUserInput, CreatedAdminUser } from '../src/
 import { AdminUserEmailTakenError } from '../src/identity-client.js';
 
 const skipReason = await databaseOrSkipReason();
+const TEST_INTERNAL_SECRET = 'test-internal-header-secret';
 
 /**
  * Records every call and returns a fixed, distinct admin user each time.
@@ -67,7 +68,10 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
     app = await createServer({
       serviceName: 'org-service',
       logger,
-      context: { trustInternalHeaders: true },
+      context: {
+        trustInternalHeaders: true,
+        internalHeaderSigningSecret: TEST_INTERNAL_SECRET,
+      },
     });
     registerOrgRoutes(app, repo, adminUsers.create);
     await app.ready();
@@ -114,7 +118,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/v1/resellers',
-        headers: { 'x-internal-org-type': 'master' },
+        headers: signInternalHeaders(TEST_INTERNAL_SECRET, { orgType: 'master' }),
         payload: { slug: 'acme', name: 'Acme Resale', ...ADMIN_BODY },
       });
 
@@ -137,7 +141,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/v1/resellers',
-        headers: { 'x-internal-org-type': 'reseller' },
+        headers: signInternalHeaders(TEST_INTERNAL_SECRET, { orgType: 'reseller' }),
         payload: { slug: 'acme', name: 'Acme', ...ADMIN_BODY },
       });
 
@@ -233,7 +237,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/tenants`,
-        headers: { 'x-internal-org-type': 'reseller' },
+        headers: signInternalHeaders(TEST_INTERNAL_SECRET, { orgType: 'reseller' }),
         payload: { slug: 'widgets', name: 'Widgets', ...ADMIN_BODY },
       });
 

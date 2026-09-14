@@ -39,6 +39,9 @@
       "path": "./packages/testing/tsconfig.build.json"
     },
     {
+      "path": "./services/api-gateway/tsconfig.build.json"
+    },
+    {
       "path": "./services/example-service/tsconfig.build.json"
     },
     {
