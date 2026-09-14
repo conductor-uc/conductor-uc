@@ -1,0 +1,102 @@
+# Local development stack (S0-05). MariaDB, Redis, NATS (JetStream), MinIO,
+# and Mailpit — everything a service needs except telephony, which is added
+# in S1 (S1-10/S1-11) once FreeSWITCH and OpenSIPs images exist.
+#
+# Usage: see the root Makefile (`make up` / `make down` / `make reset`) or
+# ./README.md for details and troubleshooting.
+name: conductor-uc
+
+services:
+  mariadb:
+    # Matches production and CI (05 §1, .github/workflows/ci.yml): a test or
+    # a dev session against a different major is not evidence about prod.
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-dev-root-password}
+      IDENTITY_SERVICE_DB_PASSWORD: ${IDENTITY_SERVICE_DB_PASSWORD:-dev-identity-password}
+      ORG_SERVICE_DB_PASSWORD: ${ORG_SERVICE_DB_PASSWORD:-dev-org-password}
+      EXAMPLE_SERVICE_DB_PASSWORD: ${EXAMPLE_SERVICE_DB_PASSWORD:-dev-example-password}
+    ports:
+      - '${MARIADB_PORT:-3306}:3306'
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      # Only runs against an empty data directory (the image's own rule), so
+      # editing this after the first `make up` needs `make reset` to apply.
+      - ./mariadb/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    # -js enables JetStream (D-004); -sd points its store at the volume so
+    # streams survive a restart; -m exposes the monitoring/health endpoint.
+    command: ['-js', '-sd', '/data', '-m', '8222']
+    ports:
+      - '${NATS_PORT:-4222}:4222'
+      - '${NATS_MONITOR_PORT:-8222}:8222'
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8222/healthz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dev-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
+    ports:
+      - '${MINIO_API_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      # The image wires its own `mc` client to a `local` alias against its
+      # own server, so this needs no extra setup.
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '${MAILPIT_UI_PORT:-8025}:8025'
+    volumes:
+      - mailpit-data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8025/readyz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mariadb-data:
+  redis-data:
+  nats-data:
+  minio-data:
+  mailpit-data:
