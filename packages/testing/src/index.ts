@@ -24,3 +24,12 @@ export {
   type TestNatsHandle,
 } from './nats.js';
 export { crossTenantProbe } from './probe-suite.js';
+export {
+  parseS3Url,
+  REQUIRE_S3_ENV,
+  s3OrSkipReason,
+  S3_URL_ENV,
+  startTestS3,
+  stopSharedS3Container,
+  type TestS3Handle,
+} from './s3.js';
