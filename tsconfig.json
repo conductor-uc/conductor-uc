@@ -30,6 +30,9 @@
       "path": "./packages/logger/tsconfig.build.json"
     },
     {
+      "path": "./packages/storage/tsconfig.build.json"
+    },
+    {
       "path": "./packages/testing/tsconfig.build.json"
     },
     {
