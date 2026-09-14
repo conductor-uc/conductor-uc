@@ -3,8 +3,10 @@ import { databaseOrSkipReason, silentLogger } from '@cuc/testing';
 import { createServer, type Server } from '@cuc/http';
 
 import { registerAuthRoutes } from '../src/routes/auth.routes.js';
+import { registerGrantRoutes } from '../src/routes/grants.routes.js';
 import { registerInternalRoutes } from '../src/routes/internal.routes.js';
 import { registerJwksRoute } from '../src/routes/jwks.routes.js';
+import { registerRoleRoutes } from '../src/routes/roles.routes.js';
 import { startHarness, TEST_TTL, type Harness } from './harness.js';
 
 const skipReason = await databaseOrSkipReason();
@@ -21,6 +23,8 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     registerAuthRoutes(app, h.auth);
     registerJwksRoute(app, createSigningKeyRepoFrom(h), TEST_TTL.signingKeyOverlapDays);
     registerInternalRoutes(app, h.users, INTERNAL_TOKEN);
+    registerRoleRoutes(app, h.roles);
+    registerGrantRoutes(app, h.grants);
     await app.ready();
   });
 
@@ -34,6 +38,10 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     await h.db.kysely.deleteFrom('mfa_factors').execute();
     await h.db.kysely.deleteFrom('users').execute();
     await h.db.kysely.deleteFrom('outbox').execute();
+    await h.db.kysely.deleteFrom('grants').execute();
+    await h.db.kysely.deleteFrom('role_assignments').execute();
+    await h.db.kysely.deleteFrom('role_permissions').execute();
+    await h.db.kysely.deleteFrom('roles').execute();
   });
 
   it('emits no Server or X-Powered-By header', async () => {
@@ -218,6 +226,150 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     });
   });
 
+  describe('GET/POST /v1/orgs/:orgId/roles', () => {
+    it('lists the built-in roles even with no custom roles defined', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/orgs/${crypto.randomUUID()}/roles`,
+      });
+
+      expect(response.statusCode).toBe(200);
+      const { rows } = response.json<{ rows: { id: string; builtIn: boolean }[] }>();
+      expect(rows.every((role) => role.builtIn)).toBe(true);
+      expect(rows.map((role) => role.id)).toContain('tenant_admin');
+    });
+
+    it('creates a custom role and then lists it alongside the built-ins', async () => {
+      const orgId = crypto.randomUUID();
+
+      const created = await app.inject({
+        method: 'POST',
+        url: `/v1/orgs/${orgId}/roles`,
+        payload: { name: 'billing-viewer', permissions: ['cdr.read'] },
+      });
+      expect(created.statusCode).toBe(201);
+      expect(created.json()).toMatchObject({
+        name: 'billing-viewer',
+        builtIn: false,
+        permissions: ['cdr.read'],
+      });
+
+      const listed = await app.inject({ method: 'GET', url: `/v1/orgs/${orgId}/roles` });
+      const { rows } = listed.json<{ rows: { name: string; builtIn: boolean }[] }>();
+      expect(rows.some((role) => role.name === 'billing-viewer' && !role.builtIn)).toBe(true);
+    });
+
+    it('rejects a duplicate role name with 409', async () => {
+      const orgId = crypto.randomUUID();
+      await app.inject({
+        method: 'POST',
+        url: `/v1/orgs/${orgId}/roles`,
+        payload: { name: 'dup', permissions: ['cdr.read'] },
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/orgs/${orgId}/roles`,
+        payload: { name: 'dup', permissions: ['analytics.view'] },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ code: 'role_name_taken' });
+    });
+
+    it('rejects a malformed body before it reaches the repo', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/orgs/${crypto.randomUUID()}/roles`,
+        payload: { name: '', permissions: [] },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe('POST/DELETE /v1/orgs/:orgId/roles/:roleId/assignments', () => {
+    it('assigns a built-in role to a user, then revokes it', async () => {
+      const orgId = crypto.randomUUID();
+      await createUserViaInternal(app, orgId, 'tenant');
+      const userId = await userIdFor(h, orgId, 'admin@example.com');
+
+      const assigned = await app.inject({
+        method: 'POST',
+        url: `/v1/orgs/${orgId}/roles/tenant_admin/assignments`,
+        payload: { userId },
+      });
+      expect(assigned.statusCode).toBe(204);
+      expect(await h.roles.roleIdsFor(userId)).toEqual(['tenant_admin']);
+
+      const revoked = await app.inject({
+        method: 'DELETE',
+        url: `/v1/orgs/${orgId}/roles/tenant_admin/assignments`,
+        payload: { userId },
+      });
+      expect(revoked.statusCode).toBe(204);
+      expect(await h.roles.roleIdsFor(userId)).toEqual([]);
+    });
+  });
+
+  describe('GET/POST/DELETE /v1/orgs/:orgId/grants', () => {
+    it('creates a grant, lists it, then deletes it', async () => {
+      const orgId = crypto.randomUUID();
+
+      const created = await app.inject({
+        method: 'POST',
+        url: `/v1/orgs/${orgId}/grants`,
+        payload: {
+          principalType: 'user',
+          principalId: 'u1',
+          permission: 'cdr.export',
+          scope: { type: 'org', id: orgId },
+        },
+      });
+      expect(created.statusCode).toBe(201);
+      const grantId = created.json<{ id: string }>().id;
+
+      const listed = await app.inject({ method: 'GET', url: `/v1/orgs/${orgId}/grants` });
+      expect(listed.json<{ rows: unknown[] }>().rows).toHaveLength(1);
+
+      const deleted = await app.inject({
+        method: 'DELETE',
+        url: `/v1/orgs/${orgId}/grants/${grantId}`,
+      });
+      expect(deleted.statusCode).toBe(204);
+      expect(
+        (await app.inject({ method: 'GET', url: `/v1/orgs/${orgId}/grants` })).json<{
+          rows: unknown[];
+        }>().rows,
+      ).toEqual([]);
+    });
+
+    it('returns a problem+json 404 for a grant that does not exist', async () => {
+      const response = await app.inject({
+        method: 'DELETE',
+        url: `/v1/orgs/${crypto.randomUUID()}/grants/${crypto.randomUUID()}`,
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.headers['content-type']).toContain('application/problem+json');
+    });
+
+    it('rejects an unknown scope type before it reaches the repo', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/orgs/${crypto.randomUUID()}/grants`,
+        payload: {
+          principalType: 'user',
+          principalId: 'u1',
+          permission: 'cdr.export',
+          scope: { type: 'not-a-real-scope', id: 'x' },
+        },
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+  });
+
   async function createUserViaInternal(
     target: Server,
     orgId: string,
@@ -237,6 +389,12 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     if (response.statusCode !== 201) {
       throw new Error(`setup failed: ${String(response.statusCode)} ${response.body}`);
     }
+  }
+
+  async function userIdFor(harness: Harness, orgId: string, email: string): Promise<string> {
+    const user = await harness.users.findByOrgAndEmail(orgId, email);
+    if (user === undefined) throw new Error(`no such user: ${email} in ${orgId}`);
+    return user.id;
   }
 });
 

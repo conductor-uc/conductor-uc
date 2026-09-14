@@ -7,13 +7,17 @@ import { createLogger } from '@cuc/logger';
 
 import { createAuthService } from './auth/auth-service.js';
 import { configSchema, loadServiceConfig } from './config.js';
+import { createGrantRepo } from './repo/grant.repo.js';
 import { createMfaRepo } from './repo/mfa.repo.js';
+import { createRoleRepo } from './repo/role.repo.js';
 import { createSessionRepo } from './repo/session.repo.js';
 import { createSigningKeyRepo } from './repo/signing-key.repo.js';
 import { createUserRepo } from './repo/user.repo.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
+import { registerGrantRoutes } from './routes/grants.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerJwksRoute } from './routes/jwks.routes.js';
+import { registerRoleRoutes } from './routes/roles.routes.js';
 import type { IdentityServiceDb } from './schema.js';
 
 const config = loadServiceConfig();
@@ -104,6 +108,8 @@ const authService = createAuthService({
 registerAuthRoutes(app, authService);
 registerJwksRoute(app, signingKeyRepo, config.SIGNING_KEY_OVERLAP_DAYS);
 registerInternalRoutes(app, userRepo, config.INTERNAL_SERVICE_TOKEN);
+registerRoleRoutes(app, createRoleRepo(db));
+registerGrantRoutes(app, createGrantRepo(db));
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

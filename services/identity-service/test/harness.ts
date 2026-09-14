@@ -5,7 +5,9 @@ import { fileKekFromConfig, type KekProvider } from '@cuc/crypto';
 import { silentLogger, startTestDatabase, type TestDatabaseHandle } from '@cuc/testing';
 
 import { createAuthService } from '../src/auth/auth-service.js';
+import { createGrantRepo, type GrantRepo } from '../src/repo/grant.repo.js';
 import { createMfaRepo } from '../src/repo/mfa.repo.js';
+import { createRoleRepo, type RoleRepo } from '../src/repo/role.repo.js';
 import { createSessionRepo } from '../src/repo/session.repo.js';
 import { createSigningKeyRepo } from '../src/repo/signing-key.repo.js';
 import { createUserRepo, type UserRepo } from '../src/repo/user.repo.js';
@@ -16,6 +18,8 @@ export interface Harness {
   readonly db: Database<IdentityServiceDb>;
   readonly kek: KekProvider;
   readonly users: UserRepo;
+  readonly roles: RoleRepo;
+  readonly grants: GrantRepo;
   readonly auth: ReturnType<typeof createAuthService>;
   readonly handle: TestDatabaseHandle;
   close(): Promise<void>;
@@ -51,6 +55,8 @@ export async function startHarness(): Promise<Harness> {
   const kek = fileKekFromConfig({ CRYPTO_KEKS: `1:${TEST_KEK}`, CRYPTO_KEK_CURRENT: '1' });
 
   const users = createUserRepo(db);
+  const roles = createRoleRepo(db);
+  const grants = createGrantRepo(db);
   const sessions = createSessionRepo(db);
   const mfa = createMfaRepo(db);
   const signingKeys = createSigningKeyRepo(db, kek);
@@ -62,6 +68,8 @@ export async function startHarness(): Promise<Harness> {
     db,
     kek,
     users,
+    roles,
+    grants,
     auth,
     handle,
     async close() {

@@ -1,0 +1,81 @@
+import type { DataClass, Permission } from './types.js';
+
+/**
+ * The permission catalog (07 §3.3), as data: every permission this codebase
+ * currently defines, mapped to its data class. `@cuc/http`'s route-contract
+ * guard requires a `dataClass` on every route (CLAUDE.md rule 3); this is
+ * where that value comes from, not a string a route author picks by hand.
+ *
+ * `audit.read` is documented as `config/private` — a route serving audit data
+ * that includes private entries declares `private`, one that only ever serves
+ * config-class audit entries declares `config`. There is no single right
+ * answer for it here, so it is listed under `private`, the stricter reading:
+ * a route can decide to be more permissive by declaring `config` for a
+ * genuinely config-only audit slice, but nothing here should default a
+ * caller into an insufficiently strict class.
+ */
+export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
+  'reseller.create': 'config',
+  'reseller.manage': 'config',
+  'tenant.create': 'config',
+  'tenant.manage': 'config',
+  'tenant.suspend': 'config',
+  'brand.manage': 'config',
+  'user.manage': 'config',
+  'role.manage': 'config',
+  'grant.manage': 'config',
+  'extension.manage': 'config',
+  'did.manage': 'config',
+  'group.manage': 'config',
+  'queue.manage': 'config',
+  'schedule.manage': 'config',
+  'media.manage': 'config',
+  'trunk.manage': 'config',
+  'callflow.edit': 'config',
+  'callflow.publish': 'config',
+  'secret.reveal': 'secret',
+  'recording.policy.manage': 'config',
+  'recording.listen': 'private',
+  'recording.download': 'private',
+  'recording.delete': 'private',
+  'cdr.read': 'private',
+  'cdr.export': 'private',
+  'voicemail.access': 'private',
+  'monitor.presence': 'config',
+  'monitor.listen': 'private',
+  'monitor.whisper': 'private',
+  'monitor.barge': 'private',
+  'analytics.view': 'private',
+  'audit.read': 'private',
+  'apikey.manage': 'secret',
+};
+
+export type CatalogPermission = keyof typeof PERMISSION_CATALOG;
+
+export class UnknownPermissionError extends Error {
+  override readonly name = 'UnknownPermissionError';
+
+  constructor(permission: string) {
+    super(
+      `'${permission}' is not in the permission catalog. Add it to PERMISSION_CATALOG ` +
+        '(07 §3.3) before a route or a role references it.',
+    );
+  }
+}
+
+/** The data class a permission implies. Throws for anything not in the catalog. */
+export function dataClassOf(permission: Permission): DataClass {
+  const dataClass = PERMISSION_CATALOG[permission];
+  if (dataClass === undefined) throw new UnknownPermissionError(permission);
+  return dataClass;
+}
+
+/** True when `permission` is in the catalog. */
+export function isKnownPermission(permission: string): boolean {
+  return Object.hasOwn(PERMISSION_CATALOG, permission);
+}
+
+/** Every permission in the catalog. */
+export function allPermissions(): readonly Permission[] {
+  return Object.keys(PERMISSION_CATALOG);
+}
