@@ -1,6 +1,7 @@
 import { Env, Type, baseEnvSchema, loadConfig } from '@cuc/config';
 import { dbEnvSchema } from '@cuc/db';
 import { eventsEnvSchema } from '@cuc/events';
+import { storageEnvSchema } from '@cuc/storage';
 
 /**
  * Everything this service reads from the environment.
@@ -13,6 +14,7 @@ export const configSchema = Type.Object({
   ...baseEnvSchema.properties,
   ...dbEnvSchema.properties,
   ...eventsEnvSchema.properties,
+  ...storageEnvSchema.properties,
   /**
    * Only trust the x-internal-* identity headers when this service is reachable
    * solely through api-gateway, which authenticates the caller and signs them.

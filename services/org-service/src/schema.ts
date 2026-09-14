@@ -68,13 +68,33 @@ export interface OrgServiceDb extends EventTables {
     created_at: Date;
   };
 
+  /** One brand per reseller (02 §5.3), fields per 02 §5.4. */
   brands: {
-    /** One brand per reseller (02 §5.3). */
     reseller_id: string;
     display_name: string | null;
     primary_color: string | null;
     accent_color: string | null;
+    /** S3 object keys (platform bucket) — the images themselves live in `@cuc/storage`. */
+    logo_light_key: string | null;
+    logo_dark_key: string | null;
+    favicon_key: string | null;
+    support_email: string | null;
+    support_url: string | null;
+    support_phone: string | null;
+    email_from_name: string | null;
+    /** Must pass SPF/DKIM before use (02 §5.4) — not enforced here; notification-service's concern. */
+    email_from_address: string | null;
+    sip_user_agent: string | null;
+    legal_footer: string | null;
     created_at: Date;
     updated_at: Date;
+  };
+
+  /** A reseller's branded console hostname (`portal.reseller-brand.com`), driving brand resolution (02 §5.2). */
+  console_hostnames: {
+    fqdn: string;
+    reseller_id: string;
+    tls_status: string;
+    created_at: Date;
   };
 }

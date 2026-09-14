@@ -78,4 +78,9 @@ export const orgEvents = defineEvents({
       ownerId: Type.String({ minLength: 1 }),
     }),
   },
+  'org.brand.updated': {
+    schemaVersion: 1,
+    description: "A reseller's brand (colors, assets, support info, …) changed (02 §5.4).",
+    data: Type.Object({ resellerId: Type.String({ minLength: 1 }) }),
+  },
 });

@@ -5,6 +5,39 @@ The org hierarchy: master → reseller → tenant (02 §1), generated from `pnpm
 `@cuc/db` sense (see `src/schema.ts`), so the generated widget-shaped sample entity did not
 fit the actual domain model.
 
+## What S1-04 adds
+
+Reseller brands and public brand resolution (02 §5).
+
+- **Brand CRUD** (`src/repo/brand.repo.ts`, `src/routes/brand.routes.ts`): `PUT
+  /v1/resellers/:id/brand` upserts — there's no separate "create a brand" step, since a
+  brand is a property of the reseller, not a thing with its own lifecycle. It's a merge,
+  not a replace: omitting a field leaves it alone, setting it to `null` clears it, and the
+  merge happens against the row already in the database so a partial update can't slip
+  an invalid *resulting* state past validation.
+- **WCAG AA contrast validation** (`src/domain/color.ts`): `primaryColor`/`accentColor`
+  are validated together — the standard `4.5:1` "AA normal text" ratio — whenever the
+  patch results in both being set, computed from the actual WCAG relative-luminance
+  formula (verified against the standard `#767676`-on-white reference pair, the commonly
+  cited "just barely passes" boundary color).
+- **Brand asset upload through presigned PUT** (`@cuc/storage`'s platform bucket, not a
+  tenant one — brand assets belong to the reseller): `POST
+  /v1/resellers/:id/brand/assets` returns an upload URL; the client uploads directly to
+  S3, then sets the returned key via the normal brand `PUT`. No existence check on
+  finalize — `@cuc/storage` doesn't expose a HEAD/object-exists call, and a dangling key
+  is a normal "the client's upload failed" case that a repeat visit to the assets flow
+  fixes on its own.
+- **Console hostname registration** (`console_hostnames`, absent since S1-01 despite
+  being documented in 05 §3.1 — S1-03 never created it, brand resolution is the first
+  thing that needs it): `POST /v1/resellers/:id/console-hostnames`, validated with the
+  same `validateFqdn` S1-03's domains use.
+- **`GET /v1/public/brand?host=`** — unauthenticated, `config: { public: true }`,
+  resolving 02 §5.2's `unauthenticated request` branch. Returns `{ neutral: true }` or the
+  branded fields, with presigned (real, working, short-lived) GET URLs for any configured
+  logo/favicon rather than bare object keys — a login page needs to actually render the
+  image before the user has authenticated, and `@cuc/storage`'s whole model is "no public
+  bucket access, presigned URLs only."
+
 ## What S1-03 adds
 
 Domains (02 §3), on top of the `reseller_base_domains`/`tenant_domains` shells S1-01 left in
@@ -83,18 +116,21 @@ the same reason.
   api-gateway builds (S1-08). Until then this matches every other service's routes.
 - **No org delete.** `pending_deletion` → `deleted`, with a retention window and a data
   export, has no owning task yet — G-11 in `docs/decisions.md`.
-- **No brand business logic** — verification, CRUD, uniqueness. S1-04.
 - **No domain change or removal.** Once assigned, a tenant's primary domain is not
   reassigned if its reseller later activates a base domain, and neither domain table has a
   delete path — 02 §3 flags changing a tenant's domain as invalidating stored SIP digest
   HA1 values, a distinct, more involved operation this task does not build.
-- **No ACME / TLS issuance.** 02 §3 mentions it; no task owns it yet.
+- **No ACME / TLS issuance.** 02 §3 mentions it; `console_hostnames.tls_status` just
+  starts and stays `pending` — no task owns actually issuing anything yet.
+- **No asset-existence check on brand upload finalize**, and no brand asset deletion —
+  see the S1-04 section above.
 
 ## Verified
 
-`pnpm build` / `typecheck` / `lint`: clean. `pnpm test`: 111 tests against real MariaDB
-(including a live HTTP client test against a real `http.createServer` fake, proving
-`identity-client.ts`'s wire behavior rather than mocking `fetch`), covering:
+`pnpm build` / `typecheck` / `lint`: clean. `pnpm test`: 149 tests against real MariaDB
+and real MinIO (including a live HTTP client test against a real `http.createServer`
+fake, proving `identity-client.ts`'s wire behavior rather than mocking `fetch`),
+covering:
 
 - The S1-01 hierarchy invariants: a tenant under master, a reseller under reseller, and a
   second master are all rejected.
@@ -105,6 +141,11 @@ the same reason.
 - The S1-03 acceptance criterion: `org.domain.added` fires for both a tenant's assigned
   domain and a verified reseller base domain, and a full register → verify flow against an
   injected fake `DnsResolver` (matching, mismatching, missing, and throwing) passes.
+- The S1-04 acceptance criterion: all four `GET /v1/public/brand` resolution branches
+  (master hostname, unknown hostname, registered-but-brandless reseller, and a full
+  branded reseller) are individually tested, the neutral response is checked for brand
+  leaks directly, and the branded-reseller case round-trips a real upload through a
+  presigned PUT and a real download through the public endpoint's presigned GET.
 
 The bootstrap CLI was run as a compiled process twice against a real schema: once creating
 the master, once hitting `orgs_slug_idx` (same slug) and once hitting

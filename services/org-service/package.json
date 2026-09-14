@@ -23,6 +23,7 @@
     "@cuc/events": "workspace:*",
     "@cuc/http": "workspace:*",
     "@cuc/logger": "workspace:*",
+    "@cuc/storage": "workspace:*",
     "kysely": "^0.29.5"
   },
   "devDependencies": {
