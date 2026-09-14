@@ -1,3 +1,4 @@
+import { toUnscopedAccessSink } from '@cuc/audit';
 import { redactConfig } from '@cuc/config';
 import { fileKekFromConfig } from '@cuc/crypto';
 import { createDatabase, migrateToLatest } from '@cuc/db';
@@ -7,12 +8,15 @@ import { createLogger } from '@cuc/logger';
 
 import { createAuthService } from './auth/auth-service.js';
 import { configSchema, loadServiceConfig } from './config.js';
+import { createAuditConsumer } from './consumers/audit.consumer.js';
+import { createAuditRepo } from './repo/audit.repo.js';
 import { createGrantRepo } from './repo/grant.repo.js';
 import { createMfaRepo } from './repo/mfa.repo.js';
 import { createRoleRepo } from './repo/role.repo.js';
 import { createSessionRepo } from './repo/session.repo.js';
 import { createSigningKeyRepo } from './repo/signing-key.repo.js';
 import { createUserRepo } from './repo/user.repo.js';
+import { registerAuditRoutes } from './routes/audit.routes.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerGrantRoutes } from './routes/grants.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
@@ -28,6 +32,18 @@ const logger = createLogger({
 });
 logger.info(redactConfig(configSchema, config), 'starting');
 
+// Connected before the database, so its handle exists in time to back the
+// audit sink `createDatabase` wires below (05 §2.3 / 07 §4: a cross-tenant
+// `unscoped(ctx, reason)` query is audited).
+const bus = await connectBus({
+  servers: config.NATS_SERVERS,
+  logger,
+  name: config.SERVICE_NAME,
+  ...(config.NATS_USER === undefined ? {} : { user: config.NATS_USER }),
+  ...(config.NATS_PASSWORD === undefined ? {} : { password: config.NATS_PASSWORD }),
+});
+await bus.ensureStreams();
+
 const db = createDatabase<IdentityServiceDb>({
   host: config.DB_HOST,
   port: config.DB_PORT,
@@ -37,6 +53,7 @@ const db = createDatabase<IdentityServiceDb>({
   poolSize: config.DB_POOL_SIZE,
   connectTimeoutMs: config.DB_CONNECT_TIMEOUT_MS,
   logger,
+  onUnscopedAccess: toUnscopedAccessSink(bus, logger),
 });
 
 // Migrations run at startup rather than as a separate deploy step, until this
@@ -48,15 +65,6 @@ await migrateToLatest({
   logger,
 });
 
-const bus = await connectBus({
-  servers: config.NATS_SERVERS,
-  logger,
-  name: config.SERVICE_NAME,
-  ...(config.NATS_USER === undefined ? {} : { user: config.NATS_USER }),
-  ...(config.NATS_PASSWORD === undefined ? {} : { password: config.NATS_PASSWORD }),
-});
-await bus.ensureStreams();
-
 const relay = createRelay({
   db: db.kysely,
   bus,
@@ -66,6 +74,11 @@ const relay = createRelay({
   maxAttempts: config.OUTBOX_MAX_ATTEMPTS,
 });
 const relayLoop = relay.run();
+
+const auditRepo = createAuditRepo(db);
+const auditConsumer = createAuditConsumer(db, bus, logger, auditRepo);
+await auditConsumer.ensure();
+const auditConsumerLoop = auditConsumer.run();
 
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
@@ -110,6 +123,7 @@ registerJwksRoute(app, signingKeyRepo, config.SIGNING_KEY_OVERLAP_DAYS);
 registerInternalRoutes(app, userRepo, config.INTERNAL_SERVICE_TOKEN);
 registerRoleRoutes(app, createRoleRepo(db));
 registerGrantRoutes(app, createGrantRepo(db));
+registerAuditRoutes(app, auditRepo);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
@@ -122,11 +136,13 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   relay.stop();
+  auditConsumer.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   await relayLoop;
+  await auditConsumerLoop;
   await bus.close();
   await db.destroy();
   logger.info('shutdown complete');

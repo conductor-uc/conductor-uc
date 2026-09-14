@@ -70,16 +70,45 @@ and would otherwise pass signature verification cleanly. A ticket also carries a
 match what the endpoint expects, so an enrollment ticket cannot be replayed at the verification
 endpoint or vice versa.
 
+## What S1-07 adds
+
+The `AUDIT` stream consumer and the audit trail's query API (05 §3.2, 07 §4) — see
+`docs/decisions.md` (G-12, G-13) for what's deliberately incomplete about partition maintenance
+and the query route's declared data class. `@cuc/audit`'s own README covers the publisher side
+(`recordAuditEvent`/`publishAuditEvent`/`toUnscopedAccessSink`); this section is the consumer.
+
+- **`consumers/audit.consumer.ts`**: one durable JetStream consumer (`identity-service-audit`)
+  reading every `audit.event.recorded` envelope, from any service, and inserting it into
+  `audit_events`. `main.ts` connects the NATS bus *before* creating the database handle
+  specifically so `toUnscopedAccessSink(bus, logger)` is ready in time to back
+  `createDatabase`'s `onUnscopedAccess` — the extension point `@cuc/db` built for exactly this
+  in S0-03, previously defaulting to a `warn` log line.
+- **`repo/audit.repo.ts`'s `listForOrg`** is the whole visibility rule (07 §4: "tenants can read
+  their own audit trail… but not master-internal details") in one `WHERE actor_org_id = :orgId OR
+  target_org_id = :orgId`: an org sees what its own actors did, plus what anyone did *to* its
+  data. Nothing external to know an org's type or evaluate a data class at query time — a row
+  naming neither field is structurally excluded, which is what keeps master's unrelated internal
+  actions out of a tenant's view without a separate check.
+- **`GET /v1/orgs/:orgId/audit-events`** — see G-13: declared `dataClass: 'config'` rather than
+  the catalog's mixed `config/private`, so `reseller_admin`/`reseller_support` (which hold
+  `audit.read`) aren't blocked outright by H1's coarse, route-level wall from reading their own
+  org's trail.
+
 ## What is deliberately not here yet
 
-- **No general user CRUD, roles, grants, or API keys.** 06 lists these under identity-service's
-  eventual public API; S1-05's stated scope is login/refresh/logout/MFA/JWKS plus the one internal
-  endpoint. `identity.user.updated|disabled|deleted` and `identity.grant.changed` are not
-  registered events for the same reason — nothing publishes them yet.
+- **No general user CRUD or API keys.** 06 lists these under identity-service's eventual public
+  API; S1-05/S1-06/S1-07's combined scope is login/refresh/logout/MFA/JWKS, the internal
+  admin-creation endpoint, roles/grants (S1-06), and the audit trail (S1-07).
+  `identity.user.updated|disabled|deleted` is not a registered event for the same reason —
+  nothing publishes it yet (`identity.grant.changed` is also still unpublished: `role.repo.ts`/
+  `grant.repo.ts` don't emit domain events today, only the audit trail a caller wires up itself).
 - **No password-reset flow.** `POST /v1/auth/password-reset` needs notification-service to send
   the email, and that does not exist until S3.
 - **The TOTP issuer is the org's own id, not its display name.** `users` does not carry the org's
   name — only its id — so an authenticator app shows a UUID today rather than "Acme Resale". Never
   a fixed product name either way (02 §5.2); this is a placeholder for real data, not a brand
   workaround.
-- **No org-ancestry authorization**, beyond "the caller already knows the right ids" — S1-06.
+- **No per-request `allowed()` authorization.** `@cuc/authz` (S1-06) exists and its evaluator is
+  fully tested, but no route here — or anywhere else in this codebase yet — resolves a caller's
+  actual roles/grants per request and checks them; that needs the request context api-gateway
+  builds (S1-08). Every route's declared `permission` is still just contract metadata today.

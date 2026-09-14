@@ -2,6 +2,7 @@ import type { Migration } from 'kysely/migration';
 
 import * as initial from './001_initial.js';
 import * as rolesAndGrants from './002_roles_and_grants.js';
+import * as auditEvents from './003_audit_events.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -15,4 +16,5 @@ import * as rolesAndGrants from './002_roles_and_grants.js';
 export const migrations: Record<string, Migration> = {
   '001_initial': initial,
   '002_roles_and_grants': rolesAndGrants,
+  '003_audit_events': auditEvents,
 };
