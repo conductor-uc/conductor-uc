@@ -61,7 +61,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       logger,
     });
     await migrateToLatest({ db: db.kysely, migrations, logger });
-    repo = createOrgRepo(db);
+    repo = createOrgRepo(db, { platformBaseDomain: 'platform.test' });
 
     adminUsers = fakeAdminUserCreator();
     app = await createServer({
@@ -88,6 +88,9 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
   });
 
   afterEach(async () => {
+    // tenant_domains/reseller_base_domains FK to orgs, so they go first.
+    await db.kysely.deleteFrom('tenant_domains').execute();
+    await db.kysely.deleteFrom('reseller_base_domains').execute();
     await db.kysely.deleteFrom('orgs').where('type', '=', 'tenant').execute();
     await db.kysely.deleteFrom('orgs').where('type', '=', 'reseller').execute();
     await db.kysely.deleteFrom('orgs').where('type', '=', 'master').execute();

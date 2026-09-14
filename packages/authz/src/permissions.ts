@@ -13,6 +13,11 @@ import type { DataClass, Permission } from './types.js';
  * a route can decide to be more permissive by declaring `config` for a
  * genuinely config-only audit slice, but nothing here should default a
  * caller into an insufficiently strict class.
+ *
+ * `domain.manage` is not in 07 §3.3 — S1-03 needed a permission for reseller
+ * base-domain registration and verification, and 02 §3 describes domains as
+ * reseller/org configuration, so it is added here the same shape as every
+ * other `*.manage` permission rather than left ungated.
  */
 export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'reseller.create': 'config',
@@ -20,6 +25,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'tenant.create': 'config',
   'tenant.manage': 'config',
   'tenant.suspend': 'config',
+  'domain.manage': 'config',
   'brand.manage': 'config',
   'user.manage': 'config',
   'role.manage': 'config',

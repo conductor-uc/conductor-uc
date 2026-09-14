@@ -39,7 +39,7 @@ describe.skipIf(skipReason !== undefined)('org repo — hierarchy invariants', (
       logger,
     });
     await migrateToLatest({ db: db.kysely, migrations, logger });
-    repo = createOrgRepo(db);
+    repo = createOrgRepo(db, { platformBaseDomain: 'platform.test' });
     stop = async () => {
       await db.destroy();
       await handle.stop();
@@ -53,7 +53,10 @@ describe.skipIf(skipReason !== undefined)('org repo — hierarchy invariants', (
   beforeEach(async () => {
     // orgs.parent_id is self-referencing, so a child must go before its
     // parent — deepest type first, since a tenant's parent is always a
-    // reseller and a reseller's parent is always the master.
+    // reseller and a reseller's parent is always the master. tenant_domains
+    // and reseller_base_domains FK to orgs, so they go first of all.
+    await db.kysely.deleteFrom('tenant_domains').execute();
+    await db.kysely.deleteFrom('reseller_base_domains').execute();
     await db.kysely.deleteFrom('orgs').where('type', '=', 'tenant').execute();
     await db.kysely.deleteFrom('orgs').where('type', '=', 'reseller').execute();
     await db.kysely.deleteFrom('orgs').where('type', '=', 'master').execute();
@@ -400,6 +403,136 @@ describe.skipIf(skipReason !== undefined)('org repo — hierarchy invariants', (
         (row) => row.type,
       );
       expect(types).toEqual(expect.arrayContaining(['org.tenant.suspended', 'org.tenant.resumed']));
+    });
+  });
+
+  describe('tenant domain assignment (S1-03)', () => {
+    it('assigns {slug}.{platformBaseDomain} when the reseller has no active base domain', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+
+      const tenant = await repo.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const row = await db.kysely
+        .selectFrom('tenant_domains')
+        .selectAll()
+        .where('tenant_id', '=', tenant.id)
+        .executeTakeFirst();
+      // is_primary comes back as 1/0 (mysql2's TINYINT(1) mapping), not a JS boolean.
+      expect(row).toMatchObject({ fqdn: 'widgets.platform.test' });
+      expect(Boolean(row?.is_primary)).toBe(true);
+    });
+
+    it("prefers the reseller's active base domain over the platform default", async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+      const now = new Date();
+      await db.kysely
+        .insertInto('reseller_base_domains')
+        .values({
+          id: 'base-1',
+          reseller_id: reseller.id,
+          fqdn: 'voice.acme-brand.com',
+          verification_token: 'tok',
+          verified_at: now,
+          status: 'active',
+          created_at: now,
+          updated_at: now,
+        })
+        .execute();
+
+      const tenant = await repo.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const row = await db.kysely
+        .selectFrom('tenant_domains')
+        .selectAll()
+        .where('tenant_id', '=', tenant.id)
+        .executeTakeFirst();
+      expect(row?.fqdn).toBe('widgets.voice.acme-brand.com');
+    });
+
+    it('ignores a pending (unverified) base domain', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+      const now = new Date();
+      await db.kysely
+        .insertInto('reseller_base_domains')
+        .values({
+          id: 'base-1',
+          reseller_id: reseller.id,
+          fqdn: 'voice.acme-brand.com',
+          verification_token: 'tok',
+          verified_at: null,
+          status: 'pending',
+          created_at: now,
+          updated_at: now,
+        })
+        .execute();
+
+      const tenant = await repo.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const row = await db.kysely
+        .selectFrom('tenant_domains')
+        .selectAll()
+        .where('tenant_id', '=', tenant.id)
+        .executeTakeFirst();
+      expect(row?.fqdn).toBe('widgets.platform.test');
+    });
+
+    it('publishes org.domain.added for the tenant, alongside org.tenant.created', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+
+      await repo.create({}, 'tenant', { parentId: reseller.id, slug: 'widgets', name: 'Widgets' });
+
+      const types = (await db.kysely.selectFrom('outbox').select('type').execute()).map(
+        (row) => row.type,
+      );
+      expect(types).toEqual(expect.arrayContaining(['org.tenant.created', 'org.domain.added']));
+    });
+
+    it('does not assign a domain for a reseller — only tenants get one', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+
+      const rows = await db.kysely
+        .selectFrom('tenant_domains')
+        .selectAll()
+        .where('tenant_id', '=', reseller.id)
+        .execute();
+      expect(rows).toEqual([]);
     });
   });
 });

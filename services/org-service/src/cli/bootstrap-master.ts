@@ -65,7 +65,7 @@ async function main(): Promise<void> {
       logger,
     });
 
-    const repo = createOrgRepo(db);
+    const repo = createOrgRepo(db, { platformBaseDomain: config.PLATFORM_BASE_DOMAIN });
 
     try {
       const master = await repo.createMaster({ slug: values.slug, name: values.name });
