@@ -3,12 +3,15 @@ import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
+import { storageFromConfig } from '@cuc/storage';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { nodeDnsResolver } from './dns-resolver.js';
 import { createIdentityClient } from './identity-client.js';
+import { createBrandRepo } from './repo/brand.repo.js';
 import { createDomainRepo } from './repo/domain.repo.js';
 import { createOrgRepo } from './repo/org.repo.js';
+import { registerBrandRoutes } from './routes/brand.routes.js';
 import { registerDomainRoutes } from './routes/domain.routes.js';
 import { registerOrgRoutes } from './routes/org.routes.js';
 import type { OrgServiceDb } from './schema.js';
@@ -84,6 +87,10 @@ registerOrgRoutes(
   identityClient.createAdminUser,
 );
 registerDomainRoutes(app, createDomainRepo(db), nodeDnsResolver());
+
+const storage = storageFromConfig(config, logger);
+// 02 §3's table: the master/unbranded console lives at console.{PLATFORM_BASE_DOMAIN}.
+registerBrandRoutes(app, createBrandRepo(db), storage, `console.${config.PLATFORM_BASE_DOMAIN}`);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
