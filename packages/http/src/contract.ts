@@ -1,18 +1,14 @@
 /**
- * Data classes from [07 §3.2]. Every route declares one; `@cuc/http` uses it to
- * enforce hard rule H1 and services use it to decide what to audit.
- */
-export const DATA_CLASSES = ['config', 'private', 'usage', 'secret'] as const;
-export type DataClass = (typeof DATA_CLASSES)[number];
-
-/**
- * A permission from the catalog in [07 §3.3], e.g. `cdr.read`.
+ * Data classes from [07 §3.2], and permissions from the catalog in [07 §3.3].
  *
- * It stays a plain string here: the catalog and the `allowed()` evaluation land
- * with `@cuc/authz` in S1, and `@cuc/http` must not become the place where the
- * catalog is defined.
+ * Both are re-exported from `@cuc/authz` rather than declared here: every
+ * route declares a `dataClass`, and `@cuc/authz` is the canonical model of
+ * what a data class *means* (H1, auditing) — `@cuc/http` must not become a
+ * second place that defines it, or the two can drift.
  */
-export type Permission = string;
+import { DATA_CLASSES, isDataClass, type DataClass, type Permission } from '@cuc/authz';
+
+export { DATA_CLASSES, isDataClass, type DataClass, type Permission };
 
 /**
  * What a route declares about itself. Fastify carries this on
@@ -41,8 +37,4 @@ export interface RegisteredRoute {
   readonly permission: Permission | null;
   readonly dataClass: DataClass | null;
   readonly public: boolean;
-}
-
-export function isDataClass(value: unknown): value is DataClass {
-  return typeof value === 'string' && (DATA_CLASSES as readonly string[]).includes(value);
 }

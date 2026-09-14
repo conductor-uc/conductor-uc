@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@cuc/api-contracts": "workspace:*",
+    "@cuc/authz": "workspace:*",
     "@cuc/config": "workspace:*",
     "@cuc/crypto": "workspace:*",
     "@cuc/db": "workspace:*",

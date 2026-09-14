@@ -98,4 +98,41 @@ export interface IdentityServiceDb extends EventTables {
      */
     retired_at: Date | null;
   };
+
+  /**
+   * Custom roles only. The seven built-in roles (07 §3.3) are `@cuc/authz`
+   * data (`BUILT_IN_ROLES`) — code, not rows — precisely because nothing
+   * about them varies per deployment. A row only exists here once an org
+   * defines its own role.
+   */
+  roles: {
+    id: string;
+    org_id: string;
+    name: string;
+    created_at: Date;
+  };
+
+  role_permissions: {
+    role_id: string;
+    permission: string;
+  };
+
+  /** Which user holds which role, in which org's scope (07 §3.1). */
+  role_assignments: {
+    user_id: string;
+    /** A built-in role id (e.g. `tenant_admin`) or a row in `roles`. */
+    role_id: string;
+    scope_org_id: string;
+  };
+
+  grants: {
+    id: string;
+    org_id: string;
+    principal_type: 'user' | 'role';
+    principal_id: string;
+    permission: string;
+    scope_type: string;
+    scope_id: string;
+    created_at: Date;
+  };
 }

@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  allPermissions,
+  dataClassOf,
+  isKnownPermission,
+  PERMISSION_CATALOG,
+  UnknownPermissionError,
+} from '../src/permissions.js';
+import { isDataClass } from '../src/types.js';
+
+describe('PERMISSION_CATALOG', () => {
+  it('gives every permission a valid data class', () => {
+    for (const [permission, dataClass] of Object.entries(PERMISSION_CATALOG)) {
+      expect(isDataClass(dataClass), `${permission} → '${dataClass}'`).toBe(true);
+    }
+  });
+
+  it('matches every permission named in 07 §3.3', () => {
+    for (const permission of [
+      'reseller.create',
+      'reseller.manage',
+      'tenant.create',
+      'tenant.manage',
+      'tenant.suspend',
+      'brand.manage',
+      'user.manage',
+      'role.manage',
+      'grant.manage',
+      'extension.manage',
+      'did.manage',
+      'group.manage',
+      'queue.manage',
+      'schedule.manage',
+      'media.manage',
+      'trunk.manage',
+      'callflow.edit',
+      'callflow.publish',
+      'secret.reveal',
+      'recording.policy.manage',
+      'recording.listen',
+      'recording.download',
+      'recording.delete',
+      'cdr.read',
+      'cdr.export',
+      'voicemail.access',
+      'monitor.presence',
+      'monitor.listen',
+      'monitor.whisper',
+      'monitor.barge',
+      'analytics.view',
+      'audit.read',
+      'apikey.manage',
+    ]) {
+      expect(isKnownPermission(permission), permission).toBe(true);
+    }
+  });
+
+  it('assigns secret to exactly the credential-facing permissions', () => {
+    expect(dataClassOf('secret.reveal')).toBe('secret');
+    expect(dataClassOf('apikey.manage')).toBe('secret');
+  });
+
+  it('assigns private to the tenant-private surfaces', () => {
+    for (const permission of [
+      'cdr.read',
+      'cdr.export',
+      'recording.listen',
+      'voicemail.access',
+      'monitor.barge',
+    ]) {
+      expect(dataClassOf(permission)).toBe('private');
+    }
+  });
+});
+
+describe('dataClassOf', () => {
+  it('throws a clear error for an unregistered permission', () => {
+    expect(() => dataClassOf('made.up.permission')).toThrow(UnknownPermissionError);
+    expect(() => dataClassOf('made.up.permission')).toThrow(/not in the permission catalog/);
+  });
+});
+
+describe('allPermissions', () => {
+  it('returns exactly the catalog keys, with no duplicates', () => {
+    const all = allPermissions();
+    expect(new Set(all).size).toBe(all.length);
+    expect([...all].sort()).toEqual(Object.keys(PERMISSION_CATALOG).sort());
+  });
+});
