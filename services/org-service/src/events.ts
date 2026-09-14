@@ -33,4 +33,36 @@ export const orgEvents = defineEvents({
       parentId: Type.String({ minLength: 1 }),
     }),
   },
+  'org.reseller.updated': {
+    schemaVersion: 1,
+    description: "A reseller's name, timezone, country, or limits changed.",
+    data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
+  },
+  'org.tenant.updated': {
+    schemaVersion: 1,
+    description: "A tenant's name, timezone, country, or limits changed.",
+    data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
+  },
+  'org.reseller.suspended': {
+    schemaVersion: 1,
+    description: 'A reseller was suspended, along with all of its tenants (02 §2).',
+    data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
+  },
+  'org.reseller.resumed': {
+    schemaVersion: 1,
+    description: 'A suspended reseller was returned to active.',
+    data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
+  },
+  'org.tenant.suspended': {
+    schemaVersion: 1,
+    description:
+      'A tenant was suspended: console login, SIP registration, and calls for its domain ' +
+      'are rejected. Data is retained (02 §2).',
+    data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
+  },
+  'org.tenant.resumed': {
+    schemaVersion: 1,
+    description: 'A suspended tenant was returned to active.',
+    data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
+  },
 });

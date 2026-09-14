@@ -5,6 +5,7 @@ export {
   h1RouteLevelWall,
   h2TenantBoundary,
   h3ResellerLifecycle,
+  h3RouteLevelLifecycle,
   h4ApiKeyRestriction,
   hardRulesPass,
 } from './hard-rules.js';

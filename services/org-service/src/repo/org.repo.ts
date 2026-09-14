@@ -4,7 +4,14 @@ import type { Database, DbContext } from '@cuc/db';
 import { isDuplicateKeyError } from '@cuc/db';
 import { enqueueEvent } from '@cuc/events';
 
-import { assertValidParentType, resellerIdFor, validateSlug } from '../domain/org.js';
+import {
+  assertCanResume,
+  assertCanSuspend,
+  assertValidParentType,
+  InvalidOrgHierarchyError,
+  resellerIdFor,
+  validateSlug,
+} from '../domain/org.js';
 import { orgEvents } from '../events.js';
 import type { OrgServiceDb, OrgStatus, OrgType } from '../schema.js';
 
@@ -16,6 +23,38 @@ export interface Org {
   readonly slug: string;
   readonly name: string;
   readonly status: OrgStatus;
+  readonly timezone: string;
+  readonly country: string;
+  /** Parsed from the `limits` JSON column. */
+  readonly limits: Record<string, unknown>;
+}
+
+const ORG_COLUMNS = [
+  'id',
+  'type',
+  'parent_id',
+  'reseller_id',
+  'slug',
+  'name',
+  'status',
+  'timezone',
+  'country',
+  'limits',
+  'version',
+] as const;
+
+interface OrgRow {
+  id: string;
+  type: OrgType;
+  parent_id: string | null;
+  reseller_id: string | null;
+  slug: string;
+  name: string;
+  status: OrgStatus;
+  timezone: string;
+  country: string;
+  limits: string;
+  version: number;
 }
 
 export class MasterAlreadyExistsError extends Error {
@@ -42,7 +81,27 @@ export class SlugTakenError extends Error {
   }
 }
 
+export class OrgNotFoundError extends Error {
+  override readonly name = 'OrgNotFoundError';
+
+  constructor(id: string) {
+    super(`No org with id '${id}'.`);
+  }
+}
+
 const DEFAULT_LIMITS = '{}';
+
+/**
+ * `orgs.limits` is declared `json` in the migration, but whether the driver
+ * hands it back already parsed depends on the server: MariaDB's docs say JSON
+ * columns are LONGTEXT under the hood, yet mysql2 parses it into an object
+ * here regardless — so this accepts either shape rather than assume one.
+ */
+function parseLimits(value: unknown): Record<string, unknown> {
+  return typeof value === 'string'
+    ? (JSON.parse(value) as Record<string, unknown>)
+    : (value as Record<string, unknown>);
+}
 
 /**
  * Data access for the org hierarchy.
@@ -57,15 +116,7 @@ const DEFAULT_LIMITS = '{}';
 export function createOrgRepo(db: Database<OrgServiceDb>) {
   const orgs = db.kysely;
 
-  function toOrg(row: {
-    id: string;
-    type: OrgType;
-    parent_id: string | null;
-    reseller_id: string | null;
-    slug: string;
-    name: string;
-    status: OrgStatus;
-  }): Org {
+  function toOrg(row: OrgRow): Org {
     return {
       id: row.id,
       type: row.type,
@@ -74,6 +125,9 @@ export function createOrgRepo(db: Database<OrgServiceDb>) {
       slug: row.slug,
       name: row.name,
       status: row.status,
+      timezone: row.timezone,
+      country: row.country,
+      limits: parseLimits(row.limits),
     };
   }
 
@@ -81,8 +135,18 @@ export function createOrgRepo(db: Database<OrgServiceDb>) {
     findById: async (id: string): Promise<Org | undefined> => {
       const row = await orgs
         .selectFrom('orgs')
-        .select(['id', 'type', 'parent_id', 'reseller_id', 'slug', 'name', 'status'])
+        .select(ORG_COLUMNS)
         .where('id', '=', id)
+        .executeTakeFirst();
+      return row === undefined ? undefined : toOrg(row);
+    },
+
+    /** The single master org, or `undefined` before bootstrap has run. */
+    findMaster: async (): Promise<Org | undefined> => {
+      const row = await orgs
+        .selectFrom('orgs')
+        .select(ORG_COLUMNS)
+        .where('type', '=', 'master')
         .executeTakeFirst();
       return row === undefined ? undefined : toOrg(row);
     },
@@ -91,7 +155,7 @@ export function createOrgRepo(db: Database<OrgServiceDb>) {
     listChildren: async (parentId: string): Promise<Org[]> => {
       const rows = await orgs
         .selectFrom('orgs')
-        .select(['id', 'type', 'parent_id', 'reseller_id', 'slug', 'name', 'status'])
+        .select(ORG_COLUMNS)
         .where('parent_id', '=', parentId)
         .orderBy('created_at', 'asc')
         .execute();
@@ -145,6 +209,9 @@ export function createOrgRepo(db: Database<OrgServiceDb>) {
         slug,
         name: input.name,
         status: 'active',
+        timezone: 'UTC',
+        country: 'US',
+        limits: {},
       };
     },
 
@@ -222,9 +289,151 @@ export function createOrgRepo(db: Database<OrgServiceDb>) {
           slug,
           name: input.name,
           status: 'active',
+          timezone: 'UTC',
+          country: 'US',
+          limits: {},
         };
       });
     },
+
+    /**
+     * Updates name, timezone, country, and/or limits. Publishes
+     * `org.reseller.updated` or `org.tenant.updated`.
+     *
+     * Never used to move an org — `parentId`/`type` are immutable in v1
+     * (02 §1: no re-parenting) — and never used to change `status`; that is
+     * `suspend`/`resume`'s job, so a status change always has its own event.
+     */
+    async update(
+      ctx: DbContext,
+      id: string,
+      patch: {
+        readonly name?: string;
+        readonly timezone?: string;
+        readonly country?: string;
+        readonly limits?: Record<string, unknown>;
+      },
+    ): Promise<Org> {
+      return db.kysely.transaction().execute(async (trx) => {
+        const existing = await trx
+          .selectFrom('orgs')
+          .select(ORG_COLUMNS)
+          .where('id', '=', id)
+          .executeTakeFirst();
+        if (existing === undefined) throw new OrgNotFoundError(id);
+        if (existing.type === 'master') {
+          throw new InvalidOrgHierarchyError(
+            'The master org is managed only by its bootstrap CLI.',
+          );
+        }
+
+        await trx
+          .updateTable('orgs')
+          .set({
+            ...(patch.name === undefined ? {} : { name: patch.name }),
+            ...(patch.timezone === undefined ? {} : { timezone: patch.timezone }),
+            ...(patch.country === undefined ? {} : { country: patch.country }),
+            ...(patch.limits === undefined ? {} : { limits: JSON.stringify(patch.limits) }),
+            updated_at: new Date(),
+            version: existing.version + 1,
+          })
+          .where('id', '=', id)
+          .execute();
+
+        await enqueueEvent(trx, orgEvents, {
+          type: existing.type === 'reseller' ? 'org.reseller.updated' : 'org.tenant.updated',
+          data: { orgId: id },
+          ...eventMeta(ctx),
+        });
+
+        return toOrg({
+          ...existing,
+          name: patch.name ?? existing.name,
+          timezone: patch.timezone ?? existing.timezone,
+          country: patch.country ?? existing.country,
+          limits: patch.limits === undefined ? existing.limits : JSON.stringify(patch.limits),
+        });
+      });
+    },
+
+    /**
+     * `active` -> `suspended` (02 §2). Blocks console login and SIP for the
+     * org's domain once `telephony-config` reacts to the event; data is
+     * retained. Suspending a reseller does not cascade to its tenants here —
+     * that fan-out belongs to whichever consumer needs it (`telephony-config`
+     * or a saga), since a cascading write from this repository would mean
+     * this transaction touching rows outside the one it was asked to change.
+     */
+    async suspend(ctx: DbContext, id: string): Promise<Org> {
+      return db.kysely.transaction().execute(async (trx) => {
+        const existing = await trx
+          .selectFrom('orgs')
+          .select(ORG_COLUMNS)
+          .where('id', '=', id)
+          .executeTakeFirst();
+        if (existing === undefined) throw new OrgNotFoundError(id);
+        if (existing.type === 'master') {
+          throw new InvalidOrgHierarchyError('The master org has no suspend/resume lifecycle.');
+        }
+        assertCanSuspend(existing.status);
+
+        await trx
+          .updateTable('orgs')
+          .set({ status: 'suspended', updated_at: new Date(), version: existing.version + 1 })
+          .where('id', '=', id)
+          .execute();
+
+        await enqueueEvent(trx, orgEvents, {
+          type: existing.type === 'reseller' ? 'org.reseller.suspended' : 'org.tenant.suspended',
+          data: { orgId: id },
+          ...eventMeta(ctx),
+        });
+
+        return toOrg({ ...existing, status: 'suspended' });
+      });
+    },
+
+    /** `suspended` -> `active` (02 §2). */
+    async resume(ctx: DbContext, id: string): Promise<Org> {
+      return db.kysely.transaction().execute(async (trx) => {
+        const existing = await trx
+          .selectFrom('orgs')
+          .select(ORG_COLUMNS)
+          .where('id', '=', id)
+          .executeTakeFirst();
+        if (existing === undefined) throw new OrgNotFoundError(id);
+        if (existing.type === 'master') {
+          throw new InvalidOrgHierarchyError('The master org has no suspend/resume lifecycle.');
+        }
+        assertCanResume(existing.status);
+
+        await trx
+          .updateTable('orgs')
+          .set({ status: 'active', updated_at: new Date(), version: existing.version + 1 })
+          .where('id', '=', id)
+          .execute();
+
+        await enqueueEvent(trx, orgEvents, {
+          type: existing.type === 'reseller' ? 'org.reseller.resumed' : 'org.tenant.resumed',
+          data: { orgId: id },
+          ...eventMeta(ctx),
+        });
+
+        return toOrg({ ...existing, status: 'active' });
+      });
+    },
+  };
+}
+
+function eventMeta(ctx: DbContext): {
+  actor?: { type: 'user'; id: string; orgId: string };
+  correlationId?: string;
+} {
+  return {
+    ...(ctx.actorId === undefined || ctx.orgId === undefined
+      ? {}
+      : { actor: { type: 'user', id: ctx.actorId, orgId: ctx.orgId } }),
+    ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
   };
 }
 

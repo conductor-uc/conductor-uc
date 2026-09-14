@@ -50,7 +50,7 @@ surface so CI can assert over it (07 §3.2).
 | Errors | RFC 9457 `application/problem+json` with a path-only `type`, a stable `code`, `errors[]` for field failures, and the `requestId` |
 | Correlation | `x-request-id` is reused if the caller sent one, `traceparent` is continued, and both land on every log line |
 | Request context | `request.context` carries `requestId`, `traceId`, and — when trusted — `actorId`, `orgId`, `orgType`, `resellerId`, `tenantId` |
-| Hard rule H1 | A reseller actor on a `private` route gets 403 before the handler runs, and no grant can override it (07 §3.1) |
+| Hard rules H1 & H3 | A reseller actor on a `private` route, or a non-master actor on a reseller-lifecycle route (`reseller.create`/`reseller.manage`), gets 403 before the handler runs — no grant can override either (07 §3.1) |
 
 ## Two things to get right
 

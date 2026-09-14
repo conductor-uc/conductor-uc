@@ -84,6 +84,19 @@ export function h1RouteLevelWall(actorOrgType: OrgType, dataClass: DataClass): b
 }
 
 /**
+ * The route-scoped form of H3: `@cuc/http` runs this on every request, the
+ * same way it runs {@link h1RouteLevelWall} — before a handler exists, using
+ * only the actor's org type and the route's declared permission. Unlike H1,
+ * this needs no resource-aware counterpart: H3 was never resource-dependent
+ * to begin with (07 §3.1 reserves `reseller.create`/`reseller.manage` to the
+ * master unconditionally), so this *is* the full rule, not an approximation
+ * of one.
+ */
+export function h3RouteLevelLifecycle(actorOrgType: OrgType, permission: Permission): boolean {
+  return !(RESELLER_LIFECYCLE_PERMISSIONS.has(permission) && actorOrgType !== 'master');
+}
+
+/**
  * All four hard rules (07 §3.1), checked first and unconditionally — nothing
  * a role or a grant says can override a `false` here.
  */
