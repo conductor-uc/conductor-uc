@@ -1,0 +1,30 @@
+{
+  "name": "@cuc/api-gateway",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/main.js",
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "dev": "node --watch dist/src/main.js",
+    "lint": "eslint .",
+    "start": "node dist/src/main.js",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cuc/config": "workspace:*",
+    "@cuc/http": "workspace:*",
+    "@cuc/logger": "workspace:*",
+    "fastify": "^5.12.4",
+    "ioredis": "^5.9.0",
+    "jose": "^6.2.12"
+  },
+  "devDependencies": {
+    "@cuc/testing": "workspace:*",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

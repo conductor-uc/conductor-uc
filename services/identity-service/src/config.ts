@@ -2,6 +2,7 @@ import { Env, Type, baseEnvSchema, loadConfig } from '@cuc/config';
 import { cryptoEnvSchema } from '@cuc/crypto';
 import { dbEnvSchema } from '@cuc/db';
 import { eventsEnvSchema } from '@cuc/events';
+import { httpEnvSchema } from '@cuc/http';
 
 /**
  * Everything this service reads from the environment.
@@ -15,11 +16,7 @@ export const configSchema = Type.Object({
   ...dbEnvSchema.properties,
   ...eventsEnvSchema.properties,
   ...cryptoEnvSchema.properties,
-  /**
-   * Only trust the x-internal-* identity headers when this service is reachable
-   * solely through api-gateway, which authenticates the caller and signs them.
-   */
-  TRUST_INTERNAL_HEADERS: Env.bool({ default: false }),
+  ...httpEnvSchema.properties,
 
   /**
    * Shared secret for the internal, service-to-service admin-creation endpoint.

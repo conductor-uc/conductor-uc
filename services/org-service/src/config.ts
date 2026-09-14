@@ -1,6 +1,7 @@
 import { Env, Type, baseEnvSchema, loadConfig } from '@cuc/config';
 import { dbEnvSchema } from '@cuc/db';
 import { eventsEnvSchema } from '@cuc/events';
+import { httpEnvSchema } from '@cuc/http';
 import { storageEnvSchema } from '@cuc/storage';
 
 /**
@@ -15,11 +16,7 @@ export const configSchema = Type.Object({
   ...dbEnvSchema.properties,
   ...eventsEnvSchema.properties,
   ...storageEnvSchema.properties,
-  /**
-   * Only trust the x-internal-* identity headers when this service is reachable
-   * solely through api-gateway, which authenticates the caller and signs them.
-   */
-  TRUST_INTERNAL_HEADERS: Env.bool({ default: false }),
+  ...httpEnvSchema.properties,
 
   /** Base URL for identity-service's internal API, e.g. http://identity-service:8080. */
   IDENTITY_SERVICE_URL: Env.url(),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { testServer } from './helpers.js';
+import type { OrgType } from '../src/context.js';
+import { signedHeaders, testServer } from './helpers.js';
 
 /** Hard rule H1: the reseller private-data wall (07 §3.1). */
 async function serverWithRoutes() {
@@ -21,13 +22,13 @@ async function serverWithRoutes() {
   return app;
 }
 
-async function get(url: string, orgType?: string) {
+async function get(url: string, orgType?: OrgType) {
   const app = await serverWithRoutes();
   await app.ready();
   return app.inject({
     method: 'GET',
     url,
-    headers: orgType === undefined ? {} : { 'x-internal-org-type': orgType },
+    headers: orgType === undefined ? {} : signedHeaders({ orgType }),
   });
 }
 
@@ -83,7 +84,7 @@ describe('H1 — reseller private-data wall', () => {
     await app.inject({
       method: 'GET',
       url: '/v1/recordings',
-      headers: { 'x-internal-org-type': 'reseller' },
+      headers: signedHeaders({ orgType: 'reseller' }),
     });
 
     expect(handlerRan).toBe(false);
@@ -99,7 +100,7 @@ describe('H1 — reseller private-data wall', () => {
     await app.inject({
       method: 'GET',
       url: '/v1/cdrs',
-      headers: { 'x-internal-org-type': 'reseller' },
+      headers: signedHeaders({ orgType: 'reseller' }),
     });
 
     expect(lines.some((line) => line['msg'] === 'H1: reseller denied private tenant data')).toBe(
@@ -110,7 +111,7 @@ describe('H1 — reseller private-data wall', () => {
 
 /** Hard rule H3: only the master may create or manage resellers (07 §3.1). */
 describe('H3 — reseller lifecycle is master-only', () => {
-  async function post(orgType?: string) {
+  async function post(orgType?: OrgType) {
     const app = await testServer({ context: { trustInternalHeaders: true } });
     app.post(
       '/v1/resellers',
@@ -121,7 +122,7 @@ describe('H3 — reseller lifecycle is master-only', () => {
     return app.inject({
       method: 'POST',
       url: '/v1/resellers',
-      headers: orgType === undefined ? {} : { 'x-internal-org-type': orgType },
+      headers: orgType === undefined ? {} : signedHeaders({ orgType }),
     });
   }
 
@@ -160,7 +161,7 @@ describe('H3 — reseller lifecycle is master-only', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/v1/resellers/r1/tenants',
-      headers: { 'x-internal-org-type': 'reseller' },
+      headers: signedHeaders({ orgType: 'reseller' }),
     });
 
     expect(response.statusCode).toBe(200);

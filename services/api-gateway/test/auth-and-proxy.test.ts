@@ -1,0 +1,267 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { startTestRedis, type TestRedisHandle } from '@cuc/testing';
+import { Redis } from 'ioredis';
+
+import { buildApp } from '../src/app.js';
+import type { Server } from '@cuc/http';
+import { testConfig } from './config.js';
+import {
+  baseServerOptions,
+  mintAccessToken,
+  startFakeDownstream,
+  startFakeJwks,
+  type FakeDownstream,
+  type FakeIdentityKeys,
+} from './helpers.js';
+
+const SECRET = 'test-internal-header-secret';
+
+describe('api-gateway: auth + proxy', () => {
+  let redisHandle: TestRedisHandle;
+  let redis: Redis;
+  let jwks: FakeIdentityKeys;
+  let identity: FakeDownstream;
+  let org: FakeDownstream;
+  let app: Server;
+
+  beforeAll(async () => {
+    redisHandle = await startTestRedis();
+    redis = new Redis(redisHandle.url);
+
+    jwks = await startFakeJwks();
+
+    identity = await startFakeDownstream(SECRET, (fake) => {
+      fake.post('/v1/auth/login', { config: { public: true } }, () => ({
+        status: 'ok',
+        accessToken: 'x',
+        refreshToken: 'y',
+        expiresIn: 600,
+      }));
+    });
+
+    org = await startFakeDownstream(SECRET, (fake) => {
+      fake.get('/v1/public/brand', { config: { public: true } }, () => ({ neutral: true }));
+      fake.get(
+        '/v1/tenants/:id',
+        { config: { permission: 'tenant.read', dataClass: 'config' } },
+        (request) => ({ id: (request.params as { id: string }).id, context: request.context }),
+      );
+      fake.get(
+        '/v1/tenants/:id/cdrs',
+        { config: { permission: 'cdr.read', dataClass: 'private' } },
+        () => ({ rows: [] }),
+      );
+      fake.post(
+        '/v1/tenants/:id/echo',
+        { config: { permission: 'tenant.read', dataClass: 'config' } },
+        (request) => request.body,
+      );
+    });
+
+    app = await buildApp({
+      config: testConfig({
+        IDENTITY_SERVICE_URL: identity.url,
+        ORG_SERVICE_URL: org.url,
+        RATE_LIMIT_IP_MAX: '100000',
+        RATE_LIMIT_ACTOR_MAX: '100000',
+      }),
+      redis,
+      jwksUrl: jwks.jwksUrl,
+      rateLimitKeyPrefix: redisHandle.keyPrefix,
+      ...baseServerOptions(),
+    });
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app.close();
+    await identity.stop();
+    await org.stop();
+    await jwks.stop();
+    redis.disconnect();
+    await redisHandle.stop();
+  });
+
+  it('proxies a public route with no Authorization header', async () => {
+    const response = await app.inject({ method: 'GET', url: '/v1/public/brand' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ neutral: true });
+  });
+
+  it('proxies a public POST route, forwarding the body', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/login',
+      payload: { orgId: 'o1', email: 'a@example.com', password: 'x' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: 'ok' });
+  });
+
+  it('rejects a protected route with no Authorization header', async () => {
+    const response = await app.inject({ method: 'GET', url: '/v1/tenants/t1' });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json()).toMatchObject({ type: '/problems/unauthorized' });
+  });
+
+  it('rejects a malformed bearer token', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/tenants/t1',
+      headers: { authorization: 'Bearer not-a-real-jwt' },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('rejects a token signed by a key the JWKS does not publish', async () => {
+    const { generateKeyPair, SignJWT } = await import('jose');
+    const { privateKey } = await generateKeyPair('EdDSA', { crv: 'Ed25519' });
+    const forged = await new SignJWT({
+      org: 'o1',
+      ot: 'tenant',
+      roles: [],
+      perms: [],
+      amr: ['pwd'],
+      sid: 's1',
+    })
+      .setProtectedHeader({ alg: 'EdDSA', kid: 'not-the-real-key' })
+      .setSubject('user-x')
+      .setIssuedAt()
+      .setExpirationTime('10m')
+      .sign(privateKey);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/tenants/t1',
+      headers: { authorization: `Bearer ${forged}` },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('rejects an expired token', async () => {
+    const token = await mintAccessToken(jwks.privateKey, {
+      org: 'org-1',
+      ot: 'tenant',
+      expiresInSeconds: -10,
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/tenants/t1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('reports API-key auth as not implemented, distinctly from a bad credential', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/tenants/t1',
+      headers: { authorization: 'ApiKey some-key' },
+    });
+
+    expect(response.statusCode).toBe(501);
+    expect(response.json()).toMatchObject({ code: 'api_key_auth_not_implemented' });
+  });
+
+  it('forwards a verified actor as a signed internal context a real downstream accepts', async () => {
+    const token = await mintAccessToken(jwks.privateKey, {
+      sub: 'user-42',
+      org: 'tenant-9',
+      ot: 'tenant',
+      rsl: 'reseller-3',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/tenants/t1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: 't1',
+      context: {
+        actorId: 'user-42',
+        actorType: 'user',
+        orgId: 'tenant-9',
+        orgType: 'tenant',
+        resellerId: 'reseller-3',
+        tenantId: 'tenant-9',
+      },
+    });
+  });
+
+  it('lets the downstream service enforce H1 on the forwarded org type', async () => {
+    const resellerToken = await mintAccessToken(jwks.privateKey, {
+      sub: 'reseller-user',
+      org: 'reseller-3',
+      ot: 'reseller',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/tenants/t1/cdrs',
+      headers: { authorization: `Bearer ${resellerToken}` },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ code: 'reseller_private_data_denied' });
+  });
+
+  it('forwards a JSON body and returns the downstream response body unchanged', async () => {
+    const token = await mintAccessToken(jwks.privateKey, { org: 'tenant-9', ot: 'tenant' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/tenants/t1/echo',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { hello: 'world' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ hello: 'world' });
+  });
+
+  it('returns 404 for a path no routing table entry covers', async () => {
+    // Authenticated, so the request actually reaches the proxy handler —
+    // an unauthenticated request to an unmapped path is correctly a 401
+    // (no route existence is revealed pre-auth), covered separately above.
+    const token = await mintAccessToken(jwks.privateKey, { org: 'tenant-9', ot: 'tenant' });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/nowhere',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns 503 when the downstream service is unreachable', async () => {
+    const unreachable = await buildApp({
+      config: testConfig({
+        IDENTITY_SERVICE_URL: identity.url,
+        ORG_SERVICE_URL: 'http://127.0.0.1:1',
+        RATE_LIMIT_IP_MAX: '100000',
+        RATE_LIMIT_ACTOR_MAX: '100000',
+      }),
+      redis,
+      jwksUrl: jwks.jwksUrl,
+      rateLimitKeyPrefix: redisHandle.keyPrefix,
+      ...baseServerOptions(),
+    });
+    await unreachable.ready();
+
+    const response = await unreachable.inject({ method: 'GET', url: '/v1/public/brand' });
+
+    expect(response.statusCode).toBe(503);
+    await unreachable.close();
+  });
+});

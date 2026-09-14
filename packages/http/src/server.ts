@@ -78,6 +78,14 @@ export async function createServer(options: CreateServerOptions): Promise<Server
     trustProxy = false,
   } = options;
 
+  if (context.trustInternalHeaders === true && context.internalHeaderSigningSecret === undefined) {
+    throw new Error(
+      'trustInternalHeaders is true but no internalHeaderSigningSecret was configured — ' +
+        'a service cannot verify x-internal-* headers without one. Fails at startup, not ' +
+        'per-request, because this is a deployment misconfiguration, not a client error.',
+    );
+  }
+
   const logger =
     options.logger ?? createLogger({ name: serviceName, level: logLevel, version: serviceVersion });
 

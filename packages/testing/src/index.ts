@@ -25,6 +25,14 @@ export {
 } from './nats.js';
 export { crossTenantProbe } from './probe-suite.js';
 export {
+  redisOrSkipReason,
+  REDIS_URL_ENV,
+  REQUIRE_REDIS_ENV,
+  startTestRedis,
+  stopSharedRedisContainer,
+  type TestRedisHandle,
+} from './redis.js';
+export {
   parseS3Url,
   REQUIRE_S3_ENV,
   s3OrSkipReason,
