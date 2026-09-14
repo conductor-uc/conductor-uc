@@ -2,6 +2,8 @@ import type { EventTables } from '@cuc/events';
 
 export type OrgType = 'master' | 'reseller' | 'tenant';
 export type OrgStatus = 'active' | 'suspended' | 'pending_deletion' | 'deleted';
+/** A reseller base domain starts `pending` and becomes `active` once its TXT record verifies (02 §3). */
+export type BaseDomainStatus = 'pending' | 'active';
 
 /**
  * This service's own schema (05 §1.1). No cross-schema joins.
@@ -53,7 +55,7 @@ export interface OrgServiceDb extends EventTables {
     fqdn: string;
     verification_token: string;
     verified_at: Date | null;
-    status: string;
+    status: BaseDomainStatus;
     created_at: Date;
     updated_at: Date;
   };

@@ -5,8 +5,11 @@ import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
 import { configSchema, loadServiceConfig } from './config.js';
+import { nodeDnsResolver } from './dns-resolver.js';
 import { createIdentityClient } from './identity-client.js';
+import { createDomainRepo } from './repo/domain.repo.js';
 import { createOrgRepo } from './repo/org.repo.js';
+import { registerDomainRoutes } from './routes/domain.routes.js';
 import { registerOrgRoutes } from './routes/org.routes.js';
 import type { OrgServiceDb } from './schema.js';
 
@@ -75,7 +78,12 @@ const identityClient = createIdentityClient({
   baseUrl: config.IDENTITY_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
-registerOrgRoutes(app, createOrgRepo(db), identityClient.createAdminUser);
+registerOrgRoutes(
+  app,
+  createOrgRepo(db, { platformBaseDomain: config.PLATFORM_BASE_DOMAIN }),
+  identityClient.createAdminUser,
+);
+registerDomainRoutes(app, createDomainRepo(db), nodeDnsResolver());
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

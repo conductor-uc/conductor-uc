@@ -21,6 +21,14 @@ export const configSchema = Type.Object({
 
   /** Base URL for identity-service's internal API, e.g. http://identity-service:8080. */
   IDENTITY_SERVICE_URL: Env.url(),
+
+  /**
+   * Deployment-wide fallback base for a tenant's primary domain when its
+   * reseller has no active base domain of its own (02 §3). Never a default
+   * that carries a product or codebase name (rule 1) — every deployment must
+   * set its own.
+   */
+  PLATFORM_BASE_DOMAIN: Env.string(),
   /**
    * Shared bearer token identity-service's `/internal/v1` routes expect
    * (07 §1's precedent) — must match that service's own INTERNAL_SERVICE_TOKEN.

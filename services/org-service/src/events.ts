@@ -65,4 +65,17 @@ export const orgEvents = defineEvents({
     description: 'A suspended tenant was returned to active.',
     data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
   },
+  'org.domain.added': {
+    schemaVersion: 1,
+    description:
+      'A domain became active: a tenant got its primary SIP domain, or a reseller base ' +
+      'domain finished TXT verification (02 §3).',
+    data: Type.Object({
+      domainId: Type.String({ minLength: 1 }),
+      fqdn: Type.String({ minLength: 1 }),
+      scope: Type.Union([Type.Literal('tenant'), Type.Literal('reseller_base')]),
+      /** The tenant id for `scope: 'tenant'`, the reseller id for `scope: 'reseller_base'`. */
+      ownerId: Type.String({ minLength: 1 }),
+    }),
+  },
 });

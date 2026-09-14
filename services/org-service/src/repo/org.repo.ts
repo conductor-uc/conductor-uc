@@ -4,6 +4,7 @@ import type { Database, DbContext } from '@cuc/db';
 import { isDuplicateKeyError } from '@cuc/db';
 import { enqueueEvent } from '@cuc/events';
 
+import { tenantDomainFor } from '../domain/domain.js';
 import {
   assertCanResume,
   assertCanSuspend,
@@ -13,6 +14,7 @@ import {
   validateSlug,
 } from '../domain/org.js';
 import { orgEvents } from '../events.js';
+import { DomainTakenError } from './domain.repo.js';
 import type { OrgServiceDb, OrgStatus, OrgType } from '../schema.js';
 
 export interface Org {
@@ -113,7 +115,16 @@ function parseLimits(value: unknown): Record<string, unknown> {
  * `@cuc/authz` will take over in S1-06. Until then, calling this repository at
  * all is the access control: nothing routes to it except the bootstrap CLI.
  */
-export function createOrgRepo(db: Database<OrgServiceDb>) {
+export interface CreateOrgRepoOptions {
+  /**
+   * The deployment-wide fallback base for a tenant's primary domain
+   * (`PLATFORM_BASE_DOMAIN`, 02 §3) — used whenever the owning reseller has
+   * no active base domain of its own yet.
+   */
+  readonly platformBaseDomain: string;
+}
+
+export function createOrgRepo(db: Database<OrgServiceDb>, options: CreateOrgRepoOptions) {
   const orgs = db.kysely;
 
   function toOrg(row: OrgRow): Org {
@@ -275,11 +286,40 @@ export function createOrgRepo(db: Database<OrgServiceDb>) {
         await enqueueEvent(trx, orgEvents, {
           type: type === 'reseller' ? 'org.reseller.created' : 'org.tenant.created',
           data: { orgId: id, slug, name: input.name, parentId: input.parentId },
-          ...(ctx.actorId === undefined || ctx.orgId === undefined
-            ? {}
-            : { actor: { type: 'user', id: ctx.actorId, orgId: ctx.orgId } }),
-          ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
+          ...eventMeta(ctx),
         });
+
+        // A tenant's primary domain is assigned in the same transaction as
+        // the tenant row: unlike identity-service's admin-user call, nothing
+        // stops this one from being atomic, so a tenant is never left
+        // without a domain (02 §3).
+        if (type === 'tenant') {
+          const base = await trx
+            .selectFrom('reseller_base_domains')
+            .select('fqdn')
+            .where('reseller_id', '=', input.parentId)
+            .where('status', '=', 'active')
+            .orderBy('created_at', 'asc')
+            .executeTakeFirst();
+          const fqdn = tenantDomainFor(slug, base?.fqdn ?? options.platformBaseDomain);
+          const domainId = randomUUID();
+
+          try {
+            await trx
+              .insertInto('tenant_domains')
+              .values({ id: domainId, tenant_id: id, fqdn, is_primary: true, created_at: now })
+              .execute();
+          } catch (error) {
+            if (isDuplicateKeyError(error)) throw new DomainTakenError(fqdn);
+            throw error;
+          }
+
+          await enqueueEvent(trx, orgEvents, {
+            type: 'org.domain.added',
+            data: { domainId, fqdn, scope: 'tenant', ownerId: id },
+            ...eventMeta(ctx),
+          });
+        }
 
         return {
           id,

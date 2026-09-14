@@ -25,6 +25,7 @@ const RESELLER_ADMIN_PERMISSIONS: readonly Permission[] = [
   'tenant.create',
   'tenant.manage',
   'tenant.suspend',
+  'domain.manage',
   'brand.manage',
   'user.manage',
   'role.manage',

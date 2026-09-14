@@ -61,7 +61,8 @@ voicemail, one queue's monitoring, etc.).
 ## The permission catalog and built-in roles
 
 `PERMISSION_CATALOG` (`permissions.ts`) is transcribed from 07 §3.3: every permission and
-the `DataClass` (`config` / `private` / `usage` / `secret`) it touches. `BUILT_IN_ROLES`
+the `DataClass` (`config` / `private` / `usage` / `secret`) it touches — plus `domain.manage`
+(S1-03), added for reseller base-domain routes that 07 §3.3 does not itself name. `BUILT_IN_ROLES`
 (`roles.ts`) is the seven fixed roles — `master_admin`, `master_support`,
 `reseller_admin`, `reseller_support`, `tenant_admin`, `tenant_supervisor`, `tenant_user` —
 as code, not rows, because nothing about them varies per deployment. `roleCatalog(custom)`

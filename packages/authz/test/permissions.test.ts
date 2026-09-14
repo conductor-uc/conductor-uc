@@ -72,6 +72,11 @@ describe('PERMISSION_CATALOG', () => {
       expect(dataClassOf(permission)).toBe('private');
     }
   });
+
+  it('includes domain.manage — S1-03, not in 07 §3.3, added for reseller base-domain routes', () => {
+    expect(isKnownPermission('domain.manage')).toBe(true);
+    expect(dataClassOf('domain.manage')).toBe('config');
+  });
 });
 
 describe('dataClassOf', () => {

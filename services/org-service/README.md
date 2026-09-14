@@ -5,6 +5,33 @@ The org hierarchy: master → reseller → tenant (02 §1), generated from `pnpm
 `@cuc/db` sense (see `src/schema.ts`), so the generated widget-shaped sample entity did not
 fit the actual domain model.
 
+## What S1-03 adds
+
+Domains (02 §3), on top of the `reseller_base_domains`/`tenant_domains` shells S1-01 left in
+place.
+
+- **A tenant's primary domain (`{slug}.{base}`) is assigned atomically inside `create()`**
+  (`src/repo/org.repo.ts`), in the same transaction as the tenant row — unlike the
+  cross-service admin-user call, nothing stops this one from being atomic, so a tenant is
+  never left without a domain. `base` is the reseller's active base domain if it has one
+  (earliest by `created_at`, when more than one), otherwise `PLATFORM_BASE_DOMAIN`.
+- **Reseller base-domain registration and TXT verification** (`src/repo/domain.repo.ts`,
+  `src/routes/domain.routes.ts`): `POST /v1/resellers/:id/base-domains` registers a
+  `pending` candidate with a generated token; `POST .../base-domains/:domainId/verify` looks
+  up a TXT record at `_domain-verification.{fqdn}` and activates the domain once it matches
+  — `_domain-verification` is a deliberately generic label, never the codebase or product
+  name, since a DNS record a reseller publishes is a network-visible surface (rule 1).
+  `src/dns-resolver.ts` wraps `node:dns/promises` behind an interface so tests inject a fake
+  resolver instead of needing control over real DNS.
+- **Global uniqueness** (02 §3) is checked across *both* domain tables, in the same
+  transaction as the insert — a candidate base domain can't collide with an existing tenant
+  domain or another reseller's base domain, and vice versa.
+- **`domain.manage`**, a new permission not in 07 §3.3 (added the same shape as every other
+  `*.manage` entry — see `@cuc/authz`'s README), held by `reseller_admin` and `master_admin`.
+  A tenant's own domain has no route to self-manage; it's assigned, not configured.
+- Uses `/verify` as a plain path segment rather than 06's example `:verify` suffix, the same
+  router-fragility finding S1-02 made for `:suspend`/`:resume`.
+
 ## What S1-02 adds
 
 The provisioning API (06's org-service section): reseller and tenant create, read, update,
@@ -56,12 +83,16 @@ the same reason.
   api-gateway builds (S1-08). Until then this matches every other service's routes.
 - **No org delete.** `pending_deletion` → `deleted`, with a retention window and a data
   export, has no owning task yet — G-11 in `docs/decisions.md`.
-- **No domain or brand business logic** — verification, CRUD, uniqueness beyond the schema
-  itself. S1-03 and S1-04.
+- **No brand business logic** — verification, CRUD, uniqueness. S1-04.
+- **No domain change or removal.** Once assigned, a tenant's primary domain is not
+  reassigned if its reseller later activates a base domain, and neither domain table has a
+  delete path — 02 §3 flags changing a tenant's domain as invalidating stored SIP digest
+  HA1 values, a distinct, more involved operation this task does not build.
+- **No ACME / TLS issuance.** 02 §3 mentions it; no task owns it yet.
 
 ## Verified
 
-`pnpm build` / `typecheck` / `lint`: clean. `pnpm test`: 66 tests against real MariaDB
+`pnpm build` / `typecheck` / `lint`: clean. `pnpm test`: 111 tests against real MariaDB
 (including a live HTTP client test against a real `http.createServer` fake, proving
 `identity-client.ts`'s wire behavior rather than mocking `fetch`), covering:
 
@@ -71,6 +102,9 @@ the same reason.
   and a cross-reseller probe proves one reseller's tenant listing never includes another's.
 - Update, suspend, resume, and their event publication; H3 denying a non-master actor at the
   HTTP layer; every `/v1/*` route declaring `permission` and `dataClass`.
+- The S1-03 acceptance criterion: `org.domain.added` fires for both a tenant's assigned
+  domain and a verified reseller base domain, and a full register → verify flow against an
+  injected fake `DnsResolver` (matching, mismatching, missing, and throwing) passes.
 
 The bootstrap CLI was run as a compiled process twice against a real schema: once creating
 the master, once hitting `orgs_slug_idx` (same slug) and once hitting

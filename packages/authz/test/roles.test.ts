@@ -38,6 +38,14 @@ describe('BUILT_IN_ROLES', () => {
     }
   });
 
+  it('reseller_admin holds domain.manage — registers and verifies its own base domains', () => {
+    expect(BUILT_IN_ROLES.get('reseller_admin')?.permissions.has('domain.manage')).toBe(true);
+  });
+
+  it('tenant_admin does not hold domain.manage — a tenant domain is assigned, not self-managed', () => {
+    expect(BUILT_IN_ROLES.get('tenant_admin')?.permissions.has('domain.manage')).toBe(false);
+  });
+
   it('tenant_admin holds secret.reveal — audited, but a real tenant-admin capability', () => {
     expect(BUILT_IN_ROLES.get('tenant_admin')?.permissions.has('secret.reveal')).toBe(true);
   });

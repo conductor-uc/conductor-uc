@@ -44,8 +44,14 @@ migrate services/example-service example_service example_service "$EXAMPLE_SERVI
 
 if [ -d services/org-service/dist/migrations ]; then
   echo "Bootstrapping the master org..."
+  # bootstrap-master loads org-service's full config schema (S1-02/S1-03 added
+  # IDENTITY_SERVICE_URL, INTERNAL_SERVICE_TOKEN, PLATFORM_BASE_DOMAIN), even
+  # though creating the master touches none of them — it never calls
+  # identity-service or assigns a domain. Local placeholders are enough.
   SERVICE_NAME=org-service-bootstrap \
     DB_HOST=127.0.0.1 DB_PORT="${MARIADB_PORT:-3306}" \
     DB_USER=org_service DB_PASSWORD="$ORG_SERVICE_DB_PASSWORD" DB_NAME=org_service \
+    IDENTITY_SERVICE_URL="http://127.0.0.1:1" INTERNAL_SERVICE_TOKEN="unused-by-bootstrap" \
+    PLATFORM_BASE_DOMAIN="local.test" \
     pnpm --filter ./services/org-service run bootstrap-master
 fi
