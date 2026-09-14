@@ -29,6 +29,10 @@ pnpm lint typecheck test build
 
 Turborepo caches task output in `.turbo/`; `pnpm clean` removes build output and caches.
 
+Services need MariaDB, Redis, NATS, MinIO, and Mailpit locally. `make up` brings up
+[the compose stack](infra/compose/README.md); `make seed` applies migrations and bootstraps
+the master org.
+
 ## Layout
 
 The directory structure follows [01 §5](docs/architecture/01-system-overview.md#5-monorepo-layout). `packages/*`,
