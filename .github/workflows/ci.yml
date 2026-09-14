@@ -21,9 +21,11 @@ env:
   # container would report green with every integration test silently skipped.
   REQUIRE_DB_TESTS: '1'
   REQUIRE_NATS_TESTS: '1'
+  REQUIRE_S3_TESTS: '1'
   REQUIRE_REDIS_TESTS: '1'
   TEST_DATABASE_URL: mysql://root:ci@127.0.0.1:3306
   TEST_NATS_URL: 127.0.0.1:4222
+  TEST_S3_URL: http://ci-minio:ci-minio-password@127.0.0.1:9000
   TEST_REDIS_URL: redis://127.0.0.1:6379
   TURBO_TELEMETRY_DISABLED: '1'
 
@@ -81,6 +83,26 @@ jobs:
           docker logs nats >&2
           exit 1
 
+      - name: Start MinIO
+        # Not a `services:` entry: the image needs a `server /data` command,
+        # and a service container has no way to pass one. Without this,
+        # @cuc/storage's tests fall back to Testcontainers pulling the image
+        # cold, which routinely outruns vitest's default hook timeout here.
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=ci-minio -e MINIO_ROOT_PASSWORD=ci-minio-password \
+            quay.io/minio/minio:latest server /data
+          for _ in $(seq 1 30); do
+            if (exec 3<>/dev/tcp/127.0.0.1/9000) 2>/dev/null; then
+              echo "MinIO is accepting connections"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "MinIO did not start in time" >&2
+          docker logs minio >&2
+          exit 1
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -126,6 +148,10 @@ jobs:
       - name: Show NATS logs on failure
         if: failure()
         run: docker logs nats || true
+
+      - name: Show MinIO logs on failure
+        if: failure()
+        run: docker logs minio || true
 
   # Later stages plug in here rather than in the job above, so one slow suite
   # does not hold up the fast feedback:
