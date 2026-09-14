@@ -5,10 +5,12 @@ import { databaseOrSkipReason, silentLogger, startTestDatabase } from '@cuc/test
 import {
   createOrgRepo,
   MasterAlreadyExistsError,
+  OrgNotFoundError,
   ParentNotFoundError,
   SlugTakenError,
   type OrgRepo,
 } from '../src/repo/org.repo.js';
+import { InvalidOrgStatusTransitionError } from '../src/domain/org.js';
 import { migrations } from '../migrations/index.js';
 import type { OrgServiceDb } from '../src/schema.js';
 
@@ -236,5 +238,168 @@ describe.skipIf(skipReason !== undefined)('org repo — hierarchy invariants', (
     const children = await repo.listChildren(reseller.id);
 
     expect(children.map((org) => org.id).sort()).toEqual([tenantA.id, tenantB.id].sort());
+  });
+
+  it("cross-reseller probe: listing one reseller's tenants never returns another reseller's (05 §2.4)", async () => {
+    const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+    const resellerA = await repo.create({}, 'reseller', {
+      parentId: master.id,
+      slug: 'reseller-a',
+      name: 'A',
+    });
+    const resellerB = await repo.create({}, 'reseller', {
+      parentId: master.id,
+      slug: 'reseller-b',
+      name: 'B',
+    });
+    const tenantA = await repo.create({}, 'tenant', {
+      parentId: resellerA.id,
+      slug: 'tenant-a',
+      name: 'Tenant A',
+    });
+    await repo.create({}, 'tenant', { parentId: resellerB.id, slug: 'tenant-b', name: 'Tenant B' });
+
+    const tenantsForA = await repo.listChildren(resellerA.id);
+
+    expect(tenantsForA.map((org) => org.id)).toEqual([tenantA.id]);
+  });
+
+  describe('findMaster', () => {
+    it('is undefined before bootstrap', async () => {
+      expect(await repo.findMaster()).toBeUndefined();
+    });
+
+    it('finds the master once created', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+
+      expect((await repo.findMaster())?.id).toBe(master.id);
+    });
+  });
+
+  describe('update', () => {
+    it('updates name, timezone, country, and limits, bumping the version', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+
+      const updated = await repo.update({}, reseller.id, {
+        name: 'Acme Resale',
+        timezone: 'America/New_York',
+        country: 'CA',
+        limits: { maxExtensions: 50 },
+      });
+
+      expect(updated).toMatchObject({
+        name: 'Acme Resale',
+        timezone: 'America/New_York',
+        country: 'CA',
+        limits: { maxExtensions: 50 },
+      });
+      expect(await repo.findById(reseller.id)).toEqual(updated);
+    });
+
+    it('leaves unspecified fields alone', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+
+      const updated = await repo.update({}, reseller.id, { name: 'Renamed' });
+
+      expect(updated).toMatchObject({ name: 'Renamed', timezone: 'UTC', country: 'US' });
+    });
+
+    it('rejects updating a nonexistent org', async () => {
+      await expect(repo.update({}, 'no-such-org', { name: 'X' })).rejects.toThrow(OrgNotFoundError);
+    });
+
+    it('publishes org.reseller.updated / org.tenant.updated', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+
+      await repo.update({}, reseller.id, { name: 'Renamed' });
+
+      const rows = await db.kysely
+        .selectFrom('outbox')
+        .selectAll()
+        .where('type', '=', 'org.reseller.updated')
+        .execute();
+      expect(rows).toHaveLength(1);
+    });
+  });
+
+  describe('suspend / resume', () => {
+    it('suspends an active org and resumes it', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+
+      const suspended = await repo.suspend({}, reseller.id);
+      expect(suspended.status).toBe('suspended');
+
+      const resumed = await repo.resume({}, reseller.id);
+      expect(resumed.status).toBe('active');
+    });
+
+    it('rejects suspending an org that is already suspended', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+      await repo.suspend({}, reseller.id);
+
+      await expect(repo.suspend({}, reseller.id)).rejects.toThrow(InvalidOrgStatusTransitionError);
+    });
+
+    it('rejects resuming an org that is not suspended', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+
+      await expect(repo.resume({}, reseller.id)).rejects.toThrow(InvalidOrgStatusTransitionError);
+    });
+
+    it('rejects suspending a nonexistent org', async () => {
+      await expect(repo.suspend({}, 'no-such-org')).rejects.toThrow(OrgNotFoundError);
+    });
+
+    it('publishes org.tenant.suspended and org.tenant.resumed', async () => {
+      const master = await repo.createMaster({ slug: 'master', name: 'Master' });
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+      const tenant = await repo.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      await repo.suspend({}, tenant.id);
+      await repo.resume({}, tenant.id);
+
+      const types = (await db.kysely.selectFrom('outbox').select('type').execute()).map(
+        (row) => row.type,
+      );
+      expect(types).toEqual(expect.arrayContaining(['org.tenant.suspended', 'org.tenant.resumed']));
+    });
   });
 });

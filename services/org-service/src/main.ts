@@ -5,6 +5,9 @@ import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
 import { configSchema, loadServiceConfig } from './config.js';
+import { createIdentityClient } from './identity-client.js';
+import { createOrgRepo } from './repo/org.repo.js';
+import { registerOrgRoutes } from './routes/org.routes.js';
 import type { OrgServiceDb } from './schema.js';
 
 const config = loadServiceConfig();
@@ -68,9 +71,12 @@ app.addReadinessCheck('outbox', async () => {
   return { status: 'pass', detail: `${String(lag)} pending` };
 });
 
-// No public routes yet: the provisioning API is S1-02's job. This service
-// currently exists to hold the org hierarchy and run the bootstrap CLI
-// (src/cli/bootstrap-master.ts); it still serves /healthz and /readyz per 06.
+const identityClient = createIdentityClient({
+  baseUrl: config.IDENTITY_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+registerOrgRoutes(app, createOrgRepo(db), identityClient.createAdminUser);
+
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
 

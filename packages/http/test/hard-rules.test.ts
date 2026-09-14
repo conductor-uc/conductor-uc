@@ -107,3 +107,62 @@ describe('H1 — reseller private-data wall', () => {
     );
   });
 });
+
+/** Hard rule H3: only the master may create or manage resellers (07 §3.1). */
+describe('H3 — reseller lifecycle is master-only', () => {
+  async function post(orgType?: string) {
+    const app = await testServer({ context: { trustInternalHeaders: true } });
+    app.post(
+      '/v1/resellers',
+      { config: { permission: 'reseller.create', dataClass: 'config' } },
+      () => ({ id: 'r1' }),
+    );
+    await app.ready();
+    return app.inject({
+      method: 'POST',
+      url: '/v1/resellers',
+      headers: orgType === undefined ? {} : { 'x-internal-org-type': orgType },
+    });
+  }
+
+  it('denies a reseller actor', async () => {
+    const response = await post('reseller');
+
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({
+      type: '/problems/forbidden',
+      status: 403,
+      code: 'reseller_lifecycle_denied',
+    });
+  });
+
+  it('denies a tenant actor', async () => {
+    const response = await post('tenant');
+
+    expect(response.statusCode).toBe(403);
+  });
+
+  it('allows a master actor', async () => {
+    const response = await post('master');
+
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('does not restrict a route with an unrelated permission', async () => {
+    const app = await testServer({ context: { trustInternalHeaders: true } });
+    app.post(
+      '/v1/resellers/:id/tenants',
+      { config: { permission: 'tenant.create', dataClass: 'config' } },
+      () => ({ id: 't1' }),
+    );
+    await app.ready();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/resellers/r1/tenants',
+      headers: { 'x-internal-org-type': 'reseller' },
+    });
+
+    expect(response.statusCode).toBe(200);
+  });
+});

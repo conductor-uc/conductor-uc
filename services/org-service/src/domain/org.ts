@@ -1,4 +1,4 @@
-import type { OrgType } from '../schema.js';
+import type { OrgStatus, OrgType } from '../schema.js';
 
 /**
  * Pure business logic for the org hierarchy (09 §1: domain code should be pure
@@ -71,4 +71,31 @@ export function resellerIdFor(
   // assertValidParentType before this runs), so the parent's own id is the
   // reseller_id to denormalize.
   return parent.id;
+}
+
+export class InvalidOrgStatusTransitionError extends Error {
+  override readonly name = 'InvalidOrgStatusTransitionError';
+}
+
+/**
+ * The lifecycle from 02 §2: `active` <-> `suspended`. `pending_deletion` and
+ * `deleted` are reachable states (05 §3.1's `status` column allows them) but
+ * no stage task yet builds the hard-delete-after-retention-window flow that
+ * would transition into them — see decisions.md G-11. Suspend and resume are
+ * therefore the only transitions this validates for now.
+ */
+export function assertCanSuspend(status: OrgStatus): void {
+  if (status !== 'active') {
+    throw new InvalidOrgStatusTransitionError(
+      `Cannot suspend an org that is '${status}'; only 'active' orgs can be suspended.`,
+    );
+  }
+}
+
+export function assertCanResume(status: OrgStatus): void {
+  if (status !== 'suspended') {
+    throw new InvalidOrgStatusTransitionError(
+      `Cannot resume an org that is '${status}'; only 'suspended' orgs can be resumed.`,
+    );
+  }
 }

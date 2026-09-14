@@ -18,6 +18,14 @@ export const configSchema = Type.Object({
    * solely through api-gateway, which authenticates the caller and signs them.
    */
   TRUST_INTERNAL_HEADERS: Env.bool({ default: false }),
+
+  /** Base URL for identity-service's internal API, e.g. http://identity-service:8080. */
+  IDENTITY_SERVICE_URL: Env.url(),
+  /**
+   * Shared bearer token identity-service's `/internal/v1` routes expect
+   * (07 §1's precedent) — must match that service's own INTERNAL_SERVICE_TOKEN.
+   */
+  INTERNAL_SERVICE_TOKEN: Env.secret(),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

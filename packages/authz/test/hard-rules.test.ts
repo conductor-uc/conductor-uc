@@ -4,6 +4,7 @@ import {
   h1PrivateDataWall,
   h2TenantBoundary,
   h3ResellerLifecycle,
+  h3RouteLevelLifecycle,
   h4ApiKeyRestriction,
   hardRulesPass,
 } from '../src/hard-rules.js';
@@ -92,6 +93,38 @@ describe('h3ResellerLifecycle', () => {
 
   it('does not restrict an unrelated permission', () => {
     expect(h3ResellerLifecycle(resellerActor, 'tenant.create')).toBe(true);
+  });
+});
+
+describe('h3RouteLevelLifecycle', () => {
+  it('denies a reseller or tenant actor on a reseller-lifecycle permission', () => {
+    expect(h3RouteLevelLifecycle('reseller', 'reseller.create')).toBe(false);
+    expect(h3RouteLevelLifecycle('tenant', 'reseller.manage')).toBe(false);
+  });
+
+  it('allows a master actor', () => {
+    expect(h3RouteLevelLifecycle('master', 'reseller.create')).toBe(true);
+    expect(h3RouteLevelLifecycle('master', 'reseller.manage')).toBe(true);
+  });
+
+  it('does not restrict an unrelated permission', () => {
+    expect(h3RouteLevelLifecycle('reseller', 'tenant.create')).toBe(true);
+  });
+
+  it('agrees with the resource-aware h3ResellerLifecycle for every actor org type', () => {
+    for (const orgType of ['master', 'reseller', 'tenant'] as const) {
+      for (const permission of ['reseller.create', 'reseller.manage', 'tenant.create']) {
+        const actor: Actor = {
+          id: 'a',
+          type: 'user',
+          org: { id: 'o', type: orgType, resellerId: null },
+          roleIds: [],
+        };
+        expect(h3RouteLevelLifecycle(orgType, permission)).toBe(
+          h3ResellerLifecycle(actor, permission),
+        );
+      }
+    }
   });
 });
 

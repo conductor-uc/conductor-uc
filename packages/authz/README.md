@@ -44,7 +44,10 @@ overrides it:
   allows), and that's the safe direction for an approximation to err in.
 - **H2** — an actor cannot act outside its own org's ancestry, full stop.
 - **H3** — `reseller.create` and `reseller.manage` are master-only, unconditionally, no
-  matter whose resource is being touched.
+  matter whose resource is being touched. `h3RouteLevelLifecycle` is the same framework-level
+  hook as H1's, using only the actor's org type and the route's declared `permission` — but
+  unlike H1 it needs no resource-aware counterpart, since H3 was never resource-dependent to
+  begin with. `@cuc/http`'s hard-rules hook runs both.
 - **H4** — API-key actors are restricted the same way regardless of role/grant.
 
 `orgAncestry` (`ancestry.ts`) is master-sees-everything, reseller-sees-its-own-tenants,

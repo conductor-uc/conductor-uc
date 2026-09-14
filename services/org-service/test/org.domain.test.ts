@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   InvalidOrgHierarchyError,
+  InvalidOrgStatusTransitionError,
   InvalidSlugError,
+  assertCanResume,
+  assertCanSuspend,
   assertValidParentType,
   resellerIdFor,
   validateSlug,
@@ -87,5 +90,29 @@ describe('resellerIdFor', () => {
 
   it('is null for the master', () => {
     expect(resellerIdFor('master', { id: 'x', type: 'master' })).toBeNull();
+  });
+});
+
+describe('assertCanSuspend', () => {
+  it('accepts an active org', () => {
+    expect(() => assertCanSuspend('active')).not.toThrow();
+  });
+
+  it('rejects anything else', () => {
+    for (const status of ['suspended', 'pending_deletion', 'deleted'] as const) {
+      expect(() => assertCanSuspend(status)).toThrow(InvalidOrgStatusTransitionError);
+    }
+  });
+});
+
+describe('assertCanResume', () => {
+  it('accepts a suspended org', () => {
+    expect(() => assertCanResume('suspended')).not.toThrow();
+  });
+
+  it('rejects anything else', () => {
+    for (const status of ['active', 'pending_deletion', 'deleted'] as const) {
+      expect(() => assertCanResume(status)).toThrow(InvalidOrgStatusTransitionError);
+    }
   });
 });
