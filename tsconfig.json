@@ -6,6 +6,9 @@
       "path": "./packages/api-contracts/tsconfig.build.json"
     },
     {
+      "path": "./packages/audit/tsconfig.build.json"
+    },
+    {
       "path": "./packages/authz/tsconfig.build.json"
     },
     {

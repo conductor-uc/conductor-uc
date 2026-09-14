@@ -135,4 +135,25 @@ export interface IdentityServiceDb extends EventTables {
     scope_id: string;
     created_at: Date;
   };
+
+  /**
+   * The audit trail (05 §3.2, 07 §4), fed by the `AUDIT` stream `@cuc/audit`
+   * publishes to. Append-only: nothing in this service ever updates or
+   * deletes a row here (retention/deletion is future, operational tooling —
+   * G-14 in docs/decisions.md).
+   */
+  audit_events: {
+    id: string;
+    at: Date;
+    actor_type: string;
+    actor_id: string;
+    actor_org_id: string;
+    target_org_id: string | null;
+    action: string;
+    resource: string;
+    data_class: string;
+    reason: string | null;
+    ip: string | null;
+    request_id: string | null;
+  };
 }
