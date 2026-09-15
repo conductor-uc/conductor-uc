@@ -26,4 +26,12 @@ create_service_db org_service org_service "${ORG_SERVICE_DB_PASSWORD}"
 create_service_db pbx_config_service pbx_config_service "${PBX_CONFIG_SERVICE_DB_PASSWORD}"
 create_service_db example_service example_service "${EXAMPLE_SERVICE_DB_PASSWORD}"
 
+# `opensips` is the one schema not owned by a Node service (05 §1.1's rule
+# still applies — one schema, one user, granted only on its own schema):
+# OpenSIPs itself reads and caches it, and only telephony-config (S1-12)
+# ever writes to it. Its tables are provisioned separately, by
+# 02-opensips-schema.sh, since they come from OpenSIPs' own vendored SQL
+# files rather than this function's generic empty-schema shape.
+create_service_db opensips opensips "${OPENSIPS_DB_PASSWORD}"
+
 mariadb -u root -p"${MARIADB_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;"

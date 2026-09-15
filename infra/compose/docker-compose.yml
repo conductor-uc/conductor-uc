@@ -1,6 +1,8 @@
 # Local development stack (S0-05). MariaDB, Redis, NATS (JetStream), MinIO,
-# Mailpit, and (from S1-10) FreeSWITCH. OpenSIPs joins in S1-11 — until then
-# FreeSWITCH has no real caller: it just proves the container boots.
+# Mailpit, and (from S1-10/S1-11) FreeSWITCH and OpenSIPs. Both projections
+# (usrloc, dispatcher, domain, ...) are empty until telephony-config (S1-12)
+# exists — every routing decision in opensips.cfg.template correctly finds
+# nothing and falls through until then.
 #
 # Usage: see the root Makefile (`make up` / `make down` / `make reset`) or
 # ./README.md for details and troubleshooting.
@@ -18,6 +20,7 @@ services:
       ORG_SERVICE_DB_PASSWORD: ${ORG_SERVICE_DB_PASSWORD:-dev-org-password}
       PBX_CONFIG_SERVICE_DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD:-dev-pbx-config-password}
       EXAMPLE_SERVICE_DB_PASSWORD: ${EXAMPLE_SERVICE_DB_PASSWORD:-dev-example-password}
+      OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     ports:
       - '${MARIADB_PORT:-3306}:3306'
     volumes:
@@ -25,6 +28,9 @@ services:
       # Only runs against an empty data directory (the image's own rule), so
       # editing this after the first `make up` needs `make reset` to apply.
       - ./mariadb/init:/docker-entrypoint-initdb.d:ro
+      # S1-11: OpenSIPs' own vendored table-creation SQL, read by
+      # 02-opensips-schema.sh above (see telephony/opensips/db-schema/README.md).
+      - ../../telephony/opensips/db-schema:/opensips-schema:ro
     healthcheck:
       test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
       interval: 5s
@@ -106,18 +112,44 @@ services:
       # Compose's default bridge subnet is assigned dynamically, so this is
       # deliberately broad rather than one fixed address — it still only
       # covers this project's own isolated network, never the host's.
-      # S1-11 narrows it once OpenSIPs's real address is known.
       FS_OPENSIPS_CIDR: ${FS_OPENSIPS_CIDR:-172.16.0.0/12}
       FS_CLUSTER_CIDR: ${FS_CLUSTER_CIDR:-172.16.0.0/12}
       FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}
       TELEPHONY_CONFIG_URL: ${TELEPHONY_CONFIG_URL:-http://telephony-config:8080}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
-    ports:
-      - '${FS_SIP_PORT:-5060}:5060/udp'
+    # No host port publish: 03 §1's table lists OpenSIPs as the only edge —
+    # FS is reached over the compose network (its ACL only allows
+    # opensips_cidr/cluster_cidr, S1-10), same as production. The dispatcher
+    # module (below) is what actually sends it traffic.
     tmpfs:
       # 06's recording pipeline spool. Never a named volume — nothing
       # durable lives on a FreeSWITCH node (CLAUDE.md rule 5).
       - /var/spool/cuc/rec
+
+  opensips:
+    # S1-11. telephony/opensips's own Dockerfile builds this from the
+    # upstream opensips/opensips:3.6 image plus the extra modules 03 §2
+    # needs — see it and opensips.cfg.template for the module-by-module
+    # reasoning.
+    build:
+      context: ../../telephony/opensips
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        # The `opensips` schema (mariadb/init/01-schemas.sh,
+        # 02-opensips-schema.sh) must exist before db_mysql-backed modules
+        # try to connect at startup.
+        condition: service_healthy
+    environment:
+      OPENSIPS_LOG_LEVEL: ${OPENSIPS_LOG_LEVEL:-3}
+      OPENSIPS_IDENTITY: ${OPENSIPS_IDENTITY:-SIP Media Server}
+      OPENSIPS_SIP_PORT: ${OPENSIPS_SIP_PORT:-5060}
+      OPENSIPS_MI_PORT: ${OPENSIPS_MI_PORT:-8888}
+      OPENSIPS_DB_URL: mysql://opensips:${OPENSIPS_DB_PASSWORD:-dev-opensips-password}@mariadb/opensips
+      OPENSIPS_REDIS_URL: ${OPENSIPS_REDIS_URL:-redis:cuc://redis:6379/0}
+    ports:
+      - '${OPENSIPS_SIP_PORT:-5060}:5060/udp'
+      - '${OPENSIPS_SIP_PORT:-5060}:5060/tcp'
 
 volumes:
   mariadb-data:

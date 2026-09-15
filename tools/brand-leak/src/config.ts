@@ -87,6 +87,9 @@ export const DEFAULT_INCLUDE: readonly string[] = [
   // Telephony config templates: SIP User-Agent/Server headers and SDP identity.
   'telephony/**/*.xml',
   'telephony/**/*.cfg',
+  // OpenSIPs' own source-controlled artifact is the *template* rendered at
+  // container start (S1-11) — `*.cfg` alone never matches it.
+  'telephony/**/*.cfg.template',
   'telephony/**/*.conf',
   'telephony/**/*.lua',
   'telephony/**/*.tpl',
