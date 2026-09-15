@@ -52,6 +52,19 @@ export interface RevealedCredential {
   readonly realm: string;
 }
 
+/**
+ * What telephony-config's internal lookup returns (S1-12) — the digest
+ * material OpenSIPs' `subscriber` table needs, never the plaintext password
+ * this service never hands to anything but `:reveal`.
+ */
+export interface DigestCredential {
+  readonly extensionId: string;
+  readonly username: string;
+  readonly ha1: string;
+  readonly ha1b: string;
+  readonly realm: string;
+}
+
 export class ExtensionNotFoundError extends Error {
   override readonly name = 'ExtensionNotFoundError';
 }
@@ -348,6 +361,28 @@ export function createExtensionRepo(
         associatedData(credential.tenant_id, credential.id),
       );
       return { username: credential.username, password, realm: credential.realm };
+    },
+
+    /**
+     * The digest material for one extension's credential — what
+     * telephony-config's `GET /internal/v1/tenants/:tenantId/extensions/:id`
+     * (S1-12) returns to project into OpenSIPs' `subscriber` table. Unlike
+     * `reveal`, this never touches the KEK: `ha1`/`ha1b` are stored
+     * unencrypted already (auth_db needs to read them as-is), only the
+     * plaintext password is ever encrypted.
+     */
+    async findCredential(
+      ctx: DbContext,
+      extensionId: string,
+    ): Promise<DigestCredential | undefined> {
+      const credential = await db
+        .scoped(ctx)
+        .selectFrom('sip_credentials')
+        .select(['username', 'ha1', 'ha1b', 'realm'])
+        .where('extension_id', '=', extensionId)
+        .executeTakeFirst();
+      if (credential === undefined) return undefined;
+      return { extensionId, ...credential };
     },
 
     /**

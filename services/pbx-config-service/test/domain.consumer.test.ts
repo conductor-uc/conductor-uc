@@ -91,7 +91,13 @@ describe.skipIf(skipReason !== undefined)('domain consumer (org.domain.added)', 
     await publishDomainAdded({ fqdn: 'new.platform.test', scope: 'tenant', ownerId: tenantId });
     const pass = await runOnceUntilHandled(consumer);
 
-    expect(pass.handled).toBe(1);
+    // >=1, not ===1: this suite shares its JetStream server's ORG stream
+    // (`TEST_NATS_URL`, when set — see `@cuc/testing`'s own nats.ts) with any
+    // other package's consumer tests running concurrently (S1-12 added
+    // telephony-config's own `org.domain.added` consumer test), so a stray
+    // unrelated event can land in the same pull batch. It never affects this
+    // tenant's own outcome, asserted below.
+    expect(pass.handled).toBeGreaterThanOrEqual(1);
     expect(pass.failed).toBe(0);
 
     const after = await h.extensions.reveal(ctxFor(tenantId), created.id);
@@ -121,7 +127,7 @@ describe.skipIf(skipReason !== undefined)('domain consumer (org.domain.added)', 
     });
     const pass = await runOnceUntilHandled(consumer);
 
-    expect(pass.handled).toBe(1);
+    expect(pass.handled).toBeGreaterThanOrEqual(1);
     expect(pass.failed).toBe(0);
   });
 
@@ -140,7 +146,7 @@ describe.skipIf(skipReason !== undefined)('domain consumer (org.domain.added)', 
 
     await publishDomainAdded({ fqdn: 'new.platform.test', scope: 'tenant', ownerId: tenantId });
     const first = await runOnceUntilHandled(consumer);
-    expect(first.handled).toBe(1);
+    expect(first.handled).toBeGreaterThanOrEqual(1);
 
     // Nothing new is on the stream — a second pass just finds no messages,
     // proving the recompute from the first pass is the only one that ran.

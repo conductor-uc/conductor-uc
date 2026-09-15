@@ -1,0 +1,186 @@
+import { createDatabase, migrateToLatest, type Database } from '@cuc/db';
+import type { Bus } from '@cuc/events';
+import { connectBus } from '@cuc/events';
+import type { Logger } from '@cuc/logger';
+import { silentLogger, startTestDatabase, startTestNats, type TestNatsHandle } from '@cuc/testing';
+
+import type { DigestCredential, PbxConfigClient } from '../src/pbx-config-client.js';
+import type { OpenSipsMiClient } from '../src/opensips-mi-client.js';
+import type { OpenSipsDb } from '../src/opensips-schema.js';
+import { createProjection, type Projection } from '../src/projection.js';
+import {
+  createOpenSipsProjectionRepo,
+  type OpenSipsProjectionRepo,
+} from '../src/repo/opensips-projection.repo.js';
+import { createReadModelRepo, type ReadModelRepo } from '../src/repo/read-model.repo.js';
+import type { TelephonyConfigDb } from '../src/schema.js';
+import { migrations } from '../migrations/index.js';
+
+export interface Harness {
+  readonly db: Database<TelephonyConfigDb>;
+  readonly opensipsDb: Database<OpenSipsDb>;
+  readonly readModel: ReadModelRepo;
+  readonly opensipsProjection: OpenSipsProjectionRepo;
+  readonly projection: Projection;
+  readonly mi: FakeMiClient;
+  readonly pbxConfig: FakePbxConfigClient;
+  readonly logger: Logger;
+  close(): Promise<void>;
+}
+
+export interface FakeMiClient extends OpenSipsMiClient {
+  readonly calls: string[];
+}
+
+/** Records every `domain_reload` call rather than needing a real OpenSIPs. */
+function fakeMiClient(): FakeMiClient {
+  const calls: string[] = [];
+  return {
+    calls,
+    call(method: string) {
+      calls.push(method);
+      return Promise.resolve();
+    },
+  };
+}
+
+export interface FakePbxConfigClient extends PbxConfigClient {
+  credentials: Record<string, DigestCredential>;
+}
+
+/** A digest-credential lookup whose answers are set per test — no live pbx-config-service needed. */
+function fakePbxConfigClient(): FakePbxConfigClient {
+  const state: FakePbxConfigClient = {
+    credentials: {},
+    findCredential: (_tenantId: string, extensionId: string) =>
+      Promise.resolve(state.credentials[extensionId]),
+  };
+  return state;
+}
+
+/**
+ * Creates `domain` and `subscriber` exactly as OpenSIPs' own vendored
+ * schema does (`telephony/opensips/db-schema/{domain,auth_db}-create.sql`),
+ * minus the `version` bookkeeping table this service never reads or writes
+ * — only column shapes matter here, and a real MariaDB, not a mock,
+ * verifies this service's actual SQL against them.
+ */
+async function createOpenSipsTables(db: Database<OpenSipsDb>): Promise<void> {
+  await db.kysely.schema
+    .createTable('domain')
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('domain', 'char(64)', (col) => col.notNull().defaultTo(''))
+    .addColumn('attrs', 'char(255)')
+    .addColumn('accept_subdomain', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('last_modified', 'datetime', (col) => col.notNull())
+    .execute();
+  await db.kysely.schema.createIndex('domain_idx').on('domain').column('domain').unique().execute();
+
+  await db.kysely.schema
+    .createTable('subscriber')
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('username', 'char(64)', (col) => col.notNull().defaultTo(''))
+    .addColumn('domain', 'char(64)', (col) => col.notNull().defaultTo(''))
+    .addColumn('password', 'char(25)', (col) => col.notNull().defaultTo(''))
+    .addColumn('ha1', 'char(64)', (col) => col.notNull().defaultTo(''))
+    .addColumn('ha1_sha256', 'char(64)', (col) => col.notNull().defaultTo(''))
+    .addColumn('ha1_sha512t256', 'char(64)', (col) => col.notNull().defaultTo(''))
+    .execute();
+  await db.kysely.schema
+    .createIndex('account_idx')
+    .on('subscriber')
+    .columns(['username', 'domain'])
+    .unique()
+    .execute();
+}
+
+/** A migrated read-model schema, a fake `opensips` schema, and the repos over both. */
+export async function startHarness(): Promise<Harness> {
+  const logger = silentLogger();
+
+  const handle = await startTestDatabase();
+  const db = createDatabase<TelephonyConfigDb>({
+    host: handle.host,
+    port: handle.port,
+    user: handle.user,
+    password: handle.password,
+    database: handle.database,
+    poolSize: 4,
+    logger,
+  });
+  await migrateToLatest({ db: db.kysely, migrations, logger });
+
+  const opensipsHandle = await startTestDatabase();
+  const opensipsDb = createDatabase<OpenSipsDb>({
+    host: opensipsHandle.host,
+    port: opensipsHandle.port,
+    user: opensipsHandle.user,
+    password: opensipsHandle.password,
+    database: opensipsHandle.database,
+    poolSize: 4,
+    logger,
+  });
+  await createOpenSipsTables(opensipsDb);
+
+  const readModel = createReadModelRepo(db);
+  const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
+  const mi = fakeMiClient();
+  const pbxConfig = fakePbxConfigClient();
+  const projection = createProjection(readModel, opensipsProjection, mi, pbxConfig, logger);
+
+  return {
+    db,
+    opensipsDb,
+    readModel,
+    opensipsProjection,
+    projection,
+    mi,
+    pbxConfig,
+    logger,
+    async close() {
+      await db.destroy();
+      await handle.stop();
+      await opensipsDb.destroy();
+      await opensipsHandle.stop();
+    },
+  };
+}
+
+export interface BusHarness extends Harness {
+  readonly bus: Bus;
+}
+
+/** {@link startHarness} plus a real JetStream connection, for consumer tests. */
+export async function startBusHarness(): Promise<BusHarness> {
+  const base = await startHarness();
+  const natsHandle: TestNatsHandle = await startTestNats();
+  const bus = await connectBus({
+    servers: [natsHandle.server],
+    logger: base.logger,
+    name: 'telephony-config-test',
+  });
+  await bus.ensureStreams();
+
+  return {
+    ...base,
+    bus,
+    async close() {
+      await bus.close();
+      await natsHandle.stop();
+      await base.close();
+    },
+  };
+}
+
+export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void> {
+  await db.kysely.deleteFrom('extensions').execute();
+  await db.kysely.deleteFrom('domains').execute();
+  await db.kysely.deleteFrom('tenants').execute();
+  await db.kysely.deleteFrom('outbox').execute();
+  await db.kysely.deleteFrom('consumed_events').execute();
+}
+
+export async function resetOpenSipsSchema(db: Database<OpenSipsDb>): Promise<void> {
+  await db.kysely.deleteFrom('subscriber').execute();
+  await db.kysely.deleteFrom('domain').execute();
+}
