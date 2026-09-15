@@ -1,0 +1,284 @@
+####### S1-11: OpenSIPs edge (03 §2) #######
+#
+# Not the stock residential example this image ships — that config assumes
+# a single flat user base with no tenancy, no trunks, and no FS cluster.
+# Every value that differs per deployment is an environment variable,
+# substituted at container start by docker-entrypoint.sh via `envsubst`
+# (see the Dockerfile) — there are no per-tenant edits to this file (03 §2).
+#
+# DB backend: db_mysql against the `opensips` schema (05 §1.1) —
+# provisioned by infra/compose/mariadb/init/02-opensips-schema.sh from
+# telephony/opensips/db-schema/*.sql, OpenSIPs' own vendored table layouts.
+# Only telephony-config (S1-12) ever writes rows there; this proxy only
+# reads and caches, reloaded through MI (dr_reload, address_reload,
+# domain_reload, ds_reload) once that projection exists.
+
+log_level=${OPENSIPS_LOG_LEVEL}
+xlog_level=${OPENSIPS_LOG_LEVEL}
+stderror_enabled=yes
+syslog_enabled=no
+
+udp_workers=4
+
+# 02 §5.5 — the brand-leak surface for the SIP `Server` and `User-Agent`
+# headers this proxy itself adds (distinct from FreeSWITCH's own, S1-10).
+server_header="Server: ${OPENSIPS_IDENTITY}"
+user_agent_header="User-Agent: ${OPENSIPS_IDENTITY}"
+
+socket=udp:*:${OPENSIPS_SIP_PORT}
+socket=tcp:*:${OPENSIPS_SIP_PORT}
+
+
+####### Modules Section ########
+
+mpath="/usr/lib/x86_64-linux-gnu/opensips/modules/"
+
+#### Core infrastructure — every routing decision below depends on these.
+loadmodule "signaling.so"
+loadmodule "sl.so"
+loadmodule "tm.so"
+modparam("tm", "fr_timeout", 5)
+modparam("tm", "fr_inv_timeout", 30)
+
+loadmodule "rr.so"
+modparam("rr", "append_fromtag", 1)
+
+loadmodule "maxfwd.so"
+loadmodule "sipmsgops.so"
+loadmodule "proto_udp.so"
+
+# The db_mysql driver every db_url-configured module below needs — loaded
+# once, early, rather than once per module.
+loadmodule "db_mysql.so"
+loadmodule "proto_tcp.so"
+
+#### Management Interface over HTTP (03 §2: MI-triggered reloads —
+#### dr_reload, address_reload, domain_reload, ds_reload — once
+#### telephony-config, S1-12, projects real rows to reload).
+loadmodule "httpd.so"
+modparam("httpd", "port", ${OPENSIPS_MI_PORT})
+loadmodule "mi_http.so"
+
+#### Flood protection (03 §2 / the plan's own S1-11 line names this
+#### explicitly). Applied to every UDP/TCP request before anything else
+#### does real work — see route{}'s first block.
+loadmodule "pike.so"
+modparam("pike", "sampling_time_unit", 2)
+modparam("pike", "reqs_density_per_unit", 30)
+modparam("pike", "remove_latency", 120)
+
+#### Multi-domain (03 §2's "multi-domain"): which SIP domains this
+#### deployment answers for — one per tenant's primary domain plus one per
+#### verified reseller base domain (02 §3), projected by telephony-config.
+loadmodule "domain.so"
+modparam("domain", "db_url", "${OPENSIPS_DB_URL}")
+modparam("domain", "db_mode", 1)
+
+#### Inbound trunk identification (03 §1's table: "Owns (permissions
+#### address table + registrant contact match)") — matches an inbound
+#### trunk's source IP against the address table projected from
+#### trunk-service (S2+). Empty today; every trunk check simply misses.
+loadmodule "permissions.so"
+modparam("permissions", "db_url", "${OPENSIPS_DB_URL}")
+
+#### Registration and digest auth (03 §1: "Owns (registrar, auth_db,
+#### usrloc full-sharing cluster)"). calculate_ha1 is off — HA1/HA1B are
+#### precomputed by pbx-config-service (S1-09) and stored alongside the
+#### tenant's realm, not derived here from a plaintext password OpenSIPs
+#### never has.
+loadmodule "usrloc.so"
+modparam("usrloc", "db_url", "${OPENSIPS_DB_URL}")
+modparam("usrloc", "db_mode", 2)
+
+loadmodule "auth.so"
+loadmodule "auth_db.so"
+modparam("auth_db", "db_url", "${OPENSIPS_DB_URL}")
+modparam("auth_db", "calculate_ha1", 0)
+modparam("auth_db", "password_column", "ha1")
+modparam("auth_db", "load_credentials", "")
+
+loadmodule "registrar.so"
+modparam("registrar", "tcp_persistent_flag", "TCP_PERSISTENT")
+
+#### Trunk registration and auth for outbound calls (03 §1: "Owns
+#### (uac_registrant, clustered)" / "Owns (uac_auth)").
+loadmodule "uac.so"
+loadmodule "uac_auth.so"
+loadmodule "uac_registrant.so"
+modparam("uac_registrant", "db_url", "${OPENSIPS_DB_URL}")
+
+#### LCR among a tenant's own trunks (03 §1: "Owns (drouting, one rule
+#### group per tenant)"), projected from trunk-service's outbound routes.
+loadmodule "drouting.so"
+modparam("drouting", "db_url", "${OPENSIPS_DB_URL}")
+
+#### Load balancing across FS nodes (03 §1: "Owns (dispatcher with OPTIONS
+#### probing)") — the plan's own "a dispatcher to the FS set".
+loadmodule "dispatcher.so"
+modparam("dispatcher", "db_url", "${OPENSIPS_DB_URL}")
+modparam("dispatcher", "table_name", "dispatcher")
+modparam("dispatcher", "ds_ping_interval", 10)
+modparam("dispatcher", "ds_probing_mode", 1)
+
+#### Dialog tracking — needed by topology_hiding (below) to persist the
+#### hidden-leg mapping across a call.
+loadmodule "dialog.so"
+modparam("dialog", "db_url", "${OPENSIPS_DB_URL}")
+modparam("dialog", "db_mode", 1)
+
+#### Topology hiding (03 §1: "Owns"): applied to every dialog-forming
+#### request in route{}, so no internal FS/OpenSIPs topology ever reaches
+#### a phone or a trunk.
+loadmodule "topology_hiding.so"
+
+#### Signaling NAT (03 §2's own words: "nathelper for signaling
+#### (fix_nated_contact, keepalive pinging)").
+loadmodule "nathelper.so"
+modparam("nathelper", "natping_interval", 30)
+
+#### Presence / BLF (03 §1: "Owns (presence, pua_dialoginfo)"). Loaded and
+#### DB-wired; no presence routing logic yet (nothing in M1 needs it) — a
+#### later stage adds the PUBLISH/SUBSCRIBE handling.
+loadmodule "presence.so"
+modparam("presence", "db_url", "${OPENSIPS_DB_URL}")
+loadmodule "presence_dialoginfo.so"
+loadmodule "pua.so"
+modparam("pua", "db_url", "${OPENSIPS_DB_URL}")
+loadmodule "pua_dialoginfo.so"
+
+#### Affinity leases (D-010) — read by call-control (S2+), not by
+#### anything in this script. Configured here since this is where every
+#### other shared resource URL for this node lives.
+loadmodule "cachedb_redis.so"
+modparam("cachedb_redis", "cachedb_url", "${OPENSIPS_REDIS_URL}")
+
+#### Multi-instance clustering (03 §2) is not loaded: unlike every other
+#### db_url-backed module above, clusterer does not degrade to an inert,
+#### empty-set state when its table has no rows for this node — confirmed
+#### directly ("Current node does not belong to any cluster" is a fatal
+#### init error, not a warning). There is no second OpenSIPs instance to
+#### cluster with yet (S4's HA work); add this together with the seed row
+#### a real cluster config needs.
+
+#### HEP export to Homer (03 §2) is not loaded: proto_hep requires a real
+#### `socket=hep_udp:...` listener to even initialize (confirmed directly —
+#### loading it with none configured aborts startup), and no capture server
+#### exists yet to point one at. Add both together when one does.
+
+
+####### Routing Logic ########
+
+route{
+    # Flood protection first — before any other work happens (pike).
+    if (!pike_check_req()) {
+        xlog("L_WARN", "pike: blocking flood from $si\n");
+        exit;
+    }
+
+    if (!mf_process_maxfwd_header(10)) {
+        send_reply(483, "Too Many Hops");
+        exit;
+    }
+
+    # 03 §2: "OpenSIPs strips any inbound X-Tenant-* or X-Trunk-* headers
+    # from external sources." Unconditional, before anything below trusts
+    # any header this proxy itself did not just set.
+    remove_hf("X-Tenant-Id");
+    remove_hf("X-Tenant-Domain");
+    remove_hf("X-Trunk-Id");
+    remove_hf("X-Call-Direction");
+
+    # Answer aliveness/OPTIONS pings addressed to this proxy itself (not a
+    # specific user) directly — the same pattern dispatcher's own OPTIONS
+    # probing of the FS set relies on in reverse. S1-11's own "Done when":
+    # "responds to OPTIONS with a neutral Server header."
+    if (is_method("OPTIONS") && !has_totag() && $rU == NULL) {
+        sl_send_reply(200, "OK");
+        exit;
+    }
+
+    if (has_totag()) {
+        if (is_method("ACK") && t_check_trans()) {
+            t_relay();
+            exit;
+        }
+        if (!loose_route()) {
+            send_reply(404, "Not here");
+            exit;
+        }
+        route(relay);
+        exit;
+    }
+
+    if (is_method("CANCEL")) {
+        if (t_check_trans()) {
+            t_relay();
+        }
+        exit;
+    }
+
+    t_check_trans();
+
+    if (is_method("REGISTER")) {
+        # 03 §1: OpenSIPs owns the registrar; no password auth exists on
+        # the FS side (03 §3.1) precisely because this challenge already
+        # happened here.
+        if (!is_uri_host_local()) {
+            send_reply(404, "Not here");
+            exit;
+        }
+        if (!www_authorize("", "subscriber")) {
+            www_challenge("", "auth");
+            exit;
+        }
+        if (!save("location")) {
+            xlog("L_ERR", "usrloc: failed to save location for $tu\n");
+        }
+        exit;
+    }
+
+    # From here on this is either a trunk (source matched in the address
+    # table) or a registered phone in one of our domains — 03 §2.1's
+    # routing summary. Both paths are data-driven against
+    # telephony-config's projection (S1-12), which is empty until then:
+    # every check below simply finds nothing and falls through, which is
+    # the correct, honest behavior for an unprovisioned deployment.
+    if (check_source_address(1)) {
+        # Inbound trunk call. Tenant identity would come from the matched
+        # address-table row once trunk-service (S2+) projects real trunks.
+        append_hf("X-Call-Direction: inbound\r\n");
+    } else if (is_from_local()) {
+        # Registered phone in a known domain, calling out.
+        append_hf("X-Call-Direction: internal\r\n");
+    } else {
+        send_reply(403, "Forbidden");
+        exit;
+    }
+
+    if (!topology_hiding()) {
+        xlog("L_ERR", "topology_hiding failed for $ru\n");
+        send_reply(500, "Server Internal Error");
+        exit;
+    }
+
+    fix_nated_contact();
+
+    # 03 §1: "Load balancing across FS nodes — Owns (dispatcher with
+    # OPTIONS probing)." The FS set itself is provisioned as environment
+    # config (see the Dockerfile), not a projected table — there is
+    # exactly one FS group in this stage (S1-10's single node).
+    if (!ds_select_dst(1, 4)) {
+        send_reply(503, "Service Unavailable");
+        exit;
+    }
+
+    route(relay);
+    exit;
+}
+
+route[relay] {
+    if (!t_relay()) {
+        send_reply(500, "Internal Error");
+    }
+    exit;
+}
