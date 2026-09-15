@@ -209,12 +209,21 @@ route{
         exit;
     }
 
+    # In-dialog request (BYE, re-INVITE, ACK for a non-2xx, ...). Not
+    # `loose_route()`: confirmed directly (via the module docs) that
+    # `topology_hiding()` above never adds a Record-Route at all — it hides
+    # the whole topology by rewriting Contact alone (into the encoded
+    # `thinfo=...` form seen on the wire), so there is never a Route header
+    # for `loose_route()` to find, and it fails every single in-dialog
+    # request. `topology_hiding_match()` is this module's own purpose-built
+    # replacement: it decodes the hidden Contact/R-URI pair itself instead
+    # of relying on a Route header.
     if (has_totag()) {
         if (is_method("ACK") && t_check_trans()) {
             t_relay();
             exit;
         }
-        if (!loose_route()) {
+        if (!topology_hiding_match()) {
             send_reply(404, "Not here");
             exit;
         }
@@ -261,17 +270,21 @@ route{
     # `is_from_local()` alone cannot tell apart from a genuine outbound
     # call, since both look identical from the FROM header's domain alone.
     #
-    # `ds_is_in_list("$si", 1)` (not a `$si == <cidr>` check, tried
-    # first and confirmed live to be wrong; nor `ds_is_from_list`, which
-    # this OpenSIPs build's dispatcher module does not export — confirmed
-    # directly): this compose network is one flat bridge subnet, so *every*
-    # container's source address — a registered phone's own SIPp container
-    # included — matches the same broad CIDR range FS itself is reachable
-    # on, making a CIDR check match a phone's own outbound call too and
-    # route it as if it came from FS. Matching against the dispatcher set's
-    # real, seeded FS-node membership (G-18) instead of a network range is
-    # what actually distinguishes the two.
-    if (ds_is_in_list("$si", 1)) {
+    # `ds_is_in_list("$si", $sp)` (not a `$si == <cidr>` check, tried first
+    # and confirmed live to be wrong; nor `ds_is_from_list`, its older name —
+    # deprecated in favor of this one, and this OpenSIPs build's dispatcher
+    # module does not export it at all — confirmed directly): this compose
+    # network is one flat bridge subnet, so *every* container's source
+    # address — a registered phone's own SIPp container included — matches
+    # the same broad CIDR range FS itself is reachable on, making a CIDR
+    # check match a phone's own outbound call too and route it as if it
+    # came from FS. Matching against the dispatcher set's real, seeded
+    # FS-node membership (G-18) instead of a network range is what actually
+    # distinguishes the two. The port argument must be unquoted (`$sp`, not
+    # `"$sp"`) — confirmed directly that ds_is_in_list's `port` parameter is
+    # typed `int`, and quoting it produces a config parse error
+    # ("Param [2] expected to be an integer or variable").
+    if (ds_is_in_list("$si", $sp)) {
         if (!topology_hiding()) {
             xlog("L_ERR", "topology_hiding failed for $ru (from FS)\n");
             send_reply(500, "Server Internal Error");

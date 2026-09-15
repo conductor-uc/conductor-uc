@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S1-14: the second half of the callee side of "101 calls 102, answered,
+  BYE" — waits for an unsolicited INVITE and answers it. Deliberately a
+  *separate* scenario/process from `register.xml`, run second, bound to
+  the exact same local port (`-p <port>`, `src/run-scenario.ts`) that the
+  register step's Contact advertised.
+
+  Not one combined "register, then wait for INVITE" scenario (which is
+  what this originally was): confirmed live against a real call that a
+  single SIPp process doing REGISTER first and *then* `<recv
+  request="INVITE">` discards the real, correctly-addressed, correctly-
+  routed INVITE that arrives afterward as "can't be mapped to a known
+  SIPp call" — a known, unresolved SIPp issue (SIPp/sipp#412) with exactly
+  this pattern, not a routing/config problem on this platform's side. A
+  fresh SIPp process whose *only* transaction is receiving the INVITE
+  (this scenario) does not hit it — the standard, well-supported "pure
+  UAS" pattern.
+-->
+<scenario name="Answer one call">
+  <recv request="INVITE" crlf="true" timeout="60000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 180 Ringing
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <send retrans="500">
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0
+      a=rtpmap:0 PCMU/8000
+    ]]>
+  </send>
+
+  <recv request="ACK" rtd="true" crlf="true">
+  </recv>
+
+  <recv request="BYE" crlf="true" timeout="60000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>

@@ -17,6 +17,17 @@
      assertion is identical to the isolation case: only the caller's own
      tenant's UAS may complete, regardless of what the spoofed header claims.
   `[field0]`=username, `[field1]`=domain, `[field2]`=destination number.
+
+  The INVITE/ACK/BYE below share the REGISTER's own `[call_id]` verbatim, not
+  a derived value like `[call_id]-invite` (tried first): confirmed directly
+  that SIPp keys its internal per-process call-matching table on whatever
+  Call-ID the scenario's first message used, and a later transaction with a
+  *different* Call-ID string has its responses silently uncorrelated — they
+  still arrive on the wire (visible via `-trace_msg`) but never reach this
+  scenario's `<recv>` steps and are not even counted as "unexpected", which
+  is what made this so hard to see. Real UAs mint a fresh Call-ID per
+  transaction; reusing REGISTER's here is a SIPp-only concession, harmless
+  since REGISTER never forms a dialog.
 -->
 <scenario name="Register, then call and hang up">
   <send retrans="500">
@@ -56,13 +67,13 @@
   <recv response="200" crlf="true">
   </recv>
 
-  <send retrans="500">
+  <send retrans="4000">
     <![CDATA[
       INVITE sip:[field2]@[field1] SIP/2.0
       Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
       From: <sip:[field0]@[field1]>;tag=[call_number]
       To: <sip:[field2]@[field1]>
-      Call-ID: [call_id]-invite
+      Call-ID: [call_id]
       CSeq: 1 INVITE
       Contact: <sip:[field0]@[local_ip]:[local_port]>
       Max-Forwards: 70
@@ -86,16 +97,31 @@
   <recv response="180" optional="true">
   </recv>
 
+  <!-- OpenSIPs' `topology_hiding()` (opensips.cfg.template) hides the whole
+       topology by rewriting Contact alone — confirmed directly (module
+       docs) it never adds a Record-Route, so there is no Route header for
+       SIPp's own `[routes]` keyword to build (tried first: with no
+       Record-Route ever seen, it expands to nothing, and an empty line in
+       its place ends the SIP header section early per RFC 3261 — the exact
+       same blank-line-terminates-headers failure `[extraheader]` hit
+       above). Per the module's own design, in-dialog requests must target
+       the hidden Contact URI itself as the R-URI (`sip:172.18.0.8;thinfo=`
+       ..., not the original `[field2]@[field1]`) — that's what carries the
+       encoded routing state `topology_hiding_match()` decodes on the way
+       back in. -->
   <recv response="200" rtd="true">
+    <action>
+      <ereg regexp="sip:[^&gt;]*" search_in="hdr" header="Contact:" assign_to="1"/>
+    </action>
   </recv>
 
   <send>
     <![CDATA[
-      ACK sip:[field2]@[field1] SIP/2.0
+      ACK [$1] SIP/2.0
       [last_Via:]
       From: <sip:[field0]@[field1]>;tag=[call_number]
       [last_To:]
-      Call-ID: [call_id]-invite
+      Call-ID: [call_id]
       CSeq: 1 ACK
       Contact: <sip:[field0]@[local_ip]:[local_port]>
       Max-Forwards: 70
@@ -107,11 +133,11 @@
 
   <send retrans="500">
     <![CDATA[
-      BYE sip:[field2]@[field1] SIP/2.0
+      BYE [$1] SIP/2.0
       Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
       From: <sip:[field0]@[field1]>;tag=[call_number]
       [last_To:]
-      Call-ID: [call_id]-invite
+      Call-ID: [call_id]
       CSeq: 2 BYE
       Max-Forwards: 70
       Content-Length: 0
