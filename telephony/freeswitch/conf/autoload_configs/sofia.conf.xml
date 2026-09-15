@@ -1,0 +1,12 @@
+<configuration name="sofia.conf" description="sofia Endpoint">
+  <global_settings>
+    <param name="log-level" value="0"/>
+    <param name="debug-presence" value="0"/>
+  </global_settings>
+
+  <!-- One profile (03 §3): "a single internal Sofia profile that receives
+       only from OpenSIPs. It has no gateways and no registrations." -->
+  <profiles>
+    <X-PRE-PROCESS cmd="include" data="../sip_profiles/*.xml"/>
+  </profiles>
+</configuration>

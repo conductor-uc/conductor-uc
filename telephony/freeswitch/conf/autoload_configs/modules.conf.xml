@@ -1,0 +1,48 @@
+<configuration name="modules.conf" description="Modules">
+  <modules>
+    <!-- Logger: infrastructure, not a listed feature — nothing below is
+         visible without it. Console only, not mod_logfile: this node keeps
+         no durable local state (CLAUDE.md rule 5), and Docker's own log
+         driver already captures stdout, the same way every Node service logs
+         JSON to stdout rather than a local file (09 §4). -->
+    <load module="mod_console"/>
+
+    <!-- Event Handlers -->
+    <load module="mod_event_socket"/>
+    <load module="mod_json_cdr"/>
+
+    <!-- Endpoints -->
+    <load module="mod_sofia"/>
+
+    <!-- XML Interfaces (D-006) -->
+    <load module="mod_xml_curl"/>
+
+    <!-- Dialplan interpreter: required to execute the XML dialplan sections
+         xml_curl fetches (03 §3.1) — infrastructure, not a listed feature. -->
+    <load module="mod_dialplan_xml"/>
+
+    <!-- Applications (03 §3) -->
+    <load module="mod_commands"/>
+    <load module="mod_dptools"/>
+    <load module="mod_callcenter"/>
+    <load module="mod_valet_parking"/>
+    <load module="mod_conference"/>
+    <load module="mod_curl"/>
+    <load module="mod_http_cache"/>
+    <load module="mod_lua"/>
+
+    <!-- Codec Interfaces (03 §3: "codecs (mod_opus, G.711, G.722, …)") —
+         G.711 and G.722 are built into FreeSWITCH's core, not separate
+         modules; mod_opus is the one that needs loading. mod_spandsp is
+         listed for its T.38/G.711 fax passthrough (03 §1's fax row), not audio
+         codec work. mod_vpx (VP8, for video) is not in this image — M1 is
+         audio-only; video arrives with S6-01. -->
+    <load module="mod_opus"/>
+    <load module="mod_spandsp"/>
+
+    <!-- File Format Interfaces (03 §3: "mod_sndfile", plus MOH/tones) -->
+    <load module="mod_sndfile"/>
+    <load module="mod_local_stream"/>
+    <load module="mod_tone_stream"/>
+  </modules>
+</configuration>

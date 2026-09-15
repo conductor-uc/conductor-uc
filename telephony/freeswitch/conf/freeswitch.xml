@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<!--
+    S1-10: a minimal, from-scratch config, not FreeSWITCH's own vanilla
+    default (which is a demo PBX with default passwords, sample gateways,
+    and a bundled sound-download step this image deliberately skips — see
+    the Dockerfile). Every section below exists for a reason stated in a
+    comment; nothing is carried over just because the stock config had it.
+-->
+<document type="freeswitch/xml">
+  <X-PRE-PROCESS cmd="include" data="vars.xml"/>
+
+  <section name="configuration" description="Various Configuration">
+    <X-PRE-PROCESS cmd="include" data="autoload_configs/*.xml"/>
+  </section>
+
+  <!-- Empty until S1-13 (telephony-config's xml_curl directory + dialplan):
+       D-006 puts all directory and dialplan data behind xml_curl
+       (autoload_configs/xml_curl.conf.xml), so there is nothing to check in
+       here — a local file would just be dead weight nothing ever reads. -->
+  <section name="dialplan" description="Regex/XML Dialplan">
+    <X-PRE-PROCESS cmd="include" data="dialplan/*.xml"/>
+  </section>
+
+  <section name="directory" description="User Directory">
+    <X-PRE-PROCESS cmd="include" data="directory/*.xml"/>
+  </section>
+</document>

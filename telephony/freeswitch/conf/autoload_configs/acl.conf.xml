@@ -1,0 +1,25 @@
+<configuration name="acl.conf" description="Network Lists">
+  <network-lists>
+    <!-- 03 §1: "FS accepts calls only from OpenSIPs addresses (a Sofia ACL)."
+         No local registrar and no local auth on the internal profile
+         (sip_profiles/internal.xml) — OpenSIPs has already authenticated
+         the call, so this ACL is the only gate. default="deny": an
+         unconfigured or misconfigured $${opensips_cidr} fails closed. -->
+    <list name="opensips" default="deny">
+      <node type="allow" cidr="$${opensips_cidr}"/>
+    </list>
+
+    <!-- Gates the event socket (03 §3): "listens on a private interface."
+         mod_event_socket falls back to a loopback-only ACL when
+         apply-inbound-acl is unset at all — explicit here so bind address
+         (0.0.0.0, event_socket.conf.xml) isn't the only thing standing
+         between this socket and the network. Loopback is always allowed
+         (the container healthcheck uses it); the configurable CIDR is for
+         the real cluster/orchestrator network call-control (S2+) reaches
+         this node from. -->
+    <list name="cluster" default="deny">
+      <node type="allow" cidr="127.0.0.1/32"/>
+      <node type="allow" cidr="$${cluster_cidr}"/>
+    </list>
+  </network-lists>
+</configuration>

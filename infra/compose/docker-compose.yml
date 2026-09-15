@@ -1,6 +1,6 @@
 # Local development stack (S0-05). MariaDB, Redis, NATS (JetStream), MinIO,
-# and Mailpit — everything a service needs except telephony, which is added
-# in S1 (S1-10/S1-11) once FreeSWITCH and OpenSIPs images exist.
+# Mailpit, and (from S1-10) FreeSWITCH. OpenSIPs joins in S1-11 — until then
+# FreeSWITCH has no real caller: it just proves the container boots.
 #
 # Usage: see the root Makefile (`make up` / `make down` / `make reset`) or
 # ./README.md for details and troubleshooting.
@@ -94,6 +94,30 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  freeswitch:
+    # S1-10. telephony/freeswitch's own Dockerfile builds a minimal, neutral
+    # image from scratch — see it for why (the upstream package repo now
+    # requires authentication).
+    build:
+      context: ../../telephony/freeswitch
+    restart: unless-stopped
+    environment:
+      # Compose's default bridge subnet is assigned dynamically, so this is
+      # deliberately broad rather than one fixed address — it still only
+      # covers this project's own isolated network, never the host's.
+      # S1-11 narrows it once OpenSIPs's real address is known.
+      FS_OPENSIPS_CIDR: ${FS_OPENSIPS_CIDR:-172.16.0.0/12}
+      FS_CLUSTER_CIDR: ${FS_CLUSTER_CIDR:-172.16.0.0/12}
+      FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}
+      TELEPHONY_CONFIG_URL: ${TELEPHONY_CONFIG_URL:-http://telephony-config:8080}
+      FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
+    ports:
+      - '${FS_SIP_PORT:-5060}:5060/udp'
+    tmpfs:
+      # 06's recording pipeline spool. Never a named volume — nothing
+      # durable lives on a FreeSWITCH node (CLAUDE.md rule 5).
+      - /var/spool/cuc/rec
 
 volumes:
   mariadb-data:

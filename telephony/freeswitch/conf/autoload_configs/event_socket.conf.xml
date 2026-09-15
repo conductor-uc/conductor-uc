@@ -1,0 +1,14 @@
+<configuration name="event_socket.conf" description="Socket Client">
+  <!-- 03 §3: "Event socket listens on a private interface." "Private" is
+       enforced by the "cluster" ACL (autoload_configs/acl.conf.xml), not by
+       bind address — see vars.xml's event_socket_bind_ip for why 0.0.0.0
+       inside the container is the right default here. call-control (S2+)
+       connects inbound to every node; nothing does yet. -->
+  <settings>
+    <param name="nat-map" value="false"/>
+    <param name="listen-ip" value="$${event_socket_bind_ip}"/>
+    <param name="listen-port" value="8021"/>
+    <param name="password" value="$${event_socket_password}"/>
+    <param name="apply-inbound-acl" value="cluster"/>
+  </settings>
+</configuration>
