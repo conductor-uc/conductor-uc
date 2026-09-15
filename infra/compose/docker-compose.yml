@@ -16,6 +16,7 @@ services:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-dev-root-password}
       IDENTITY_SERVICE_DB_PASSWORD: ${IDENTITY_SERVICE_DB_PASSWORD:-dev-identity-password}
       ORG_SERVICE_DB_PASSWORD: ${ORG_SERVICE_DB_PASSWORD:-dev-org-password}
+      PBX_CONFIG_SERVICE_DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD:-dev-pbx-config-password}
       EXAMPLE_SERVICE_DB_PASSWORD: ${EXAMPLE_SERVICE_DB_PASSWORD:-dev-example-password}
     ports:
       - '${MARIADB_PORT:-3306}:3306'

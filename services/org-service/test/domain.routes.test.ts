@@ -7,10 +7,12 @@ import type { DnsResolver } from '../src/dns-resolver.js';
 import { createDomainRepo, type DomainRepo } from '../src/repo/domain.repo.js';
 import { createOrgRepo, type OrgRepo } from '../src/repo/org.repo.js';
 import { registerDomainRoutes } from '../src/routes/domain.routes.js';
+import { registerInternalRoutes } from '../src/routes/internal.routes.js';
 import { migrations } from '../migrations/index.js';
 import type { OrgServiceDb } from '../src/schema.js';
 
 const skipReason = await databaseOrSkipReason();
+const INTERNAL_TOKEN = 'test-internal-service-token';
 
 /** A resolver whose answers are set per test, and swappable mid-test. */
 function fakeResolver(): DnsResolver & { records: Record<string, string[][]> } {
@@ -50,6 +52,7 @@ describe.skipIf(skipReason !== undefined)('domain-service HTTP routes', () => {
 
     app = await createServer({ serviceName: 'org-service', logger });
     registerDomainRoutes(app, domainsRepo, resolver);
+    registerInternalRoutes(app, domainsRepo, INTERNAL_TOKEN);
     await app.ready();
 
     stop = async () => {
@@ -239,7 +242,70 @@ describe.skipIf(skipReason !== undefined)('domain-service HTTP routes', () => {
     });
   });
 
-  it('every route declares permission and dataClass (CLAUDE.md rule 3)', () => {
+  describe('GET /internal/v1/tenants/:id/domain', () => {
+    it('rejects a request with no bearer token', async () => {
+      const reseller = await makeReseller();
+      const tenant = await orgs.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${tenant.id}/domain`,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('rejects a request with the wrong bearer token', async () => {
+      const reseller = await makeReseller();
+      const tenant = await orgs.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${tenant.id}/domain`,
+        headers: { authorization: 'Bearer not-the-token' },
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("returns the tenant's primary domain with the right token", async () => {
+      const reseller = await makeReseller();
+      const tenant = await orgs.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${tenant.id}/domain`,
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ fqdn: 'widgets.platform.test' });
+    });
+
+    it('404s a tenant with no primary domain', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/v1/tenants/no-such-tenant/domain',
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  it('every public route declares permission and dataClass (CLAUDE.md rule 3)', () => {
     for (const route of app.registeredRoutes) {
       if (route.url.startsWith('/v1/')) {
         expect(route.permission, `${route.method} ${route.url}`).not.toBeNull();

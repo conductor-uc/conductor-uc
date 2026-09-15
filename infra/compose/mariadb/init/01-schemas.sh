@@ -23,6 +23,7 @@ SQL
 
 create_service_db identity_service identity_service "${IDENTITY_SERVICE_DB_PASSWORD}"
 create_service_db org_service org_service "${ORG_SERVICE_DB_PASSWORD}"
+create_service_db pbx_config_service pbx_config_service "${PBX_CONFIG_SERVICE_DB_PASSWORD}"
 create_service_db example_service example_service "${EXAMPLE_SERVICE_DB_PASSWORD}"
 
 mariadb -u root -p"${MARIADB_ROOT_PASSWORD}" -e "FLUSH PRIVILEGES;"

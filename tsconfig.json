@@ -51,6 +51,9 @@
       "path": "./services/org-service/tsconfig.build.json"
     },
     {
+      "path": "./services/pbx-config-service/tsconfig.build.json"
+    },
+    {
       "path": "./tools/brand-leak/tsconfig.build.json"
     },
     {
