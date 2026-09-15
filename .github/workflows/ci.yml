@@ -201,6 +201,11 @@ jobs:
 
       - name: Run SIP scenarios
         working-directory: tests/sip
+        env:
+          # A missing/broken compose stack must fail this job, not report a
+          # green run full of skipped tests — same pattern as the `check`
+          # job's own REQUIRE_DB_TESTS etc. above.
+          REQUIRE_SIP_TESTS: '1'
         run: pnpm vitest run
 
       - name: Show compose logs on failure

@@ -49,6 +49,43 @@ export function sipTestEnv(): SipTestEnv {
   };
 }
 
+/** Set to `1` in the `sip-smoke` CI job so a missing compose stack fails the
+ * run instead of skipping it — same pattern as `@cuc/testing`'s
+ * `REQUIRE_DB_TESTS` (`packages/testing/src/mariadb.ts`). The main `check`
+ * job deliberately does *not* set this: it has no compose stack (only
+ * MariaDB/Redis service containers), and turbo's `--affected` picks up
+ * `@cuc/tests-sip` whenever these files change, so this suite must skip
+ * cleanly there rather than fail — confirmed directly, it did fail there
+ * first (`docker: network conductor-uc_default not found`) before this
+ * check existed. */
+export const REQUIRE_SIP_ENV = 'REQUIRE_SIP_TESTS';
+
+function sipTestsRequired(): boolean {
+  return process.env[REQUIRE_SIP_ENV] === '1';
+}
+
+/**
+ * The reason the SIP scenario suite cannot run here, or `undefined` when it
+ * can — pass to `describe.skipIf` in `test/scenarios.test.ts`:
+ * ```ts
+ * const skipReason = await sipInfraOrSkipReason();
+ * describe.skipIf(skipReason !== undefined)('S1-14 SIP scenarios', () => { ... });
+ * ```
+ */
+export async function sipInfraOrSkipReason(): Promise<string | undefined> {
+  const env = sipTestEnv();
+  try {
+    await execFileAsync('docker', ['network', 'inspect', env.network], { timeout: 5_000 });
+    return undefined;
+  } catch {
+    const reason = `the "${env.network}" Docker network is not reachable (the compose stack, "infra/compose", must be up)`;
+    if (sipTestsRequired()) {
+      throw new Error(`${REQUIRE_SIP_ENV} is set, but ${reason}.`);
+    }
+    return reason;
+  }
+}
+
 export interface SeedExtension {
   readonly password: string;
   readonly realm: string;

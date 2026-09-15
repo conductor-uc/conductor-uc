@@ -4,13 +4,20 @@ import {
   clearRegistration,
   runForeground,
   seedFixtures,
+  sipInfraOrSkipReason,
   startUas,
   stopContainer,
   uasReceivedCall,
   type SeedResult,
 } from '../src/run-scenario.js';
 
-describe('S1-14 SIP scenarios', () => {
+// Skips cleanly on a laptop without the compose stack up, or in the main CI
+// `check` job (no compose stack there — only MariaDB/Redis service
+// containers); fails loudly instead when `REQUIRE_SIP_TESTS=1` (the
+// dedicated `sip-smoke` CI job) — see `sipInfraOrSkipReason`'s own comment.
+const skipReason = await sipInfraOrSkipReason();
+
+describe.skipIf(skipReason !== undefined)('S1-14 SIP scenarios', () => {
   let seed: SeedResult;
   const activeContainers = new Set<string>();
 
