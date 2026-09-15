@@ -1,0 +1,31 @@
+<configuration name="xml_curl.conf" description="cURL XML Gateway">
+  <!-- D-006 / 03 §3.1: directory, dialplan, and configuration are all fetched
+       from telephony-config over HTTP — no local XML for any of them (see
+       freeswitch.xml's empty dialplan/directory sections). One binding per
+       section, matching 06's three distinct endpoints
+       (POST /fs/directory, /fs/dialplan, /fs/configuration).
+
+       Reachable only from FS nodes (06): the shared token is presented as
+       HTTP basic auth, the same shared-per-environment-token precedent
+       07 §1 sets for FS/OpenSIPs generally, since real service-to-service
+       auth does not exist yet. Endpoints do not exist until S1-13 — until
+       then every lookup here fails, which FreeSWITCH treats as "nothing
+       found" rather than an error. -->
+  <bindings>
+    <binding name="directory">
+      <param name="gateway-url" value="$${telephony_config_url}/fs/directory" bindings="directory"/>
+      <param name="gateway-credentials" value="fs-node:$${telephony_config_token}"/>
+      <param name="auth-scheme" value="basic"/>
+    </binding>
+    <binding name="dialplan">
+      <param name="gateway-url" value="$${telephony_config_url}/fs/dialplan" bindings="dialplan"/>
+      <param name="gateway-credentials" value="fs-node:$${telephony_config_token}"/>
+      <param name="auth-scheme" value="basic"/>
+    </binding>
+    <binding name="configuration">
+      <param name="gateway-url" value="$${telephony_config_url}/fs/configuration" bindings="configuration"/>
+      <param name="gateway-credentials" value="fs-node:$${telephony_config_token}"/>
+      <param name="auth-scheme" value="basic"/>
+    </binding>
+  </bindings>
+</configuration>

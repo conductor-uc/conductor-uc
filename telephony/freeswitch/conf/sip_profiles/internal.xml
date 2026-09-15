@@ -1,0 +1,76 @@
+<profile name="internal">
+  <!--
+      S1-10: the one Sofia profile this node runs (03 §3). No gateways, no
+      registrations — OpenSIPs owns both (D-007), which is what keeps this
+      node interchangeable with any other. No local auth either: the ACL
+      below is the entire gate, because OpenSIPs has already authenticated
+      whatever it forwards.
+  -->
+  <gateways></gateways>
+
+  <domains>
+    <domain name="all" alias="true" parse="false"/>
+  </domains>
+
+  <settings>
+    <!-- 02 §5.5 brand-leak surfaces: the SIP User-Agent header, and (per
+         `username`, below) the SDP o=/s= lines. Both take the same neutral,
+         functional value from vars.xml — no vendor or product name. -->
+    <param name="user-agent-string" value="$${sip_identity}"/>
+    <!-- Sets `profile->sdp_username` (mod_sofia's XML param is literally
+         named "username"), which becomes both the SDP o= line username and
+         the s= session name. Defaults to "FreeSWITCH" if unset — this is the
+         one param standing between a fresh profile and a brand leak on every
+         call's SDP. -->
+    <param name="username" value="$${sip_identity}"/>
+
+    <param name="debug" value="0"/>
+    <param name="sip-trace" value="no"/>
+    <param name="log-auth-failures" value="false"/>
+
+    <param name="context" value="public"/>
+    <param name="dialplan" value="XML"/>
+    <param name="sip-port" value="$${internal_sip_port}"/>
+    <param name="rtp-ip" value="$${local_ip_v4}"/>
+    <param name="sip-ip" value="$${local_ip_v4}"/>
+    <param name="ext-rtp-ip" value="$${external_rtp_ip}"/>
+    <param name="ext-sip-ip" value="$${external_sip_ip}"/>
+
+    <param name="inbound-codec-prefs" value="$${global_codec_prefs}"/>
+    <param name="outbound-codec-prefs" value="$${global_codec_prefs}"/>
+    <param name="inbound-codec-negotiation" value="generous"/>
+    <param name="rtp-timer-name" value="soft"/>
+
+    <!-- No local registrar or challenge on this profile at all — see the
+         module comment above. -->
+    <param name="auth-calls" value="false"/>
+    <param name="accept-blind-reg" value="false"/>
+    <param name="accept-blind-auth" value="false"/>
+
+    <!-- 03 §1: "FS accepts calls only from OpenSIPs addresses (a Sofia
+         ACL)" — see autoload_configs/acl.conf.xml. Applied to both the
+         initial INVITE and to registration attempts, even though this
+         profile never expects a REGISTER, so one stays consistent with the
+         other. -->
+    <param name="apply-inbound-acl" value="opensips"/>
+    <param name="apply-register-acl" value="opensips"/>
+
+    <!-- TLS is not part of S1-10's scope; OpenSIPs and FS share a private
+         cluster network. Revisit alongside 03 §2's `proto_tls` when the
+         platform's TLS story for internal links is decided. -->
+    <param name="tls" value="false"/>
+
+    <!-- 06's recording pipeline: FS spools here (tmpfs — see the Dockerfile),
+         an uploader sidecar (a later stage) pushes to S3 and deletes the
+         local copy. Nothing durable on the node (CLAUDE.md rule 5). -->
+    <param name="record-path" value="$${recordings_dir}"/>
+    <param name="record-template" value="${uuid}.wav"/>
+
+    <param name="rtp-timeout-sec" value="300"/>
+    <param name="rtp-hold-timeout-sec" value="1800"/>
+
+    <!-- Realm challenge is moot with auth-calls off, but set for when a
+         later stage turns it on for a specific reason. -->
+    <param name="challenge-realm" value="auto_from"/>
+  </settings>
+</profile>

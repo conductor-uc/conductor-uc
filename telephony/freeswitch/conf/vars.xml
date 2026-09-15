@@ -1,0 +1,88 @@
+<include>
+  <!--
+      S1-10: every deployment-specific value here has a default plus an
+      `env-set` override, so the same image runs in compose and in any real
+      deployment without a config-file edit — only environment variables
+      change (09 §1's convention for services, applied to this node too).
+
+      `env-set` only overrides when the named OS environment variable is
+      actually present; the preceding `set` is what makes that safe to skip.
+  -->
+
+  <!-- 02 §5.5: the one identity string this node exposes on the wire, for
+       both the SIP User-Agent header and the SDP o=/s= lines (see
+       sip_profiles/internal.xml). Functional, not a product or vendor name. -->
+  <X-PRE-PROCESS cmd="set" data="sip_identity=SIP Media Server"/>
+  <X-PRE-PROCESS cmd="env-set" data="sip_identity=$FS_SIP_IDENTITY"/>
+
+  <!-- No per-tenant meaning at the node level (02 §3): every domain/user
+       lookup is dynamic, via xml_curl — see autoload_configs/xml_curl.conf.xml.
+       This is only the fallback FreeSWITCH falls back to if a lookup never
+       names one. -->
+  <X-PRE-PROCESS cmd="set" data="domain=$${local_ip_v4}"/>
+
+  <X-PRE-PROCESS cmd="set" data="internal_sip_port=5060"/>
+  <X-PRE-PROCESS cmd="env-set" data="internal_sip_port=$FS_SIP_PORT"/>
+
+  <!-- 03 §1: media never leaves the docker/cluster network directly — OpenSIPs
+       is the only thing FS ever talks to, and it owns NAT/external exposure
+       (RTPengine media anchoring is deferred, O-7). No STUN lookup needed. -->
+  <X-PRE-PROCESS cmd="set" data="external_rtp_ip=$${local_ip_v4}"/>
+  <X-PRE-PROCESS cmd="set" data="external_sip_ip=$${local_ip_v4}"/>
+
+  <X-PRE-PROCESS cmd="set" data="rtp_start_port=16384"/>
+  <X-PRE-PROCESS cmd="env-set" data="rtp_start_port=$FS_RTP_START_PORT"/>
+  <X-PRE-PROCESS cmd="set" data="rtp_end_port=32768"/>
+  <X-PRE-PROCESS cmd="env-set" data="rtp_end_port=$FS_RTP_END_PORT"/>
+
+  <!-- 03 §1: "FS accepts calls only from OpenSIPs addresses (a Sofia ACL)" —
+       see autoload_configs/acl.conf.xml. The default denies everything, so a
+       deployment that forgets to set this fails closed, not open. -->
+  <X-PRE-PROCESS cmd="set" data="opensips_cidr=127.0.0.1/32"/>
+  <X-PRE-PROCESS cmd="env-set" data="opensips_cidr=$FS_OPENSIPS_CIDR"/>
+
+  <!-- Gates the event socket (autoload_configs/acl.conf.xml's "cluster"
+       list) — the private cluster/orchestrator network call-control (S2+)
+       reaches this node from. Same fail-closed default as opensips_cidr. -->
+  <X-PRE-PROCESS cmd="set" data="cluster_cidr=127.0.0.1/32"/>
+  <X-PRE-PROCESS cmd="env-set" data="cluster_cidr=$FS_CLUSTER_CIDR"/>
+
+  <!-- 03 §3: "Event socket listens on a private interface." call-control
+       (S2+) connects inbound to every node; nothing does yet. Bound to all
+       interfaces inside the container (0.0.0.0) rather than a specific one
+       — the container's network namespace is already private, and access is
+       actually restricted by the "cluster" ACL below, not by bind address
+       (mod_event_socket falls back to a loopback-only ACL when none is
+       configured at all, which a non-loopback bind address would fail —
+       explicit is more robust than relying on that fallback). No safe
+       default password exists, so this one is deliberately obviously a
+       placeholder — every real deployment MUST set FS_EVENT_SOCKET_PASSWORD. -->
+  <X-PRE-PROCESS cmd="set" data="event_socket_bind_ip=0.0.0.0"/>
+  <X-PRE-PROCESS cmd="env-set" data="event_socket_bind_ip=$FS_EVENT_SOCKET_BIND_IP"/>
+  <X-PRE-PROCESS cmd="set" data="event_socket_password=change-me-FS_EVENT_SOCKET_PASSWORD"/>
+  <X-PRE-PROCESS cmd="env-set" data="event_socket_password=$FS_EVENT_SOCKET_PASSWORD"/>
+
+  <!-- 03 §3.1 / D-006: telephony-config's xml_curl endpoints. Gated by network
+       ACL plus this shared token (07 §1's precedent for FS/OpenSIPs — real
+       service-to-service auth does not exist yet), presented as HTTP basic
+       auth (gateway-credentials, below). -->
+  <X-PRE-PROCESS cmd="set" data="telephony_config_url=http://telephony-config:8080"/>
+  <X-PRE-PROCESS cmd="env-set" data="telephony_config_url=$TELEPHONY_CONFIG_URL"/>
+  <X-PRE-PROCESS cmd="set" data="telephony_config_token=change-me-FS_XML_CURL_TOKEN"/>
+  <X-PRE-PROCESS cmd="env-set" data="telephony_config_token=$FS_XML_CURL_TOKEN"/>
+
+  <X-PRE-PROCESS cmd="set" data="console_loglevel=info"/>
+  <X-PRE-PROCESS cmd="env-set" data="console_loglevel=$FS_LOG_LEVEL"/>
+
+  <!-- Codec preference (03 §3): Opus first, G.711/G.722 as the interoperable
+       fallback. No video codec here — mod_vpx is not in the module set this
+       image ships (M1 is audio-only; video arrives with S6-01). -->
+  <X-PRE-PROCESS cmd="set" data="global_codec_prefs=OPUS,G722,PCMU,PCMA"/>
+  <X-PRE-PROCESS cmd="set" data="outbound_codec_prefs=OPUS,G722,PCMU,PCMA"/>
+
+  <!-- 06's recording pipeline: FS spools here (tmpfs — see the Dockerfile and
+       compose's volume mount), and a node-local uploader sidecar (a later
+       stage) pushes to S3 and deletes the local copy. Nothing durable lives
+       on the node (CLAUDE.md rule 5). -->
+  <X-PRE-PROCESS cmd="set" data="recordings_dir=/var/spool/cuc/rec"/>
+</include>
