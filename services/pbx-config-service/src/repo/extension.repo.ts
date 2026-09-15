@@ -56,9 +56,16 @@ export interface RevealedCredential {
  * What telephony-config's internal lookup returns (S1-12) — the digest
  * material OpenSIPs' `subscriber` table needs, never the plaintext password
  * this service never hands to anything but `:reveal`.
+ *
+ * `number` is included alongside the SIP `username` (S1-13): they start
+ * equal at creation but can diverge — `update()` below never touches
+ * `sip_credentials.username` when `number` (the dialable extension) is
+ * renumbered. telephony-config's `/fs/dialplan` needs the *current* number
+ * for ext→ext lookups, which `username` alone cannot answer.
  */
 export interface DigestCredential {
   readonly extensionId: string;
+  readonly number: string;
   readonly username: string;
   readonly ha1: string;
   readonly ha1b: string;
@@ -375,11 +382,24 @@ export function createExtensionRepo(
       ctx: DbContext,
       extensionId: string,
     ): Promise<DigestCredential | undefined> {
+      const { tenantId } = requireTenant(ctx);
       const credential = await db
         .scoped(ctx)
         .selectFrom('sip_credentials')
-        .select(['username', 'ha1', 'ha1b', 'realm'])
-        .where('extension_id', '=', extensionId)
+        .innerJoin('extensions', 'extensions.id', 'sip_credentials.extension_id')
+        .select([
+          'sip_credentials.username',
+          'sip_credentials.ha1',
+          'sip_credentials.ha1b',
+          'sip_credentials.realm',
+          'extensions.number',
+        ])
+        // Belt-and-suspenders alongside `scoped(ctx)`'s own filter on
+        // `sip_credentials.tenant_id`: both rows are already guaranteed the
+        // same tenant by `extension_id`'s FK, but an explicit predicate on
+        // the joined table costs nothing (CLAUDE.md rule 2).
+        .where('extensions.tenant_id', '=', tenantId)
+        .where('sip_credentials.extension_id', '=', extensionId)
         .executeTakeFirst();
       if (credential === undefined) return undefined;
       return { extensionId, ...credential };

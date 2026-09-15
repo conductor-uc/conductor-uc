@@ -14,6 +14,7 @@ import { createProjection } from './projection.js';
 import { createOpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
 import { createReadModelRepo } from './repo/read-model.repo.js';
 import { createReconciler } from './reconcile.js';
+import { registerFsRoutes } from './routes/fs.routes.js';
 import type { TelephonyConfigDb } from './schema.js';
 
 const config = loadServiceConfig();
@@ -106,6 +107,8 @@ app.addReadinessCheck('opensips_db', async () => ({
   status: (await opensipsDb.ping()) ? 'pass' : 'fail',
 }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
+
+registerFsRoutes(app, db, readModel, config.FS_XML_CURL_TOKEN, logger);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

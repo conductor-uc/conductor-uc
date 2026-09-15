@@ -43,6 +43,7 @@ describe('createPbxConfigClient', () => {
       res.end(
         JSON.stringify({
           extensionId: 'ext1',
+          number: '101',
           username: '101',
           ha1: 'a'.repeat(32),
           ha1b: 'b'.repeat(32),
@@ -59,6 +60,7 @@ describe('createPbxConfigClient', () => {
     expect(seenAuth).toBe(`Bearer ${TOKEN}`);
     expect(result).toEqual({
       extensionId: 'ext1',
+      number: '101',
       username: '101',
       ha1: 'a'.repeat(32),
       ha1b: 'b'.repeat(32),
@@ -104,6 +106,7 @@ describe('createPbxConfigClient', () => {
       res.end(
         JSON.stringify({
           extensionId: 'ext1',
+          number: '101',
           username: '101',
           ha1: 'a'.repeat(32),
           ha1b: 'b'.repeat(32),

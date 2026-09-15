@@ -494,6 +494,9 @@ importers:
       '@cuc/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@cuc/crypto':
+        specifier: workspace:*
+        version: link:../../packages/crypto
       '@cuc/db':
         specifier: workspace:*
         version: link:../../packages/db

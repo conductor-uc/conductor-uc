@@ -42,18 +42,23 @@ export interface TelephonyConfigDb extends EventTables {
     updated_at: Date;
   };
   /**
-   * What `opensips.subscriber` was last projected from. `username`/`realm`
+   * What `opensips.subscriber` was last projected from, plus the extension's
+   * current dialable `number` (S1-13, migration 002). `username`/`realm`
    * mirror `sip_credentials.username`/`.realm` at the time they were last
    * fetched — not necessarily the extension's *current* dialable number:
    * pbx-config-service's own `update()` never touches `sip_credentials` when
    * only `number` changes (a device's SIP username does not change just
    * because its dialable number does), so `username` can outlive a later
-   * renumbering. That is `subscriber.username`'s real value too, so this
-   * table stays byte-for-byte what is actually projected.
+   * renumbering. That is `subscriber.username`'s real value too, so
+   * `username`/`ha1`/`realm` stay byte-for-byte what is actually projected.
+   * `number` is fetched and stored separately for exactly the case
+   * `username` cannot cover: `/fs/dialplan`'s ext→ext lookup, which must
+   * match the number a caller actually dials, not the frozen SIP identity.
    */
   extensions: {
     id: string;
     tenant_id: string;
+    number: string;
     username: string;
     ha1: string;
     realm: string;

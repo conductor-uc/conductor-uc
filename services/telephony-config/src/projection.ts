@@ -69,6 +69,7 @@ export function createProjection(
       const previous = await readModel.upsertExtension(trx, {
         id: extensionId,
         tenantId,
+        number: credential.number,
         username: credential.username,
         ha1: credential.ha1,
         realm: credential.realm,

@@ -25,6 +25,11 @@ create_service_db identity_service identity_service "${IDENTITY_SERVICE_DB_PASSW
 create_service_db org_service org_service "${ORG_SERVICE_DB_PASSWORD}"
 create_service_db pbx_config_service pbx_config_service "${PBX_CONFIG_SERVICE_DB_PASSWORD}"
 create_service_db example_service example_service "${EXAMPLE_SERVICE_DB_PASSWORD}"
+# S1-12 added this service but never its own compose schema/user — every
+# S1-12/S1-13 test instead ran against a `startTestDatabase()`-provisioned
+# temp schema, so the omission went unnoticed until S1-13's own real-FS
+# verification needed the full compose stack.
+create_service_db telephony_config telephony_config "${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD}"
 
 # `opensips` is the one schema not owned by a Node service (05 §1.1's rule
 # still applies — one schema, one user, granted only on its own schema):
