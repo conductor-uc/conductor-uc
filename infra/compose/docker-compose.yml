@@ -20,6 +20,7 @@ services:
       ORG_SERVICE_DB_PASSWORD: ${ORG_SERVICE_DB_PASSWORD:-dev-org-password}
       PBX_CONFIG_SERVICE_DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD:-dev-pbx-config-password}
       EXAMPLE_SERVICE_DB_PASSWORD: ${EXAMPLE_SERVICE_DB_PASSWORD:-dev-example-password}
+      TELEPHONY_CONFIG_SERVICE_DB_PASSWORD: ${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD:-dev-telephony-config-password}
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     ports:
       - '${MARIADB_PORT:-3306}:3306'
@@ -147,6 +148,11 @@ services:
       OPENSIPS_MI_PORT: ${OPENSIPS_MI_PORT:-8888}
       OPENSIPS_DB_URL: mysql://opensips:${OPENSIPS_DB_PASSWORD:-dev-opensips-password}@mariadb/opensips
       OPENSIPS_REDIS_URL: ${OPENSIPS_REDIS_URL:-redis:cuc://redis:6379/0}
+      # S1-13: the mirror image of FS's own FS_OPENSIPS_CIDR ACL — this is
+      # how `route{}` tells a request FS just sent back to us (ext→ext,
+      # 03 §2.1) apart from a registered phone dialing out. Same broad
+      # default and same reasoning (opensips.cfg.template).
+      OPENSIPS_FS_CIDR: ${OPENSIPS_FS_CIDR:-172.16.0.0/12}
     ports:
       - '${OPENSIPS_SIP_PORT:-5060}:5060/udp'
       - '${OPENSIPS_SIP_PORT:-5060}:5060/tcp'

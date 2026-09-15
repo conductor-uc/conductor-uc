@@ -13,6 +13,8 @@
 
 export interface DigestCredential {
   readonly extensionId: string;
+  /** The extension's current dialable number — S1-13's `/fs/dialplan` matches on this. */
+  readonly number: string;
   readonly username: string;
   readonly ha1: string;
   readonly ha1b: string;

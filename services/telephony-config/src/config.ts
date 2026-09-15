@@ -55,6 +55,18 @@ export const configSchema = Type.Object({
    * so a test can drive it without a real 15-minute wait.
    */
   RECONCILE_INTERVAL_MS: Env.int({ minimum: 1000, default: 15 * 60 * 1000 }),
+
+  /**
+   * Shared secret FreeSWITCH presents as the password half of HTTP Basic
+   * auth (`gateway-credentials value="fs-node:..."`,
+   * `telephony/freeswitch/conf/autoload_configs/xml_curl.conf.xml`) on every
+   * `/fs/directory`/`/fs/dialplan` request (S1-13). Must match that image's
+   * own `FS_XML_CURL_TOKEN` — the same shared-per-environment-token
+   * precedent as `INTERNAL_SERVICE_TOKEN` above, not a distinct trust
+   * mechanism: this one gates the FS-node-facing surface, that one gates
+   * calls this service makes *as a client* to org-service/pbx-config-service.
+   */
+  FS_XML_CURL_TOKEN: Env.secret(),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

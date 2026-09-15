@@ -9,6 +9,7 @@ const ParamsSchema = Type.Object({
 });
 const CredentialResponseSchema = Type.Object({
   extensionId: Type.String(),
+  number: Type.String(),
   username: Type.String(),
   ha1: Type.String(),
   ha1b: Type.String(),

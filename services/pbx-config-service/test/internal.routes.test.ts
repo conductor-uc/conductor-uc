@@ -46,10 +46,16 @@ describe.skipIf(skipReason !== undefined)(
       });
 
       expect(response.statusCode).toBe(200);
-      const body: { extensionId: string; username: string; ha1: string; realm: string } =
-        response.json();
+      const body: {
+        extensionId: string;
+        number: string;
+        username: string;
+        ha1: string;
+        realm: string;
+      } = response.json();
       expect(body).toMatchObject({
         extensionId: created.id,
+        number: '101',
         username: '101',
         realm: 'tenant-a.platform.test',
       });

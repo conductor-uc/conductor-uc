@@ -90,6 +90,7 @@ describe.skipIf(skipReason !== undefined)('reconciler', () => {
     await h.readModel.upsertExtension(h.db.kysely, {
       id: crypto.randomUUID(),
       tenantId,
+      number: '101',
       username: '101',
       ha1: 'a'.repeat(32),
       realm: 'acme.platform.test',

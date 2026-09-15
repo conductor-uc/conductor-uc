@@ -237,6 +237,35 @@ route{
         exit;
     }
 
+    # A request FS itself sent back to us (03 §2.1: "request from FS: if
+    # destination is a local user -> lookup(location) and relay") — S1-13's
+    # ext→ext dialplan bridges the call to `${network_addr}:${sip_network_port}`,
+    # i.e. back to whoever FS received it from, which the FS-side ACL
+    # (`telephony/freeswitch/conf/autoload_configs/acl.conf.xml`) guarantees
+    # is this proxy. Checked first, and separately from the trunk/registered-
+    # phone block below: the caller's own FROM header still names a local
+    # tenant domain on this leg, which would otherwise satisfy
+    # `is_from_local()` too and send the call straight back to the FS pool
+    # (`ds_select_dst`) instead of resolving the callee's real contact —
+    # a routing loop `check_source_address`/`is_from_local()` alone cannot
+    # tell apart from a genuine outbound call, since both look identical from
+    # the FROM header's domain alone. Only the transport-level source
+    # address distinguishes them.
+    if ($si == ${OPENSIPS_FS_CIDR}) {
+        if (!topology_hiding()) {
+            xlog("L_ERR", "topology_hiding failed for $ru (from FS)\n");
+            send_reply(500, "Server Internal Error");
+            exit;
+        }
+        fix_nated_contact();
+        if (!lookup("location")) {
+            send_reply(404, "Not Found");
+            exit;
+        }
+        route(relay);
+        exit;
+    }
+
     # From here on this is either a trunk (source matched in the address
     # table) or a registered phone in one of our domains — 03 §2.1's
     # routing summary. Both paths are data-driven against
@@ -266,7 +295,10 @@ route{
     # 03 §1: "Load balancing across FS nodes — Owns (dispatcher with
     # OPTIONS probing)." The FS set itself is provisioned as environment
     # config (see the Dockerfile), not a projected table — there is
-    # exactly one FS group in this stage (S1-10's single node).
+    # exactly one FS group in this stage (S1-10's single node). G-18
+    # (docs/decisions.md): nothing seeds that table yet, so this always
+    # returns 503 today — a pre-existing S1-11 gap S1-13's own verification
+    # surfaced, not one introduced here.
     if (!ds_select_dst(1, 4)) {
         send_reply(503, "Service Unavailable");
         exit;

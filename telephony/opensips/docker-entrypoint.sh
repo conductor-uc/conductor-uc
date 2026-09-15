@@ -12,7 +12,7 @@ set -eu
 # silently replaces each with an empty string, which parses as a syntax
 # error at best and a silent behavior change at worst. Listing only this
 # image's own template variables is what keeps OpenSIPs' own syntax intact.
-TEMPLATE_VARS='$OPENSIPS_LOG_LEVEL $OPENSIPS_IDENTITY $OPENSIPS_SIP_PORT $OPENSIPS_MI_PORT $OPENSIPS_DB_URL $OPENSIPS_REDIS_URL'
+TEMPLATE_VARS='$OPENSIPS_LOG_LEVEL $OPENSIPS_IDENTITY $OPENSIPS_SIP_PORT $OPENSIPS_MI_PORT $OPENSIPS_DB_URL $OPENSIPS_REDIS_URL $OPENSIPS_FS_CIDR'
 
 envsubst "$TEMPLATE_VARS" \
   < /etc/opensips/opensips.cfg.template > /etc/opensips/opensips.cfg

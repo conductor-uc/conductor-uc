@@ -75,6 +75,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
     const extensionId = crypto.randomUUID();
     h.pbxConfig.credentials[extensionId] = {
       extensionId,
+      number: '101',
       username: '101',
       ha1: 'a'.repeat(32),
       ha1b: 'b'.repeat(32),
@@ -107,6 +108,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
     const extensionId = crypto.randomUUID();
     h.pbxConfig.credentials[extensionId] = {
       extensionId,
+      number: '101',
       username: '101',
       ha1: 'a'.repeat(32),
       ha1b: 'b'.repeat(32),
@@ -121,6 +123,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
 
     h.pbxConfig.credentials[extensionId] = {
       extensionId,
+      number: '101',
       username: '101',
       ha1: 'c'.repeat(32),
       ha1b: 'd'.repeat(32),
@@ -141,6 +144,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
     const extensionId = crypto.randomUUID();
     h.pbxConfig.credentials[extensionId] = {
       extensionId,
+      number: '101',
       username: '101',
       ha1: 'a'.repeat(32),
       ha1b: 'b'.repeat(32),
@@ -167,6 +171,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
     const extensionId = crypto.randomUUID();
     h.pbxConfig.credentials[extensionId] = {
       extensionId,
+      number: '101',
       username: '101',
       ha1: 'a'.repeat(32),
       ha1b: 'b'.repeat(32),

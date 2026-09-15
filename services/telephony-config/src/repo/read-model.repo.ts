@@ -17,6 +17,7 @@ export interface DomainRow {
 export interface ExtensionRow {
   readonly id: string;
   readonly tenantId: string;
+  readonly number: string;
   readonly username: string;
   readonly ha1: string;
   readonly realm: string;
@@ -128,7 +129,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     ): Promise<ExtensionRow | undefined> {
       const previous = await trx
         .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'username', 'ha1', 'realm'])
+        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
         .where('id', '=', extension.id)
         .executeTakeFirst();
 
@@ -139,6 +140,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
           .values({
             id: extension.id,
             tenant_id: extension.tenantId,
+            number: extension.number,
             username: extension.username,
             ha1: extension.ha1,
             realm: extension.realm,
@@ -150,6 +152,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         await trx
           .updateTable('extensions')
           .set({
+            number: extension.number,
             username: extension.username,
             ha1: extension.ha1,
             realm: extension.realm,
@@ -164,7 +167,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     async deleteExtension(trx: Executor, id: string): Promise<ExtensionRow | undefined> {
       const existing = await trx
         .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'username', 'ha1', 'realm'])
+        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
         .where('id', '=', id)
         .executeTakeFirst();
       if (existing === undefined) return undefined;
@@ -176,7 +179,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     listExtensionsForTenant(trx: Executor, tenantId: string): Promise<ExtensionRow[]> {
       return trx
         .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'username', 'ha1', 'realm'])
+        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
         .where('tenant_id', '=', tenantId)
         .execute();
     },
@@ -185,8 +188,31 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     listExtensions(): Promise<ExtensionRow[]> {
       return db.kysely
         .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'username', 'ha1', 'realm'])
+        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
         .execute();
+    },
+
+    /** `/fs/directory`'s domain lookup (S1-13): which tenant a SIP domain belongs to. */
+    async findTenantIdByFqdn(fqdn: string): Promise<string | undefined> {
+      const row = await db.kysely
+        .selectFrom('domains')
+        .select('tenant_id')
+        .where('fqdn', '=', fqdn)
+        .executeTakeFirst();
+      return row?.tenant_id;
+    },
+
+    /**
+     * `/fs/dialplan`'s ext→ext lookup (S1-13): a tenant's extension by its
+     * current dialable number, not its (possibly stale) SIP `username`.
+     */
+    findExtensionByNumber(tenantId: string, number: string): Promise<ExtensionRow | undefined> {
+      return db.kysely
+        .selectFrom('extensions')
+        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
+        .where('tenant_id', '=', tenantId)
+        .where('number', '=', number)
+        .executeTakeFirst();
     },
   };
 }
