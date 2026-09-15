@@ -1,0 +1,25 @@
+{
+  "name": "@cuc/tests-sip",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "lint": "eslint .",
+    "seed": "node dist/src/seed.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cuc/crypto": "workspace:*",
+    "@cuc/db": "workspace:*",
+    "@cuc/logger": "workspace:*",
+    "@cuc/org-service": "workspace:*",
+    "@cuc/pbx-config-service": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

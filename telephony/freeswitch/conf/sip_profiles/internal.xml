@@ -14,15 +14,19 @@
 
   <settings>
     <!-- 02 §5.5 brand-leak surfaces: the SIP User-Agent header, and (per
-         `username`, below) the SDP o=/s= lines. Both take the same neutral,
-         functional value from vars.xml — no vendor or product name. -->
+         `username`, below) the SDP o=/s= lines — two different neutral,
+         functional values (vars.xml explains why they can't be the same
+         one), neither a vendor or product name. -->
     <param name="user-agent-string" value="$${sip_identity}"/>
     <!-- Sets `profile->sdp_username` (mod_sofia's XML param is literally
          named "username"), which becomes both the SDP o= line username and
          the s= session name. Defaults to "FreeSWITCH" if unset — this is the
          one param standing between a fresh profile and a brand leak on every
-         call's SDP. -->
-    <param name="username" value="$${sip_identity}"/>
+         call's SDP. `sip_sdp_identity`, not `sip_identity`: RFC 4566's o=
+         line grammar forbids whitespace in this field, which `sip_identity`
+         has (vars.xml has the full story — this was silently breaking every
+         outbound call this node ever originated). -->
+    <param name="username" value="$${sip_sdp_identity}"/>
 
     <param name="debug" value="0"/>
     <param name="sip-trace" value="no"/>

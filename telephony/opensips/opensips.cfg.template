@@ -86,9 +86,20 @@ modparam("permissions", "db_url", "${OPENSIPS_DB_URL}")
 #### precomputed by pbx-config-service (S1-09) and stored alongside the
 #### tenant's realm, not derived here from a plaintext password OpenSIPs
 #### never has.
+#
+# `use_domain` on both modules (S1-14): without it, `subscriber` and
+# `location` are each a *global* username-only namespace, not one per
+# tenant domain — confirmed directly, digest auth for a second tenant's
+# extension silently fails (or worse, could match a same-numbered
+# extension in the wrong tenant) whenever two tenants pick the same
+# extension number, which is the normal case (most tenants start
+# numbering at 100/101/...), not an edge case. `subscriber`/`location`
+# are keyed by (username, domain) precisely so this scoping is possible
+# (`telephony/opensips/db-schema/{auth_db,usrloc}-create.sql`).
 loadmodule "usrloc.so"
 modparam("usrloc", "db_url", "${OPENSIPS_DB_URL}")
 modparam("usrloc", "db_mode", 2)
+modparam("usrloc", "use_domain", 1)
 
 loadmodule "auth.so"
 loadmodule "auth_db.so"
@@ -96,6 +107,7 @@ modparam("auth_db", "db_url", "${OPENSIPS_DB_URL}")
 modparam("auth_db", "calculate_ha1", 0)
 modparam("auth_db", "password_column", "ha1")
 modparam("auth_db", "load_credentials", "")
+modparam("auth_db", "use_domain", 1)
 
 loadmodule "registrar.so"
 modparam("registrar", "tcp_persistent_flag", "TCP_PERSISTENT")
@@ -197,12 +209,21 @@ route{
         exit;
     }
 
+    # In-dialog request (BYE, re-INVITE, ACK for a non-2xx, ...). Not
+    # `loose_route()`: confirmed directly (via the module docs) that
+    # `topology_hiding()` above never adds a Record-Route at all — it hides
+    # the whole topology by rewriting Contact alone (into the encoded
+    # `thinfo=...` form seen on the wire), so there is never a Route header
+    # for `loose_route()` to find, and it fails every single in-dialog
+    # request. `topology_hiding_match()` is this module's own purpose-built
+    # replacement: it decodes the hidden Contact/R-URI pair itself instead
+    # of relying on a Route header.
     if (has_totag()) {
         if (is_method("ACK") && t_check_trans()) {
             t_relay();
             exit;
         }
-        if (!loose_route()) {
+        if (!topology_hiding_match()) {
             send_reply(404, "Not here");
             exit;
         }
@@ -239,19 +260,31 @@ route{
 
     # A request FS itself sent back to us (03 §2.1: "request from FS: if
     # destination is a local user -> lookup(location) and relay") — S1-13's
-    # ext→ext dialplan bridges the call to `${network_addr}:${sip_network_port}`,
-    # i.e. back to whoever FS received it from, which the FS-side ACL
-    # (`telephony/freeswitch/conf/autoload_configs/acl.conf.xml`) guarantees
-    # is this proxy. Checked first, and separately from the trunk/registered-
-    # phone block below: the caller's own FROM header still names a local
-    # tenant domain on this leg, which would otherwise satisfy
-    # `is_from_local()` too and send the call straight back to the FS pool
-    # (`ds_select_dst`) instead of resolving the callee's real contact —
-    # a routing loop `check_source_address`/`is_from_local()` alone cannot
-    # tell apart from a genuine outbound call, since both look identical from
-    # the FROM header's domain alone. Only the transport-level source
-    # address distinguishes them.
-    if ($si == ${OPENSIPS_FS_CIDR}) {
+    # ext→ext dialplan bridges the call back to this proxy's own SIP URI
+    # (`OPENSIPS_SIP_URI`, telephony-config's config). Checked first, and
+    # separately from the trunk/registered-phone block below: the caller's
+    # own FROM header still names a local tenant domain on this leg, which
+    # would otherwise satisfy `is_from_local()` too and send the call
+    # straight back to the FS pool (`ds_select_dst`) instead of resolving
+    # the callee's real contact — a routing loop `check_source_address`/
+    # `is_from_local()` alone cannot tell apart from a genuine outbound
+    # call, since both look identical from the FROM header's domain alone.
+    #
+    # `ds_is_in_list("$si", $sp)` (not a `$si == <cidr>` check, tried first
+    # and confirmed live to be wrong; nor `ds_is_from_list`, its older name —
+    # deprecated in favor of this one, and this OpenSIPs build's dispatcher
+    # module does not export it at all — confirmed directly): this compose
+    # network is one flat bridge subnet, so *every* container's source
+    # address — a registered phone's own SIPp container included — matches
+    # the same broad CIDR range FS itself is reachable on, making a CIDR
+    # check match a phone's own outbound call too and route it as if it
+    # came from FS. Matching against the dispatcher set's real, seeded
+    # FS-node membership (G-18) instead of a network range is what actually
+    # distinguishes the two. The port argument must be unquoted (`$sp`, not
+    # `"$sp"`) — confirmed directly that ds_is_in_list's `port` parameter is
+    # typed `int`, and quoting it produces a config parse error
+    # ("Param [2] expected to be an integer or variable").
+    if (ds_is_in_list("$si", $sp)) {
         if (!topology_hiding()) {
             xlog("L_ERR", "topology_hiding failed for $ru (from FS)\n");
             send_reply(500, "Server Internal Error");
@@ -276,9 +309,15 @@ route{
         # Inbound trunk call. Tenant identity would come from the matched
         # address-table row once trunk-service (S2+) projects real trunks.
         append_hf("X-Call-Direction: inbound\r\n");
-    } else if (is_from_local()) {
-        # Registered phone in a known domain, calling out.
+    } else if (is_from_local($var(tenant_id))) {
+        # Registered phone in a known domain, calling out. `$var(tenant_id)`
+        # is the domain row's own `attrs` column (S1-14) — telephony-config
+        # is the only writer of that table (05 §1.1), and this is the one
+        # link back to its read model OpenSIPs' own script can reach.
+        # FS's `/fs/dialplan` (S1-13) trusts this exact header for ext→ext
+        # tenant scoping (03 §3.2: "never inferred from the context name").
         append_hf("X-Call-Direction: internal\r\n");
+        append_hf("X-Tenant-Id: $var(tenant_id)\r\n");
     } else {
         send_reply(403, "Forbidden");
         exit;

@@ -40,6 +40,8 @@ export function registerFsRoutes(
   db: Database<TelephonyConfigDb>,
   readModel: ReadModelRepo,
   fsXmlCurlToken: string,
+  /** OpenSIPs' SIP listener, e.g. `opensips:5060` — see `xml.ts`'s `buildDialplanDocument`. */
+  opensipsSipUri: string,
   logger: Logger,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
@@ -144,7 +146,16 @@ export function registerFsRoutes(
       return NOT_FOUND_DOCUMENT;
     }
 
-    return buildDialplanDocument(callerContext, destinationNumber);
+    // The bridge's R-URI needs the tenant's own SIP domain (`xml.ts`'s own
+    // doc comment on why) — not derivable from any trusted request field,
+    // so this is the one dialplan lookup that also needs a domain read.
+    const domain = await readModel.findDomain(db.kysely, tenantId);
+    if (domain === undefined) {
+      logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    return buildDialplanDocument(callerContext, destinationNumber, domain.fqdn, opensipsSipUri);
   });
 
   app.post('/fs/configuration', { config: { public: true } }, async (request, reply) => {

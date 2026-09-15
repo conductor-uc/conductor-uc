@@ -153,8 +153,71 @@ jobs:
         if: failure()
         run: docker logs minio || true
 
-  # Later stages plug in here rather than in the job above, so one slow suite
-  # does not hold up the fast feedback:
-  #   - SIP smoke against the compose stack (S1)
+  # A separate job, not a step in `check` above, so one slow suite does not
+  # hold up the fast feedback loop (real SIP transaction timers over real
+  # UDP make this the slowest thing in the workflow).
+  sip-smoke:
+    name: SIP smoke (S1-14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Restore Turborepo cache
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      # `tests/sip`'s own seed step (`run-scenario.ts`'s `seedFixtures`)
+      # runs `dist/src/seed.js` inside a throwaway container that bind-mounts
+      # this checkout — it needs the compiled output on disk, not just a
+      # turbo cache entry elsewhere, so this must happen before the stack
+      # comes up.
+      - name: Build tests/sip and its workspace dependencies
+        run: pnpm exec turbo run build --filter=@cuc/tests-sip...
+
+      # `--wait` blocks until every service satisfies its own
+      # `depends_on: condition:` (S1-14's own compose file) or, for FS/
+      # OpenSIPs, the Docker-level `HEALTHCHECK` baked into their own
+      # Dockerfiles — the same readiness signal `make up` relies on locally.
+      - name: Build and start the compose stack
+        working-directory: infra/compose
+        run: |
+          docker compose build
+          docker compose up -d --wait --wait-timeout 180
+
+      - name: Run SIP scenarios
+        working-directory: tests/sip
+        env:
+          # A missing/broken compose stack must fail this job, not report a
+          # green run full of skipped tests — same pattern as the `check`
+          # job's own REQUIRE_DB_TESTS etc. above.
+          REQUIRE_SIP_TESTS: '1'
+        run: pnpm vitest run
+
+      - name: Show compose logs on failure
+        if: failure()
+        working-directory: infra/compose
+        run: docker compose logs
+
+      - name: Tear down the compose stack
+        if: always()
+        working-directory: infra/compose
+        run: docker compose down -v
+
+  # Later stages plug in here rather than in the job above:
   #   - Flutter console build and widget tests (S3)
   #   - container image builds, pushed on main (S1)

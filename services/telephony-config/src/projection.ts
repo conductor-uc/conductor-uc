@@ -33,8 +33,8 @@ export function createProjection(
      * A tenant becoming active with a known domain: project `domain` and
      * trigger `domain_reload` (03 §2 — `domain` is db_mode=1, cached).
      */
-    async activateDomain(fqdn: string): Promise<void> {
-      await opensips.upsertDomain(fqdn);
+    async activateDomain(fqdn: string, tenantId: string): Promise<void> {
+      await opensips.upsertDomain(fqdn, tenantId);
       await mi.call('domain_reload');
     },
 

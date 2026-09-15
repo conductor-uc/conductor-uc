@@ -9,11 +9,25 @@
       actually present; the preceding `set` is what makes that safe to skip.
   -->
 
-  <!-- 02 §5.5: the one identity string this node exposes on the wire, for
-       both the SIP User-Agent header and the SDP o=/s= lines (see
-       sip_profiles/internal.xml). Functional, not a product or vendor name. -->
+  <!-- 02 §5.5: the SIP User-Agent header's identity string. Functional, not
+       a product or vendor name. -->
   <X-PRE-PROCESS cmd="set" data="sip_identity=SIP Media Server"/>
   <X-PRE-PROCESS cmd="env-set" data="sip_identity=$FS_SIP_IDENTITY"/>
+
+  <!-- The SDP o=/s= line's username token (`sip_profiles/internal.xml`'s
+       own `username` param) — a *different* value from `sip_identity`
+       above on purpose: RFC 4566's o= line grammar requires this field to
+       be a single token with no embedded whitespace ("The username MUST
+       NOT contain spaces"), but `sip_identity`'s neutral value has one.
+       Confirmed directly this is not merely cosmetic: reusing
+       `sip_identity` here made sofia-sip's own outbound message
+       construction fail internally (`nua_client.c`'s `sip_object(msg)`
+       returning NULL, reported as "900 Internal error") for *every*
+       outbound INVITE this node ever originates, before any packet is
+       sent — S1-10's own "Done when" never exercised an outbound call, so
+       this went uncaught until S1-14 first tried one. -->
+  <X-PRE-PROCESS cmd="set" data="sip_sdp_identity=SIP-Media-Server"/>
+  <X-PRE-PROCESS cmd="env-set" data="sip_sdp_identity=$FS_SDP_IDENTITY"/>
 
   <!-- No per-tenant meaning at the node level (02 §3): every domain/user
        lookup is dynamic, via xml_curl — see autoload_configs/xml_curl.conf.xml.

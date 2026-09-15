@@ -35,7 +35,7 @@ describe.skipIf(skipReason !== undefined)('reconciler', () => {
       tenantId,
       fqdn: 'acme.platform.test',
     });
-    await h.opensipsProjection.upsertDomain('acme.platform.test');
+    await h.opensipsProjection.upsertDomain('acme.platform.test', tenantId);
 
     const report = await reconciler().reconcileOnce();
     expect(report).toEqual({
@@ -63,7 +63,7 @@ describe.skipIf(skipReason !== undefined)('reconciler', () => {
   });
 
   it("removes an orphaned domain projection (e.g. a tenant that is suspended, or doesn't exist)", async () => {
-    await h.opensipsProjection.upsertDomain('orphan.platform.test');
+    await h.opensipsProjection.upsertDomain('orphan.platform.test', crypto.randomUUID());
 
     const report = await reconciler().reconcileOnce();
     expect(report.domainsRemoved).toBe(1);
@@ -78,7 +78,7 @@ describe.skipIf(skipReason !== undefined)('reconciler', () => {
       tenantId,
       fqdn: 'suspended.platform.test',
     });
-    await h.opensipsProjection.upsertDomain('suspended.platform.test');
+    await h.opensipsProjection.upsertDomain('suspended.platform.test', tenantId);
 
     const report = await reconciler().reconcileOnce();
     expect(report.domainsRemoved).toBe(1);

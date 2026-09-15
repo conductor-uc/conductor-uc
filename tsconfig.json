@@ -57,6 +57,9 @@
       "path": "./services/telephony-config/tsconfig.build.json"
     },
     {
+      "path": "./tests/sip/tsconfig.build.json"
+    },
+    {
       "path": "./tools/brand-leak/tsconfig.build.json"
     },
     {

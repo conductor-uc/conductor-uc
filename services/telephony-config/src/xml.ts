@@ -80,17 +80,34 @@ export function buildDirectoryDocument(
  * channel variable instead (03 §3.2: "Tenant data is never inferred from
  * the context name").
  *
- * The bridge target is FreeSWITCH's own literal channel-variable syntax,
- * not a value this service resolves: `${network_addr}`/`${sip_network_port}`
- * are the address the *current* call actually arrived from, which the FS
- * ACL guarantees is OpenSIPs (`telephony/freeswitch/conf/autoload_configs/acl.conf.xml`).
- * Sending the call back out to whoever just sent it in is what "routed back
- * through OpenSIPs for location" (03 §2.1) means in practice: OpenSIPs
- * re-receives it, and its own `route{}` relays to the callee's real contact
- * (`lookup("location")`) rather than back to the FS pool.
+ * The bridge target's R-URI stays `<number>@<tenant domain>` — `lookup(
+ * "location")` on the OpenSIPs side (`use_domain=1`, S1-14) only finds a
+ * registered contact by exactly that (username, domain) pair, never by
+ * whatever host the packet was physically addressed to — while
+ * `{sip_route_uri=...}` (a FreeSWITCH inline channel-variable prefix, set
+ * right before the dial string) is what actually points the *packet* at
+ * OpenSIPs (`opensipsSipUri`, e.g. `opensips:5060`), independent of the
+ * R-URI. Both pieces were confirmed live to matter, the hard way:
+ *  - `${network_addr}` (FreeSWITCH's own "wherever this call arrived from"
+ *    channel variable) reflects the *original calling party's* own
+ *    advertised address on a real three-hop call, not OpenSIPs' — a bridge
+ *    built from it dials the caller's own phone instead of the proxy.
+ *  - Using OpenSIPs' address as the R-URI's *domain* (`102@opensips:5060`)
+ *    makes `lookup("location")` search for an AOR in a domain named
+ *    "opensips" — which has no registered users — instead of the tenant
+ *    domain everyone is actually registered under, so it always misses.
+ * "Routed back through OpenSIPs for location" (03 §2.1) needs both: the
+ * R-URI OpenSIPs can actually resolve, delivered to the address that can
+ * resolve it.
  */
-export function buildDialplanDocument(callerContext: string, destinationNumber: string): string {
-  const target = `sofia/internal/${destinationNumber}@\${network_addr}:\${sip_network_port}`;
+export function buildDialplanDocument(
+  callerContext: string,
+  destinationNumber: string,
+  tenantDomain: string,
+  opensipsSipUri: string,
+): string {
+  const target =
+    `{sip_route_uri=sip:${opensipsSipUri}}` + `sofia/internal/${destinationNumber}@${tenantDomain}`;
 
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +

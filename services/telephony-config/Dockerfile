@@ -12,10 +12,10 @@ RUN corepack enable
 # the dependency layer.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY packages ./packages
-COPY services/{{name}} ./services/{{name}}
+COPY services/telephony-config ./services/telephony-config
 
-RUN pnpm install --frozen-lockfile --filter @cuc/{{name}}...
-RUN pnpm --filter @cuc/{{name}}... build
+RUN pnpm install --frozen-lockfile --filter @cuc/telephony-config...
+RUN pnpm --filter @cuc/telephony-config... build
 
 # Drop dev dependencies from what gets copied into the runtime image.
 # No `...` here (unlike the two steps above): `pnpm deploy`'s own
@@ -30,7 +30,7 @@ RUN pnpm --filter @cuc/{{name}}... build
 # (the same effect, scoped to this one build step). Both of these deploy
 # bugs were confirmed directly: never caught before S1-14, the first task
 # to actually build one of these images.
-RUN pnpm --filter @cuc/{{name}} --prod deploy --legacy /app
+RUN pnpm --filter @cuc/telephony-config --prod deploy --legacy /app
 
 FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runtime
 WORKDIR /app
