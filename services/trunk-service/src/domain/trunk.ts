@@ -76,7 +76,9 @@ export function validateCodecs(codecs: readonly string[]): string[] {
 export function validateMaxChannels(maxChannels: number | null | undefined): number | null {
   if (maxChannels === undefined || maxChannels === null) return null;
   if (!Number.isInteger(maxChannels) || maxChannels < 1) {
-    throw new InvalidTrunkConfigError('max_channels must be a positive integer, or null for no limit.');
+    throw new InvalidTrunkConfigError(
+      'max_channels must be a positive integer, or null for no limit.',
+    );
   }
   return maxChannels;
 }
@@ -87,7 +89,12 @@ const IPV6_CIDR = /^[0-9a-fA-F:]+\/(\d|[1-9]\d|1[01]\d|12[0-8])$/;
 /** Accepts IPv4 or IPv6 CIDR notation — the shape `trunk_ips.cidr` is matched against (03: inbound trunk identification). */
 export function validateCidr(cidr: string): string {
   const trimmed = cidr.trim();
-  const isIpv4 = IPV4_CIDR.test(trimmed) && trimmed.split('/')[0]!.split('.').every((octet) => Number(octet) <= 255);
+  const isIpv4 =
+    IPV4_CIDR.test(trimmed) &&
+    trimmed
+      .split('/')[0]!
+      .split('.')
+      .every((octet) => Number(octet) <= 255);
   if (!isIpv4 && !IPV6_CIDR.test(trimmed)) {
     throw new InvalidCidrError(`'${cidr}' is not a valid IPv4 or IPv6 CIDR.`);
   }
@@ -98,8 +105,14 @@ export function validateCallerIdPolicy(
   policy: CallerIdPolicy | null | undefined,
 ): CallerIdPolicy | null {
   if (policy === undefined || policy === null) return null;
-  if ((policy.name === null || policy.name === '') && (policy.number === null || policy.number === '')) {
+  if (
+    (policy.name === null || policy.name === '') &&
+    (policy.number === null || policy.number === '')
+  ) {
     throw new InvalidTrunkConfigError('A caller-ID policy needs at least a name or a number.');
   }
-  return { name: policy.name === undefined ? null : policy.name, number: policy.number === undefined ? null : policy.number };
+  return {
+    name: policy.name === undefined ? null : policy.name,
+    number: policy.number === undefined ? null : policy.number,
+  };
 }

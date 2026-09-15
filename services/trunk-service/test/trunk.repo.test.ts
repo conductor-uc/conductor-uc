@@ -125,7 +125,7 @@ describe.skipIf(skipReason !== undefined)('trunk repo', () => {
     });
   });
 
-  it("reveal returns the register secret and matches the HA1-style precedent of never storing it in the clear", async () => {
+  it('reveal returns the register secret and matches the HA1-style precedent of never storing it in the clear', async () => {
     const tenantId = crypto.randomUUID();
     h.resellers.resellerIds[tenantId] = 'reseller-a';
     const created = await h.trunks.create(ctxFor(tenantId), baseInput);
@@ -175,9 +175,9 @@ describe.skipIf(skipReason !== undefined)('trunk repo', () => {
     h.resellers.resellerIds[tenantId] = 'reseller-a';
     const created = await h.trunks.create(ctxFor(tenantId), baseInput);
 
-    await expect(
-      h.trunks.update(ctxFor(tenantId), created.id, { authMode: 'ip' }),
-    ).rejects.toThrow(InvalidTrunkConfigError);
+    await expect(h.trunks.update(ctxFor(tenantId), created.id, { authMode: 'ip' })).rejects.toThrow(
+      InvalidTrunkConfigError,
+    );
   });
 
   it('404s an update for a nonexistent trunk', async () => {
@@ -196,7 +196,11 @@ describe.skipIf(skipReason !== undefined)('trunk repo', () => {
 
     expect(await h.trunks.findById(ctxFor(tenantId), created.id)).toBeUndefined();
     expect(
-      await h.db.kysely.selectFrom('trunk_ips').selectAll().where('trunk_id', '=', created.id).execute(),
+      await h.db.kysely
+        .selectFrom('trunk_ips')
+        .selectAll()
+        .where('trunk_id', '=', created.id)
+        .execute(),
     ).toEqual([]);
   });
 

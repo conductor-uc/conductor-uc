@@ -139,7 +139,9 @@ function parseJsonCodecs(value: unknown): string[] {
 
 function parseJsonCallerIdPolicy(value: unknown): CallerIdPolicy | null {
   if (value === null) return null;
-  return typeof value === 'string' ? (JSON.parse(value) as CallerIdPolicy) : (value as CallerIdPolicy);
+  return typeof value === 'string'
+    ? (JSON.parse(value) as CallerIdPolicy)
+    : (value as CallerIdPolicy);
 }
 
 function toTrunk(row: TrunkRow): Trunk {
@@ -327,9 +329,13 @@ export function createTrunkRepo(
         hasSecret: willHaveSecret,
       });
       const codecs =
-        input.codecs === undefined ? parseJsonCodecs(existing.codecs) : validateCodecs(input.codecs);
+        input.codecs === undefined
+          ? parseJsonCodecs(existing.codecs)
+          : validateCodecs(input.codecs);
       const maxChannels =
-        input.maxChannels === undefined ? existing.max_channels : validateMaxChannels(input.maxChannels);
+        input.maxChannels === undefined
+          ? existing.max_channels
+          : validateMaxChannels(input.maxChannels);
       const callerIdPolicy =
         input.callerIdPolicy === undefined
           ? parseJsonCallerIdPolicy(existing.caller_id_policy)
@@ -473,10 +479,16 @@ export function createTrunkRepo(
         .executeTakeFirst();
       if (trunk === undefined) throw new TrunkNotFoundError(`No trunk with id '${trunkId}'.`);
       if (trunk.username === null || trunk.secret_enc === null) {
-        throw new TrunkHasNoCredentialError(`Trunk '${trunkId}' has no register credential to reveal.`);
+        throw new TrunkHasNoCredentialError(
+          `Trunk '${trunkId}' has no register credential to reveal.`,
+        );
       }
 
-      const secret = await decryptString(kek, trunk.secret_enc, associatedData(trunk.tenant_id, trunkId));
+      const secret = await decryptString(
+        kek,
+        trunk.secret_enc,
+        associatedData(trunk.tenant_id, trunkId),
+      );
       return { username: trunk.username, secret };
     },
   };

@@ -216,7 +216,11 @@ export function registerTrunkRoutes(app: Server, trunks: TrunkRepo, bus: Bus): v
     '/v1/tenants/:tenantId/trunks/:id',
     {
       config: { permission: 'trunk.manage', dataClass: 'config' },
-      schema: { params: TrunkParamsSchema, body: UpdateTrunkBodySchema, response: { 200: TrunkSchema } },
+      schema: {
+        params: TrunkParamsSchema,
+        body: UpdateTrunkBodySchema,
+        response: { 200: TrunkSchema },
+      },
     },
     async (request) => {
       try {
@@ -306,7 +310,9 @@ export function registerTrunkRoutes(app: Server, trunks: TrunkRepo, bus: Bus): v
     async (request) => {
       const { actorId, actorType, orgId } = request.context;
       if (actorId === undefined || actorType === undefined || orgId === undefined) {
-        throw ProblemError.unauthorized('An identified actor is required to reveal a trunk credential.');
+        throw ProblemError.unauthorized(
+          'An identified actor is required to reveal a trunk credential.',
+        );
       }
 
       let revealed;
