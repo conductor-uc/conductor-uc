@@ -48,21 +48,24 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
     return createPbxConsumer(h.db, h.bus, h.logger, h.projection, { pullTimeoutMs: 5000 });
   }
 
+  /** Returns the published envelope's own id, for a dedupe check that names it exactly. */
   async function publish(
     type: 'pbx.extension.created' | 'pbx.extension.updated' | 'pbx.extension.deleted',
     tenantId: string,
     data: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<string> {
     const contract = telephonyEvents.contract(type);
     telephonyEvents.assertPayload(type, data);
+    const id = crypto.randomUUID();
     await h.bus.publish({
-      id: crypto.randomUUID(),
+      id,
       type,
       schemaVersion: contract.schemaVersion,
       occurredAt: new Date().toISOString(),
       orgContext: { tenantId },
       data,
     });
+    return id;
   }
 
   it("pbx.extension.created projects the subscriber row — S1-12's own acceptance test", async () => {
@@ -170,7 +173,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       realm: 'acme.platform.test',
     };
 
-    await publish('pbx.extension.created', tenantId, {
+    const eventId = await publish('pbx.extension.created', tenantId, {
       extensionId,
       number: '101',
       displayName: 'Front Desk',
@@ -178,7 +181,17 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
     const first = await runOnceUntilHandled(c);
     expect(first.handled).toBeGreaterThanOrEqual(1);
 
-    const second = await c.runOnce();
-    expect(second.handled).toBe(0);
+    // A second pass is not asserted empty (G-17: streams are shared with any
+    // other package's own concurrently-running consumer tests). What proves
+    // dedupe is that *our own* event was recorded exactly once —
+    // `consumed_events.id` is its primary key, so processing it twice would
+    // collide and roll back.
+    await c.runOnce();
+    const consumedRows = await h.db.kysely
+      .selectFrom('consumed_events')
+      .select('id')
+      .where('id', '=', eventId)
+      .execute();
+    expect(consumedRows).toHaveLength(1);
   });
 });

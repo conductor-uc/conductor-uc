@@ -58,20 +58,23 @@ describe.skipIf(skipReason !== undefined)('org consumer', () => {
     });
   }
 
+  /** Returns the published envelope's own id, for a dedupe check that names it exactly. */
   async function publish(
     type: 'org.tenant.created' | 'org.tenant.suspended' | 'org.tenant.resumed' | 'org.domain.added',
     data: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<string> {
     const contract = telephonyEvents.contract(type);
     telephonyEvents.assertPayload(type, data);
+    const id = crypto.randomUUID();
     await h.bus.publish({
-      id: crypto.randomUUID(),
+      id,
       type,
       schemaVersion: contract.schemaVersion,
       occurredAt: new Date().toISOString(),
       orgContext: {},
       data,
     });
+    return id;
   }
 
   it('org.tenant.created inserts an active tenant row', async () => {
@@ -205,7 +208,7 @@ describe.skipIf(skipReason !== undefined)('org consumer', () => {
     await c.ensure();
     const tenantId = crypto.randomUUID();
 
-    await publish('org.tenant.created', {
+    const eventId = await publish('org.tenant.created', {
       orgId: tenantId,
       slug: 'acme',
       name: 'Acme',
@@ -214,7 +217,17 @@ describe.skipIf(skipReason !== undefined)('org consumer', () => {
     const first = await runOnceUntilHandled(c);
     expect(first.handled).toBeGreaterThanOrEqual(1);
 
-    const second = await c.runOnce();
-    expect(second.handled).toBe(0);
+    // A second pass is not asserted empty (G-17: the ORG stream is shared
+    // with any other package's own concurrently-running consumer tests, so a
+    // stray unrelated event can land here). What proves dedupe is that *our
+    // own* event was recorded exactly once — `consumed_events.id` is its
+    // primary key, so processing it twice would collide and roll back.
+    await c.runOnce();
+    const consumedRows = await h.db.kysely
+      .selectFrom('consumed_events')
+      .select('id')
+      .where('id', '=', eventId)
+      .execute();
+    expect(consumedRows).toHaveLength(1);
   });
 });
