@@ -1,21 +1,16 @@
 import { redactConfig } from '@cuc/config';
+import { fileKekFromConfig } from '@cuc/crypto';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
-import { storageFromConfig } from '@cuc/storage';
 
 import { configSchema, loadServiceConfig } from './config.js';
-import { nodeDnsResolver } from './dns-resolver.js';
-import { createIdentityClient } from './identity-client.js';
-import { createBrandRepo } from './repo/brand.repo.js';
-import { createDomainRepo } from './repo/domain.repo.js';
-import { createOrgRepo } from './repo/org.repo.js';
-import { registerBrandRoutes } from './routes/brand.routes.js';
-import { registerDomainRoutes } from './routes/domain.routes.js';
-import { registerInternalRoutes } from './routes/internal.routes.js';
-import { registerOrgRoutes } from './routes/org.routes.js';
-import type { OrgServiceDb } from './schema.js';
+import { createDomainConsumer } from './consumers/domain.consumer.js';
+import { createOrgClient } from './org-client.js';
+import { createExtensionRepo } from './repo/extension.repo.js';
+import { registerExtensionRoutes } from './routes/extension.routes.js';
+import type { PbxConfigServiceDb } from './schema.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -25,7 +20,7 @@ const logger = createLogger({
 });
 logger.info(redactConfig(configSchema, config), 'starting');
 
-const db = createDatabase<OrgServiceDb>({
+const db = createDatabase<PbxConfigServiceDb>({
   host: config.DB_HOST,
   port: config.DB_PORT,
   user: config.DB_USER,
@@ -64,6 +59,17 @@ const relay = createRelay({
 });
 const relayLoop = relay.run();
 
+const kek = fileKekFromConfig(config);
+const orgClient = createOrgClient({
+  baseUrl: config.ORG_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+const extensionRepo = createExtensionRepo(db, orgClient.primaryDomain, kek);
+
+const domainConsumer = createDomainConsumer(db, bus, logger, extensionRepo);
+await domainConsumer.ensure();
+const domainConsumerLoop = domainConsumer.run();
+
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
   serviceVersion: config.SERVICE_VERSION,
@@ -83,39 +89,26 @@ app.addReadinessCheck('outbox', async () => {
   return { status: 'pass', detail: `${String(lag)} pending` };
 });
 
-const identityClient = createIdentityClient({
-  baseUrl: config.IDENTITY_SERVICE_URL,
-  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
-});
-registerOrgRoutes(
-  app,
-  createOrgRepo(db, { platformBaseDomain: config.PLATFORM_BASE_DOMAIN }),
-  identityClient.createAdminUser,
-);
-const domainRepo = createDomainRepo(db);
-registerDomainRoutes(app, domainRepo, nodeDnsResolver());
-registerInternalRoutes(app, domainRepo, config.INTERNAL_SERVICE_TOKEN);
-
-const storage = storageFromConfig(config, logger);
-// 02 §3's table: the master/unbranded console lives at console.{PLATFORM_BASE_DOMAIN}.
-registerBrandRoutes(app, createBrandRepo(db), storage, `console.${config.PLATFORM_BASE_DOMAIN}`);
+registerExtensionRoutes(app, extensionRepo, bus);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
 
 /**
- * SIGTERM drains in-flight HTTP requests, stops taking new outbox work, and
- * closes the bus connection — in that order, so nothing is torn down while it
- * might still be needed.
+ * SIGTERM drains in-flight HTTP requests, stops taking new outbox and
+ * consumer work, and closes the bus connection — in that order, so nothing
+ * is torn down while it might still be needed.
  */
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   relay.stop();
+  domainConsumer.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   await relayLoop;
+  await domainConsumerLoop;
   await bus.close();
   await db.destroy();
   logger.info('shutdown complete');

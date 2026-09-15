@@ -1,11 +1,10 @@
 {
-  "name": "@cuc/org-service",
+  "name": "@cuc/pbx-config-service",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/src/main.js",
   "scripts": {
-    "bootstrap-master": "node dist/src/cli/bootstrap-master.js",
     "build": "tsc --build tsconfig.build.json",
     "clean": "rm -rf dist *.tsbuildinfo",
     "dev": "node --watch dist/src/main.js",
@@ -18,13 +17,13 @@
   },
   "dependencies": {
     "@cuc/api-contracts": "workspace:*",
+    "@cuc/audit": "workspace:*",
     "@cuc/config": "workspace:*",
     "@cuc/crypto": "workspace:*",
     "@cuc/db": "workspace:*",
     "@cuc/events": "workspace:*",
     "@cuc/http": "workspace:*",
     "@cuc/logger": "workspace:*",
-    "@cuc/storage": "workspace:*",
     "kysely": "^0.29.5"
   },
   "devDependencies": {
