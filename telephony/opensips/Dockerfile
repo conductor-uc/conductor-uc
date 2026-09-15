@@ -34,6 +34,10 @@ RUN apt-get -o Acquire::Check-Valid-Until=false update && \
 
 COPY opensips.cfg.template /etc/opensips/opensips.cfg.template
 COPY docker-entrypoint.sh /docker-entrypoint.sh
+# S1-14 (G-18): seeds the FS node into `dispatcher` at container start.
+# `pymysql` (confirmed present — `opensips-cli` itself needs a MySQL driver)
+# means no new package is needed for this.
+COPY seed-dispatcher.py /seed-dispatcher.py
 RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 5060/udp 5060/tcp

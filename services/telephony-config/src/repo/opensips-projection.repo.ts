@@ -18,11 +18,20 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
   const k: Kysely<OpenSipsDb> = db.kysely;
 
   return {
-    async upsertDomain(fqdn: string): Promise<void> {
+    /**
+     * `attrs` carries the owning tenant's id (S1-14) — the one piece of
+     * per-domain data OpenSIPs' routing script actually needs back out.
+     * `is_from_local($var(attrs))` (03 §2.1's "request from a registered
+     * phone" branch) is the only way `route{}` can learn which tenant an
+     * outbound call belongs to and set the trusted `X-Tenant-Id` header FS's
+     * `/fs/dialplan` requires — OpenSIPs has no other reachable link back to
+     * telephony-config's own read model.
+     */
+    async upsertDomain(fqdn: string, tenantId: string): Promise<void> {
       await k
         .insertInto('domain')
-        .values({ domain: fqdn, attrs: null, accept_subdomain: 0, last_modified: new Date() })
-        .onDuplicateKeyUpdate({ last_modified: new Date() })
+        .values({ domain: fqdn, attrs: tenantId, accept_subdomain: 0, last_modified: new Date() })
+        .onDuplicateKeyUpdate({ attrs: tenantId, last_modified: new Date() })
         .execute();
     },
 

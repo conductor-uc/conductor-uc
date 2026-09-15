@@ -40,6 +40,18 @@ export const configSchema = Type.Object({
    */
   OPENSIPS_MI_URL: Env.url(),
 
+  /**
+   * OpenSIPs' SIP listener, e.g. `opensips:5060` (03 §2's `OPENSIPS_SIP_PORT`)
+   * — where `/fs/dialplan`'s ext→ext bridge (S1-13/S1-14) sends the call
+   * back to for `lookup("location")` to resolve the callee's real contact.
+   * Deliberately a static config value, not a FreeSWITCH channel variable
+   * like `${network_addr}`: confirmed live that variable reflects the
+   * *original caller's* own advertised address, not the proxy hop, so a
+   * bridge target built from it dials the caller's own phone instead of
+   * OpenSIPs.
+   */
+  OPENSIPS_SIP_URI: Env.string(),
+
   /** Base URL for pbx-config-service's internal API, e.g. http://pbx-config-service:8080. */
   PBX_CONFIG_SERVICE_URL: Env.url(),
   /**

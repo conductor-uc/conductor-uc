@@ -18,7 +18,19 @@ RUN pnpm install --frozen-lockfile --filter @cuc/org-service...
 RUN pnpm --filter @cuc/org-service... build
 
 # Drop dev dependencies from what gets copied into the runtime image.
-RUN pnpm --filter @cuc/org-service... --prod deploy /app
+# No `...` here (unlike the two steps above): `pnpm deploy`'s own
+# `--filter` names exactly one target project and resolves its dependency
+# tree itself — passing the "include dependencies" filter modifier trips
+# `ERR_PNPM_CANNOT_DEPLOY_MANY` since it (correctly) matches this workspace's
+# other packages too. `--legacy`: pnpm 10's default deploy mode needs
+# `inject-workspace-packages=true` in .npmrc, which would switch every
+# workspace package (not just this deploy step) from symlinked to copied
+# dependencies — exactly what root .npmrc's own comment says not to relax.
+# `--legacy` keeps that policy untouched and deploys by copying instead
+# (the same effect, scoped to this one build step). Both of these deploy
+# bugs were confirmed directly: never caught before S1-14, the first task
+# to actually build one of these images.
+RUN pnpm --filter @cuc/org-service --prod deploy --legacy /app
 
 FROM gcr.io/distroless/nodejs22-debian12:nonroot AS runtime
 WORKDIR /app

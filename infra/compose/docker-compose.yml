@@ -148,14 +148,119 @@ services:
       OPENSIPS_MI_PORT: ${OPENSIPS_MI_PORT:-8888}
       OPENSIPS_DB_URL: mysql://opensips:${OPENSIPS_DB_PASSWORD:-dev-opensips-password}@mariadb/opensips
       OPENSIPS_REDIS_URL: ${OPENSIPS_REDIS_URL:-redis:cuc://redis:6379/0}
-      # S1-13: the mirror image of FS's own FS_OPENSIPS_CIDR ACL — this is
-      # how `route{}` tells a request FS just sent back to us (ext→ext,
-      # 03 §2.1) apart from a registered phone dialing out. Same broad
-      # default and same reasoning (opensips.cfg.template).
-      OPENSIPS_FS_CIDR: ${OPENSIPS_FS_CIDR:-172.16.0.0/12}
+      # S1-14 (G-18): seeded into `dispatcher` set 1 at container start
+      # (seed-dispatcher.py) — one FS node in this stage. `route{}` also
+      # uses this same set (`ds_is_from_list("1")`) to tell a request FS
+      # sent back to us (ext→ext, 03 §2.1) apart from a registered phone
+      # dialing out — a CIDR check was tried first and confirmed wrong on
+      # this flat compose network (opensips.cfg.template's own comment).
+      OPENSIPS_FS_DESTINATION: ${OPENSIPS_FS_DESTINATION:-sip:freeswitch:5060}
     ports:
       - '${OPENSIPS_SIP_PORT:-5060}:5060/udp'
       - '${OPENSIPS_SIP_PORT:-5060}:5060/tcp'
+
+  org-service:
+    # S1-14: the first Node service to actually run in this stack (09 §1's
+    # "each service builds a single container image", never exercised until
+    # a task needed real cross-service HTTP + event flow, not just each
+    # service's own integration tests). `identity-service` deliberately does
+    # not run here — tests/sip provisions fixtures through this service's
+    # own repo layer directly (bypassing the admin-user side effect on
+    # `POST /v1/.../tenants`, which SIP scenarios have no use for), so
+    # nothing in this stack ever calls out to it.
+    build:
+      context: ../..
+      dockerfile: services/org-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      SERVICE_NAME: org-service
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: org_service
+      DB_PASSWORD: ${ORG_SERVICE_DB_PASSWORD:-dev-org-password}
+      DB_NAME: org_service
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      # Unreachable on purpose (see the note above) — org-service's own
+      # config still requires a syntactically valid URL to boot.
+      IDENTITY_SERVICE_URL: http://127.0.0.1:1
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      PLATFORM_BASE_DOMAIN: ${PLATFORM_BASE_DOMAIN:-platform.test}
+      STORAGE_BUCKET_PREFIX: cuc-dev
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
+      STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
+      STORAGE_FORCE_PATH_STYLE: 'true'
+
+  pbx-config-service:
+    build:
+      context: ../..
+      dockerfile: services/pbx-config-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      org-service:
+        condition: service_started
+    environment:
+      SERVICE_NAME: pbx-config-service
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: pbx_config_service
+      DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD:-dev-pbx-config-password}
+      DB_NAME: pbx_config_service
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      ORG_SERVICE_URL: http://org-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
+      CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
+      CRYPTO_KEK_CURRENT: '1'
+
+  telephony-config:
+    build:
+      context: ../..
+      dockerfile: services/telephony-config/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      org-service:
+        condition: service_started
+      pbx-config-service:
+        condition: service_started
+    environment:
+      SERVICE_NAME: telephony-config
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: telephony_config
+      DB_PASSWORD: ${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD:-dev-telephony-config-password}
+      DB_NAME: telephony_config
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      OPENSIPS_DB_HOST: mariadb
+      OPENSIPS_DB_PORT: 3306
+      OPENSIPS_DB_USER: opensips
+      OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
+      OPENSIPS_DB_NAME: opensips
+      OPENSIPS_MI_URL: http://opensips:${OPENSIPS_MI_PORT:-8888}/mi
+      OPENSIPS_SIP_URI: opensips:${OPENSIPS_SIP_PORT:-5060}
+      PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
+      RECONCILE_INTERVAL_MS: '900000'
 
 volumes:
   mariadb-data:

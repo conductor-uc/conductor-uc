@@ -21,7 +21,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'telephony-config', logger: h.logger });
-    registerFsRoutes(app, h.db, h.readModel, TOKEN, h.logger);
+    registerFsRoutes(app, h.db, h.readModel, TOKEN, 'opensips:5060', h.logger);
     await app.ready();
   });
 
@@ -130,6 +130,11 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
   describe('/fs/dialplan', () => {
     async function seedExtension(tenantId: string, number: string): Promise<void> {
       await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        fqdn: 'acme.platform.test',
+      });
       await h.readModel.upsertExtension(h.db.kysely, {
         id: crypto.randomUUID(),
         tenantId,
@@ -167,7 +172,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(response.body).toContain('<context name="public">');
       expect(response.body).toContain('expression="^102$"');
       expect(response.body).toContain(
-        'data="sofia/internal/102@${network_addr}:${sip_network_port}"',
+        'data="{sip_route_uri=sip:opensips:5060}sofia/internal/102@acme.platform.test"',
       );
     });
 

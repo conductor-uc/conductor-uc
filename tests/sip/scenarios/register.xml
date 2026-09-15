@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S1-14: REGISTER with digest auth against OpenSIPs' real registrar
+  (auth_db/usrloc, S1-11). `[field0]`=username, `[field1]`=domain, from an
+  `-inf` injection file (one line per call — see `src/run-scenario.ts`).
+  Password is passed as `-au`/`-ap` on the command line, not as a third
+  injected field: `[authentication username=... password=...]`'s own
+  parameter values do not support nested `[fieldN]` substitution (confirmed
+  directly against SIPp 3.5.1 — it corrupts the message rather than
+  expanding it), but the bare `[authentication]` keyword auto-fills from
+  `-au`/`-ap`, which is per-invocation anyway since each scenario run here
+  is already for one specific credential.
+
+  `[call_id]` (a `-key uuid <random>` CLI value, `src/run-scenario.ts`) makes
+  the Call-ID unique across separate `docker run` invocations — confirmed
+  directly that two back-to-back container runs can otherwise reuse
+  `[call_id]`'s own value, which a real registrar correctly rejects as a
+  stale/out-of-order CSeq for the same Call-ID.
+-->
+<scenario name="Register">
+  <send retrans="500">
+    <![CDATA[
+      REGISTER sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Expires: 300
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="401" auth="true">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      REGISTER sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 2 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Expires: 300
+      [authentication]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true">
+  </recv>
+
+</scenario>

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S1-14: for "a suspended tenant cannot register". A suspended tenant's
+  domain is removed from OpenSIPs' projection entirely (telephony-config's
+  `deactivateDomain`, S1-12), so `route{}`'s REGISTER branch rejects with
+  404 at `is_uri_host_local()` — before any digest challenge, unlike
+  `register.xml`'s happy path. `[field0]`=username, `[field1]`=domain.
+-->
+<scenario name="Register (expect rejection)">
+  <send retrans="500">
+    <![CDATA[
+      REGISTER sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Expires: 300
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="404">
+  </recv>
+
+</scenario>

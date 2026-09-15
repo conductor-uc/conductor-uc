@@ -76,7 +76,7 @@ export function createOrgConsumer(
           const data = envelope.data as TenantStatusData;
           await readModel.setTenantStatus(trx, data.orgId, 'active');
           const domain = await readModel.findDomain(trx, data.orgId);
-          if (domain !== undefined) await projection.activateDomain(domain.fqdn);
+          if (domain !== undefined) await projection.activateDomain(domain.fqdn, data.orgId);
           return;
         }
 
@@ -106,7 +106,7 @@ export function createOrgConsumer(
           if (previous !== undefined && previous.fqdn !== data.fqdn) {
             await projection.deactivateDomain(previous.fqdn);
           }
-          if (isActive) await projection.activateDomain(data.fqdn);
+          if (isActive) await projection.activateDomain(data.fqdn, tenantId);
 
           // 02 §3: a domain change invalidates every credential computed
           // under the old realm. pbx-config-service's own domain consumer
