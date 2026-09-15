@@ -30,6 +30,7 @@ create_service_db example_service example_service "${EXAMPLE_SERVICE_DB_PASSWORD
 # temp schema, so the omission went unnoticed until S1-13's own real-FS
 # verification needed the full compose stack.
 create_service_db telephony_config telephony_config "${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD}"
+create_service_db trunk_service trunk_service "${TRUNK_SERVICE_DB_PASSWORD}"
 
 # `opensips` is the one schema not owned by a Node service (05 §1.1's rule
 # still applies — one schema, one user, granted only on its own schema):
