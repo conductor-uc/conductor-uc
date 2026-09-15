@@ -10,6 +10,7 @@ import { createDomainConsumer } from './consumers/domain.consumer.js';
 import { createOrgClient } from './org-client.js';
 import { createExtensionRepo } from './repo/extension.repo.js';
 import { registerExtensionRoutes } from './routes/extension.routes.js';
+import { registerInternalRoutes } from './routes/internal.routes.js';
 import type { PbxConfigServiceDb } from './schema.js';
 
 const config = loadServiceConfig();
@@ -90,6 +91,7 @@ app.addReadinessCheck('outbox', async () => {
 });
 
 registerExtensionRoutes(app, extensionRepo, bus);
+registerInternalRoutes(app, extensionRepo, config.INTERNAL_SERVICE_TOKEN);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

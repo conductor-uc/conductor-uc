@@ -56,22 +56,25 @@ describe.skipIf(skipReason !== undefined)('domain consumer (org.domain.added)', 
     return { tenantId };
   }
 
+  /** Returns the published envelope's own id, for a dedupe check that names it exactly. */
   async function publishDomainAdded(fields: {
     fqdn: string;
     scope: 'tenant' | 'reseller_base';
     ownerId: string;
-  }): Promise<void> {
+  }): Promise<string> {
     const contract = pbxEvents.contract('org.domain.added');
     const data = { domainId: crypto.randomUUID(), ...fields };
     pbxEvents.assertPayload('org.domain.added', data);
+    const id = crypto.randomUUID();
     await h.bus.publish({
-      id: crypto.randomUUID(),
+      id,
       type: 'org.domain.added',
       schemaVersion: contract.schemaVersion,
       occurredAt: new Date().toISOString(),
       orgContext: fields.scope === 'tenant' ? { tenantId: fields.ownerId } : {},
       data,
     });
+    return id;
   }
 
   it("recomputes a tenant's SIP credentials when its primary domain changes", async () => {
@@ -91,7 +94,13 @@ describe.skipIf(skipReason !== undefined)('domain consumer (org.domain.added)', 
     await publishDomainAdded({ fqdn: 'new.platform.test', scope: 'tenant', ownerId: tenantId });
     const pass = await runOnceUntilHandled(consumer);
 
-    expect(pass.handled).toBe(1);
+    // >=1, not ===1: this suite shares its JetStream server's ORG stream
+    // (`TEST_NATS_URL`, when set — see `@cuc/testing`'s own nats.ts) with any
+    // other package's consumer tests running concurrently (S1-12 added
+    // telephony-config's own `org.domain.added` consumer test), so a stray
+    // unrelated event can land in the same pull batch. It never affects this
+    // tenant's own outcome, asserted below.
+    expect(pass.handled).toBeGreaterThanOrEqual(1);
     expect(pass.failed).toBe(0);
 
     const after = await h.extensions.reveal(ctxFor(tenantId), created.id);
@@ -121,7 +130,7 @@ describe.skipIf(skipReason !== undefined)('domain consumer (org.domain.added)', 
     });
     const pass = await runOnceUntilHandled(consumer);
 
-    expect(pass.handled).toBe(1);
+    expect(pass.handled).toBeGreaterThanOrEqual(1);
     expect(pass.failed).toBe(0);
   });
 
@@ -138,14 +147,28 @@ describe.skipIf(skipReason !== undefined)('domain consumer (org.domain.added)', 
     });
     await consumer.ensure();
 
-    await publishDomainAdded({ fqdn: 'new.platform.test', scope: 'tenant', ownerId: tenantId });
+    const eventId = await publishDomainAdded({
+      fqdn: 'new.platform.test',
+      scope: 'tenant',
+      ownerId: tenantId,
+    });
     const first = await runOnceUntilHandled(consumer);
-    expect(first.handled).toBe(1);
+    expect(first.handled).toBeGreaterThanOrEqual(1);
 
-    // Nothing new is on the stream — a second pass just finds no messages,
-    // proving the recompute from the first pass is the only one that ran.
-    const second = await consumer.runOnce();
-    expect(second.handled).toBe(0);
+    // A second pass — not asserted empty: this suite's ORG stream is shared
+    // with any other package's own consumer tests running concurrently
+    // (G-17, docs/decisions.md), which can leave a stray unrelated event for
+    // it to find. What actually proves dedupe is that *our own* event was
+    // recorded exactly once — `consumed_events.id` is its primary key, so a
+    // second insert for it would collide and roll back the whole handler
+    // (`@cuc/events`' whole mechanism), never silently recompute twice.
+    await consumer.runOnce();
+    const consumedRows = await h.db.kysely
+      .selectFrom('consumed_events')
+      .select('id')
+      .where('id', '=', eventId)
+      .execute();
+    expect(consumedRows).toHaveLength(1);
 
     const row = await h.db.kysely
       .selectFrom('sip_credentials')

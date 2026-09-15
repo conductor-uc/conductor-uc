@@ -1,0 +1,137 @@
+import { redactConfig } from '@cuc/config';
+import { createDatabase, migrateToLatest } from '@cuc/db';
+import { connectBus } from '@cuc/events';
+import { createServer } from '@cuc/http';
+import { createLogger } from '@cuc/logger';
+
+import { configSchema, loadServiceConfig } from './config.js';
+import { createOrgConsumer } from './consumers/org.consumer.js';
+import { createPbxConsumer } from './consumers/pbx.consumer.js';
+import { createOpenSipsMiClient } from './opensips-mi-client.js';
+import type { OpenSipsDb } from './opensips-schema.js';
+import { createPbxConfigClient } from './pbx-config-client.js';
+import { createProjection } from './projection.js';
+import { createOpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
+import { createReadModelRepo } from './repo/read-model.repo.js';
+import { createReconciler } from './reconcile.js';
+import type { TelephonyConfigDb } from './schema.js';
+
+const config = loadServiceConfig();
+const logger = createLogger({
+  name: config.SERVICE_NAME,
+  level: config.LOG_LEVEL,
+  version: config.SERVICE_VERSION,
+});
+logger.info(redactConfig(configSchema, config), 'starting');
+
+const db = createDatabase<TelephonyConfigDb>({
+  host: config.DB_HOST,
+  port: config.DB_PORT,
+  user: config.DB_USER,
+  password: config.DB_PASSWORD,
+  database: config.DB_NAME,
+  poolSize: config.DB_POOL_SIZE,
+  connectTimeoutMs: config.DB_CONNECT_TIMEOUT_MS,
+  logger,
+});
+
+// Migrations run at startup, same as every other service (Kysely holds a
+// lock, so several instances starting at once is safe). Only for this
+// service's own schema — the `opensips` schema below is provisioned by
+// S1-11's compose init flow, not by a migration this service owns.
+await migrateToLatest({
+  db: db.kysely,
+  dir: new URL('../migrations', import.meta.url).pathname,
+  logger,
+});
+
+// A second, separate connection pool: 05 §1.1's "only telephony-config
+// writes to that schema", with its own DB user and grants (S1-11's
+// `mariadb/init/01-schemas.sh`). Never the same pool as `db` — no
+// cross-schema transaction is possible across them (`projection.ts`).
+const opensipsDb = createDatabase<OpenSipsDb>({
+  host: config.OPENSIPS_DB_HOST,
+  port: config.OPENSIPS_DB_PORT,
+  user: config.OPENSIPS_DB_USER,
+  password: config.OPENSIPS_DB_PASSWORD,
+  database: config.OPENSIPS_DB_NAME,
+  poolSize: config.OPENSIPS_DB_POOL_SIZE,
+  logger,
+});
+
+const bus = await connectBus({
+  servers: config.NATS_SERVERS,
+  logger,
+  name: config.SERVICE_NAME,
+  ...(config.NATS_USER === undefined ? {} : { user: config.NATS_USER }),
+  ...(config.NATS_PASSWORD === undefined ? {} : { password: config.NATS_PASSWORD }),
+});
+await bus.ensureStreams();
+
+const pbxConfigClient = createPbxConfigClient({
+  baseUrl: config.PBX_CONFIG_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+const miClient = createOpenSipsMiClient({ url: config.OPENSIPS_MI_URL });
+
+const readModel = createReadModelRepo(db);
+const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
+const projection = createProjection(
+  readModel,
+  opensipsProjection,
+  miClient,
+  pbxConfigClient,
+  logger,
+);
+
+const orgConsumer = createOrgConsumer(db, bus, logger, readModel, projection);
+await orgConsumer.ensure();
+const orgConsumerLoop = orgConsumer.run();
+
+const pbxConsumer = createPbxConsumer(db, bus, logger, projection);
+await pbxConsumer.ensure();
+const pbxConsumerLoop = pbxConsumer.run();
+
+const reconciler = createReconciler(readModel, opensipsProjection, miClient, logger);
+reconciler.start(config.RECONCILE_INTERVAL_MS);
+
+const app = await createServer({
+  serviceName: config.SERVICE_NAME,
+  serviceVersion: config.SERVICE_VERSION,
+  logger,
+});
+
+app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
+app.addReadinessCheck('opensips_db', async () => ({
+  status: (await opensipsDb.ping()) ? 'pass' : 'fail',
+}));
+app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
+
+await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
+logger.info({ port: config.HTTP_PORT }, 'listening');
+
+/**
+ * SIGTERM stops taking new consumer/reconciliation work, drains in-flight
+ * HTTP requests, then closes the bus and both database connections — in
+ * that order, so nothing is torn down while it might still be needed.
+ */
+async function shutdown(signal: string): Promise<void> {
+  logger.info({ signal }, 'shutting down');
+  reconciler.stop();
+  orgConsumer.stop();
+  pbxConsumer.stop();
+  await Promise.race([
+    app.close(),
+    new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
+  ]);
+  await orgConsumerLoop;
+  await pbxConsumerLoop;
+  await bus.close();
+  await db.destroy();
+  await opensipsDb.destroy();
+  logger.info('shutdown complete');
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
