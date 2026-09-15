@@ -21,6 +21,7 @@ services:
       PBX_CONFIG_SERVICE_DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD:-dev-pbx-config-password}
       EXAMPLE_SERVICE_DB_PASSWORD: ${EXAMPLE_SERVICE_DB_PASSWORD:-dev-example-password}
       TELEPHONY_CONFIG_SERVICE_DB_PASSWORD: ${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD:-dev-telephony-config-password}
+      TRUNK_SERVICE_DB_PASSWORD: ${TRUNK_SERVICE_DB_PASSWORD:-dev-trunk-service-password}
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     ports:
       - '${MARIADB_PORT:-3306}:3306'
@@ -217,6 +218,34 @@ services:
       DB_USER: pbx_config_service
       DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD:-dev-pbx-config-password}
       DB_NAME: pbx_config_service
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      ORG_SERVICE_URL: http://org-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
+      CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
+      CRYPTO_KEK_CURRENT: '1'
+
+  trunk-service:
+    build:
+      context: ../..
+      dockerfile: services/trunk-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      org-service:
+        condition: service_started
+    environment:
+      SERVICE_NAME: trunk-service
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: trunk_service
+      DB_PASSWORD: ${TRUNK_SERVICE_DB_PASSWORD:-dev-trunk-service-password}
+      DB_NAME: trunk_service
       NATS_SERVERS: nats://nats:4222
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080

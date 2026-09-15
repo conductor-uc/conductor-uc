@@ -1,21 +1,15 @@
 import { redactConfig } from '@cuc/config';
+import { fileKekFromConfig } from '@cuc/crypto';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
-import { storageFromConfig } from '@cuc/storage';
 
 import { configSchema, loadServiceConfig } from './config.js';
-import { nodeDnsResolver } from './dns-resolver.js';
-import { createIdentityClient } from './identity-client.js';
-import { createBrandRepo } from './repo/brand.repo.js';
-import { createDomainRepo } from './repo/domain.repo.js';
-import { createOrgRepo } from './repo/org.repo.js';
-import { registerBrandRoutes } from './routes/brand.routes.js';
-import { registerDomainRoutes } from './routes/domain.routes.js';
-import { registerInternalRoutes } from './routes/internal.routes.js';
-import { registerOrgRoutes } from './routes/org.routes.js';
-import type { OrgServiceDb } from './schema.js';
+import { createOrgClient } from './org-client.js';
+import { createTrunkRepo } from './repo/trunk.repo.js';
+import { registerTrunkRoutes } from './routes/trunk.routes.js';
+import type { TrunkServiceDb } from './schema.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -25,7 +19,7 @@ const logger = createLogger({
 });
 logger.info(redactConfig(configSchema, config), 'starting');
 
-const db = createDatabase<OrgServiceDb>({
+const db = createDatabase<TrunkServiceDb>({
   host: config.DB_HOST,
   port: config.DB_PORT,
   user: config.DB_USER,
@@ -64,6 +58,13 @@ const relay = createRelay({
 });
 const relayLoop = relay.run();
 
+const kek = fileKekFromConfig(config);
+const orgClient = createOrgClient({
+  baseUrl: config.ORG_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+const trunkRepo = createTrunkRepo(db, orgClient.resellerForTenant, kek);
+
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
   serviceVersion: config.SERVICE_VERSION,
@@ -83,19 +84,7 @@ app.addReadinessCheck('outbox', async () => {
   return { status: 'pass', detail: `${String(lag)} pending` };
 });
 
-const identityClient = createIdentityClient({
-  baseUrl: config.IDENTITY_SERVICE_URL,
-  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
-});
-const orgRepo = createOrgRepo(db, { platformBaseDomain: config.PLATFORM_BASE_DOMAIN });
-registerOrgRoutes(app, orgRepo, identityClient.createAdminUser);
-const domainRepo = createDomainRepo(db);
-registerDomainRoutes(app, domainRepo, nodeDnsResolver());
-registerInternalRoutes(app, domainRepo, config.INTERNAL_SERVICE_TOKEN, orgRepo);
-
-const storage = storageFromConfig(config, logger);
-// 02 §3's table: the master/unbranded console lives at console.{PLATFORM_BASE_DOMAIN}.
-registerBrandRoutes(app, createBrandRepo(db), storage, `console.${config.PLATFORM_BASE_DOMAIN}`);
+registerTrunkRoutes(app, trunkRepo, bus);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

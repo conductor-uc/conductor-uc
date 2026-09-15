@@ -2,9 +2,11 @@ import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
 import type { DomainRepo } from '../repo/domain.repo.js';
+import type { OrgRepo } from '../repo/org.repo.js';
 
 const TenantParamsSchema = Type.Object({ id: Type.String({ minLength: 1 }) });
 const DomainResponseSchema = Type.Object({ fqdn: Type.String() });
+const ResellerResponseSchema = Type.Object({ resellerId: Type.String() });
 
 /**
  * `GET /internal/v1/tenants/:id/domain` (06). What pbx-config-service calls
@@ -23,6 +25,7 @@ export function registerInternalRoutes(
   app: Server,
   domains: DomainRepo,
   internalServiceToken: string,
+  orgs: OrgRepo,
 ): void {
   app.get(
     '/internal/v1/tenants/:id/domain',
@@ -39,6 +42,32 @@ export function registerInternalRoutes(
       const domain = await domains.findPrimaryTenantDomain(request.params.id);
       if (domain === undefined) throw ProblemError.notFound('No primary domain for that tenant.');
       return { fqdn: domain.fqdn } satisfies Static<typeof DomainResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:id/reseller` (S2-01). trunk-service denormalizes
+   * a trunk's owning reseller onto the row itself (05 §3.4: `trunks.reseller_id`)
+   * so a reseller-scoped trunk list never needs a cross-schema join (05 §1.1) —
+   * this is the one place that denormalized value is looked up, at trunk
+   * creation time, the same shape as `/domain` above (S1-09's precedent).
+   */
+  app.get(
+    '/internal/v1/tenants/:id/reseller',
+    {
+      config: { public: true },
+      schema: { params: TenantParamsSchema, response: { 200: ResellerResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const org = await orgs.findById(request.params.id);
+      if (org === undefined || org.type !== 'tenant' || org.resellerId === null) {
+        throw ProblemError.notFound('No such tenant.');
+      }
+      return { resellerId: org.resellerId } satisfies Static<typeof ResellerResponseSchema>;
     },
   );
 }

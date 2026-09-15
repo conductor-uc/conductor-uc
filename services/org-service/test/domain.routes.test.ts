@@ -52,7 +52,7 @@ describe.skipIf(skipReason !== undefined)('domain-service HTTP routes', () => {
 
     app = await createServer({ serviceName: 'org-service', logger });
     registerDomainRoutes(app, domainsRepo, resolver);
-    registerInternalRoutes(app, domainsRepo, INTERNAL_TOKEN);
+    registerInternalRoutes(app, domainsRepo, INTERNAL_TOKEN, orgs);
     await app.ready();
 
     stop = async () => {
@@ -298,6 +298,64 @@ describe.skipIf(skipReason !== undefined)('domain-service HTTP routes', () => {
       const response = await app.inject({
         method: 'GET',
         url: '/internal/v1/tenants/no-such-tenant/domain',
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('GET /internal/v1/tenants/:id/reseller', () => {
+    it('rejects a request with no bearer token', async () => {
+      const reseller = await makeReseller();
+      const tenant = await orgs.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${tenant.id}/reseller`,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("returns the tenant's owning reseller with the right token", async () => {
+      const reseller = await makeReseller();
+      const tenant = await orgs.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${tenant.id}/reseller`,
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ resellerId: reseller.id });
+    });
+
+    it('404s a reseller org id (not a tenant)', async () => {
+      const reseller = await makeReseller();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${reseller.id}/reseller`,
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('404s an unknown tenant id', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/v1/tenants/no-such-tenant/reseller',
         headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
       });
 
