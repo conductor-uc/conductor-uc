@@ -161,7 +161,14 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
     const pass = await runOnceUntilHandled(c);
     expect(pass.handled).toBeGreaterThanOrEqual(1);
 
-    expect(await h.opensipsProjection.listSubscribers()).toEqual([]);
+    // Not `toEqual([])` (G-17: the PBX stream is shared in CI, so a
+    // different suite's own, unrelated extension-created event can land in
+    // this same pull) — what this test checks is that *its own* subscriber
+    // row was removed.
+    expect(await h.opensipsProjection.listSubscribers()).not.toContainEqual({
+      username: '101',
+      domain: 'acme.platform.test',
+    });
   });
 
   it('redelivery does not re-project twice (dedupe via consumed_events)', async () => {
