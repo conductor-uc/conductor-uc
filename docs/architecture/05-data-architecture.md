@@ -90,9 +90,13 @@ Constraint: a DB check constraint plus a service invariant guarantee that `type=
 | `outbound_routes` | `id`, `tenant_id`, `priority`, `pattern` (prefix or regex), `trunk_ids` (ordered), `strip`, `prepend` |
 | `emergency_routes` | `tenant_id`, `trunk_id`, `numbers` |
 
-### 3.5 callflow-service
+### 3.5 callflow-service (S2-09)
 
-`flows` (`id`, `tenant_id`, `name`, `current_published_version`), `flow_versions` (`flow_id`, `version`, `status` `draft`/`published`/`archived`, `graph` JSON, `ir` JSON, `ir_version`, `published_by`, `published_at`), `entry_points` (DIDs or extension numbers → flow).
+`flows` (`id`, `tenant_id`, `name`, `draft_graph` JSON — the one mutable working copy, `draft_updated_at`, `current_published_version_id` nullable). `flow_versions` (`id`, `tenant_id`, `flow_id`, `version_number` monotonic per flow and never reused (even across rollback), `graph` JSON, `ir` JSON — the compiled form S2-10's flow_runner actually fetches, `published_at`). A version row is only ever inserted, never updated or deleted — immutability holds by construction, not convention.
+
+Two deviations from this section's original sketch, made while implementing S2-09: no separate `status` (`draft`/`published`/`archived`) on `flow_versions` — every row in that table is by definition an immutable published version, and the one mutable draft lives directly on `flows` instead, so there is nothing else a version's status could be. And no separate `entry_points` table — `@cuc/callflow-ir`'s graph schema carries `entryPoints` (a name → node id map) inline, so a flow can expose several named entry points (e.g. `main`, `after_hours`) without a second table; a DID or extension still just stores a `flowId` (S2-03/S1-09's own destination-type columns), not a flow+entry-point pair, so `main` is the effective default entry point until a caller resolves otherwise.
+
+`callflow` is its own event domain (§5). `callflow.flow.published` fires on both `:publish` and `:rollback` — both change which version is *current*, which is all a consumer (flow_runner's IR cache, eventually) needs to know.
 
 ### 3.6 cdr-service
 
