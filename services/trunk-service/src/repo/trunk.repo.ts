@@ -80,6 +80,17 @@ export interface RevealedTrunkCredential {
   readonly secret: string;
 }
 
+/**
+ * The full detail telephony-config's projection needs (S2-02) — everything
+ * `Trunk` has, plus the decrypted register secret and the trunk's IPs. Not
+ * part of the public API (never returned by `list`/`findById`): only the
+ * internal, token-gated route in `routes/internal.routes.ts` builds this.
+ */
+export interface TrunkProjectionView extends Trunk {
+  readonly secret: string | null;
+  readonly ips: readonly string[];
+}
+
 export class TrunkNotFoundError extends Error {
   override readonly name = 'TrunkNotFoundError';
 }
@@ -490,6 +501,79 @@ export function createTrunkRepo(
         associatedData(trunk.tenant_id, trunkId),
       );
       return { username: trunk.username, secret };
+    },
+
+    /**
+     * The full config + decrypted secret + IPs telephony-config projects
+     * into OpenSIPs (S2-02) — `registrant.password` needs the plaintext
+     * itself (the module computes its own digest response; there is no
+     * HA1-equivalent precompute for a trunk the way `sip_credentials` has
+     * for an extension), so this is a second reveal path, gated by the
+     * internal-service-token check in `routes/internal.routes.ts` rather
+     * than the `secret.reveal` permission.
+     */
+    async findForProjection(tenantId: string, id: string): Promise<TrunkProjectionView | undefined> {
+      const ctx = { tenantId };
+      const trunk = await db
+        .scoped(ctx)
+        .selectFrom('trunks')
+        .select([...TRUNK_COLUMNS, 'secret_enc'])
+        .where('id', '=', id)
+        .executeTakeFirst();
+      if (trunk === undefined) return undefined;
+
+      const [ips, secret] = await Promise.all([
+        db
+          .scoped(ctx)
+          .selectFrom('trunk_ips')
+          .select('cidr')
+          .where('trunk_id', '=', id)
+          .execute()
+          .then((rows) => rows.map((row) => row.cidr)),
+        trunk.username === null || trunk.secret_enc === null
+          ? Promise.resolve(null)
+          : decryptString(kek, trunk.secret_enc, associatedData(tenantId, id)),
+      ]);
+
+      return { ...toTrunk(trunk), secret, ips };
+    },
+
+    /**
+     * Every trunk, across every tenant, with the same detail
+     * {@link findForProjection} returns — what the reconciliation pass in
+     * telephony-config diffs against (05 §1.1's "list everything" gap,
+     * G-16/G-17: this is the first internal endpoint in the repo to close it
+     * for one service's own data). Unscoped by necessity: a background
+     * reconciliation job has no per-request tenant actor to scope to, and no
+     * user-facing route ever calls this — only the internal-token-gated
+     * `GET /internal/v1/trunks`.
+     */
+    async listAllForProjection(): Promise<TrunkProjectionView[]> {
+      const trunks = await db.kysely
+        .selectFrom('trunks')
+        .select([...TRUNK_COLUMNS, 'secret_enc'])
+        .execute();
+      const ips = await db.kysely.selectFrom('trunk_ips').select(['trunk_id', 'cidr']).execute();
+      const ipsByTrunk = new Map<string, string[]>();
+      for (const row of ips) {
+        const list = ipsByTrunk.get(row.trunk_id) ?? [];
+        list.push(row.cidr);
+        ipsByTrunk.set(row.trunk_id, list);
+      }
+
+      return Promise.all(
+        trunks.map(async (trunk) => {
+          const secret =
+            trunk.username === null || trunk.secret_enc === null
+              ? null
+              : await decryptString(
+                  kek,
+                  trunk.secret_enc,
+                  associatedData(trunk.tenant_id, trunk.id),
+                );
+          return { ...toTrunk(trunk), secret, ips: ipsByTrunk.get(trunk.id) ?? [] };
+        }),
+      );
     },
   };
 }

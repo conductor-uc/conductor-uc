@@ -21,8 +21,15 @@ export const configSchema = Type.Object({
   /** Base URL for org-service's internal API, e.g. http://org-service:8080. */
   ORG_SERVICE_URL: Env.url(),
   /**
-   * Shared bearer token org-service's `/internal/v1` routes expect
-   * (07 §1's precedent) — must match that service's own INTERNAL_SERVICE_TOKEN.
+   * Base URL for telephony-config's internal API, e.g.
+   * http://telephony-config:8080 — the `:status` action's only source for
+   * live registration state (S2-02; `src/telephony-config-client.ts`).
+   */
+  TELEPHONY_CONFIG_URL: Env.url(),
+  /**
+   * Shared bearer token org-service's and telephony-config's `/internal/v1`
+   * routes expect (07 §1's precedent) — must match those services' own
+   * INTERNAL_SERVICE_TOKEN.
    */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
 });

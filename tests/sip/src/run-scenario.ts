@@ -479,3 +479,99 @@ export async function uasReceivedCall(containerName: string): Promise<boolean> {
   const last = matches.at(-1);
   return last !== undefined && Number(last[1]) > 0;
 }
+
+export interface UasScenarioHandle {
+  /** Resolves once the container is up and the scenario is listening ("Sipp Server Mode" in its logs). */
+  ready(): Promise<void>;
+  /** Force-stops the container. */
+  stop(): Promise<void>;
+}
+
+/**
+ * S2-02: a single, persistent SIPp UAS running one scenario in the
+ * background — for a scenario like `carrier_registrar.xml` that never
+ * itself sends the first message and is not part of the register/answer
+ * two-step pattern `startUas` exists for. Not `-m 1`/short-lived: SIPp's
+ * own idle-timeout default would let the container exit before a slow,
+ * timer-driven caller (`uac_registrant`'s own periodic REGISTER cycle)
+ * ever reaches it — confirmed live, an early attempt at this exact scenario
+ * exited (code 99, "no traffic") seconds before OpenSIPs' own registration
+ * timer fired. No `-m` (unlimited calls — `-m 0` means the opposite, see
+ * below) plus a long `-timeout` keep the process alive for the whole test
+ * regardless of how long the real timer takes.
+ */
+export function startBackgroundUas(scenario: string, containerName: string, port: number): UasScenarioHandle {
+  const env = sipTestEnv();
+  const ready = (async (): Promise<void> => {
+    await execFileAsync('docker', ['rm', '-f', containerName]).catch(() => undefined);
+    await execFileAsync('docker', [
+      'run',
+      '-d',
+      '--name',
+      containerName,
+      '--network',
+      env.network,
+      '-v',
+      `${SCENARIOS_DIR}:/scenarios:ro`,
+      env.sippImage,
+      '-sf',
+      `/scenarios/${scenario}`,
+      '-p',
+      String(port),
+      // No `-m`: SIPp's call-limit flag, not a "run forever" one — `-m 0`
+      // means "0 calls allowed" and exits immediately (confirmed live,
+      // "Call limit reached (-m 0)" in its own log). Omitting it entirely
+      // is what actually means unlimited.
+      '-timeout',
+      '180s',
+      '-i',
+      '0.0.0.0',
+    ]);
+    await waitForLog(containerName, 'Sipp Server Mode', 10_000);
+  })();
+
+  return {
+    ready: () => ready,
+    stop: async () => {
+      await ready.catch(() => undefined);
+      await execFileAsync('docker', ['rm', '-f', containerName]).catch(() => undefined);
+    },
+  };
+}
+
+/**
+ * Runs a JSON HTTP request against a service reachable only on the compose
+ * network (trunk-service, telephony-config — deliberately unpublished, the
+ * same reasoning `seedFixtures`'s own comment gives for org-service) from a
+ * throwaway `curlimages/curl` container, since a host-side `fetch` cannot
+ * reach it. `-w` appends the HTTP status code after a literal newline,
+ * parsed back out below.
+ */
+export async function dockerCurlJson(
+  method: 'GET' | 'POST' | 'DELETE',
+  url: string,
+  body?: unknown,
+): Promise<{ status: number; json: unknown }> {
+  const env = sipTestEnv();
+  const args = [
+    'run',
+    '--rm',
+    '--network',
+    env.network,
+    'curlimages/curl:latest',
+    '-s',
+    '-X',
+    method,
+    url,
+    '-w',
+    '\n%{http_code}',
+  ];
+  if (body !== undefined) {
+    args.push('-H', 'content-type: application/json', '-d', JSON.stringify(body));
+  }
+  const { stdout } = await execFileAsync('docker', args, { maxBuffer: 16 * 1024 * 1024 });
+  const lastNewline = stdout.lastIndexOf('\n');
+  const bodyText = stdout.slice(0, lastNewline);
+  const status = Number(stdout.slice(lastNewline + 1).trim());
+  return { status, json: bodyText === '' ? undefined : (JSON.parse(bodyText) as unknown) };
+}

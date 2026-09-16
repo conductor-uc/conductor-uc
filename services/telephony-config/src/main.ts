@@ -7,6 +7,7 @@ import { createLogger } from '@cuc/logger';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
 import { createPbxConsumer } from './consumers/pbx.consumer.js';
+import { createTrunkConsumer } from './consumers/trunk.consumer.js';
 import { createOpenSipsMiClient } from './opensips-mi-client.js';
 import type { OpenSipsDb } from './opensips-schema.js';
 import { createPbxConfigClient } from './pbx-config-client.js';
@@ -15,7 +16,9 @@ import { createOpenSipsProjectionRepo } from './repo/opensips-projection.repo.js
 import { createReadModelRepo } from './repo/read-model.repo.js';
 import { createReconciler } from './reconcile.js';
 import { registerFsRoutes } from './routes/fs.routes.js';
+import { registerInternalRoutes } from './routes/internal.routes.js';
 import type { TelephonyConfigDb } from './schema.js';
+import { createTrunkConfigClient } from './trunk-config-client.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -73,6 +76,10 @@ const pbxConfigClient = createPbxConfigClient({
   baseUrl: config.PBX_CONFIG_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
+const trunkConfigClient = createTrunkConfigClient({
+  baseUrl: config.TRUNK_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
 const miClient = createOpenSipsMiClient({ url: config.OPENSIPS_MI_URL });
 
 const readModel = createReadModelRepo(db);
@@ -83,6 +90,8 @@ const projection = createProjection(
   miClient,
   pbxConfigClient,
   logger,
+  trunkConfigClient,
+  config.OPENSIPS_SIP_URI,
 );
 
 const orgConsumer = createOrgConsumer(db, bus, logger, readModel, projection);
@@ -93,7 +102,17 @@ const pbxConsumer = createPbxConsumer(db, bus, logger, projection);
 await pbxConsumer.ensure();
 const pbxConsumerLoop = pbxConsumer.run();
 
-const reconciler = createReconciler(readModel, opensipsProjection, miClient, logger);
+const trunkConsumer = createTrunkConsumer(db, bus, logger, projection);
+await trunkConsumer.ensure();
+const trunkConsumerLoop = trunkConsumer.run();
+
+const reconciler = createReconciler(
+  readModel,
+  opensipsProjection,
+  miClient,
+  logger,
+  config.OPENSIPS_SIP_URI,
+);
 reconciler.start(config.RECONCILE_INTERVAL_MS);
 
 const app = await createServer({
@@ -109,6 +128,14 @@ app.addReadinessCheck('opensips_db', async () => ({
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
 
 registerFsRoutes(app, db, readModel, config.FS_XML_CURL_TOKEN, config.OPENSIPS_SIP_URI, logger);
+registerInternalRoutes(
+  app,
+  readModel,
+  miClient,
+  config.OPENSIPS_SIP_URI,
+  config.INTERNAL_SERVICE_TOKEN,
+  logger,
+);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
@@ -123,12 +150,14 @@ async function shutdown(signal: string): Promise<void> {
   reconciler.stop();
   orgConsumer.stop();
   pbxConsumer.stop();
+  trunkConsumer.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   await orgConsumerLoop;
   await pbxConsumerLoop;
+  await trunkConsumerLoop;
   await bus.close();
   await db.destroy();
   await opensipsDb.destroy();

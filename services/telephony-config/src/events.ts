@@ -4,10 +4,11 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * Event contracts this service consumes (S1-12; 05 §5: "telephony-config
  * consumes org.tenant.*, org.domain.*, pbx.*, trunk.*,
  * callflow.flow.published, recording.policy.*"). Only the ones a producer
- * actually emits today are registered — `trunk.*`, `callflow.flow.published`,
- * and `recording.policy.*` have no owning service yet (trunk-service is
- * S2-01, callflow-service S2, recording-service S5) and there is nothing on
- * those subjects to consume until then.
+ * actually emits today are registered — `trunk.*` joined S2-02, once
+ * trunk-service (S2-01) existed to emit it; `callflow.flow.published` and
+ * `recording.policy.*` still have no owning service (callflow-service S2,
+ * recording-service S5) and there is nothing on those subjects to consume
+ * until then.
  *
  * `org.tenant.updated` is deliberately not registered: nothing it carries
  * (name, timezone, country, limits) affects the `opensips` projection this
@@ -71,5 +72,24 @@ export const telephonyEvents = defineEvents({
     schemaVersion: 1,
     description: 'An extension (and its SIP credentials) was deleted.',
     data: Type.Object({ extensionId: Type.String({ minLength: 1 }) }),
+  },
+  'trunk.trunk.created': {
+    schemaVersion: 1,
+    description: 'A trunk was created for a tenant.',
+    data: Type.Object({
+      trunkId: Type.String({ minLength: 1 }),
+      name: Type.String({ minLength: 1 }),
+      authMode: Type.Union([Type.Literal('register'), Type.Literal('ip'), Type.Literal('both')]),
+    }),
+  },
+  'trunk.trunk.updated': {
+    schemaVersion: 1,
+    description: "A trunk's configuration changed (fields, IPs, or credentials).",
+    data: Type.Object({ trunkId: Type.String({ minLength: 1 }) }),
+  },
+  'trunk.trunk.deleted': {
+    schemaVersion: 1,
+    description: 'A trunk was deleted.',
+    data: Type.Object({ trunkId: Type.String({ minLength: 1 }) }),
   },
 });

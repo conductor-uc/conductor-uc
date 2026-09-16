@@ -2,7 +2,13 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { databaseOrSkipReason } from '@cuc/testing';
 
 import { createReconciler } from '../src/reconcile.js';
-import { resetOpenSipsSchema, resetSchema, startHarness, type Harness } from './harness.js';
+import {
+  resetOpenSipsSchema,
+  resetSchema,
+  startHarness,
+  TEST_OPENSIPS_SIP_URI,
+  type Harness,
+} from './harness.js';
 
 const skipReason = await databaseOrSkipReason();
 
@@ -24,7 +30,13 @@ describe.skipIf(skipReason !== undefined)('reconciler', () => {
   });
 
   function reconciler() {
-    return createReconciler(h.readModel, h.opensipsProjection, h.mi, h.logger);
+    return createReconciler(
+      h.readModel,
+      h.opensipsProjection,
+      h.mi,
+      h.logger,
+      TEST_OPENSIPS_SIP_URI,
+    );
   }
 
   it('reports no drift and calls no MI reload when everything already matches', async () => {
@@ -43,6 +55,12 @@ describe.skipIf(skipReason !== undefined)('reconciler', () => {
       domainsRemoved: 0,
       subscribersAdded: 0,
       subscribersRemoved: 0,
+      registrantsAdded: 0,
+      registrantsRemoved: 0,
+      addressesAdded: 0,
+      addressesRemoved: 0,
+      gatewaysAdded: 0,
+      gatewaysRemoved: 0,
     });
     expect(h.mi.calls).toEqual([]);
   });

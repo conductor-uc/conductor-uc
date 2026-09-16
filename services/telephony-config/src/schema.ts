@@ -65,4 +65,42 @@ export interface TelephonyConfigDb extends EventTables {
     created_at: Date;
     updated_at: Date;
   };
+  /**
+   * The desired state `reconcile.ts` diffs `opensips.registrant`/`address`
+   * against (S2-02) — kept current by `consumers/trunk.consumer.ts`, the
+   * same "local mirror is the trusted desired state" pattern `extensions`
+   * above already establishes.
+   *
+   * `secret` is the plaintext register credential, not encrypted here: an
+   * unavoidable consequence of what it is projected into — OpenSIPs'
+   * `uac_registrant` module stores `registrant.password` as plaintext too
+   * (it answers the carrier's own digest challenges itself; there is no
+   * HA1-equivalent precompute for a trunk the way `sip_credentials` has for
+   * an extension) — so this mirror can be no more protected than the table
+   * it exists to repair drift against. Fetched from trunk-service's
+   * internal API (`src/trunk-config-client.ts`), which is itself a second
+   * `:reveal`-equivalent path, gated the same way (S2-02).
+   */
+  trunks: {
+    id: string;
+    tenant_id: string;
+    name: string;
+    auth_mode: string;
+    host: string;
+    port: number;
+    transport: string;
+    username: string | null;
+    secret: string | null;
+    from_domain: string | null;
+    status: string;
+    created_at: Date;
+    updated_at: Date;
+  };
+  /** Mirrors trunk-service's own `trunk_ips` (1:N — `extensions`' flat-row shape cannot represent this). */
+  trunk_ips: {
+    id: string;
+    trunk_id: string;
+    cidr: string;
+    created_at: Date;
+  };
 }

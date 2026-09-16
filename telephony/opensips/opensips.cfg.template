@@ -118,6 +118,12 @@ loadmodule "uac.so"
 loadmodule "uac_auth.so"
 loadmodule "uac_registrant.so"
 modparam("uac_registrant", "db_url", "${OPENSIPS_DB_URL}")
+# Module default is 100s (README.uac_registrant.gz) — with the also-default
+# hash_size of 1 (2 buckets), a newly projected registrant can wait up to
+# ~2x this value for its first REGISTER. Dev/test wants that fast (S2-02's
+# SIPp registrar scenario polls trunk-status); production can override to a
+# more conservative value via this same var.
+modparam("uac_registrant", "timer_interval", ${OPENSIPS_REGISTRANT_TIMER_INTERVAL})
 
 #### LCR among a tenant's own trunks (03 §1: "Owns (drouting, one rule
 #### group per tenant)"), projected from trunk-service's outbound routes.

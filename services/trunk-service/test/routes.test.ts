@@ -5,10 +5,20 @@ import { databaseOrSkipReason } from '@cuc/testing';
 import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 
 import { registerTrunkRoutes } from '../src/routes/trunk.routes.js';
+import type { TelephonyConfigClient, TrunkStatus } from '../src/telephony-config-client.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
 const skipReason = await databaseOrSkipReason();
 const TEST_INTERNAL_SECRET = 'test-internal-header-secret';
+
+/** A status lookup whose answer is set per test — no live telephony-config needed. */
+function fakeTelephonyConfigClient(): TelephonyConfigClient & { status: TrunkStatus | undefined } {
+  const state = {
+    status: undefined as TrunkStatus | undefined,
+    findStatus: () => Promise.resolve(state.status),
+  };
+  return state;
+}
 
 /**
  * Records every envelope handed to `publish` rather than opening a real NATS
@@ -35,17 +45,19 @@ function fakeBus(): Bus & { published: EventEnvelope[] } {
 describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
   let h: Harness;
   let bus: ReturnType<typeof fakeBus>;
+  let telephony: ReturnType<typeof fakeTelephonyConfigClient>;
   let app: Server;
 
   beforeAll(async () => {
     h = await startHarness();
     bus = fakeBus();
+    telephony = fakeTelephonyConfigClient();
     app = await createServer({
       serviceName: 'trunk-service',
       logger: h.logger,
       context: { trustInternalHeaders: true, internalHeaderSigningSecret: TEST_INTERNAL_SECRET },
     });
-    registerTrunkRoutes(app, h.trunks, bus);
+    registerTrunkRoutes(app, h.trunks, bus, telephony);
     await app.ready();
   });
 
@@ -58,6 +70,7 @@ describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
     await resetSchema(h.db);
     h.resellers.resellerIds = {};
     bus.published.length = 0;
+    telephony.status = undefined;
   });
 
   function actorHeaders(tenantId: string) {
@@ -297,6 +310,65 @@ describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
       });
 
       expect(response.statusCode).toBe(400);
+    });
+  });
+
+  describe('GET /v1/tenants/:tenantId/trunks/:id/status', () => {
+    it('returns the registration status telephony-config reports', async () => {
+      const tenantId = crypto.randomUUID();
+      h.resellers.resellerIds[tenantId] = 'reseller-a';
+      const created = await app
+        .inject({
+          method: 'POST',
+          url: `/v1/tenants/${tenantId}/trunks`,
+          headers: actorHeaders(tenantId),
+          payload,
+        })
+        .then((r) => r.json<{ id: string }>());
+      telephony.status = { status: 'registered' };
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/tenants/${tenantId}/trunks/${created.id}/status`,
+        headers: actorHeaders(tenantId),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ registrationStatus: 'registered' });
+    });
+
+    it("defaults to not_registered when telephony-config has no record of the trunk", async () => {
+      const tenantId = crypto.randomUUID();
+      h.resellers.resellerIds[tenantId] = 'reseller-a';
+      const created = await app
+        .inject({
+          method: 'POST',
+          url: `/v1/tenants/${tenantId}/trunks`,
+          headers: actorHeaders(tenantId),
+          payload,
+        })
+        .then((r) => r.json<{ id: string }>());
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/tenants/${tenantId}/trunks/${created.id}/status`,
+        headers: actorHeaders(tenantId),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ registrationStatus: 'not_registered' });
+    });
+
+    it('404s an unknown trunk', async () => {
+      const tenantId = crypto.randomUUID();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/tenants/${tenantId}/trunks/${crypto.randomUUID()}/status`,
+        headers: actorHeaders(tenantId),
+      });
+
+      expect(response.statusCode).toBe(404);
     });
   });
 
