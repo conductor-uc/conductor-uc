@@ -53,7 +53,11 @@ describe.skipIf(skipReason !== undefined)('S2-05 toll-fraud controls', () => {
     );
   });
 
-  async function createIpTrunk(tenantId: string, host: string, port: number): Promise<CreatedTrunk> {
+  async function createIpTrunk(
+    tenantId: string,
+    host: string,
+    port: number,
+  ): Promise<CreatedTrunk> {
     const created = await dockerCurlJson(
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks`,

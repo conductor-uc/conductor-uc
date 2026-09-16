@@ -745,7 +745,11 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       return trunkId;
     }
 
-    async function seedRoute(tenantId: string, trunkIds: readonly string[], pattern: string): Promise<void> {
+    async function seedRoute(
+      tenantId: string,
+      trunkIds: readonly string[],
+      pattern: string,
+    ): Promise<void> {
       await h.readModel.upsertOutboundRoute(h.db.kysely, {
         id: crypto.randomUUID(),
         tenantId,
