@@ -51,6 +51,16 @@ request from FS:
 
 All calls, including extension-to-extension calls, pass through FreeSWITCH so that recording, forwarding, voicemail-on-no-answer, and CDRs apply consistently. The cost is some extra media hops. That's an accepted trade-off in v1.
 
+### 2.2 Presence / BLF (S2-17)
+
+Extension BLF is `presence` + `presence_dialoginfo` + `pua_dialoginfo`, all DB-backed against the same `opensips` schema every other stateful module here uses (`presence-create.sql`: `presentity`, `active_watchers`). No application service is involved — `pua_dialoginfo` registers its own dialog callbacks the moment it loads, and the existing `dialog.so`/`topology_hiding()` pairing (already in route{} for every dialog-forming request) is what creates the dialog it watches; there was nothing to add on the publish side.
+
+The only new routing logic is the SUBSCRIBE handler: digest-authenticated the same way REGISTER is, then a same-domain check (watcher's From domain must equal the presentity's To domain) before `handle_subscribe()` — SIP has no `dataClass`/`permission` mechanism of its own, but the platform's tenant-scoping rule (CLAUDE.md rule 2) still applies at this edge the same as everywhere else tenant state is read, so one tenant's phone can never watch another tenant's extension state.
+
+"Publishes park-slot state" (§1's table) is **not yet implemented** — it's S2-14's (call parking) forward reference, added when that task's own park-lot state exists to publish. S2-17 covers ordinary extension-to-extension BLF only.
+
+See `docs/decisions.md` G-38 for what this task could verify live (config parses, every presence/pua module reaches clean `mod_init`) versus what needs a real call in flight to confirm (actual NOTIFY delivery across early/confirmed/terminated) — left for issue #44's SIP regression suite, per this repo's standing practice for FS/OpenSIPs-facing behavior.
+
 ## 3. FreeSWITCH
 
 - Version: FreeSWITCH 1.10.x. The image is built from `telephony/freeswitch` and loads only the required modules.
