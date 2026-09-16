@@ -119,6 +119,43 @@ export function createProjection(
     },
 
     /**
+     * Fetches a DID's current state and mirrors it locally (S2-03) — shared
+     * by `pbx.did.created` and `.updated`, the same "thin event, re-fetch
+     * current state" story `projectExtension` tells. A DID has no `opensips`
+     * schema counterpart at all (`schema.ts`'s own comment on `dids`): unlike
+     * every other projection here, this never touches `opensips` or triggers
+     * an MI reload — `/fs/dialplan`'s from-trunk lookup reads this local
+     * mirror directly, on every inbound trunk call, so keeping it current is
+     * the whole point. A 404 from pbx-config-service means the DID is
+     * already gone (raced with a delete) — nothing to project.
+     */
+    async projectDid(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      didId: string,
+    ): Promise<void> {
+      const did = await pbxConfig.findDid(tenantId, didId);
+      if (did === undefined) {
+        logger.warn({ tenantId, didId }, 'DID not found in pbx-config-service');
+        return;
+      }
+
+      await readModel.upsertDid(trx, {
+        id: did.id,
+        tenantId,
+        e164: did.e164,
+        trunkId: did.trunkId,
+        destinationType: did.destinationType,
+        destinationId: did.destinationId,
+      });
+    },
+
+    /** `pbx.did.deleted`: remove the local mirror. Nothing else to clean up (no `opensips` projection). */
+    async removeDid(trx: Transaction<TelephonyConfigDb>, didId: string): Promise<void> {
+      await readModel.deleteDid(trx, didId);
+    },
+
+    /**
      * Fetches a trunk's current full config (including its decrypted
      * secret and IPs) and projects it into `registrant` (register/both),
      * `address` (ip/both), and `dr_gateways` (always — 03 §1's LCR needs a

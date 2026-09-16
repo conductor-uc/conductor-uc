@@ -17,7 +17,7 @@ describe.skipIf(skipReason !== undefined)(
     beforeAll(async () => {
       h = await startHarness();
       app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-      registerInternalRoutes(app, h.extensions, TOKEN);
+      registerInternalRoutes(app, h.extensions, h.dids, TOKEN);
       await app.ready();
     });
 
@@ -29,6 +29,7 @@ describe.skipIf(skipReason !== undefined)(
     afterEach(async () => {
       await resetSchema(h.db);
       h.domains.realms = {};
+      h.trunks.known.clear();
     });
 
     it('returns the digest credential for a valid token', async () => {
@@ -110,3 +111,106 @@ describe.skipIf(skipReason !== undefined)(
     });
   },
 );
+
+describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/dids/:id', () => {
+  let h: Harness;
+  let app: Server;
+
+  beforeAll(async () => {
+    h = await startHarness();
+    app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
+    registerInternalRoutes(app, h.extensions, h.dids, TOKEN);
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+    await h?.close();
+  });
+
+  afterEach(async () => {
+    await resetSchema(h.db);
+    h.domains.realms = {};
+    h.trunks.known.clear();
+  });
+
+  it('returns a DID for a valid token', async () => {
+    const tenantId = crypto.randomUUID();
+    const trunkId = crypto.randomUUID();
+    h.trunks.known.add(`${tenantId}:${trunkId}`);
+    h.domains.realms[tenantId] = 'tenant-a.platform.test';
+    const extension = await h.extensions.create(
+      { tenantId },
+      { number: '101', displayName: 'Front Desk' },
+    );
+    const created = await h.dids.create(
+      { tenantId },
+      {
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'extension',
+        destinationId: extension.id,
+      },
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${tenantId}/dids/${created.id}`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: created.id,
+      e164: '+15551234567',
+      trunkId,
+      destinationType: 'extension',
+      destinationId: extension.id,
+    });
+  });
+
+  it('401s with no token', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${crypto.randomUUID()}/dids/${crypto.randomUUID()}`,
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('404s an unknown DID', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${crypto.randomUUID()}/dids/${crypto.randomUUID()}`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('404s a DID that exists but belongs to a different tenant', async () => {
+    const tenantId = crypto.randomUUID();
+    const otherTenantId = crypto.randomUUID();
+    const trunkId = crypto.randomUUID();
+    h.trunks.known.add(`${tenantId}:${trunkId}`);
+    h.domains.realms[tenantId] = 'tenant-a.platform.test';
+    const extension = await h.extensions.create(
+      { tenantId },
+      { number: '101', displayName: 'Front Desk' },
+    );
+    const created = await h.dids.create(
+      { tenantId },
+      {
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'extension',
+        destinationId: extension.id,
+      },
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${otherTenantId}/dids/${created.id}`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+});

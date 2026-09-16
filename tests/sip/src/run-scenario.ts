@@ -543,6 +543,92 @@ export function startBackgroundUas(
   };
 }
 
+export interface DelayedCallerHandle {
+  readonly containerName: string;
+  /** The container's own IP on the compose network — what a trunk's `ips` CIDR must whitelist to be recognized as this "carrier". */
+  readonly ip: string;
+  /** Resolves once the container (and the scenario's own leading pause + INVITE exchange) has finished. */
+  result(): Promise<SippStats>;
+  stop(): Promise<void>;
+}
+
+/**
+ * S2-03: starts a *caller*-role SIPp scenario (an unregistered "trunk"
+ * sending an unsolicited INVITE — `trunk_invite*.xml`'s own doc comments)
+ * detached (`-d`), so this function can read back the container's real
+ * compose-network IP (`docker inspect`) before the scenario's first message
+ * ever goes out. Every `trunk_invite*.xml` scenario starts with a
+ * `<pause milliseconds="…">` for exactly this reason: it gives the caller
+ * (provision a trunk/DID whitelisting this IP, wait for telephony-config's
+ * event-driven projection) a real window to run *after* the IP is known but
+ * *before* the INVITE that depends on it fires. `runForeground`'s "bind to
+ * `$(hostname -i)`" trick alone cannot do this — that command only resolves
+ * inside the already-started container, is inlined into the same shell
+ * invocation that immediately sends traffic, and is never visible to the
+ * host process launching it.
+ */
+export async function startDelayedCaller(opts: {
+  readonly scenario: string;
+  readonly csvLine: string;
+  readonly containerName: string;
+}): Promise<DelayedCallerHandle> {
+  const env = sipTestEnv();
+  await execFileAsync('docker', ['rm', '-f', opts.containerName]).catch(() => undefined);
+  const hostCsvDir = await mkdtemp(path.join(tmpdir(), 'sip-test-'));
+  await writeFile(path.join(hostCsvDir, 'fields.csv'), `SEQUENTIAL\n${opts.csvLine}\n`);
+
+  await execFileAsync('docker', [
+    'run',
+    '-d',
+    '--name',
+    opts.containerName,
+    '--network',
+    env.network,
+    '--entrypoint',
+    'sh',
+    '-w',
+    '/data',
+    '-v',
+    `${SCENARIOS_DIR}:/scenarios:ro`,
+    '-v',
+    `${hostCsvDir}:/data`,
+    env.sippImage,
+    '-c',
+    buildSippCommand({
+      scenarioPath: `/scenarios/${opts.scenario}`,
+      csvPath: '/data/fields.csv',
+      remoteHost: env.opensipsTarget,
+      logPrefix: 'delayed',
+    }),
+  ]);
+
+  const { stdout } = await execFileAsync('docker', [
+    'inspect',
+    opts.containerName,
+    '--format',
+    `{{ (index .NetworkSettings.Networks "${env.network}").IPAddress }}`,
+  ]);
+  const ip = stdout.trim();
+  if (ip === '')
+    throw new Error(`could not determine ${opts.containerName}'s IP on ${env.network}`);
+
+  return {
+    containerName: opts.containerName,
+    ip,
+    result: async () => {
+      await waitForContainerExit(opts.containerName, 30_000);
+      const { stdout: logs } = await execFileAsync('docker', ['logs', opts.containerName], {
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      return parseSippStats(logs, 0);
+    },
+    stop: async () => {
+      await execFileAsync('docker', ['rm', '-f', opts.containerName]).catch(() => undefined);
+      await rm(hostCsvDir, { recursive: true, force: true });
+    },
+  };
+}
+
 /**
  * Runs a JSON HTTP request against a service reachable only on the compose
  * network (trunk-service, telephony-config — deliberately unpublished, the

@@ -214,6 +214,8 @@ services:
         condition: service_healthy
       org-service:
         condition: service_started
+      trunk-service:
+        condition: service_started
     environment:
       SERVICE_NAME: pbx-config-service
       DB_HOST: mariadb
@@ -225,6 +227,7 @@ services:
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
       ORG_SERVICE_URL: http://org-service:8080
+      TRUNK_SERVICE_URL: http://trunk-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}

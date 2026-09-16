@@ -19,6 +19,20 @@ export function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
+/**
+ * Escapes PCRE metacharacters (S2-03) — `buildDialplanDocument`'s own
+ * `destination_number` condition wraps whatever it's given in `^...$` and
+ * FreeSWITCH compiles that as a real regex, not a literal match. An
+ * extension number is always plain digits, so this never mattered before,
+ * but a DID's E.164 form always leads with a literal `+` — confirmed live:
+ * an unescaped `^+15551234567$` fails FreeSWITCH's own regex compile with
+ * "COMPILE ERROR: nothing to repeat" (`+` has no preceding atom to quantify)
+ * and the call gets no route at all, silently, rather than a clear rejection.
+ */
+export function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export const NOT_FOUND_DOCUMENT =
   '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
   '<document type="freeswitch/xml">\n' +
@@ -105,9 +119,17 @@ export function buildDialplanDocument(
   destinationNumber: string,
   tenantDomain: string,
   opensipsSipUri: string,
+  /**
+   * The user part actually dialed at the bridge target — S2-03's from-trunk
+   * case needs this distinct from `destinationNumber` (matched against the
+   * dialed digits, a DID's E.164) when the resolved destination is an
+   * extension with a *different* dialable number. Defaults to
+   * `destinationNumber` for the ext→ext case, where they are always the same.
+   */
+  bridgeNumber: string = destinationNumber,
 ): string {
   const target =
-    `{sip_route_uri=sip:${opensipsSipUri}}` + `sofia/internal/${destinationNumber}@${tenantDomain}`;
+    `{sip_route_uri=sip:${opensipsSipUri}}` + `sofia/internal/${bridgeNumber}@${tenantDomain}`;
 
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
@@ -115,7 +137,7 @@ export function buildDialplanDocument(
     '  <section name="dialplan">\n' +
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="ext-${escapeXml(destinationNumber)}">\n` +
-    `        <condition field="destination_number" expression="^${escapeXml(destinationNumber)}$">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
     `          <action application="bridge" data="${escapeXml(target)}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +

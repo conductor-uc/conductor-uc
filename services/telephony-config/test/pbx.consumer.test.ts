@@ -41,6 +41,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
     await resetSchema(h.db);
     await resetOpenSipsSchema(h.opensipsDb);
     h.pbxConfig.credentials = {};
+    h.pbxConfig.dids = {};
     await h.bus.jsm.streams.purge('PBX');
   });
 
@@ -50,7 +51,13 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
 
   /** Returns the published envelope's own id, for a dedupe check that names it exactly. */
   async function publish(
-    type: 'pbx.extension.created' | 'pbx.extension.updated' | 'pbx.extension.deleted',
+    type:
+      | 'pbx.extension.created'
+      | 'pbx.extension.updated'
+      | 'pbx.extension.deleted'
+      | 'pbx.did.created'
+      | 'pbx.did.updated'
+      | 'pbx.did.deleted',
     tenantId: string,
     data: Record<string, unknown>,
   ): Promise<string> {
@@ -205,5 +212,83 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       .where('id', '=', eventId)
       .execute();
     expect(consumedRows).toHaveLength(1);
+  });
+
+  it("pbx.did.created projects the DID into this service's own local mirror (S2-03)", async () => {
+    const c = consumer();
+    await c.ensure();
+    const tenantId = crypto.randomUUID();
+    const didId = crypto.randomUUID();
+    const trunkId = crypto.randomUUID();
+    const destinationId = crypto.randomUUID();
+    h.pbxConfig.dids[didId] = {
+      id: didId,
+      e164: '+15551234567',
+      trunkId,
+      destinationType: 'extension',
+      destinationId,
+    };
+
+    await publish('pbx.did.created', tenantId, { didId, e164: '+15551234567' });
+    const pass = await runOnceUntilHandled(c);
+    expect(pass.handled).toBeGreaterThanOrEqual(1);
+
+    const did = await h.readModel.findDidByE164(tenantId, '+15551234567');
+    expect(did).toMatchObject({ id: didId, trunkId, destinationType: 'extension', destinationId });
+  });
+
+  it('pbx.did.updated re-fetches and re-projects a changed trunk binding', async () => {
+    const c = consumer();
+    await c.ensure();
+    const tenantId = crypto.randomUUID();
+    const didId = crypto.randomUUID();
+    const trunkA = crypto.randomUUID();
+    const trunkB = crypto.randomUUID();
+    const destinationId = crypto.randomUUID();
+    h.pbxConfig.dids[didId] = {
+      id: didId,
+      e164: '+15551234567',
+      trunkId: trunkA,
+      destinationType: 'extension',
+      destinationId,
+    };
+    await publish('pbx.did.created', tenantId, { didId, e164: '+15551234567' });
+    await runOnceUntilHandled(c);
+
+    h.pbxConfig.dids[didId] = {
+      id: didId,
+      e164: '+15551234567',
+      trunkId: trunkB,
+      destinationType: 'extension',
+      destinationId,
+    };
+    await publish('pbx.did.updated', tenantId, { didId });
+    const pass = await runOnceUntilHandled(c);
+    expect(pass.handled).toBeGreaterThanOrEqual(1);
+
+    const did = await h.readModel.findDidByE164(tenantId, '+15551234567');
+    expect(did?.trunkId).toBe(trunkB);
+  });
+
+  it('pbx.did.deleted removes the local mirror row', async () => {
+    const c = consumer();
+    await c.ensure();
+    const tenantId = crypto.randomUUID();
+    const didId = crypto.randomUUID();
+    h.pbxConfig.dids[didId] = {
+      id: didId,
+      e164: '+15551234567',
+      trunkId: crypto.randomUUID(),
+      destinationType: 'extension',
+      destinationId: crypto.randomUUID(),
+    };
+    await publish('pbx.did.created', tenantId, { didId, e164: '+15551234567' });
+    await runOnceUntilHandled(c);
+
+    await publish('pbx.did.deleted', tenantId, { didId });
+    const pass = await runOnceUntilHandled(c);
+    expect(pass.handled).toBeGreaterThanOrEqual(1);
+
+    expect(await h.readModel.findDidByE164(tenantId, '+15551234567')).toBeUndefined();
   });
 });

@@ -25,6 +25,15 @@ export interface ExtensionRow {
   readonly realm: string;
 }
 
+export interface DidRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly e164: string;
+  readonly trunkId: string;
+  readonly destinationType: string;
+  readonly destinationId: string;
+}
+
 export interface TrunkRow {
   readonly id: string;
   readonly tenantId: string;
@@ -231,6 +240,19 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .executeTakeFirst();
     },
 
+    /**
+     * `/fs/dialplan`'s from-trunk lookup (S2-03): a DID's `destination_id`
+     * names an extension by id, not by number — this is the resolution step
+     * from "which extension" to "what number to actually bridge to".
+     */
+    findExtensionById(id: string): Promise<ExtensionRow | undefined> {
+      return db.kysely
+        .selectFrom('extensions')
+        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
+        .where('id', '=', id)
+        .executeTakeFirst();
+    },
+
     /** Returns the previous row, if any, so a consumer can clean up a stale projection (S2-02). */
     async upsertTrunk(trx: Executor, trunk: TrunkRow): Promise<TrunkRow | undefined> {
       const previous = await trx
@@ -411,6 +433,59 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
           .execute();
       }
       return { added, removed };
+    },
+
+    /** Upserts a DID's current state (S2-03), keyed by id (pbx-config-service's own primary key). */
+    async upsertDid(trx: Executor, did: DidRow): Promise<void> {
+      const now = new Date();
+      await trx
+        .insertInto('dids')
+        .values({
+          id: did.id,
+          tenant_id: did.tenantId,
+          e164: did.e164,
+          trunk_id: did.trunkId,
+          destination_type: did.destinationType,
+          destination_id: did.destinationId,
+          created_at: now,
+          updated_at: now,
+        })
+        .onDuplicateKeyUpdate({
+          e164: did.e164,
+          trunk_id: did.trunkId,
+          destination_type: did.destinationType,
+          destination_id: did.destinationId,
+          updated_at: now,
+        })
+        .execute();
+    },
+
+    async deleteDid(trx: Executor, id: string): Promise<void> {
+      await trx.deleteFrom('dids').where('id', '=', id).execute();
+    },
+
+    /**
+     * `/fs/dialplan`'s from-trunk lookup (S2-03): a tenant's DID by its
+     * dialed E.164 number. Scoped to `tenantId` — the tenant resolved from
+     * the *trunk* the call arrived on, not anything the caller claims — so a
+     * DID actually owned by a different tenant is simply not found here,
+     * which is exactly the rejection 03 §2.1 and this task's own "Done when"
+     * (a DID owned by tenant B arriving on tenant A's trunk) call for.
+     */
+    findDidByE164(tenantId: string, e164: string): Promise<DidRow | undefined> {
+      return db.kysely
+        .selectFrom('dids')
+        .select([
+          'id',
+          'tenant_id as tenantId',
+          'e164',
+          'trunk_id as trunkId',
+          'destination_type as destinationType',
+          'destination_id as destinationId',
+        ])
+        .where('tenant_id', '=', tenantId)
+        .where('e164', '=', e164)
+        .executeTakeFirst();
     },
   };
 }

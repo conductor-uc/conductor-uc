@@ -311,10 +311,20 @@ route{
     # telephony-config's projection (S1-12), which is empty until then:
     # every check below simply finds nothing and falls through, which is
     # the correct, honest behavior for an unprovisioned deployment.
-    if (check_source_address(1)) {
-        # Inbound trunk call. Tenant identity would come from the matched
-        # address-table row once trunk-service (S2+) projects real trunks.
+    if (check_source_address(1, $avp(trunk_ctx))) {
+        # Inbound trunk call (S2-03). `$avp(trunk_ctx)` is the matched
+        # `address` row's own `context_info` — the owning trunk's id, hyphens
+        # stripped to fit that column's `CHAR(32)` (S2-02's
+        # `opensips-projection.repo.ts`, `context-id.ts` on the telephony-config
+        # side that reverses it). Tenant identity is deliberately *not*
+        # resolved here: unlike `domain`'s `attrs` column (the registered-phone
+        # branch below), `address` has no free column left to carry a second
+        # value, and telephony-config's own already-projected trunk mirror can
+        # answer "which tenant owns this trunk" just as trustworthily as
+        # OpenSIPs could — `/fs/dialplan`'s from-trunk lookup (S2-03) does
+        # exactly that with the trunk id this header carries.
         append_hf("X-Call-Direction: inbound\r\n");
+        append_hf("X-Trunk-Id: $avp(trunk_ctx)\r\n");
     } else if (is_from_local($var(tenant_id))) {
         # Registered phone in a known domain, calling out. `$var(tenant_id)`
         # is the domain row's own `attrs` column (S1-14) — telephony-config

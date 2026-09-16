@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { databaseOrSkipReason } from '@cuc/testing';
 import { createServer, type Server } from '@cuc/http';
 
+import { toContextId } from '../src/context-id.js';
 import { registerFsRoutes } from '../src/routes/fs.routes.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
@@ -227,7 +228,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(response.body).toContain('<result status="not found"/>');
     });
 
-    it('rejects a non-internal call direction (from-trunk DID routing is out of scope, S2-03)', async () => {
+    it('rejects an inbound call with no X-Trunk-Id header at all', async () => {
       const tenantId = crypto.randomUUID();
       await seedExtension(tenantId, '102');
 
@@ -242,7 +243,6 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
           section: 'dialplan',
           'Caller-Context': 'public',
           'Caller-Destination-Number': '102',
-          'variable_sip_h_X-Tenant-Id': tenantId,
           'variable_sip_h_X-Call-Direction': 'inbound',
         }),
       });
@@ -264,6 +264,251 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
           'Caller-Context': 'public',
           'Caller-Destination-Number': '102',
           'variable_sip_h_X-Call-Direction': 'internal',
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+  });
+
+  describe('/fs/dialplan (S2-03: from-trunk DID routing)', () => {
+    async function seedTrunkAndExtension(
+      tenantId: string,
+      trunkId: string,
+      extensionNumber: string,
+    ): Promise<void> {
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        fqdn: 'acme.platform.test',
+      });
+      await h.readModel.upsertTrunk(h.db.kysely, {
+        id: trunkId,
+        tenantId,
+        name: 'Carrier',
+        authMode: 'ip',
+        host: 'carrier.test',
+        port: 5060,
+        transport: 'udp',
+        username: null,
+        secret: null,
+        fromDomain: null,
+        status: 'active',
+      });
+      await h.readModel.upsertExtension(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        number: extensionNumber,
+        username: extensionNumber,
+        ha1: 'a'.repeat(32),
+        realm: 'acme.platform.test',
+      });
+    }
+
+    function extensionIdFor(tenantId: string): Promise<string> {
+      return h.db.kysely
+        .selectFrom('extensions')
+        .select('id')
+        .where('tenant_id', '=', tenantId)
+        .executeTakeFirstOrThrow()
+        .then((row) => row.id);
+    }
+
+    function inboundPayload(fields: Record<string, string>) {
+      return form({
+        section: 'dialplan',
+        'Caller-Context': 'public',
+        'variable_sip_h_X-Call-Direction': 'inbound',
+        ...fields,
+      });
+    }
+
+    it('bridges a DID to its bound extension', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await seedTrunkAndExtension(tenantId, trunkId, '102');
+      const extensionId = await extensionIdFor(tenantId);
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'extension',
+        destinationId: extensionId,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({
+          'Caller-Destination-Number': '+15551234567',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      // The leading `+` is a regex metacharacter, not a literal one, in the
+      // `destination_number` condition FreeSWITCH compiles — escaped, not
+      // passed through raw (`xml.ts`'s own comment on why: an unescaped `+`
+      // right after `^` fails FreeSWITCH's regex compile entirely).
+      expect(response.body).toContain('expression="^\\+15551234567$"');
+      expect(response.body).toContain(
+        'data="{sip_route_uri=sip:opensips:5060}sofia/internal/102@acme.platform.test"',
+      );
+    });
+
+    it('rejects an INVITE whose source IP matched no trunk (no X-Trunk-Id)', async () => {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({ 'Caller-Destination-Number': '+15551234567' }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+
+    it('rejects a DID owned by a different tenant than the trunk it arrived on', async () => {
+      const tenantA = crypto.randomUUID();
+      const tenantB = crypto.randomUUID();
+      const trunkA = crypto.randomUUID();
+      const trunkB = crypto.randomUUID();
+      await seedTrunkAndExtension(tenantA, trunkA, '102');
+      await seedTrunkAndExtension(tenantB, trunkB, '201');
+      const tenantBExtensionId = await h.db.kysely
+        .selectFrom('extensions')
+        .select('id')
+        .where('tenant_id', '=', tenantB)
+        .executeTakeFirstOrThrow()
+        .then((row) => row.id);
+      // A DID owned by tenant B...
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId: tenantB,
+        e164: '+15551234567',
+        trunkId: trunkB,
+        destinationType: 'extension',
+        destinationId: tenantBExtensionId,
+      });
+
+      // ...dialed on a call that arrived on tenant A's trunk.
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({
+          'Caller-Destination-Number': '+15551234567',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkA),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+
+    it('rejects a DID bound to a different trunk of the same tenant', async () => {
+      const tenantId = crypto.randomUUID();
+      const boundTrunk = crypto.randomUUID();
+      const otherTrunk = crypto.randomUUID();
+      await seedTrunkAndExtension(tenantId, boundTrunk, '102');
+      await h.readModel.upsertTrunk(h.db.kysely, {
+        id: otherTrunk,
+        tenantId,
+        name: 'Other trunk',
+        authMode: 'ip',
+        host: 'other.test',
+        port: 5060,
+        transport: 'udp',
+        username: null,
+        secret: null,
+        fromDomain: null,
+        status: 'active',
+      });
+      const extensionId = await extensionIdFor(tenantId);
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15551234567',
+        trunkId: boundTrunk,
+        destinationType: 'extension',
+        destinationId: extensionId,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({
+          'Caller-Destination-Number': '+15551234567',
+          'variable_sip_h_X-Trunk-Id': toContextId(otherTrunk),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+
+    it('rejects a DID whose destination type has no owning subsystem yet (docs/decisions.md G-25)', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await seedTrunkAndExtension(tenantId, trunkId, '102');
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'ring_group',
+        destinationId: crypto.randomUUID(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({
+          'Caller-Destination-Number': '+15551234567',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+
+    it('rejects an unknown DID entirely', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await seedTrunkAndExtension(tenantId, trunkId, '102');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({
+          'Caller-Destination-Number': '+19998887777',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
         }),
       });
 
