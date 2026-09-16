@@ -456,6 +456,19 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
       await k.deleteFrom('dr_rules').where('description', '=', routeId).execute();
     },
 
+    /**
+     * S2-06: an emergency route can carry more than one number
+     * (`emergency_routes.numbers`), but `dr_rules.prefix` only ever matches
+     * one prefix per row — `projectEmergencyRoute` writes one rule per
+     * number, keyed `${emergencyRouteId}:${number}` (`description`, this
+     * service's own synthetic key, not read by `drouting` itself), so
+     * cleanup needs the same `LIKE` prefix-match idiom
+     * `deleteOutboundGatewaysForRoute` already uses for its own gateways.
+     */
+    async deleteDrRulesByDescriptionPrefix(prefix: string): Promise<void> {
+      await k.deleteFrom('dr_rules').where('description', 'like', `${prefix}:%`).execute();
+    },
+
     /** Every rule's own route id (`description`), for reconciliation. */
     listDrRules(): Promise<string[]> {
       return k

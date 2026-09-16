@@ -41,6 +41,14 @@ export interface OutboundRouteConfig {
   readonly prepend: string | null;
 }
 
+/** A tenant's single emergency route (S2-06; G-1) — no `priority`/`strip`/`prepend`, unlike `OutboundRouteConfig` (`emergency-route.repo.ts`'s own doc comment on why). */
+export interface EmergencyRouteConfig {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly trunkId: string;
+  readonly numbers: readonly string[];
+}
+
 export class TrunkConfigClientError extends Error {
   override readonly name = 'TrunkConfigClientError';
 }
@@ -65,6 +73,10 @@ export interface TrunkConfigClient {
   ): Promise<OutboundRouteConfig | undefined>;
   /** Every outbound route, across every tenant — what the reconciliation pass diffs against. */
   listAllOutboundRoutes(): Promise<OutboundRouteConfig[]>;
+  /** Undefined when the tenant has no emergency route configured (a 404). */
+  findEmergencyRoute(tenantId: string): Promise<EmergencyRouteConfig | undefined>;
+  /** Every tenant's emergency route — what the reconciliation pass diffs against. */
+  listAllEmergencyRoutes(): Promise<EmergencyRouteConfig[]>;
 }
 
 export function createTrunkConfigClient(options: TrunkConfigClientOptions): TrunkConfigClient {
@@ -163,6 +175,51 @@ export function createTrunkConfigClient(options: TrunkConfigClientOptions): Trun
       }
 
       const body = (await response.json()) as { rows: OutboundRouteConfig[] };
+      return body.rows;
+    },
+
+    async findEmergencyRoute(tenantId: string): Promise<EmergencyRouteConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/emergency-route`,
+          { headers },
+        );
+      } catch (error) {
+        throw new TrunkConfigClientError(
+          `Could not reach trunk-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new TrunkConfigClientError(
+          `trunk-service rejected the emergency-route lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return (await response.json()) as EmergencyRouteConfig;
+    },
+
+    async listAllEmergencyRoutes(): Promise<EmergencyRouteConfig[]> {
+      let response: Response;
+      try {
+        response = await fetchImpl(`${baseUrl}/internal/v1/emergency-routes`, { headers });
+      } catch (error) {
+        throw new TrunkConfigClientError(
+          `Could not reach trunk-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (!response.ok) {
+        throw new TrunkConfigClientError(
+          `trunk-service rejected the emergency-route list (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      const body = (await response.json()) as { rows: EmergencyRouteConfig[] };
       return body.rows;
     },
   };

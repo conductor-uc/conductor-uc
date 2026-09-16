@@ -25,6 +25,8 @@ export interface ExtensionRow {
   readonly realm: string;
   readonly callerIdName: string | null;
   readonly callerIdNumber: string | null;
+  /** S2-06 (G-1) — an `emergency_locations` id, resolved via `pbx-config-client.ts`'s `findEmergencyLocation` at the moment an emergency call actually needs it. */
+  readonly emergencyLocationId: string;
 }
 
 const EXTENSION_COLUMNS = [
@@ -36,6 +38,7 @@ const EXTENSION_COLUMNS = [
   'realm',
   'caller_id_name as callerIdName',
   'caller_id_number as callerIdNumber',
+  'emergency_location_id as emergencyLocationId',
 ] as const;
 
 export interface DidRow {
@@ -55,6 +58,14 @@ export interface OutboundRouteRow {
   readonly trunkIds: readonly string[];
   readonly strip: number;
   readonly prepend: string | null;
+}
+
+/** S2-06 (G-1) — one per tenant, mirroring trunk-service's own `emergency_routes` singleton. */
+export interface EmergencyRouteRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly trunkId: string;
+  readonly numbers: readonly string[];
 }
 
 export interface TrunkRow {
@@ -212,6 +223,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
             realm: extension.realm,
             caller_id_name: extension.callerIdName,
             caller_id_number: extension.callerIdNumber,
+            emergency_location_id: extension.emergencyLocationId,
             created_at: now,
             updated_at: now,
           })
@@ -226,6 +238,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
             realm: extension.realm,
             caller_id_name: extension.callerIdName,
             caller_id_number: extension.callerIdNumber,
+            emergency_location_id: extension.emergencyLocationId,
             updated_at: now,
           })
           .where('id', '=', extension.id)
@@ -597,6 +610,57 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .execute()
         .then((rows) => rows.map(parseOutboundRouteRow));
     },
+
+    /** Replaces the tenant's mirrored emergency route (S2-06) — same "local mirror is the trusted desired state" pattern `upsertOutboundRoute` establishes. */
+    async upsertEmergencyRoute(trx: Executor, route: EmergencyRouteRow): Promise<void> {
+      const now = new Date();
+      await trx
+        .insertInto('emergency_routes')
+        .values({
+          id: route.id,
+          tenant_id: route.tenantId,
+          trunk_id: route.trunkId,
+          numbers: JSON.stringify(route.numbers),
+          created_at: now,
+          updated_at: now,
+        })
+        .onDuplicateKeyUpdate({
+          trunk_id: route.trunkId,
+          numbers: JSON.stringify(route.numbers),
+          updated_at: now,
+        })
+        .execute();
+    },
+
+    async deleteEmergencyRoute(trx: Executor, id: string): Promise<void> {
+      await trx.deleteFrom('emergency_routes').where('id', '=', id).execute();
+    },
+
+    /** `/fs/dialplan`'s emergency-number check (S2-06): a tenant's own single route, if it has one. */
+    findEmergencyRouteForTenant(tenantId: string): Promise<EmergencyRouteRow | undefined> {
+      return db.kysely
+        .selectFrom('emergency_routes')
+        .select(['id', 'tenant_id as tenantId', 'trunk_id as trunkId', 'numbers'])
+        .where('tenant_id', '=', tenantId)
+        .executeTakeFirst()
+        .then((row) => (row === undefined ? undefined : parseEmergencyRouteRow(row)));
+    },
+  };
+}
+
+/** `emergency_routes.numbers` is declared `json` — same driver-parsing quirk `parseOutboundRouteRow` documents. */
+function parseEmergencyRouteRow(row: {
+  id: string;
+  tenantId: string;
+  trunkId: string;
+  numbers: unknown;
+}): EmergencyRouteRow {
+  return {
+    ...row,
+    numbers:
+      typeof row.numbers === 'string'
+        ? (JSON.parse(row.numbers) as string[])
+        : (row.numbers as string[]),
   };
 }
 

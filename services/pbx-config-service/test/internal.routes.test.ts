@@ -17,7 +17,7 @@ describe.skipIf(skipReason !== undefined)(
     beforeAll(async () => {
       h = await startHarness();
       app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-      registerInternalRoutes(app, h.extensions, h.dids, TOKEN);
+      registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, TOKEN);
       await app.ready();
     });
 
@@ -37,7 +37,23 @@ describe.skipIf(skipReason !== undefined)(
       h.domains.realms[tenantId] = 'tenant-a.platform.test';
       const created = await h.extensions.create(
         { tenantId },
-        { number: '101', displayName: 'Front Desk' },
+        {
+          number: '101',
+          displayName: 'Front Desk',
+          emergencyLocationId: (
+            await h.emergencyLocations.create(
+              { tenantId },
+              {
+                label: 'Test Location',
+                addressLine1: '123 Main St',
+                city: 'Springfield',
+                state: 'IL',
+                postalCode: '62701',
+                country: 'US',
+              },
+            )
+          ).id,
+        },
       );
 
       const response = await app.inject({
@@ -99,7 +115,23 @@ describe.skipIf(skipReason !== undefined)(
       h.domains.realms[tenantId] = 'tenant-a.platform.test';
       const created = await h.extensions.create(
         { tenantId },
-        { number: '101', displayName: 'Front Desk' },
+        {
+          number: '101',
+          displayName: 'Front Desk',
+          emergencyLocationId: (
+            await h.emergencyLocations.create(
+              { tenantId },
+              {
+                label: 'Test Location',
+                addressLine1: '123 Main St',
+                city: 'Springfield',
+                state: 'IL',
+                postalCode: '62701',
+                country: 'US',
+              },
+            )
+          ).id,
+        },
       );
 
       const response = await app.inject({
@@ -119,7 +151,7 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/di
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-    registerInternalRoutes(app, h.extensions, h.dids, TOKEN);
+    registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, TOKEN);
     await app.ready();
   });
 
@@ -141,7 +173,23 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/di
     h.domains.realms[tenantId] = 'tenant-a.platform.test';
     const extension = await h.extensions.create(
       { tenantId },
-      { number: '101', displayName: 'Front Desk' },
+      {
+        number: '101',
+        displayName: 'Front Desk',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(
+            { tenantId },
+            {
+              label: 'Test Location',
+              addressLine1: '123 Main St',
+              city: 'Springfield',
+              state: 'IL',
+              postalCode: '62701',
+              country: 'US',
+            },
+          )
+        ).id,
+      },
     );
     const created = await h.dids.create(
       { tenantId },
@@ -194,7 +242,23 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/di
     h.domains.realms[tenantId] = 'tenant-a.platform.test';
     const extension = await h.extensions.create(
       { tenantId },
-      { number: '101', displayName: 'Front Desk' },
+      {
+        number: '101',
+        displayName: 'Front Desk',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(
+            { tenantId },
+            {
+              label: 'Test Location',
+              addressLine1: '123 Main St',
+              city: 'Springfield',
+              state: 'IL',
+              postalCode: '62701',
+              country: 'US',
+            },
+          )
+        ).id,
+      },
     );
     const created = await h.dids.create(
       { tenantId },

@@ -46,7 +46,26 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service DID HTTP routes', 
 
   async function seedExtension(tenantId: string) {
     h.domains.realms[tenantId] ??= `${tenantId}.platform.test`;
-    return h.extensions.create({ tenantId }, { number: '101', displayName: 'Front Desk' });
+    return h.extensions.create(
+      { tenantId },
+      {
+        number: '101',
+        displayName: 'Front Desk',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(
+            { tenantId },
+            {
+              label: 'Test Location',
+              addressLine1: '123 Main St',
+              city: 'Springfield',
+              state: 'IL',
+              postalCode: '62701',
+              country: 'US',
+            },
+          )
+        ).id,
+      },
+    );
   }
 
   describe('POST /v1/tenants/:tenantId/dids', () => {

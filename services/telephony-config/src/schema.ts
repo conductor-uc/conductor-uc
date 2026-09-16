@@ -92,6 +92,8 @@ export interface TelephonyConfigDb extends EventTables {
      */
     caller_id_name: string | null;
     caller_id_number: string | null;
+    /** S2-06 (G-1) — an `emergency_locations` id, pbx-config-service's own. Never re-resolved to a full address here; `pbx-config-client.ts`'s `findEmergencyLocation` does that live, at the moment an emergency call needs it. */
+    emergency_location_id: string;
     created_at: Date;
     updated_at: Date;
   };
@@ -173,6 +175,22 @@ export interface TelephonyConfigDb extends EventTables {
     trunk_ids: string;
     strip: number;
     prepend: string | null;
+    created_at: Date;
+    updated_at: Date;
+  };
+  /**
+   * S2-06 (G-1) — trunk-service's own singleton mirrored locally, the same
+   * "local read model on the call-setup hot path" story `outbound_routes`
+   * tells: `/fs/dialplan` checks a dialed number against this *before*
+   * anything else (channel limits, international policy, normal outbound
+   * routing), all of which an emergency call must bypass.
+   */
+  emergency_routes: {
+    id: string;
+    tenant_id: string;
+    trunk_id: string;
+    /** JSON array of direct-dial numbers, e.g. `["911"]`. */
+    numbers: string;
     created_at: Date;
     updated_at: Date;
   };

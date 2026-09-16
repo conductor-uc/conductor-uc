@@ -25,6 +25,23 @@ const TESTS_SIP_DIR = path.resolve(SRC_DIR, '..');
 const REPO_ROOT = path.resolve(TESTS_SIP_DIR, '../..');
 const SCENARIOS_DIR = path.resolve(TESTS_SIP_DIR, 'scenarios');
 
+/**
+ * How long `waitForLog` waits for a background SIPp server container to
+ * print "Sipp Server Mode" before giving up, and how long `waitForContainerExit`
+ * waits for one to actually exit. Both were 10s/20s through S2-05 — widened
+ * here (S2-06) after three consecutive PR #128 CI runs each hit one or the
+ * other timing out in a *different*, unrelated, pre-existing test file
+ * (never the same file twice, and never anything touching application
+ * logic): `docker run -d`/`docker inspect` occasionally taking longer than
+ * that under this CI runner's own load is apparently a real, if infrequent,
+ * condition on its own, not something any one task's test can fix by being
+ * lighter-weight. See docs/decisions.md G-34.
+ */
+const CONTAINER_LOG_TIMEOUT_MS = 25_000;
+const CONTAINER_EXIT_TIMEOUT_MS = 40_000;
+/** Same reasoning, for `startDelayedCaller`'s own `docker inspect` IP-lookup retry (200ms apiece) — 10 attempts (~2s) through S2-05, widened alongside the two above. */
+const CONTAINER_IP_LOOKUP_ATTEMPTS = 25;
+
 function envOr(name: string, fallback: string): string {
   const value = process.env[name];
   return value === undefined || value === '' ? fallback : value;
@@ -98,6 +115,7 @@ export interface SeedResult {
   readonly tenantSuspended: { readonly id: string; readonly fqdn: string };
   readonly tenantOutbound: { readonly id: string; readonly fqdn: string };
   readonly tenantFraud: { readonly id: string; readonly fqdn: string };
+  readonly tenantEmergency: { readonly id: string; readonly fqdn: string };
   readonly extensions: Record<string, SeedExtension>;
 }
 
@@ -452,7 +470,7 @@ export function startUas(opts: StartUasOptions): UasHandle {
       '-c',
       `${registerCmd} && ${answerCmd}`,
     ]);
-    await waitForLog(opts.containerName, 'Sipp Server Mode', 10_000);
+    await waitForLog(opts.containerName, 'Sipp Server Mode', CONTAINER_LOG_TIMEOUT_MS);
   })();
 
   return {
@@ -460,7 +478,7 @@ export function startUas(opts: StartUasOptions): UasHandle {
     ready: () => ready,
     result: async () => {
       await ready;
-      await waitForContainerExit(opts.containerName, 20_000);
+      await waitForContainerExit(opts.containerName, CONTAINER_EXIT_TIMEOUT_MS);
       const { stdout } = await execFileAsync('docker', ['logs', opts.containerName], {
         maxBuffer: 16 * 1024 * 1024,
       });
@@ -592,7 +610,7 @@ export function startBackgroundUas(
       '-i',
       '0.0.0.0',
     ]);
-    await waitForLog(containerName, 'Sipp Server Mode', 10_000);
+    await waitForLog(containerName, 'Sipp Server Mode', CONTAINER_LOG_TIMEOUT_MS);
   })();
 
   return {
@@ -686,7 +704,7 @@ export async function startDelayedCaller(opts: {
   // pause (S2-05's `uac_call_hold.xml`) can ask before it's ready. A short
   // poll is cheap and only ever taken on the rare empty-IP case.
   let ip = '';
-  for (let attempt = 1; attempt <= 10 && ip === ''; attempt += 1) {
+  for (let attempt = 1; attempt <= CONTAINER_IP_LOOKUP_ATTEMPTS && ip === ''; attempt += 1) {
     const { stdout } = await execFileAsync('docker', [
       'inspect',
       opts.containerName,
@@ -694,7 +712,9 @@ export async function startDelayedCaller(opts: {
       `{{ (index .NetworkSettings.Networks "${env.network}").IPAddress }}`,
     ]);
     ip = stdout.trim();
-    if (ip === '' && attempt < 10) await new Promise((resolve) => setTimeout(resolve, 200));
+    if (ip === '' && attempt < CONTAINER_IP_LOOKUP_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
   }
   if (ip === '')
     throw new Error(`could not determine ${opts.containerName}'s IP on ${env.network}`);
@@ -703,7 +723,7 @@ export async function startDelayedCaller(opts: {
     containerName: opts.containerName,
     ip,
     result: async () => {
-      await waitForContainerExit(opts.containerName, 30_000);
+      await waitForContainerExit(opts.containerName, CONTAINER_EXIT_TIMEOUT_MS);
       const { stdout: logs } = await execFileAsync('docker', ['logs', opts.containerName], {
         maxBuffer: 16 * 1024 * 1024,
       });
@@ -725,7 +745,7 @@ export async function startDelayedCaller(opts: {
  * parsed back out below.
  */
 export async function dockerCurlJson(
-  method: 'GET' | 'POST' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   url: string,
   body?: unknown,
 ): Promise<{ status: number; json: unknown }> {

@@ -1,6 +1,6 @@
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
-import { connectBus } from '@cuc/events';
+import { connectBus, createRelay } from '@cuc/events';
 import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
@@ -73,6 +73,19 @@ const bus = await connectBus({
 });
 await bus.ensureStreams();
 
+// S2-06: this service's first outbound publish (`call.emergency.initiated`)
+// — every consumer above already existed; this is the first thing that
+// needs the outbox *relayed*, not just written to.
+const relay = createRelay({
+  db: db.kysely,
+  bus,
+  logger,
+  batchSize: config.OUTBOX_BATCH_SIZE,
+  pollIntervalMs: config.OUTBOX_POLL_INTERVAL_MS,
+  maxAttempts: config.OUTBOX_MAX_ATTEMPTS,
+});
+const relayLoop = relay.run();
+
 const pbxConfigClient = createPbxConfigClient({
   baseUrl: config.PBX_CONFIG_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
@@ -131,6 +144,10 @@ app.addReadinessCheck('opensips_db', async () => ({
   status: (await opensipsDb.ping()) ? 'pass' : 'fail',
 }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
+app.addReadinessCheck('outbox', async () => {
+  const lag = await relay.lag();
+  return { status: 'pass', detail: `${String(lag)} pending` };
+});
 
 registerFsRoutes(
   app,
@@ -140,6 +157,7 @@ registerFsRoutes(
   config.OPENSIPS_SIP_URI,
   logger,
   orgClient,
+  pbxConfigClient,
 );
 registerInternalRoutes(
   app,
@@ -164,6 +182,7 @@ async function shutdown(signal: string): Promise<void> {
   orgConsumer.stop();
   pbxConsumer.stop();
   trunkConsumer.stop();
+  relay.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
@@ -171,6 +190,7 @@ async function shutdown(signal: string): Promise<void> {
   await orgConsumerLoop;
   await pbxConsumerLoop;
   await trunkConsumerLoop;
+  await relayLoop;
   await bus.close();
   await db.destroy();
   await opensipsDb.destroy();

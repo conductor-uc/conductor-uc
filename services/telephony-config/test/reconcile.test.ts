@@ -114,6 +114,7 @@ describe.skipIf(skipReason !== undefined)('reconciler', () => {
       realm: 'acme.platform.test',
       callerIdName: null,
       callerIdNumber: null,
+      emergencyLocationId: crypto.randomUUID(),
     });
 
     const report = await reconciler().reconcileOnce();

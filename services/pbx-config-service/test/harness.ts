@@ -8,6 +8,10 @@ import type { Logger } from '@cuc/logger';
 import { silentLogger, startTestDatabase, startTestNats, type TestNatsHandle } from '@cuc/testing';
 
 import { createDidRepo, type DidRepo } from '../src/repo/did.repo.js';
+import {
+  createEmergencyLocationRepo,
+  type EmergencyLocationRepo,
+} from '../src/repo/emergency-location.repo.js';
 import { createExtensionRepo, type ExtensionRepo } from '../src/repo/extension.repo.js';
 import type { TenantDomainLookup } from '../src/org-client.js';
 import type { PbxConfigServiceDb } from '../src/schema.js';
@@ -19,6 +23,7 @@ export interface Harness {
   readonly kek: KekProvider;
   readonly extensions: ExtensionRepo;
   readonly dids: DidRepo;
+  readonly emergencyLocations: EmergencyLocationRepo;
   readonly domains: FakeTenantDomains;
   readonly trunks: FakeTrunkLookup;
   readonly logger: Logger;
@@ -78,12 +83,14 @@ export async function startHarness(): Promise<Harness> {
   const extensions = createExtensionRepo(db, domains.lookup, kek);
   const trunks = fakeTrunkLookup();
   const dids = createDidRepo(db, trunks.exists);
+  const emergencyLocations = createEmergencyLocationRepo(db);
 
   return {
     db,
     kek,
     extensions,
     dids,
+    emergencyLocations,
     domains,
     trunks,
     logger,
@@ -124,6 +131,7 @@ export async function resetSchema(db: Database<PbxConfigServiceDb>): Promise<voi
   await db.kysely.deleteFrom('dids').execute();
   await db.kysely.deleteFrom('sip_credentials').execute();
   await db.kysely.deleteFrom('extensions').execute();
+  await db.kysely.deleteFrom('emergency_locations').execute();
   await db.kysely.deleteFrom('outbox').execute();
   await db.kysely.deleteFrom('consumed_events').execute();
 }

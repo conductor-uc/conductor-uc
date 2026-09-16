@@ -1,12 +1,21 @@
 import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
+import type { EmergencyRouteRepo } from '../repo/emergency-route.repo.js';
 import type { OutboundRouteRepo } from '../repo/outbound-route.repo.js';
 import type { TrunkRepo } from '../repo/trunk.repo.js';
 
 const TenantTrunkParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
   id: Type.String({ minLength: 1 }),
+});
+const TenantParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
+
+const EmergencyRouteViewSchema = Type.Object({
+  id: Type.String(),
+  tenantId: Type.String(),
+  trunkId: Type.String(),
+  numbers: Type.Array(Type.String()),
 });
 
 const OutboundRouteViewSchema = Type.Object({
@@ -64,6 +73,7 @@ export function registerInternalRoutes(
   app: Server,
   trunks: TrunkRepo,
   outboundRoutes: OutboundRouteRepo,
+  emergencyRoutes: EmergencyRouteRepo,
   internalServiceToken: string,
 ): void {
   app.get(
@@ -135,6 +145,45 @@ export function registerInternalRoutes(
       requireInternalToken(request.headers.authorization, internalServiceToken);
       const routes = await outboundRoutes.listAll();
       return { rows: routes.map((route) => ({ ...route, trunkIds: [...route.trunkIds] })) };
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/emergency-route` and
+   * `GET /internal/v1/emergency-routes` (S2-06) — the same shape as the
+   * outbound-route pair above, singular (one per tenant,
+   * `emergency-route.repo.ts`'s own doc comment on why there is no `:id`).
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/emergency-route',
+    {
+      config: { public: true },
+      schema: { params: TenantParamsSchema, response: { 200: EmergencyRouteViewSchema } },
+    },
+    async (request) => {
+      requireInternalToken(request.headers.authorization, internalServiceToken);
+
+      const { tenantId } = request.params;
+      const route = await emergencyRoutes.find({ tenantId });
+      if (route === undefined) {
+        throw ProblemError.notFound('No emergency route for that tenant.');
+      }
+      return { ...route, numbers: [...route.numbers] } satisfies Static<
+        typeof EmergencyRouteViewSchema
+      >;
+    },
+  );
+
+  app.get(
+    '/internal/v1/emergency-routes',
+    {
+      config: { public: true },
+      schema: { response: { 200: Type.Object({ rows: Type.Array(EmergencyRouteViewSchema) }) } },
+    },
+    async (request) => {
+      requireInternalToken(request.headers.authorization, internalServiceToken);
+      const routes = await emergencyRoutes.listAll();
+      return { rows: routes.map((route) => ({ ...route, numbers: [...route.numbers] })) };
     },
   );
 }

@@ -25,6 +25,8 @@ export interface Extension {
   readonly callerIdName: string | null;
   readonly callerIdNumber: string | null;
   readonly voicemailEnabled: boolean;
+  /** A `emergency_locations` row in this tenant (S2-06; G-1) — required, never null. */
+  readonly emergencyLocationId: string;
 }
 
 export interface CreateExtensionInput {
@@ -34,6 +36,8 @@ export interface CreateExtensionInput {
   readonly callerIdName?: string | null;
   readonly callerIdNumber?: string | null;
   readonly voicemailEnabled?: boolean;
+  /** Required (issue #96: "an extension cannot go live without one") — not optional the way the caller-ID fields are. */
+  readonly emergencyLocationId: string;
 }
 
 export interface UpdateExtensionInput {
@@ -43,6 +47,7 @@ export interface UpdateExtensionInput {
   readonly callerIdName?: string | null;
   readonly callerIdNumber?: string | null;
   readonly voicemailEnabled?: boolean;
+  readonly emergencyLocationId?: string;
 }
 
 /** What `:reveal` returns — the one place the plaintext password ever leaves this service. */
@@ -73,10 +78,17 @@ export interface DigestCredential {
   /** The extension's own caller-ID override (S2-04's own precedence: extension, then a bound DID, then the trunk's policy). */
   readonly callerIdName: string | null;
   readonly callerIdNumber: string | null;
+  /** S2-06 (G-1) — what `/fs/dialplan`'s emergency branch resolves to a real address via `GET /internal/v1/tenants/:id/emergency-locations/:id`. */
+  readonly emergencyLocationId: string;
 }
 
 export class ExtensionNotFoundError extends Error {
   override readonly name = 'ExtensionNotFoundError';
+}
+
+/** S2-06 (G-1): `emergencyLocationId` must name a real `emergency_locations` row in the same tenant. */
+export class EmergencyLocationNotFoundError extends Error {
+  override readonly name = 'EmergencyLocationNotFoundError';
 }
 
 export class TenantDomainNotFoundError extends Error {
@@ -105,6 +117,7 @@ interface ExtensionRow {
   caller_id_name: string | null;
   caller_id_number: string | null;
   voicemail_enabled: boolean;
+  emergency_location_id: string;
 }
 
 /**
@@ -128,6 +141,7 @@ function toExtension(
     callerIdName: row.caller_id_name,
     callerIdNumber: row.caller_id_number,
     voicemailEnabled: Boolean(row.voicemail_enabled),
+    emergencyLocationId: row.emergency_location_id,
   };
 }
 
@@ -178,6 +192,18 @@ export function createExtensionRepo(
       const realm = await domains(tenantId);
       if (realm === undefined) throw new TenantDomainNotFoundError(tenantId);
 
+      const location = await db
+        .scoped(ctx)
+        .selectFrom('emergency_locations')
+        .select('id')
+        .where('id', '=', input.emergencyLocationId)
+        .executeTakeFirst();
+      if (location === undefined) {
+        throw new EmergencyLocationNotFoundError(
+          `No emergency location with id '${input.emergencyLocationId}' in this tenant.`,
+        );
+      }
+
       const id = randomUUID();
       const now = new Date();
       const password = generateSipPassword();
@@ -202,6 +228,7 @@ export function createExtensionRepo(
               caller_id_name: callerIdName,
               caller_id_number: callerIdNumber,
               voicemail_enabled: voicemailEnabled,
+              emergency_location_id: input.emergencyLocationId,
               created_at: now,
               updated_at: now,
               version: 1,
@@ -247,6 +274,7 @@ export function createExtensionRepo(
         callerIdName,
         callerIdNumber,
         voicemailEnabled,
+        emergencyLocationId: input.emergencyLocationId,
       };
     },
 
@@ -278,6 +306,23 @@ export function createExtensionRepo(
         assertNumberAvailable(number, taken !== undefined);
       }
 
+      if (
+        input.emergencyLocationId !== undefined &&
+        input.emergencyLocationId !== existing.emergency_location_id
+      ) {
+        const location = await db
+          .scoped(ctx)
+          .selectFrom('emergency_locations')
+          .select('id')
+          .where('id', '=', input.emergencyLocationId)
+          .executeTakeFirst();
+        if (location === undefined) {
+          throw new EmergencyLocationNotFoundError(
+            `No emergency location with id '${input.emergencyLocationId}' in this tenant.`,
+          );
+        }
+      }
+
       const merged: ExtensionRow = {
         id: existing.id,
         tenant_id: existing.tenant_id,
@@ -289,6 +334,7 @@ export function createExtensionRepo(
         caller_id_number:
           input.callerIdNumber === undefined ? existing.caller_id_number : input.callerIdNumber,
         voicemail_enabled: input.voicemailEnabled ?? Boolean(existing.voicemail_enabled),
+        emergency_location_id: input.emergencyLocationId ?? existing.emergency_location_id,
       };
 
       try {
@@ -302,6 +348,7 @@ export function createExtensionRepo(
               caller_id_name: merged.caller_id_name,
               caller_id_number: merged.caller_id_number,
               voicemail_enabled: merged.voicemail_enabled,
+              emergency_location_id: merged.emergency_location_id,
               updated_at: new Date(),
               version: existing.version + 1,
             })
@@ -398,6 +445,7 @@ export function createExtensionRepo(
           'extensions.number',
           'extensions.caller_id_name as callerIdName',
           'extensions.caller_id_number as callerIdNumber',
+          'extensions.emergency_location_id as emergencyLocationId',
         ])
         // Belt-and-suspenders alongside `scoped(ctx)`'s own filter on
         // `sip_credentials.tenant_id`: both rows are already guaranteed the

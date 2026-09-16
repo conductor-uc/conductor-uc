@@ -23,7 +23,16 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'telephony-config', logger: h.logger });
-    registerFsRoutes(app, h.db, h.readModel, TOKEN, 'opensips:5060', h.logger, h.orgClient);
+    registerFsRoutes(
+      app,
+      h.db,
+      h.readModel,
+      TOKEN,
+      'opensips:5060',
+      h.logger,
+      h.orgClient,
+      h.pbxConfig,
+    );
     await app.ready();
   });
 
@@ -106,6 +115,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         realm: 'acme.platform.test',
         callerIdName: null,
         callerIdNumber: null,
+        emergencyLocationId: crypto.randomUUID(),
       });
 
       const response = await app.inject({
@@ -148,6 +158,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         realm: 'acme.platform.test',
         callerIdName: null,
         callerIdNumber: null,
+        emergencyLocationId: crypto.randomUUID(),
       });
     }
 
@@ -313,6 +324,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         realm: 'acme.platform.test',
         callerIdName: null,
         callerIdNumber: null,
+        emergencyLocationId: crypto.randomUUID(),
       });
     }
 
@@ -639,6 +651,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         realm: 'acme.platform.test',
         callerIdName: 'Front Desk',
         callerIdNumber: '+15559990000',
+        emergencyLocationId: crypto.randomUUID(),
       });
 
       const response = await app.inject({
@@ -890,6 +903,183 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
 
       expect(response.statusCode).toBe(200);
       expect(response.body).not.toContain('application="limit"');
+    });
+  });
+
+  describe('/fs/dialplan (S2-06: emergency dialing)', () => {
+    async function seedTenant(tenantId: string): Promise<void> {
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        fqdn: 'acme.platform.test',
+      });
+    }
+
+    async function seedEmergencyRoute(tenantId: string, numbers: string[]): Promise<void> {
+      await h.readModel.upsertEmergencyRoute(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        trunkId: crypto.randomUUID(),
+        numbers,
+      });
+    }
+
+    async function seedExtension(
+      tenantId: string,
+      number: string,
+      emergencyLocationId?: string,
+    ): Promise<string> {
+      const id = crypto.randomUUID();
+      await h.readModel.upsertExtension(h.db.kysely, {
+        id,
+        tenantId,
+        number,
+        username: number,
+        ha1: 'a'.repeat(32),
+        realm: 'acme.platform.test',
+        callerIdName: null,
+        callerIdNumber: null,
+        emergencyLocationId: emergencyLocationId ?? crypto.randomUUID(),
+      });
+      return id;
+    }
+
+    function dialplanPayload(fields: Record<string, string>) {
+      return form({
+        section: 'dialplan',
+        'Caller-Context': 'public',
+        'variable_sip_h_X-Call-Direction': 'internal',
+        ...fields,
+      });
+    }
+
+    async function dial(tenantId: string, destinationNumber: string, callingNumber?: string) {
+      return app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: dialplanPayload({
+          'Caller-Destination-Number': destinationNumber,
+          'variable_sip_h_X-Tenant-Id': tenantId,
+          ...(callingNumber === undefined ? {} : { variable_sip_from_user: callingNumber }),
+        }),
+      });
+    }
+
+    it('bridges an emergency call even though the tenant is already at its configured channel limit', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedEmergencyRoute(tenantId, ['911']);
+      // The same kind of limit that gates a normal outbound call (S2-05) —
+      // proving the bypass means proving *this* never produces a `limit`
+      // action, not that some separately-configured "no limit" state does.
+      h.orgClient.limits[tenantId] = { maxConcurrentChannels: 1 };
+
+      const response = await dial(tenantId, '911');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('application="bridge"');
+      expect(response.body).not.toContain('application="limit"');
+    });
+
+    it('sets X-Emergency-Location from the calling extension’s resolved location, address parts slash-joined', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedEmergencyRoute(tenantId, ['911']);
+      const locationId = crypto.randomUUID();
+      h.pbxConfig.emergencyLocations[locationId] = {
+        id: locationId,
+        label: 'HQ',
+        addressLine1: '123 Main St',
+        addressLine2: null,
+        city: 'Springfield',
+        state: 'IL',
+        postalCode: '62701',
+        country: 'US',
+      };
+      await seedExtension(tenantId, '101', locationId);
+
+      const response = await dial(tenantId, '911', '101');
+
+      expect(response.statusCode).toBe(200);
+      // `escapeXml` turns the value's own wrapping `'` into `&apos;` (same
+      // as `origination_caller_id_name`'s own escaping above) — ` / `, not
+      // `, `, is what must separate the parts (the comma-corruption bug
+      // this header's own construction was fixed for before it ever shipped).
+      expect(response.body).toContain(
+        'sip_h_X-Emergency-Location=&apos;123 Main St / Springfield / IL / 62701 / US&apos;',
+      );
+      expect(response.body).not.toContain('123 Main St, Springfield');
+    });
+
+    it('still bridges, with no location header or caller ID, when the calling extension cannot be resolved', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedEmergencyRoute(tenantId, ['911']);
+
+      // No `variable_sip_from_user` at all — an unrecognized/absent caller.
+      const response = await dial(tenantId, '911');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('application="bridge"');
+      expect(response.body).not.toContain('X-Emergency-Location');
+      expect(response.body).not.toContain('origination_caller_id');
+    });
+
+    it('enqueues call.emergency.initiated with the dialed number, extension, and location', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedEmergencyRoute(tenantId, ['911']);
+      const locationId = crypto.randomUUID();
+      h.pbxConfig.emergencyLocations[locationId] = {
+        id: locationId,
+        label: 'HQ',
+        addressLine1: '123 Main St',
+        addressLine2: null,
+        city: 'Springfield',
+        state: 'IL',
+        postalCode: '62701',
+        country: 'US',
+      };
+      const extensionId = await seedExtension(tenantId, '101', locationId);
+
+      const response = await dial(tenantId, '911', '101');
+      expect(response.statusCode).toBe(200);
+
+      const rows = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['type', 'tenant_id as tenantId', 'payload'])
+        .where('type', '=', 'call.emergency.initiated')
+        .execute();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        tenantId,
+        payload: {
+          dialedNumber: '911',
+          callingExtensionId: extensionId,
+          emergencyLocationId: locationId,
+        },
+      });
+    });
+
+    it('takes the emergency path, not the extension path, when a real extension shares the emergency number', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedEmergencyRoute(tenantId, ['911']);
+      // A misconfigured (or coincidental) extension numbered exactly '911' —
+      // G-1's own "must never be shadowed" requirement (`fs.routes.ts`'s own
+      // doc comment on why the emergency check runs first).
+      await seedExtension(tenantId, '911');
+
+      const response = await dial(tenantId, '911');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('name="emergency-911"');
+      expect(response.body).not.toContain('name="ext-911"');
     });
   });
 });

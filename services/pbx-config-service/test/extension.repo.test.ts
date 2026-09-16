@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { crossTenantProbe, databaseOrSkipReason } from '@cuc/testing';
 
 import {
+  EmergencyLocationNotFoundError,
   ExtensionNotFoundError,
   ExtensionNumberTakenError,
   TenantDomainNotFoundError,
@@ -39,6 +40,16 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
     const created = await h.extensions.create(ctxFor(tenantId), {
       number: '101',
       displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
     });
 
     expect(created).toMatchObject({ number: '101', displayName: 'Front Desk', userId: null });
@@ -60,6 +71,16 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
     const created = await h.extensions.create(ctxFor(tenantId), {
       number: '101',
       displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
     });
 
     const row = await h.db.kysely
@@ -81,6 +102,16 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
     const created = await h.extensions.create(ctxFor(tenantId), {
       number: '101',
       displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
     });
 
     const revealed = await h.extensions.reveal(ctxFor(tenantId), created.id);
@@ -98,10 +129,36 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
   it('rejects a number already used in the same tenant', async () => {
     const tenantId = crypto.randomUUID();
     h.domains.realms[tenantId] = 'tenant-a.platform.test';
-    await h.extensions.create(ctxFor(tenantId), { number: '101', displayName: 'A' });
+    await h.extensions.create(ctxFor(tenantId), {
+      number: '101',
+      displayName: 'A',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
+    });
 
     await expect(
-      h.extensions.create(ctxFor(tenantId), { number: '101', displayName: 'B' }),
+      h.extensions.create(ctxFor(tenantId), {
+        number: '101',
+        displayName: 'B',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(ctxFor(tenantId), {
+            label: 'Test Location',
+            addressLine1: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          })
+        ).id,
+      }),
     ).rejects.toThrow(ExtensionNumberTakenError);
   });
 
@@ -111,24 +168,111 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
     h.domains.realms[tenantA] = 'a.platform.test';
     h.domains.realms[tenantB] = 'b.platform.test';
 
-    await h.extensions.create(ctxFor(tenantA), { number: '101', displayName: 'A' });
+    await h.extensions.create(ctxFor(tenantA), {
+      number: '101',
+      displayName: 'A',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantA), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
+    });
     await expect(
-      h.extensions.create(ctxFor(tenantB), { number: '101', displayName: 'B' }),
+      h.extensions.create(ctxFor(tenantB), {
+        number: '101',
+        displayName: 'B',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(ctxFor(tenantB), {
+            label: 'Test Location',
+            addressLine1: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          })
+        ).id,
+      }),
     ).resolves.toMatchObject({ number: '101' });
   });
 
   it('rejects a malformed number before touching the database', async () => {
     const tenantId = crypto.randomUUID();
     await expect(
-      h.extensions.create(ctxFor(tenantId), { number: 'abc', displayName: 'A' }),
+      h.extensions.create(ctxFor(tenantId), {
+        number: 'abc',
+        displayName: 'A',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(ctxFor(tenantId), {
+            label: 'Test Location',
+            addressLine1: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          })
+        ).id,
+      }),
     ).rejects.toThrow(InvalidExtensionNumberError);
   });
 
   it('refuses to create credentials when the tenant has no primary domain', async () => {
     const tenantId = crypto.randomUUID();
     await expect(
-      h.extensions.create(ctxFor(tenantId), { number: '101', displayName: 'A' }),
+      h.extensions.create(ctxFor(tenantId), {
+        number: '101',
+        displayName: 'A',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(ctxFor(tenantId), {
+            label: 'Test Location',
+            addressLine1: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          })
+        ).id,
+      }),
     ).rejects.toThrow(TenantDomainNotFoundError);
+  });
+
+  // G-1/issue #96: "an extension cannot be created without a dispatchable location."
+  it('refuses to create an extension with no such emergency location', async () => {
+    const tenantId = crypto.randomUUID();
+    h.domains.realms[tenantId] = 'tenant-a.platform.test';
+    await expect(
+      h.extensions.create(ctxFor(tenantId), {
+        number: '101',
+        displayName: 'A',
+        emergencyLocationId: crypto.randomUUID(),
+      }),
+    ).rejects.toThrow(EmergencyLocationNotFoundError);
+  });
+
+  it("refuses to create an extension with another tenant's emergency location", async () => {
+    const tenantA = crypto.randomUUID();
+    const tenantB = crypto.randomUUID();
+    h.domains.realms[tenantA] = 'tenant-a.platform.test';
+    const locationB = await h.emergencyLocations.create(ctxFor(tenantB), {
+      label: 'Test Location',
+      addressLine1: '123 Main St',
+      city: 'Springfield',
+      state: 'IL',
+      postalCode: '62701',
+      country: 'US',
+    });
+
+    await expect(
+      h.extensions.create(ctxFor(tenantA), {
+        number: '101',
+        displayName: 'A',
+        emergencyLocationId: locationB.id,
+      }),
+    ).rejects.toThrow(EmergencyLocationNotFoundError);
   });
 
   it('updates display fields without touching SIP credentials', async () => {
@@ -137,6 +281,16 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
     const created = await h.extensions.create(ctxFor(tenantId), {
       number: '101',
       displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
     });
     const before = await h.db.kysely
       .selectFrom('sip_credentials')
@@ -164,6 +318,16 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
     const created = await h.extensions.create(ctxFor(tenantId), {
       number: '101',
       displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
     });
 
     await h.extensions.update(ctxFor(tenantId), created.id, { number: '102' });
@@ -190,6 +354,16 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
     const created = await h.extensions.create(ctxFor(tenantId), {
       number: '101',
       displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
     });
 
     await h.extensions.remove(ctxFor(tenantId), created.id);
@@ -217,6 +391,16 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
       const created = await h.extensions.create(ctxFor(tenantId), {
         number: '101',
         displayName: 'Front Desk',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(ctxFor(tenantId), {
+            label: 'Test Location',
+            addressLine1: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          })
+        ).id,
       });
       const before = await h.extensions.reveal(ctxFor(tenantId), created.id);
 
@@ -248,8 +432,34 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
       const tenantB = crypto.randomUUID();
       h.domains.realms[tenantA] = 'a.platform.test';
       h.domains.realms[tenantB] = 'b.platform.test';
-      await h.extensions.create(ctxFor(tenantA), { number: '101', displayName: 'A' });
-      const extB = await h.extensions.create(ctxFor(tenantB), { number: '101', displayName: 'B' });
+      await h.extensions.create(ctxFor(tenantA), {
+        number: '101',
+        displayName: 'A',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(ctxFor(tenantA), {
+            label: 'Test Location',
+            addressLine1: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          })
+        ).id,
+      });
+      const extB = await h.extensions.create(ctxFor(tenantB), {
+        number: '101',
+        displayName: 'B',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(ctxFor(tenantB), {
+            label: 'Test Location',
+            addressLine1: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          })
+        ).id,
+      });
 
       await h.db.kysely
         .transaction()
@@ -266,7 +476,20 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
     it('is a no-op when the realm has not actually changed', async () => {
       const tenantId = crypto.randomUUID();
       h.domains.realms[tenantId] = 'tenant-a.platform.test';
-      await h.extensions.create(ctxFor(tenantId), { number: '101', displayName: 'A' });
+      await h.extensions.create(ctxFor(tenantId), {
+        number: '101',
+        displayName: 'A',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(ctxFor(tenantId), {
+            label: 'Test Location',
+            addressLine1: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          })
+        ).id,
+      });
 
       const recomputed = await h.db.kysely
         .transaction()
@@ -285,6 +508,16 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
       const created = await h.extensions.create(ctxFor(tenantId), {
         number: '101',
         displayName: 'Probe',
+        emergencyLocationId: (
+          await h.emergencyLocations.create(ctxFor(tenantId), {
+            label: 'Test Location',
+            addressLine1: '123 Main St',
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          })
+        ).id,
       });
       return created.id;
     },

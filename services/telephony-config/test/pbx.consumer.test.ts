@@ -89,6 +89,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       realm: 'acme.platform.test',
       callerIdName: null,
       callerIdNumber: null,
+      emergencyLocationId: crypto.randomUUID(),
     };
 
     await publish('pbx.extension.created', tenantId, {
@@ -124,6 +125,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       realm: 'old.platform.test',
       callerIdName: null,
       callerIdNumber: null,
+      emergencyLocationId: crypto.randomUUID(),
     };
     await publish('pbx.extension.created', tenantId, {
       extensionId,
@@ -141,6 +143,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       realm: 'new.platform.test',
       callerIdName: null,
       callerIdNumber: null,
+      emergencyLocationId: crypto.randomUUID(),
     };
     await publish('pbx.extension.updated', tenantId, { extensionId });
     const pass = await runOnceUntilHandled(c);
@@ -164,6 +167,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       realm: 'acme.platform.test',
       callerIdName: null,
       callerIdNumber: null,
+      emergencyLocationId: crypto.randomUUID(),
     };
     await publish('pbx.extension.created', tenantId, {
       extensionId,
@@ -200,6 +204,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       realm: 'acme.platform.test',
       callerIdName: null,
       callerIdNumber: null,
+      emergencyLocationId: crypto.randomUUID(),
     };
 
     const eventId = await publish('pbx.extension.created', tenantId, {

@@ -22,6 +22,25 @@ export interface DigestCredential {
   /** S2-04's caller-ID precedence, first tier: the extension's own override, if set. */
   readonly callerIdName: string | null;
   readonly callerIdNumber: string | null;
+  /** S2-06 (G-1) — an `emergency_locations` id in this same tenant, required at extension-creation time. */
+  readonly emergencyLocationId: string;
+}
+
+/**
+ * A dispatchable civic address (S2-06; G-1) — what `findEmergencyLocation`
+ * resolves an extension's `emergencyLocationId` to, live, at the moment an
+ * emergency call actually needs one (never cached — see this file's own
+ * "thin event, re-fetch current state" framing above, the same reasoning).
+ */
+export interface EmergencyLocationConfig {
+  readonly id: string;
+  readonly label: string;
+  readonly addressLine1: string;
+  readonly addressLine2: string | null;
+  readonly city: string;
+  readonly state: string;
+  readonly postalCode: string;
+  readonly country: string;
 }
 
 /**
@@ -54,6 +73,11 @@ export interface PbxConfigClient {
   findCredential(tenantId: string, extensionId: string): Promise<DigestCredential | undefined>;
   /** Undefined when the DID does not exist in that tenant (a 404). */
   findDid(tenantId: string, didId: string): Promise<DidConfig | undefined>;
+  /** Undefined when the location does not exist in that tenant (a 404). */
+  findEmergencyLocation(
+    tenantId: string,
+    locationId: string,
+  ): Promise<EmergencyLocationConfig | undefined>;
 }
 
 export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfigClient {
@@ -110,6 +134,33 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
       }
 
       return (await response.json()) as DidConfig;
+    },
+
+    async findEmergencyLocation(
+      tenantId: string,
+      locationId: string,
+    ): Promise<EmergencyLocationConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/emergency-locations/${encodeURIComponent(locationId)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the emergency location lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return (await response.json()) as EmergencyLocationConfig;
     },
   };
 }

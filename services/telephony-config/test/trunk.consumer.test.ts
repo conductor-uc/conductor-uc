@@ -43,6 +43,7 @@ describe.skipIf(skipReason !== undefined)('trunk consumer', () => {
     await resetOpenSipsSchema(h.opensipsDb);
     h.trunkConfig.trunks = {};
     h.trunkConfig.outboundRoutes = {};
+    h.trunkConfig.emergencyRoutes = {};
     await h.bus.jsm.streams.purge('TRUNK');
   });
 
@@ -57,7 +58,10 @@ describe.skipIf(skipReason !== undefined)('trunk consumer', () => {
       | 'trunk.trunk.deleted'
       | 'trunk.outbound_route.created'
       | 'trunk.outbound_route.updated'
-      | 'trunk.outbound_route.deleted',
+      | 'trunk.outbound_route.deleted'
+      | 'trunk.emergency_route.created'
+      | 'trunk.emergency_route.updated'
+      | 'trunk.emergency_route.deleted',
     tenantId: string,
     data: Record<string, unknown>,
   ): Promise<string> {
@@ -457,6 +461,166 @@ describe.skipIf(skipReason !== undefined)('trunk consumer', () => {
         .selectFrom('dr_rules')
         .select('ruleid')
         .where('description', '=', routeId)
+        .execute();
+      expect(rules).toHaveLength(0);
+
+      const gateways = await h.opensipsDb.kysely
+        .selectFrom('dr_gateways')
+        .select('gwid')
+        .where('gwid', '=', before.gwlist!)
+        .execute();
+      expect(gateways).toHaveLength(0);
+    });
+  });
+
+  describe('trunk.emergency_route.* (S2-06)', () => {
+    /** Same "must already be locally projected" precondition `trunk.outbound_route.*`'s own `projectTrunk` documents. */
+    async function projectTrunk(
+      c: EventConsumer,
+      tenantId: string,
+      overrides: Partial<TrunkConfig> = {},
+    ): Promise<string> {
+      const trunk = registerModeTrunk({
+        tenantId,
+        authMode: 'ip',
+        username: null,
+        secret: null,
+        ...overrides,
+      });
+      h.trunkConfig.trunks[trunk.id] = trunk;
+      await publish('trunk.trunk.created', tenantId, {
+        trunkId: trunk.id,
+        name: trunk.name,
+        authMode: trunk.authMode,
+      });
+      await runOnceUntilHandled(c);
+      return trunk.id;
+    }
+
+    async function tenantDrTag(tenantId: string): Promise<string> {
+      const row = await h.db.kysely
+        .selectFrom('tenant_dr_groups')
+        .select('dr_group_id')
+        .where('tenant_id', '=', tenantId)
+        .executeTakeFirstOrThrow();
+      return drTag(row.dr_group_id);
+    }
+
+    it('created projects one synthesized gateway and one dr_rules row per number, sharing the gateway (G-1)', async () => {
+      const c = consumer();
+      await c.ensure();
+      const tenantId = crypto.randomUUID();
+      const trunkId = await projectTrunk(c, tenantId, { host: 'carrier-e911.test' });
+      const routeId = crypto.randomUUID();
+      h.trunkConfig.emergencyRoutes[routeId] = {
+        id: routeId,
+        tenantId,
+        trunkId,
+        numbers: ['911', '933'],
+      };
+
+      await publish('trunk.emergency_route.created', tenantId, { emergencyRouteId: routeId });
+      const pass = await runOnceUntilHandled(c);
+      expect(pass.handled).toBeGreaterThanOrEqual(1);
+
+      const tag = await tenantDrTag(tenantId);
+      const rules = await h.opensipsDb.kysely
+        .selectFrom('dr_rules')
+        .selectAll()
+        .where('description', 'in', [`${routeId}:911`, `${routeId}:933`])
+        .orderBy('prefix', 'asc')
+        .execute();
+      expect(rules).toHaveLength(2);
+      expect(rules[0]).toMatchObject({
+        prefix: `${tag}911`,
+        sort_alg: 'N',
+        groupid: String(DEFAULT_DR_GROUP_ID),
+      });
+      expect(rules[1]).toMatchObject({
+        prefix: `${tag}933`,
+        sort_alg: 'N',
+        groupid: String(DEFAULT_DR_GROUP_ID),
+      });
+      // One trunk, one synthesized gateway — reused across both numbers'
+      // own rules, not a gateway per number.
+      expect(rules[0]!.gwlist).toBe(rules[1]!.gwlist);
+      const gwids = rules[0]!.gwlist!.split(',');
+      expect(gwids).toHaveLength(1);
+
+      const gateway = await h.opensipsDb.kysely
+        .selectFrom('dr_gateways')
+        .selectAll()
+        .where('gwid', '=', gwids[0]!)
+        .executeTakeFirstOrThrow();
+      expect(gateway).toMatchObject({
+        address: 'carrier-e911.test:5060',
+        strip: DR_TAG_WIDTH,
+        pri_prefix: null,
+      });
+    });
+
+    it('updated re-projects a changed number list, dropping the stale per-number rule', async () => {
+      const c = consumer();
+      await c.ensure();
+      const tenantId = crypto.randomUUID();
+      const trunkId = await projectTrunk(c, tenantId);
+      const routeId = crypto.randomUUID();
+      h.trunkConfig.emergencyRoutes[routeId] = {
+        id: routeId,
+        tenantId,
+        trunkId,
+        numbers: ['911', '933'],
+      };
+      await publish('trunk.emergency_route.created', tenantId, { emergencyRouteId: routeId });
+      await runOnceUntilHandled(c);
+
+      h.trunkConfig.emergencyRoutes[routeId] = {
+        id: routeId,
+        tenantId,
+        trunkId,
+        numbers: ['911'],
+      };
+      await publish('trunk.emergency_route.updated', tenantId, { emergencyRouteId: routeId });
+      const pass = await runOnceUntilHandled(c);
+      expect(pass.handled).toBeGreaterThanOrEqual(1);
+
+      const rules = await h.opensipsDb.kysely
+        .selectFrom('dr_rules')
+        .select('description')
+        .where('description', 'like', `${routeId}:%`)
+        .execute();
+      expect(rules.map((r) => r.description)).toEqual([`${routeId}:911`]);
+    });
+
+    it('deleted removes the dr_rules rows and the synthesized gateway', async () => {
+      const c = consumer();
+      await c.ensure();
+      const tenantId = crypto.randomUUID();
+      const trunkId = await projectTrunk(c, tenantId);
+      const routeId = crypto.randomUUID();
+      h.trunkConfig.emergencyRoutes[routeId] = {
+        id: routeId,
+        tenantId,
+        trunkId,
+        numbers: ['911', '933'],
+      };
+      await publish('trunk.emergency_route.created', tenantId, { emergencyRouteId: routeId });
+      await runOnceUntilHandled(c);
+
+      const before = await h.opensipsDb.kysely
+        .selectFrom('dr_rules')
+        .select('gwlist')
+        .where('description', '=', `${routeId}:911`)
+        .executeTakeFirstOrThrow();
+
+      await publish('trunk.emergency_route.deleted', tenantId, { emergencyRouteId: routeId });
+      const pass = await runOnceUntilHandled(c);
+      expect(pass.handled).toBeGreaterThanOrEqual(1);
+
+      const rules = await h.opensipsDb.kysely
+        .selectFrom('dr_rules')
+        .select('ruleid')
+        .where('description', 'like', `${routeId}:%`)
         .execute();
       expect(rules).toHaveLength(0);
 

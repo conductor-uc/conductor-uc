@@ -125,4 +125,40 @@ export const telephonyEvents = defineEvents({
     description: 'An outbound route was deleted.',
     data: Type.Object({ outboundRouteId: Type.String({ minLength: 1 }) }),
   },
+  'trunk.emergency_route.created': {
+    schemaVersion: 1,
+    description: "A tenant's emergency route was created (S2-06; G-1).",
+    data: Type.Object({ emergencyRouteId: Type.String({ minLength: 1 }) }),
+  },
+  'trunk.emergency_route.updated': {
+    schemaVersion: 1,
+    description: "An emergency route's trunk or number list changed.",
+    data: Type.Object({ emergencyRouteId: Type.String({ minLength: 1 }) }),
+  },
+  'trunk.emergency_route.deleted': {
+    schemaVersion: 1,
+    description: 'An emergency route was deleted.',
+    data: Type.Object({ emergencyRouteId: Type.String({ minLength: 1 }) }),
+  },
+  /**
+   * S2-06 (G-1: "a notification hook (email/SMS/console) on every emergency
+   * call") — published by this service itself, the first event it ever
+   * originates rather than just consumes, from `/fs/dialplan`'s emergency
+   * branch at the moment a call to one of the tenant's emergency numbers is
+   * dialplan-resolved. `call`, not a new `emergency` domain:
+   * `@cuc/api-contracts`' `EVENT_DOMAINS` is a closed list with no such
+   * domain, and `call.lost`'s own precedent there is exactly this shape —
+   * something that happened during a call, not a CRUD entity. No consumer
+   * exists yet for the actual email/SMS/console delivery (a future stage's
+   * job, docs/decisions.md gap) — this is the hook itself.
+   */
+  'call.emergency.initiated': {
+    schemaVersion: 1,
+    description: 'A call to a tenant emergency number was dialplan-resolved and bridged.',
+    data: Type.Object({
+      dialedNumber: Type.String({ minLength: 1 }),
+      callingExtensionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      emergencyLocationId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    }),
+  },
 });
