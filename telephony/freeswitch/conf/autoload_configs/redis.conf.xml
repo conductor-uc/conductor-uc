@@ -1,0 +1,10 @@
+<configuration name="redis.conf" description="mod_redis Configuration">
+  <!-- S2-05: backs the "redis" backend `limit` (mod_dptools) uses for the
+       per-tenant outbound concurrent-channel counter — vars.xml's
+       fs_redis_host/fs_redis_port. -->
+  <settings>
+    <param name="host" value="$${fs_redis_host}"/>
+    <param name="port" value="$${fs_redis_port}"/>
+    <param name="timeout" value="10000"/>
+  </settings>
+</configuration>

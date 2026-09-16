@@ -23,7 +23,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'telephony-config', logger: h.logger });
-    registerFsRoutes(app, h.db, h.readModel, TOKEN, 'opensips:5060', h.logger);
+    registerFsRoutes(app, h.db, h.readModel, TOKEN, 'opensips:5060', h.logger, h.orgClient);
     await app.ready();
   });
 
@@ -711,6 +711,181 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
 
       expect(response.statusCode).toBe(200);
       expect(response.body).toContain('<result status="not found"/>');
+    });
+  });
+
+  describe('/fs/dialplan (S2-05: toll-fraud controls)', () => {
+    async function seedTenant(tenantId: string, country: string): Promise<void> {
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        fqdn: 'acme.platform.test',
+      });
+      await h.readModel.setTenantCountry(h.db.kysely, tenantId, country);
+    }
+
+    async function seedTrunk(tenantId: string): Promise<string> {
+      const trunkId = crypto.randomUUID();
+      await h.readModel.upsertTrunk(h.db.kysely, {
+        id: trunkId,
+        tenantId,
+        name: 'Carrier',
+        authMode: 'ip',
+        host: 'carrier.test',
+        port: 5060,
+        transport: 'udp',
+        username: null,
+        secret: null,
+        fromDomain: null,
+        status: 'active',
+        callerIdName: null,
+        callerIdNumber: null,
+      });
+      return trunkId;
+    }
+
+    async function seedRoute(tenantId: string, trunkIds: readonly string[], pattern: string): Promise<void> {
+      await h.readModel.upsertOutboundRoute(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        priority: 0,
+        pattern,
+        trunkIds,
+        strip: 0,
+        prepend: null,
+      });
+    }
+
+    function outboundPayload(fields: Record<string, string>) {
+      return form({
+        section: 'dialplan',
+        'Caller-Context': 'public',
+        'variable_sip_h_X-Call-Direction': 'internal',
+        ...fields,
+      });
+    }
+
+    async function dial(tenantId: string, destinationNumber: string) {
+      return app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: outboundPayload({
+          'Caller-Destination-Number': destinationNumber,
+          'variable_sip_h_X-Tenant-Id': tenantId,
+        }),
+      });
+    }
+
+    it('blocks an international call by default (no limits set at all)', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      // A route that would match a GB number too, so the block is provably
+      // the fraud check firing, not "no route matched".
+      await seedRoute(tenantId, [trunkId], '');
+
+      // libphonenumber's own documented example UK number (`e164.test.ts`).
+      const response = await dial(tenantId, '+442079460958');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+
+    it('allows an international call once internationalAllowed is set', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      await seedRoute(tenantId, [trunkId], '');
+      h.orgClient.limits[tenantId] = { internationalAllowed: true };
+
+      const response = await dial(tenantId, '+442079460958');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<action application="bridge"');
+    });
+
+    it("allows an international call to a country on the tenant's own allow-list", async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      await seedRoute(tenantId, [trunkId], '');
+      h.orgClient.limits[tenantId] = { countryAllowList: ['GB'] };
+
+      const allowed = await dial(tenantId, '+442079460958');
+      expect(allowed.statusCode).toBe(200);
+      expect(allowed.body).toContain('<action application="bridge"');
+
+      // A country *not* on the list is still blocked.
+      h.orgClient.limits[tenantId] = { countryAllowList: ['DE'] };
+      const stillBlocked = await dial(tenantId, '+442079460958');
+      expect(stillBlocked.body).toContain('<result status="not found"/>');
+    });
+
+    it('never blocks a domestic call, even with no limits configured', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      await seedRoute(tenantId, [trunkId], '+1');
+
+      const response = await dial(tenantId, '+14155552671');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<action application="bridge"');
+    });
+
+    it('fails the call closed when org-service cannot be reached for the limits lookup', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      await seedRoute(tenantId, [trunkId], '+1');
+      const originalFindLimits = h.orgClient.findLimits.bind(h.orgClient);
+      h.orgClient.findLimits = () => Promise.reject(new Error('connection refused'));
+
+      try {
+        const response = await dial(tenantId, '+14155552671');
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toContain('<result status="not found"/>');
+      } finally {
+        h.orgClient.findLimits = originalFindLimits;
+      }
+    });
+
+    it('emits a redis-backed limit action ahead of the bridge when maxConcurrentChannels is set', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      await seedRoute(tenantId, [trunkId], '+1');
+      h.orgClient.limits[tenantId] = { maxConcurrentChannels: 3 };
+
+      const response = await dial(tenantId, '+14155552671');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(
+        `<action application="limit" data="redis ${tenantId} outbound-channels 3"/>`,
+      );
+      // Ordered before the bridge, not after — a call over the limit must
+      // never reach it.
+      const limitIndex = response.body.indexOf('application="limit"');
+      const bridgeIndex = response.body.indexOf('application="bridge"');
+      expect(limitIndex).toBeGreaterThan(-1);
+      expect(limitIndex).toBeLessThan(bridgeIndex);
+    });
+
+    it('emits no limit action at all when maxConcurrentChannels is unset (unlimited)', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      await seedRoute(tenantId, [trunkId], '+1');
+
+      const response = await dial(tenantId, '+14155552671');
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toContain('application="limit"');
     });
   });
 });

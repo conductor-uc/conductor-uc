@@ -132,7 +132,15 @@ app.addReadinessCheck('opensips_db', async () => ({
 }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
 
-registerFsRoutes(app, db, readModel, config.FS_XML_CURL_TOKEN, config.OPENSIPS_SIP_URI, logger);
+registerFsRoutes(
+  app,
+  db,
+  readModel,
+  config.FS_XML_CURL_TOKEN,
+  config.OPENSIPS_SIP_URI,
+  logger,
+  orgClient,
+);
 registerInternalRoutes(
   app,
   readModel,

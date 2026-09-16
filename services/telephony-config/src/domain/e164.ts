@@ -24,3 +24,18 @@ export function normalizeToE164(dialed: string, tenantCountry: string): string |
   if (parsed === undefined || !parsed.isValid()) return undefined;
   return parsed.number;
 }
+
+/**
+ * The ISO 3166-1 alpha-2 region an *already-normalized* E.164 number
+ * belongs to (S2-05's own toll-fraud line: "country allow-lists per
+ * tenant") — a leading `+` number is self-describing, so this needs no
+ * `tenantCountry` hint the way {@link normalizeToE164} does. `undefined`
+ * for a number in a shared calling code with no single owning country
+ * (e.g. NANP's own non-geographic ranges) — `fraud-limits.ts`'s own
+ * caller treats that as "can't prove this is domestic," not a guess
+ * either way.
+ */
+export function destinationCountry(e164: string): string | undefined {
+  const parsed = parsePhoneNumberFromString(e164);
+  return parsed?.country;
+}

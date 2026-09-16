@@ -105,13 +105,16 @@ function fakeTrunkConfigClient(): FakeTrunkConfigClient {
 
 export interface FakeOrgClient extends OrgClient {
   countries: Record<string, string>;
+  limits: Record<string, Record<string, unknown>>;
 }
 
-/** A tenant-country lookup whose answers are set per test — no live org-service needed. */
+/** A tenant-country/limits lookup whose answers are set per test — no live org-service needed. */
 function fakeOrgClient(): FakeOrgClient {
   const state: FakeOrgClient = {
     countries: {},
+    limits: {},
     findCountry: (tenantId: string) => Promise.resolve(state.countries[tenantId]),
+    findLimits: (tenantId: string) => Promise.resolve(state.limits[tenantId]),
   };
   return state;
 }

@@ -119,6 +119,12 @@ services:
       FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}
       TELEPHONY_CONFIG_URL: ${TELEPHONY_CONFIG_URL:-http://telephony-config:8080}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
+      # S2-05: mod_redis (the "redis" `limit` backend) — the container-
+      # internal port, not `REDIS_PORT` (that one's the *host*-side mapping,
+      # same distinction `OPENSIPS_DB_URL`'s own `mariadb:3306` already
+      # makes for the DB).
+      FS_REDIS_HOST: ${FS_REDIS_HOST:-redis}
+      FS_REDIS_PORT: ${FS_REDIS_PORT:-6379}
     # No host port publish: 03 §1's table lists OpenSIPs as the only edge —
     # FS is reached over the compose network (its ACL only allows
     # opensips_cidr/cluster_cidr, S1-10), same as production. The dispatcher

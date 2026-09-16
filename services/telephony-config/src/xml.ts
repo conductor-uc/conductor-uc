@@ -179,6 +179,9 @@ export function buildDialplanDocument(
  * originated leg — unlike `X-Dr-Group-Id`, a well-documented mechanism, not
  * something this task had to invent.
  */
+/** `limit`'s own `realm`/`id` pair (mod_dptools) the per-tenant outbound concurrent-channel counter is keyed on — `redis` backend (S2-05; `telephony/freeswitch/conf/autoload_configs/redis.conf.xml`). */
+const OUTBOUND_CHANNEL_LIMIT_RESOURCE = 'outbound-channels';
+
 export function buildOutboundDialplanDocument(
   callerContext: string,
   destinationNumber: string,
@@ -187,6 +190,9 @@ export function buildOutboundDialplanDocument(
   opensipsSipUri: string,
   drGroupId: number,
   callerId: { readonly name: string | null; readonly number: string | null } | null,
+  tenantId: string,
+  /** `null` means unlimited (`fraud-limits.ts`'s own convention) — no `limit` action is emitted at all. */
+  maxConcurrentChannels: number | null,
 ): string {
   const vars: string[] = [`sip_route_uri=sip:${opensipsSipUri}`];
   if (callerId?.number !== null && callerId?.number !== undefined) {
@@ -208,6 +214,20 @@ export function buildOutboundDialplanDocument(
   const taggedNumber = drTag(drGroupId) + stripLeadingPlus(normalizedNumber);
   const target = `{${vars.join(',')}}sofia/internal/${taggedNumber}@${tenantDomain}`;
 
+  // S2-05 (07 §6: "Per-tenant ... concurrent channel ... limits, enforced
+  // in ... FS (`limit` with a Redis backend)"). No overflow
+  // `[number [dialplan [context]]]` args: exceeding `max` hangs the calling
+  // channel up on its own (mod_dptools' own documented default), which is
+  // the desired behavior here — there is no "queue the call" fallback for
+  // a toll-fraud control. Placed as its own action *before* `bridge`, not
+  // folded into one data string: `limit` and `bridge` are independent
+  // applications, chained the same way every other multi-action extension
+  // in this codebase's own dialplan XML already is.
+  const limitAction =
+    maxConcurrentChannels === null
+      ? ''
+      : `          <action application="limit" data="${escapeXml(`redis ${tenantId} ${OUTBOUND_CHANNEL_LIMIT_RESOURCE} ${String(maxConcurrentChannels)}`)}"/>\n`;
+
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
     '<document type="freeswitch/xml">\n' +
@@ -215,6 +235,7 @@ export function buildOutboundDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="outbound-${escapeXml(destinationNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    limitAction +
     `          <action application="bridge" data="${escapeXml(target)}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +
