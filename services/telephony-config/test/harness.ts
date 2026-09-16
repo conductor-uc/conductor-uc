@@ -5,7 +5,12 @@ import type { Logger } from '@cuc/logger';
 import { silentLogger, startTestDatabase, startTestNats, type TestNatsHandle } from '@cuc/testing';
 
 import type { OrgClient } from '../src/org-client.js';
-import type { DidConfig, DigestCredential, PbxConfigClient } from '../src/pbx-config-client.js';
+import type {
+  DidConfig,
+  DigestCredential,
+  EmergencyLocationConfig,
+  PbxConfigClient,
+} from '../src/pbx-config-client.js';
 import type { OpenSipsMiClient } from '../src/opensips-mi-client.js';
 import type { OpenSipsDb } from '../src/opensips-schema.js';
 import { createProjection, type Projection } from '../src/projection.js';
@@ -16,6 +21,7 @@ import {
 import { createReadModelRepo, type ReadModelRepo } from '../src/repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../src/schema.js';
 import type {
+  EmergencyRouteConfig,
   OutboundRouteConfig,
   TrunkConfig,
   TrunkConfigClient,
@@ -70,16 +76,20 @@ function fakeMiClient(): FakeMiClient {
 export interface FakePbxConfigClient extends PbxConfigClient {
   credentials: Record<string, DigestCredential>;
   dids: Record<string, DidConfig>;
+  emergencyLocations: Record<string, EmergencyLocationConfig>;
 }
 
-/** A digest-credential/DID lookup whose answers are set per test — no live pbx-config-service needed. */
+/** A digest-credential/DID/emergency-location lookup whose answers are set per test — no live pbx-config-service needed. */
 function fakePbxConfigClient(): FakePbxConfigClient {
   const state: FakePbxConfigClient = {
     credentials: {},
     dids: {},
+    emergencyLocations: {},
     findCredential: (_tenantId: string, extensionId: string) =>
       Promise.resolve(state.credentials[extensionId]),
     findDid: (_tenantId: string, didId: string) => Promise.resolve(state.dids[didId]),
+    findEmergencyLocation: (_tenantId: string, locationId: string) =>
+      Promise.resolve(state.emergencyLocations[locationId]),
   };
   return state;
 }
@@ -87,18 +97,23 @@ function fakePbxConfigClient(): FakePbxConfigClient {
 export interface FakeTrunkConfigClient extends TrunkConfigClient {
   trunks: Record<string, TrunkConfig>;
   outboundRoutes: Record<string, OutboundRouteConfig>;
+  emergencyRoutes: Record<string, EmergencyRouteConfig>;
 }
 
-/** A trunk-config/outbound-route lookup whose answers are set per test — no live trunk-service needed. */
+/** A trunk-config/outbound-route/emergency-route lookup whose answers are set per test — no live trunk-service needed. */
 function fakeTrunkConfigClient(): FakeTrunkConfigClient {
   const state: FakeTrunkConfigClient = {
     trunks: {},
     outboundRoutes: {},
+    emergencyRoutes: {},
     findTrunk: (_tenantId: string, trunkId: string) => Promise.resolve(state.trunks[trunkId]),
     listAllTrunks: () => Promise.resolve(Object.values(state.trunks)),
     findOutboundRoute: (_tenantId: string, outboundRouteId: string) =>
       Promise.resolve(state.outboundRoutes[outboundRouteId]),
     listAllOutboundRoutes: () => Promise.resolve(Object.values(state.outboundRoutes)),
+    findEmergencyRoute: (tenantId: string) =>
+      Promise.resolve(Object.values(state.emergencyRoutes).find((r) => r.tenantId === tenantId)),
+    listAllEmergencyRoutes: () => Promise.resolve(Object.values(state.emergencyRoutes)),
   };
   return state;
 }
@@ -320,6 +335,7 @@ export async function startBusHarness(): Promise<BusHarness> {
 export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void> {
   await db.kysely.deleteFrom('dids').execute();
   await db.kysely.deleteFrom('outbound_routes').execute();
+  await db.kysely.deleteFrom('emergency_routes').execute();
   await db.kysely.deleteFrom('trunk_ips').execute();
   await db.kysely.deleteFrom('trunks').execute();
   await db.kysely.deleteFrom('extensions').execute();

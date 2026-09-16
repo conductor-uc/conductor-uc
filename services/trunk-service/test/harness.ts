@@ -8,6 +8,10 @@ import type { Logger } from '@cuc/logger';
 import { silentLogger, startTestDatabase, startTestNats, type TestNatsHandle } from '@cuc/testing';
 
 import {
+  createEmergencyRouteRepo,
+  type EmergencyRouteRepo,
+} from '../src/repo/emergency-route.repo.js';
+import {
   createOutboundRouteRepo,
   type OutboundRouteRepo,
 } from '../src/repo/outbound-route.repo.js';
@@ -21,6 +25,7 @@ export interface Harness {
   readonly kek: KekProvider;
   readonly trunks: TrunkRepo;
   readonly outboundRoutes: OutboundRouteRepo;
+  readonly emergencyRoutes: EmergencyRouteRepo;
   readonly resellers: FakeTenantResellers;
   readonly logger: Logger;
   close(): Promise<void>;
@@ -62,12 +67,14 @@ export async function startHarness(): Promise<Harness> {
   const resellers = fakeTenantResellers();
   const trunks = createTrunkRepo(db, resellers.lookup, kek);
   const outboundRoutes = createOutboundRouteRepo(db);
+  const emergencyRoutes = createEmergencyRouteRepo(db);
 
   return {
     db,
     kek,
     trunks,
     outboundRoutes,
+    emergencyRoutes,
     resellers,
     logger,
     async close() {
@@ -105,6 +112,7 @@ export async function startBusHarness(): Promise<BusHarness> {
 
 export async function resetSchema(db: Database<TrunkServiceDb>): Promise<void> {
   await db.kysely.deleteFrom('outbound_routes').execute();
+  await db.kysely.deleteFrom('emergency_routes').execute();
   await db.kysely.deleteFrom('trunk_ips').execute();
   await db.kysely.deleteFrom('trunks').execute();
   await db.kysely.deleteFrom('outbox').execute();

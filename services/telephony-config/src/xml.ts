@@ -244,3 +244,88 @@ export function buildOutboundDialplanDocument(
     '</document>\n'
   );
 }
+
+/** A dispatchable civic address, formatted for the `X-Emergency-Location` header `buildEmergencyDialplanDocument` sets. */
+export interface EmergencyLocationDetail {
+  readonly addressLine1: string;
+  readonly addressLine2: string | null;
+  readonly city: string;
+  readonly state: string;
+  readonly postalCode: string;
+  readonly country: string;
+}
+
+/**
+ * `/fs/dialplan`'s emergency branch (S2-06; G-1). Deliberately its own
+ * function, not a variant of `buildOutboundDialplanDocument` above: an
+ * emergency call skips E.164 normalization entirely (`destinationNumber`
+ * dials exactly as-is — G-1's own "direct dial without a prefix"), never
+ * carries a `limit` action (must reach the trunk "even when the tenant is
+ * at its channel limit," S2-06's own "Done when"), and carries a location
+ * header no ordinary outbound call has any reason to set.
+ *
+ * `X-Emergency-Location`: a single-line, human-readable civic address — the
+ * generic default, not any particular carrier's own documented E911
+ * format. G-1/issue #96 is explicit that "location delivery depends on
+ * each carrier's E911 service," and no specific carrier's format (a PIDF-LO
+ * body, a Geolocation header with a location-reference URI, …) is
+ * implemented here — a documented gap (docs/decisions.md), not a silent
+ * guess at one carrier's convention over another's.
+ */
+export function buildEmergencyDialplanDocument(
+  callerContext: string,
+  dialedNumber: string,
+  tenantDomain: string,
+  opensipsSipUri: string,
+  drGroupId: number,
+  callerId: { readonly name: string | null; readonly number: string | null } | null,
+  location: EmergencyLocationDetail | null,
+): string {
+  const vars: string[] = [`sip_route_uri=sip:${opensipsSipUri}`];
+  if (callerId?.number !== null && callerId?.number !== undefined) {
+    vars.push(`origination_caller_id_number=${callerId.number}`);
+  }
+  if (callerId?.name !== null && callerId?.name !== undefined) {
+    vars.push(`origination_caller_id_name='${callerId.name}'`);
+  }
+  if (location !== null) {
+    // `/` not `, `: the whole `{var=val,var=val}` prefix block is itself
+    // comma-delimited (every var above shares it) — a literal `,` inside
+    // this value would be read as the start of a new var, corrupting the
+    // bridge string, the same class of mistake `[extraheader]`'s own blank-
+    // line pitfall was in `uac_call.xml` (S1-14's own checkpoint memory).
+    const addressLine = [
+      location.addressLine1,
+      location.addressLine2,
+      location.city,
+      location.state,
+      location.postalCode,
+      location.country,
+    ]
+      .filter((part): part is string => part !== null && part !== '')
+      .join(' / ');
+    vars.push(`sip_h_X-Emergency-Location='${addressLine}'`);
+  }
+
+  // Same tenant-isolation tag every OpenSIPs-routed outbound leg carries
+  // (G-28) — `dialedNumber` itself is never normalized or stripped of a
+  // leading `+` the way `buildOutboundDialplanDocument`'s destination is:
+  // there is nothing to strip, G-1's own numbers are already bare digits.
+  const taggedNumber = drTag(drGroupId) + dialedNumber;
+  const target = `{${vars.join(',')}}sofia/internal/${taggedNumber}@${tenantDomain}`;
+
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="emergency-${escapeXml(dialedNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(dialedNumber)}$`)}">\n` +
+    `          <action application="bridge" data="${escapeXml(target)}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}

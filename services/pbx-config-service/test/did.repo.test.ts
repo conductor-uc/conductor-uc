@@ -35,7 +35,20 @@ describe.skipIf(skipReason !== undefined)('DID repo', () => {
 
   async function seedExtension(tenantId: string, number = '101') {
     h.domains.realms[tenantId] ??= `${tenantId}.platform.test`;
-    return h.extensions.create(ctxFor(tenantId), { number, displayName: 'Front Desk' });
+    return h.extensions.create(ctxFor(tenantId), {
+      number,
+      displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
+    });
   }
 
   it('creates a DID bound to a trunk and an extension', async () => {

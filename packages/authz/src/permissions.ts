@@ -32,6 +32,8 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'grant.manage': 'config',
   'extension.manage': 'config',
   'did.manage': 'config',
+  'emergency_location.manage': 'config',
+  'emergency_route.manage': 'config',
   'group.manage': 'config',
   'queue.manage': 'config',
   'schedule.manage': 'config',

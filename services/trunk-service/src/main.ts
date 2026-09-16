@@ -7,8 +7,10 @@ import { createLogger } from '@cuc/logger';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { createOrgClient } from './org-client.js';
+import { createEmergencyRouteRepo } from './repo/emergency-route.repo.js';
 import { createOutboundRouteRepo } from './repo/outbound-route.repo.js';
 import { createTrunkRepo } from './repo/trunk.repo.js';
+import { registerEmergencyRouteRoutes } from './routes/emergency-route.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerOutboundRouteRoutes } from './routes/outbound-route.routes.js';
 import { registerTrunkRoutes } from './routes/trunk.routes.js';
@@ -69,6 +71,7 @@ const orgClient = createOrgClient({
 });
 const trunkRepo = createTrunkRepo(db, orgClient.resellerForTenant, kek);
 const outboundRouteRepo = createOutboundRouteRepo(db);
+const emergencyRouteRepo = createEmergencyRouteRepo(db);
 const telephonyConfigClient = createTelephonyConfigClient({
   baseUrl: config.TELEPHONY_CONFIG_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
@@ -95,7 +98,14 @@ app.addReadinessCheck('outbox', async () => {
 
 registerTrunkRoutes(app, trunkRepo, bus, telephonyConfigClient);
 registerOutboundRouteRoutes(app, outboundRouteRepo);
-registerInternalRoutes(app, trunkRepo, outboundRouteRepo, config.INTERNAL_SERVICE_TOKEN);
+registerEmergencyRouteRoutes(app, emergencyRouteRepo);
+registerInternalRoutes(
+  app,
+  trunkRepo,
+  outboundRouteRepo,
+  emergencyRouteRepo,
+  config.INTERNAL_SERVICE_TOKEN,
+);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

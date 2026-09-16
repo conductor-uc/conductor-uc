@@ -3,18 +3,24 @@ import { secretEquals } from '@cuc/crypto';
 import type { Server } from '@cuc/http';
 import type { Logger } from '@cuc/logger';
 
+import { enqueueEvent } from '@cuc/events';
+
 import { fromContextId } from '../context-id.js';
 import { resolveOutboundCallerId, type CallerId } from '../domain/caller-id.js';
 import { destinationCountry, normalizeToE164 } from '../domain/e164.js';
 import { isOutboundCallAllowed, parseFraudLimits } from '../domain/fraud-limits.js';
+import { telephonyEvents } from '../events.js';
 import type { OrgClient } from '../org-client.js';
+import type { PbxConfigClient } from '../pbx-config-client.js';
 import type { OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../schema.js';
 import {
   buildDialplanDocument,
   buildDirectoryDocument,
+  buildEmergencyDialplanDocument,
   buildOutboundDialplanDocument,
   NOT_FOUND_DOCUMENT,
+  type EmergencyLocationDetail,
 } from '../xml.js';
 
 /**
@@ -84,6 +90,8 @@ export function registerFsRoutes(
   logger: Logger,
   /** S2-05: `handleOutboundDial`'s live (uncached) toll-fraud limits lookup — see `org-client.ts`'s own doc comment on why this one isn't cached the way `findCountry`'s result is. */
   orgClient: OrgClient,
+  /** S2-06: `handleEmergencyDial`'s live emergency-location lookup (G-1) — which numbers *are* the tenant's emergency numbers is answered by `readModel.findEmergencyRouteForTenant` instead (the local mirror `projection.ts` already keeps current), the same "local read model on the call-setup hot path" story every other dialplan lookup here follows. */
+  pbxConfigClient: PbxConfigClient,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -112,6 +120,110 @@ export function registerFsRoutes(
     const username = decoded.slice(0, separator);
     const password = decoded.slice(separator + 1);
     return username === 'fs-node' && secretEquals(fsXmlCurlToken, password);
+  }
+
+  /**
+   * `/fs/dialplan`'s emergency branch (S2-06; G-1). Checked *before*
+   * `findExtensionByNumber` in the `internal` branch below, not after: a
+   * tenant dialing its own emergency number must never be shadowed by a
+   * coincidentally-numbered extension (a misconfiguration risk, but
+   * emergency reachability outranks it) — G-1's own "direct dial without a
+   * prefix" is unconditional, not "unless something else claims the
+   * number first."
+   *
+   * Fires `call.emergency.initiated` (G-1's own notification-hook
+   * requirement) in its own short transaction, separate from the read path
+   * above it — a failure to enqueue the notification must never block the
+   * call itself, so it's caught and logged, not allowed to fail the whole
+   * dialplan response.
+   */
+  async function handleEmergencyDial(
+    tenantId: string,
+    dialedNumber: string,
+    callerContext: string,
+    callingNumber: string | undefined,
+  ): Promise<string> {
+    const domain = await readModel.findDomain(db.kysely, tenantId);
+    if (domain === undefined) {
+      logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    const callingExtension =
+      callingNumber === undefined || callingNumber === ''
+        ? undefined
+        : await readModel.findExtensionByNumber(tenantId, callingNumber);
+
+    const callerId: CallerId | null =
+      callingExtension === undefined
+        ? null
+        : { name: callingExtension.callerIdName, number: callingExtension.callerIdNumber };
+
+    // The provisioning gate (pbx-config-service's own `extensions.create`,
+    // G-1) guarantees every extension has one — a miss here means the
+    // lookup itself failed (unreachable pbx-config-service, or the
+    // location was deleted out from under the extension somehow), not that
+    // none was ever set. Either way, the call still goes out: a missing
+    // *address* is not a reason to refuse an emergency call, only a
+    // reason to log it loudly.
+    let location: EmergencyLocationDetail | null = null;
+    if (callingExtension !== undefined) {
+      try {
+        const resolved = await pbxConfigClient.findEmergencyLocation(
+          tenantId,
+          callingExtension.emergencyLocationId,
+        );
+        if (resolved === undefined) {
+          logger.error(
+            { tenantId, emergencyLocationId: callingExtension.emergencyLocationId },
+            'dialplan: emergency call, but the extension’s own emergency location no longer exists',
+          );
+        } else {
+          location = resolved;
+        }
+      } catch (error) {
+        logger.error(
+          { tenantId, error: error instanceof Error ? error.message : String(error) },
+          'dialplan: emergency call, but could not fetch the emergency location; proceeding without one',
+        );
+      }
+    } else {
+      logger.warn(
+        { tenantId, dialedNumber },
+        'dialplan: emergency call from an unrecognized extension; proceeding without caller ID or a location',
+      );
+    }
+
+    const drGroupId = await readModel.findOrCreateDrGroupId(db.kysely, tenantId);
+
+    try {
+      await db.kysely.transaction().execute(async (trx) => {
+        await enqueueEvent(trx, telephonyEvents, {
+          type: 'call.emergency.initiated',
+          data: {
+            dialedNumber,
+            callingExtensionId: callingExtension?.id ?? null,
+            emergencyLocationId: callingExtension?.emergencyLocationId ?? null,
+          },
+          orgContext: { tenantId },
+        });
+      });
+    } catch (error) {
+      logger.error(
+        { tenantId, error: error instanceof Error ? error.message : String(error) },
+        'dialplan: failed to enqueue the emergency-call notification event',
+      );
+    }
+
+    return buildEmergencyDialplanDocument(
+      callerContext,
+      dialedNumber,
+      domain.fqdn,
+      opensipsSipUri,
+      drGroupId,
+      callerId,
+      location,
+    );
   }
 
   /**
@@ -289,6 +401,18 @@ export function registerFsRoutes(
     if (callDirection === 'internal') {
       const tenantId = body['variable_sip_h_X-Tenant-Id'];
       if (tenantId === undefined || tenantId === '') return NOT_FOUND_DOCUMENT;
+
+      // G-1: checked first — see `handleEmergencyDial`'s own doc comment on
+      // why this must never be shadowed by a same-numbered extension.
+      const emergencyRoute = await readModel.findEmergencyRouteForTenant(tenantId);
+      if (emergencyRoute !== undefined && emergencyRoute.numbers.includes(destinationNumber)) {
+        return handleEmergencyDial(
+          tenantId,
+          destinationNumber,
+          callerContext,
+          body['variable_sip_from_user'],
+        );
+      }
 
       const extension = await readModel.findExtensionByNumber(tenantId, destinationNumber);
       if (extension === undefined) {

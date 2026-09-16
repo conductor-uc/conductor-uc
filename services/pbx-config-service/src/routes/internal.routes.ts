@@ -2,6 +2,7 @@ import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
 import type { DidRepo } from '../repo/did.repo.js';
+import type { EmergencyLocationRepo } from '../repo/emergency-location.repo.js';
 import type { ExtensionRepo } from '../repo/extension.repo.js';
 
 const ParamsSchema = Type.Object({
@@ -17,6 +18,17 @@ const CredentialResponseSchema = Type.Object({
   realm: Type.String(),
   callerIdName: Type.Union([Type.String(), Type.Null()]),
   callerIdNumber: Type.Union([Type.String(), Type.Null()]),
+  emergencyLocationId: Type.String(),
+});
+const EmergencyLocationResponseSchema = Type.Object({
+  id: Type.String(),
+  label: Type.String(),
+  addressLine1: Type.String(),
+  addressLine2: Type.Union([Type.String(), Type.Null()]),
+  city: Type.String(),
+  state: Type.String(),
+  postalCode: Type.String(),
+  country: Type.String(),
 });
 const DidResponseSchema = Type.Object({
   id: Type.String(),
@@ -52,6 +64,7 @@ export function registerInternalRoutes(
   app: Server,
   extensions: ExtensionRepo,
   dids: DidRepo,
+  emergencyLocations: EmergencyLocationRepo,
   internalServiceToken: string,
 ): void {
   app.get(
@@ -106,6 +119,36 @@ export function registerInternalRoutes(
         destinationType: did.destinationType,
         destinationId: did.destinationId,
       } satisfies Static<typeof DidResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/emergency-locations/:id` (S2-06;
+   * G-1) — how telephony-config resolves a calling extension's
+   * `emergencyLocationId` (already on the credential above) to a real,
+   * dispatchable address at the moment an emergency call actually needs
+   * one. Fetched live, not cached — same reasoning as S2-05's
+   * `org-client.ts`'s own `findLimits`: a location correction should take
+   * effect on the very next call.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/emergency-locations/:id',
+    {
+      config: { public: true },
+      schema: { params: ParamsSchema, response: { 200: EmergencyLocationResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      const location = await emergencyLocations.findById({ tenantId }, id);
+      if (location === undefined) {
+        throw ProblemError.notFound('No emergency location with that id in that tenant.');
+      }
+      return location satisfies Static<typeof EmergencyLocationResponseSchema>;
     },
   );
 }

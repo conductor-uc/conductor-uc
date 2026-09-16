@@ -81,7 +81,23 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
         method: 'POST',
         url: `/v1/tenants/${tenantId}/extensions`,
         headers: actorHeaders(tenantId),
-        payload: { number: '101', displayName: 'Front Desk' },
+        payload: {
+          number: '101',
+          displayName: 'Front Desk',
+          emergencyLocationId: (
+            await h.emergencyLocations.create(
+              { tenantId },
+              {
+                label: 'Test Location',
+                addressLine1: '123 Main St',
+                city: 'Springfield',
+                state: 'IL',
+                postalCode: '62701',
+                country: 'US',
+              },
+            )
+          ).id,
+        },
       });
 
       expect(response.statusCode).toBe(201);
@@ -97,14 +113,46 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
         method: 'POST',
         url: `/v1/tenants/${tenantId}/extensions`,
         headers: actorHeaders(tenantId),
-        payload: { number: '101', displayName: 'A' },
+        payload: {
+          number: '101',
+          displayName: 'A',
+          emergencyLocationId: (
+            await h.emergencyLocations.create(
+              { tenantId },
+              {
+                label: 'Test Location',
+                addressLine1: '123 Main St',
+                city: 'Springfield',
+                state: 'IL',
+                postalCode: '62701',
+                country: 'US',
+              },
+            )
+          ).id,
+        },
       });
 
       const response = await app.inject({
         method: 'POST',
         url: `/v1/tenants/${tenantId}/extensions`,
         headers: actorHeaders(tenantId),
-        payload: { number: '101', displayName: 'B' },
+        payload: {
+          number: '101',
+          displayName: 'B',
+          emergencyLocationId: (
+            await h.emergencyLocations.create(
+              { tenantId },
+              {
+                label: 'Test Location',
+                addressLine1: '123 Main St',
+                city: 'Springfield',
+                state: 'IL',
+                postalCode: '62701',
+                country: 'US',
+              },
+            )
+          ).id,
+        },
       });
 
       expect(response.statusCode).toBe(409);
@@ -119,7 +167,23 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
         method: 'POST',
         url: `/v1/tenants/${tenantId}/extensions`,
         headers: actorHeaders(tenantId),
-        payload: { number: 'not-a-number', displayName: 'A' },
+        payload: {
+          number: 'not-a-number',
+          displayName: 'A',
+          emergencyLocationId: (
+            await h.emergencyLocations.create(
+              { tenantId },
+              {
+                label: 'Test Location',
+                addressLine1: '123 Main St',
+                city: 'Springfield',
+                state: 'IL',
+                postalCode: '62701',
+                country: 'US',
+              },
+            )
+          ).id,
+        },
       });
 
       expect(response.statusCode).toBe(400);
@@ -132,7 +196,23 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
         method: 'POST',
         url: `/v1/tenants/${tenantId}/extensions`,
         headers: actorHeaders(tenantId),
-        payload: { number: '101', displayName: 'A' },
+        payload: {
+          number: '101',
+          displayName: 'A',
+          emergencyLocationId: (
+            await h.emergencyLocations.create(
+              { tenantId },
+              {
+                label: 'Test Location',
+                addressLine1: '123 Main St',
+                city: 'Springfield',
+                state: 'IL',
+                postalCode: '62701',
+                country: 'US',
+              },
+            )
+          ).id,
+        },
       });
 
       expect(response.statusCode).toBe(409);
@@ -148,7 +228,23 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
         method: 'POST',
         url: `/v1/tenants/${tenantId}/extensions`,
         headers: actorHeaders(tenantId),
-        payload: { number: '101', displayName: 'A' },
+        payload: {
+          number: '101',
+          displayName: 'A',
+          emergencyLocationId: (
+            await h.emergencyLocations.create(
+              { tenantId },
+              {
+                label: 'Test Location',
+                addressLine1: '123 Main St',
+                city: 'Springfield',
+                state: 'IL',
+                postalCode: '62701',
+                country: 'US',
+              },
+            )
+          ).id,
+        },
       });
 
       const response = await app.inject({
@@ -171,7 +267,23 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
           method: 'POST',
           url: `/v1/tenants/${tenantId}/extensions`,
           headers: actorHeaders(tenantId),
-          payload: { number: '101', displayName: 'A' },
+          payload: {
+            number: '101',
+            displayName: 'A',
+            emergencyLocationId: (
+              await h.emergencyLocations.create(
+                { tenantId },
+                {
+                  label: 'Test Location',
+                  addressLine1: '123 Main St',
+                  city: 'Springfield',
+                  state: 'IL',
+                  postalCode: '62701',
+                  country: 'US',
+                },
+              )
+            ).id,
+          },
         })
         .then((r) => r.json<{ id: string }>());
 
@@ -209,7 +321,23 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
           method: 'POST',
           url: `/v1/tenants/${tenantId}/extensions`,
           headers: actorHeaders(tenantId),
-          payload: { number: '101', displayName: 'A' },
+          payload: {
+            number: '101',
+            displayName: 'A',
+            emergencyLocationId: (
+              await h.emergencyLocations.create(
+                { tenantId },
+                {
+                  label: 'Test Location',
+                  addressLine1: '123 Main St',
+                  city: 'Springfield',
+                  state: 'IL',
+                  postalCode: '62701',
+                  country: 'US',
+                },
+              )
+            ).id,
+          },
         })
         .then((r) => r.json<{ id: string }>());
 
@@ -241,7 +369,23 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
           method: 'POST',
           url: `/v1/tenants/${tenantId}/extensions`,
           headers: actorHeaders(tenantId),
-          payload: { number: '101', displayName: 'A' },
+          payload: {
+            number: '101',
+            displayName: 'A',
+            emergencyLocationId: (
+              await h.emergencyLocations.create(
+                { tenantId },
+                {
+                  label: 'Test Location',
+                  addressLine1: '123 Main St',
+                  city: 'Springfield',
+                  state: 'IL',
+                  postalCode: '62701',
+                  country: 'US',
+                },
+              )
+            ).id,
+          },
         })
         .then((r) => r.json<{ id: string }>());
 
@@ -280,7 +424,23 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
           method: 'POST',
           url: `/v1/tenants/${tenantId}/extensions`,
           headers: actorHeaders(tenantId),
-          payload: { number: '101', displayName: 'A' },
+          payload: {
+            number: '101',
+            displayName: 'A',
+            emergencyLocationId: (
+              await h.emergencyLocations.create(
+                { tenantId },
+                {
+                  label: 'Test Location',
+                  addressLine1: '123 Main St',
+                  city: 'Springfield',
+                  state: 'IL',
+                  postalCode: '62701',
+                  country: 'US',
+                },
+              )
+            ).id,
+          },
         })
         .then((r) => r.json<{ id: string }>());
 

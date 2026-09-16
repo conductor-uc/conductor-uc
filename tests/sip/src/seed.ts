@@ -30,6 +30,7 @@ import {
 } from '@cuc/org-service/dist/src/repo/org.repo.js';
 import type { OrgServiceDb } from '@cuc/org-service/dist/src/schema.js';
 import { createOrgClient } from '@cuc/pbx-config-service/dist/src/org-client.js';
+import { createEmergencyLocationRepo } from '@cuc/pbx-config-service/dist/src/repo/emergency-location.repo.js';
 import {
   createExtensionRepo,
   ExtensionNumberTakenError,
@@ -61,6 +62,14 @@ export interface SeedResult {
    * `setLimits` below.
    */
   readonly tenantFraud: { readonly id: string; readonly fqdn: string };
+  /**
+   * S2-06: a tenant dedicated to emergency-calling tests, kept separate from
+   * `tenantFraud` for the same reason `tenantFraud` is kept separate from
+   * `tenantOutbound` — this suite's own test also calls `setTenantLimits`
+   * (to prove the channel-limit bypass), and needs its own emergency route
+   * (a trunk-service resource) no other test should see.
+   */
+  readonly tenantEmergency: { readonly id: string; readonly fqdn: string };
   /** `{ number: { password, realm } }`, one entry per seeded extension. */
   readonly extensions: Record<string, { readonly password: string; readonly realm: string }>;
 }
@@ -152,6 +161,32 @@ export async function seed(): Promise<SeedResult> {
       CRYPTO_KEK_CURRENT: env('CRYPTO_KEK_CURRENT'),
     });
     const extensionRepo = createExtensionRepo(pbxDb, orgClient.primaryDomain, kek);
+    const emergencyLocationRepo = createEmergencyLocationRepo(pbxDb);
+
+    /**
+     * S2-06: `extensionRepo.create` now requires a real `emergency_locations`
+     * id (G-1 — an extension cannot be provisioned without one). One shared
+     * location per tenant is enough for this suite's own purposes (nothing
+     * here tests emergency-location content) — found by its own fixed
+     * `label` rather than tracked separately, the same "safe to re-run"
+     * idempotency `seedExtension` below already needs for the extension
+     * itself.
+     */
+    async function findOrCreateEmergencyLocation(tenantId: string): Promise<string> {
+      const ctx = { tenantId };
+      const existing = await emergencyLocationRepo.list(ctx);
+      const found = existing.find((location) => location.label === 'SIP Test Location');
+      if (found !== undefined) return found.id;
+      const created = await emergencyLocationRepo.create(ctx, {
+        label: 'SIP Test Location',
+        addressLine1: '1 Test Way',
+        city: 'Testville',
+        state: 'CA',
+        postalCode: '94000',
+        country: 'US',
+      });
+      return created.id;
+    }
 
     let master: Org;
     try {
@@ -209,6 +244,14 @@ export async function seed(): Promise<SeedResult> {
       'fraud',
       'Toll-fraud controls test tenant',
     );
+    const tenantEmergency = await findOrCreateOrg(
+      orgRepo,
+      orgDb,
+      'tenant',
+      reseller.id,
+      'emergency',
+      'Emergency calling test tenant',
+    );
 
     const extensions: SeedResult['extensions'] = {};
 
@@ -219,7 +262,11 @@ export async function seed(): Promise<SeedResult> {
     ): Promise<void> {
       let password: string;
       try {
-        const created = await extensionRepo.create({ tenantId }, { number, displayName });
+        const emergencyLocationId = await findOrCreateEmergencyLocation(tenantId);
+        const created = await extensionRepo.create(
+          { tenantId },
+          { number, displayName, emergencyLocationId },
+        );
         const revealed = await extensionRepo.reveal({ tenantId }, created.id);
         password = revealed.password;
       } catch (error) {
@@ -244,6 +291,7 @@ export async function seed(): Promise<SeedResult> {
     await seedExtension(tenantSuspended.id, '103', 'SIP Test 103 (suspended)');
     await seedExtension(tenantOutbound.id, '104', 'SIP Test 104 (outbound failover)');
     await seedExtension(tenantFraud.id, '105', 'SIP Test 105 (toll-fraud controls)');
+    await seedExtension(tenantEmergency.id, '106', 'SIP Test 106 (emergency calling)');
 
     // Suspended last, and idempotent: `suspend()` on an already-suspended
     // tenant is a real InvalidOrgStatusTransitionError, not "nothing to do".
@@ -267,6 +315,10 @@ export async function seed(): Promise<SeedResult> {
       tenantOutbound: {
         id: tenantOutbound.id,
         fqdn: await tenantFqdn(orgDb, tenantOutbound.id),
+      },
+      tenantEmergency: {
+        id: tenantEmergency.id,
+        fqdn: await tenantFqdn(orgDb, tenantEmergency.id),
       },
       tenantFraud: {
         id: tenantFraud.id,

@@ -63,6 +63,7 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 | `user.manage` / `role.manage` / `grant.manage` | config | Org admins |
 | `extension.manage`, `did.manage`, `group.manage`, `queue.manage`, `schedule.manage`, `media.manage` | config | Tenant admin, reseller admin |
 | `trunk.manage` | config | Reseller admin, tenant admin (opt-in) |
+| `emergency_location.manage`, `emergency_route.manage` | config | Tenant admin, reseller admin — G-1: the reseller carries the compliance obligation, but a tenant admin provisions its own extensions' locations day to day |
 | `callflow.edit` / `callflow.publish` | config | Tenant admin |
 | `secret.reveal` | secret | Tenant admin (audited) |
 | `recording.policy.manage` | config | Tenant admin |

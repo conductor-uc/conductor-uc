@@ -14,17 +14,22 @@ interface OutboundRouteEventData {
   readonly outboundRouteId: string;
 }
 
+interface EmergencyRouteEventData {
+  readonly emergencyRouteId: string;
+}
+
 export interface TrunkConsumerOptions {
   /** How long one pull waits for a message (`@cuc/events`' default: 1s). Longer in tests. */
   readonly pullTimeoutMs?: number;
 }
 
 /**
- * The `TRUNK` stream consumer (S2-02; S2-04 adds `trunk.outbound_route.*`):
- * `trunk.trunk.created`, `.updated`, `.deleted` keep
- * `opensips.registrant`/`address`/`dr_gateways` in sync with trunk-service,
- * and `trunk.outbound_route.created`, `.updated`, `.deleted` keep
- * `opensips.dr_rules` in sync.
+ * The `TRUNK` stream consumer (S2-02; S2-04 adds `trunk.outbound_route.*`;
+ * S2-06 adds `trunk.emergency_route.*`): `trunk.trunk.created`, `.updated`,
+ * `.deleted` keep `opensips.registrant`/`address`/`dr_gateways` in sync with
+ * trunk-service, and `trunk.outbound_route.*`/`trunk.emergency_route.*` both
+ * keep `opensips.dr_rules` in sync (the same underlying mechanism, sourced
+ * from two different tenant-owned tables).
  *
  * Every event carries only an id (06: events stay thin), so `created`/
  * `updated` both re-fetch current state rather than trusting anything in
@@ -54,6 +59,9 @@ export function createTrunkConsumer(
       'trunk.outbound_route.created',
       'trunk.outbound_route.updated',
       'trunk.outbound_route.deleted',
+      'trunk.emergency_route.created',
+      'trunk.emergency_route.updated',
+      'trunk.emergency_route.deleted',
     ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
     handler: async (envelope, trx) => {
@@ -86,6 +94,22 @@ export function createTrunkConsumer(
           await projection.removeOutboundRoute(
             trx,
             (envelope.data as OutboundRouteEventData).outboundRouteId,
+          );
+          return;
+
+        case 'trunk.emergency_route.created':
+        case 'trunk.emergency_route.updated':
+          await projection.projectEmergencyRoute(
+            trx,
+            tenantId,
+            (envelope.data as EmergencyRouteEventData).emergencyRouteId,
+          );
+          return;
+
+        case 'trunk.emergency_route.deleted':
+          await projection.removeEmergencyRoute(
+            trx,
+            (envelope.data as EmergencyRouteEventData).emergencyRouteId,
           );
           return;
 

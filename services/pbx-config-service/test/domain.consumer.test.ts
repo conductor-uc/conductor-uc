@@ -83,6 +83,16 @@ describe.skipIf(skipReason !== undefined)('domain consumer (org.domain.added)', 
     const created = await h.extensions.create(ctxFor(tenantId), {
       number: '101',
       displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
     });
     const before = await h.extensions.reveal(ctxFor(tenantId), created.id);
 
@@ -140,6 +150,16 @@ describe.skipIf(skipReason !== undefined)('domain consumer (org.domain.added)', 
     const created = await h.extensions.create(ctxFor(tenantId), {
       number: '101',
       displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
     });
 
     const consumer = createDomainConsumer(h.db, h.bus, h.logger, h.extensions, {

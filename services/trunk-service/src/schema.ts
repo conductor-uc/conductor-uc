@@ -2,10 +2,6 @@ import type { EventTables } from '@cuc/events';
 
 /**
  * This service's own schema (05 §3.4). No cross-schema joins (05 §1.1).
- *
- * `emergency_routes` is still not here — 05 §3.4 lists it under
- * trunk-service too, but it arrives with S2-06 (its own "Depends on: S2-04"
- * line in the plan).
  */
 export interface TrunkServiceDb extends EventTables {
   trunks: {
@@ -65,6 +61,23 @@ export interface TrunkServiceDb extends EventTables {
     strip: number;
     /** Null means prepend nothing. */
     prepend: string | null;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
+  /**
+   * S2-06 (05 §3.4, G-1) — one row per tenant (`emergency_routes_tenant_idx`
+   * unique), a single dedicated trunk for every emergency number: no
+   * `priority`/`strip`/`prepend`/ordered-failover-chain the way
+   * `outbound_routes` has, since G-1's own scope names exactly one trunk
+   * ("a priority emergency route"), not several.
+   */
+  emergency_routes: {
+    id: string;
+    tenant_id: string;
+    trunk_id: string;
+    /** JSON array of direct-dial emergency numbers, e.g. `["911"]`. */
+    numbers: string;
     created_at: Date;
     updated_at: Date;
     version: number;

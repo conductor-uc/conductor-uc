@@ -26,7 +26,7 @@ describe.skipIf(skipReason !== undefined)('trunk-service internal routes', () =>
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'trunk-service', logger: h.logger });
-    registerInternalRoutes(app, h.trunks, h.outboundRoutes, TOKEN);
+    registerInternalRoutes(app, h.trunks, h.outboundRoutes, h.emergencyRoutes, TOKEN);
     await app.ready();
   });
 
@@ -194,6 +194,57 @@ describe.skipIf(skipReason !== undefined)('trunk-service internal routes', () =>
       const response = await app.inject({
         method: 'GET',
         url: '/internal/v1/outbound-routes',
+        headers: { authorization: `Bearer ${TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body: { rows: { id: string }[] } = response.json();
+      expect(body.rows.map((row) => row.id).sort()).toEqual([routeA.id, routeB.id].sort());
+    });
+  });
+
+  describe('GET /internal/v1/tenants/:tenantId/emergency-route', () => {
+    it("returns the tenant's emergency route", async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await h.emergencyRoutes.upsert({ tenantId }, { trunkId, numbers: ['911'] });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${tenantId}/emergency-route`,
+        headers: { authorization: `Bearer ${TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ trunkId, numbers: ['911'] });
+    });
+
+    it('404s a tenant with no emergency route', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${crypto.randomUUID()}/emergency-route`,
+        headers: { authorization: `Bearer ${TOKEN}` },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('GET /internal/v1/emergency-routes', () => {
+    it('lists every emergency route across every tenant', async () => {
+      const tenantA = crypto.randomUUID();
+      const tenantB = crypto.randomUUID();
+      const routeA = await h.emergencyRoutes.upsert(
+        { tenantId: tenantA },
+        { trunkId: crypto.randomUUID(), numbers: ['911'] },
+      );
+      const routeB = await h.emergencyRoutes.upsert(
+        { tenantId: tenantB },
+        { trunkId: crypto.randomUUID(), numbers: ['911'] },
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/v1/emergency-routes',
         headers: { authorization: `Bearer ${TOKEN}` },
       });
 

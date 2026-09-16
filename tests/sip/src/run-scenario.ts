@@ -98,6 +98,7 @@ export interface SeedResult {
   readonly tenantSuspended: { readonly id: string; readonly fqdn: string };
   readonly tenantOutbound: { readonly id: string; readonly fqdn: string };
   readonly tenantFraud: { readonly id: string; readonly fqdn: string };
+  readonly tenantEmergency: { readonly id: string; readonly fqdn: string };
   readonly extensions: Record<string, SeedExtension>;
 }
 
@@ -725,7 +726,7 @@ export async function startDelayedCaller(opts: {
  * parsed back out below.
  */
 export async function dockerCurlJson(
-  method: 'GET' | 'POST' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   url: string,
   body?: unknown,
 ): Promise<{ status: number; json: unknown }> {

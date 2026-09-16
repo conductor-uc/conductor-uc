@@ -3,7 +3,12 @@ import type { Logger } from '@cuc/logger';
 
 import type { OpenSipsMiClient } from './opensips-mi-client.js';
 import type { PbxConfigClient } from './pbx-config-client.js';
-import type { OutboundRouteRow, ReadModelRepo, TrunkRow } from './repo/read-model.repo.js';
+import type {
+  EmergencyRouteRow,
+  OutboundRouteRow,
+  ReadModelRepo,
+  TrunkRow,
+} from './repo/read-model.repo.js';
 import {
   DR_TAG_WIDTH,
   drTag,
@@ -12,7 +17,12 @@ import {
   type OpenSipsProjectionRepo,
 } from './repo/opensips-projection.repo.js';
 import type { TelephonyConfigDb } from './schema.js';
-import type { OutboundRouteConfig, TrunkConfig, TrunkConfigClient } from './trunk-config-client.js';
+import type {
+  EmergencyRouteConfig,
+  OutboundRouteConfig,
+  TrunkConfig,
+  TrunkConfigClient,
+} from './trunk-config-client.js';
 
 /**
  * `dr_gateways.attrs` for a trunk with a register credential (S2-04) —
@@ -121,6 +131,7 @@ export function createProjection(
         realm: credential.realm,
         callerIdName: credential.callerIdName,
         callerIdNumber: credential.callerIdNumber,
+        emergencyLocationId: credential.emergencyLocationId,
       });
 
       if (
@@ -364,6 +375,86 @@ export function createProjection(
       await opensips.deleteDrRule(outboundRouteId);
       await mi.call('dr_reload');
     },
+
+    /**
+     * Fetches the tenant's current emergency route and projects it into
+     * `dr_rules` (S2-06; G-1) — shared by `trunk.emergency_route.created`
+     * and `.updated`, the same "thin event, re-fetch current state" story
+     * `projectOutboundRoute` tells. One synthesized gateway (reused across
+     * every number — there is only ever one trunk), but one `dr_rules` row
+     * *per number*: `drouting`'s own `prefix` matches a single value, and
+     * `emergency_routes.numbers` can list more than one (e.g. `911`, a
+     * local equivalent). No `strip`/`prepend` — G-1's own "direct dial, no
+     * prefix" means the number reaches the carrier exactly as dialed, and
+     * `strip` only needs to eat this route's own tenant tag, not
+     * `route.strip` (there is no such field here at all).
+     */
+    async projectEmergencyRoute(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      emergencyRouteId: string,
+    ): Promise<void> {
+      const route = await trunkConfig.findEmergencyRoute(tenantId);
+      if (route === undefined || route.id !== emergencyRouteId) {
+        logger.warn(
+          { tenantId, emergencyRouteId },
+          'emergency route not found (or superseded) in trunk-service',
+        );
+        return;
+      }
+
+      const groupId = await readModel.findOrCreateDrGroupId(trx, tenantId);
+      await opensips.deleteOutboundGatewaysForRoute(route.id);
+      await opensips.deleteDrRulesByDescriptionPrefix(route.id);
+
+      const trunk = await readModel.findTrunkById(route.trunkId);
+      if (trunk === undefined) {
+        logger.warn(
+          { emergencyRouteId: route.id, trunkId: route.trunkId },
+          'emergency route names a trunk this service has not projected; skipping it',
+        );
+        await readModel.upsertEmergencyRoute(trx, toEmergencyRouteRow(route));
+        await mi.call('dr_reload');
+        return;
+      }
+
+      await opensips.upsertOutboundGateway({
+        routeId: route.id,
+        trunkId: route.trunkId,
+        address: `${trunk.host}:${String(trunk.port)}`,
+        description: `${trunk.name} (emergency)`,
+        strip: DR_TAG_WIDTH,
+        prepend: null,
+        attrs: drGatewayAttrsFor(trunk),
+      });
+      const gwid = outboundGwid(route.id, route.trunkId);
+
+      for (const number of route.numbers) {
+        await opensips.upsertDrRule({
+          routeId: `${route.id}:${number}`,
+          prefix: drTag(groupId) + number,
+          priority: 0,
+          gwlist: [gwid],
+        });
+      }
+
+      await readModel.upsertEmergencyRoute(trx, toEmergencyRouteRow(route));
+      await mi.call('dr_reload');
+    },
+
+    /**
+     * `trunk.emergency_route.deleted`: remove the local mirror, the
+     * synthesized gateway, and every per-number `dr_rules` row it fed.
+     */
+    async removeEmergencyRoute(
+      trx: Transaction<TelephonyConfigDb>,
+      emergencyRouteId: string,
+    ): Promise<void> {
+      await readModel.deleteEmergencyRoute(trx, emergencyRouteId);
+      await opensips.deleteOutboundGatewaysForRoute(emergencyRouteId);
+      await opensips.deleteDrRulesByDescriptionPrefix(emergencyRouteId);
+      await mi.call('dr_reload');
+    },
   };
 }
 
@@ -376,6 +467,15 @@ function toOutboundRouteRow(route: OutboundRouteConfig): OutboundRouteRow {
     trunkIds: route.trunkIds,
     strip: route.strip,
     prepend: route.prepend,
+  };
+}
+
+function toEmergencyRouteRow(route: EmergencyRouteConfig): EmergencyRouteRow {
+  return {
+    id: route.id,
+    tenantId: route.tenantId,
+    trunkId: route.trunkId,
+    numbers: route.numbers,
   };
 }
 

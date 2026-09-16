@@ -5,6 +5,7 @@ import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
 import { InvalidExtensionNumberError } from '../domain/numbering.js';
 import {
+  EmergencyLocationNotFoundError,
   ExtensionNotFoundError,
   ExtensionNumberTakenError,
   TenantDomainNotFoundError,
@@ -25,6 +26,7 @@ const ExtensionSchema = Type.Object({
   callerIdName: Type.Union([Type.String(), Type.Null()]),
   callerIdNumber: Type.Union([Type.String(), Type.Null()]),
   voicemailEnabled: Type.Boolean(),
+  emergencyLocationId: Type.String(),
 });
 type ExtensionResponse = Static<typeof ExtensionSchema>;
 
@@ -35,6 +37,9 @@ const CreateExtensionBodySchema = Type.Object({
   callerIdName: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
   callerIdNumber: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
   voicemailEnabled: Type.Optional(Type.Boolean()),
+  // Required, not optional — G-1/issue #96: an extension cannot be created
+  // without a dispatchable emergency location.
+  emergencyLocationId: Type.String({ minLength: 1 }),
 });
 
 const UpdateExtensionBodySchema = Type.Object({
@@ -44,6 +49,7 @@ const UpdateExtensionBodySchema = Type.Object({
   callerIdName: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
   callerIdNumber: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
   voicemailEnabled: Type.Optional(Type.Boolean()),
+  emergencyLocationId: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 const RevealBodySchema = Type.Object({
@@ -64,6 +70,7 @@ function toResponse(extension: {
   callerIdName: string | null;
   callerIdNumber: string | null;
   voicemailEnabled: boolean;
+  emergencyLocationId: string;
 }): ExtensionResponse {
   return {
     id: extension.id,
@@ -73,6 +80,7 @@ function toResponse(extension: {
     callerIdName: extension.callerIdName,
     callerIdNumber: extension.callerIdNumber,
     voicemailEnabled: extension.voicemailEnabled,
+    emergencyLocationId: extension.emergencyLocationId,
   };
 }
 
@@ -100,6 +108,9 @@ function toProblem(error: unknown): ProblemError {
     return ProblemError.conflict(error.message, { code: 'tenant_domain_not_found' });
   }
   if (error instanceof ExtensionNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof EmergencyLocationNotFoundError) {
+    return ProblemError.badRequest(error.message, { code: 'emergency_location_not_found' });
+  }
   throw error;
 }
 
