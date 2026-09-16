@@ -223,6 +223,26 @@ describe.skipIf(skipReason !== undefined)('trunk repo', () => {
       expect(ips.map((ip) => ip.cidr).sort()).toEqual(['198.51.100.5/32', '203.0.113.0/24']);
     });
 
+    it('enqueues trunk.trunk.updated so telephony-config re-projects the address table', async () => {
+      const tenantId = crypto.randomUUID();
+      h.resellers.resellerIds[tenantId] = 'reseller-a';
+      const created = await h.trunks.create(ctxFor(tenantId), ipModeInput);
+
+      await h.trunks.addIp(ctxFor(tenantId), created.id, '203.0.113.0/24');
+
+      const rows = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['type', 'tenant_id as tenantId', 'payload'])
+        .where('type', '=', 'trunk.trunk.updated')
+        .execute();
+      expect(rows).toContainEqual(
+        expect.objectContaining({
+          tenantId,
+          payload: { trunkId: created.id },
+        }),
+      );
+    });
+
     it('404s adding an IP to a nonexistent trunk', async () => {
       const tenantId = crypto.randomUUID();
       await expect(
@@ -239,6 +259,14 @@ describe.skipIf(skipReason !== undefined)('trunk repo', () => {
       await h.trunks.removeIp(ctxFor(tenantId), created.id, ip.id);
 
       expect(await h.trunks.listIps(ctxFor(tenantId), created.id)).toEqual([]);
+
+      const rows = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['type', 'tenant_id as tenantId'])
+        .where('type', '=', 'trunk.trunk.updated')
+        .where('tenant_id', '=', tenantId)
+        .execute();
+      expect(rows.length).toBeGreaterThanOrEqual(1);
     });
 
     it('404s removing a nonexistent IP', async () => {

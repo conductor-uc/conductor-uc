@@ -21,6 +21,19 @@ export interface DigestCredential {
   readonly realm: string;
 }
 
+/**
+ * A DID's current state (S2-03) — what `pbx.did.*`'s "thin event, re-fetch
+ * current state" projection (`projection.ts`'s `projectDid`) fetches to keep
+ * telephony-config's own local `dids` mirror current.
+ */
+export interface DidConfig {
+  readonly id: string;
+  readonly e164: string;
+  readonly trunkId: string;
+  readonly destinationType: string;
+  readonly destinationId: string;
+}
+
 export class PbxConfigClientError extends Error {
   override readonly name = 'PbxConfigClientError';
 }
@@ -36,6 +49,8 @@ export interface PbxConfigClientOptions {
 export interface PbxConfigClient {
   /** Undefined when the extension does not exist in that tenant (a 404). */
   findCredential(tenantId: string, extensionId: string): Promise<DigestCredential | undefined>;
+  /** Undefined when the DID does not exist in that tenant (a 404). */
+  findDid(tenantId: string, didId: string): Promise<DidConfig | undefined>;
 }
 
 export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfigClient {
@@ -68,6 +83,30 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
       }
 
       return (await response.json()) as DigestCredential;
+    },
+
+    async findDid(tenantId: string, didId: string): Promise<DidConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/dids/${encodeURIComponent(didId)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the DID lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return (await response.json()) as DidConfig;
     },
   };
 }

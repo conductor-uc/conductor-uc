@@ -1,6 +1,7 @@
 import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
+import type { DidRepo } from '../repo/did.repo.js';
 import type { ExtensionRepo } from '../repo/extension.repo.js';
 
 const ParamsSchema = Type.Object({
@@ -14,6 +15,20 @@ const CredentialResponseSchema = Type.Object({
   ha1: Type.String(),
   ha1b: Type.String(),
   realm: Type.String(),
+});
+const DidResponseSchema = Type.Object({
+  id: Type.String(),
+  e164: Type.String(),
+  trunkId: Type.String(),
+  destinationType: Type.Union([
+    Type.Literal('extension'),
+    Type.Literal('ring_group'),
+    Type.Literal('flow'),
+    Type.Literal('queue'),
+    Type.Literal('conference'),
+    Type.Literal('voicemail'),
+  ]),
+  destinationId: Type.String(),
 });
 
 /**
@@ -34,6 +49,7 @@ const CredentialResponseSchema = Type.Object({
 export function registerInternalRoutes(
   app: Server,
   extensions: ExtensionRepo,
+  dids: DidRepo,
   internalServiceToken: string,
 ): void {
   app.get(
@@ -54,6 +70,40 @@ export function registerInternalRoutes(
         throw ProblemError.notFound('No extension with that id in that tenant.');
       }
       return credential satisfies Static<typeof CredentialResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/dids/:id` (S2-03) — how
+   * telephony-config's `pbx.did.*` consumer re-fetches a DID's current state
+   * to project into its own local read model (`pbx.consumer.ts`'s "thin
+   * event" pattern, the same shape this file's extension route already
+   * serves).
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/dids/:id',
+    {
+      config: { public: true },
+      schema: { params: ParamsSchema, response: { 200: DidResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      const did = await dids.findById({ tenantId }, id);
+      if (did === undefined) {
+        throw ProblemError.notFound('No DID with that id in that tenant.');
+      }
+      return {
+        id: did.id,
+        e164: did.e164,
+        trunkId: did.trunkId,
+        destinationType: did.destinationType,
+        destinationId: did.destinationId,
+      } satisfies Static<typeof DidResponseSchema>;
     },
   );
 }

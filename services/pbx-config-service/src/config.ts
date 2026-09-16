@@ -20,9 +20,12 @@ export const configSchema = Type.Object({
 
   /** Base URL for org-service's internal API, e.g. http://org-service:8080. */
   ORG_SERVICE_URL: Env.url(),
+  /** Base URL for trunk-service's internal API, e.g. http://trunk-service:8080 (S2-03). */
+  TRUNK_SERVICE_URL: Env.url(),
   /**
-   * Shared bearer token org-service's `/internal/v1` routes expect
-   * (07 §1's precedent) — must match that service's own INTERNAL_SERVICE_TOKEN.
+   * Shared bearer token org-service's/trunk-service's `/internal/v1` routes
+   * expect (07 §1's precedent) — must match those services' own
+   * INTERNAL_SERVICE_TOKEN.
    */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
 });

@@ -103,4 +103,25 @@ export interface TelephonyConfigDb extends EventTables {
     cidr: string;
     created_at: Date;
   };
+  /**
+   * S2-03's own local mirror of pbx-config-service's `dids` table — what
+   * `/fs/dialplan`'s from-trunk lookup resolves against (03 §3.2's "from-
+   * trunk: DID → destination"). Unlike `registrant`/`address`, a DID has no
+   * `opensips` schema counterpart at all: routing a DID to its destination
+   * is entirely FS's own dialplan decision, not anything OpenSIPs' script
+   * needs to know about, so this table exists only here and is never
+   * diffed by `reconcile.ts` against a projected OpenSIPs table (there is
+   * none) — the same "list everything" gap `reconcile.ts` already has for
+   * org-service/pbx-config-service applies here too (docs/decisions.md G-16).
+   */
+  dids: {
+    id: string;
+    tenant_id: string;
+    e164: string;
+    trunk_id: string;
+    destination_type: string;
+    destination_id: string;
+    created_at: Date;
+    updated_at: Date;
+  };
 }

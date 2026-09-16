@@ -10,19 +10,26 @@ interface ExtensionEventData {
   readonly extensionId: string;
 }
 
+interface DidEventData {
+  readonly didId: string;
+}
+
 export interface PbxConsumerOptions {
   /** How long one pull waits for a message (`@cuc/events`' default: 1s). Longer in tests. */
   readonly pullTimeoutMs?: number;
 }
 
 /**
- * The `PBX` stream consumer (S1-12): `pbx.extension.created`, `.updated`,
- * `.deleted` — keeps `opensips.subscriber` in sync with pbx-config-service.
+ * The `PBX` stream consumer (S1-12; S2-03 added `pbx.did.*`):
+ * `pbx.extension.created`, `.updated`, `.deleted` keep `opensips.subscriber`
+ * in sync with pbx-config-service, and `pbx.did.created`, `.updated`,
+ * `.deleted` keep this service's own local `dids` mirror in sync (no
+ * `opensips` counterpart — `projection.ts`'s `projectDid` comment).
  *
- * Every event carries only `extensionId` (06: events stay thin), so
- * `created`/`updated` both re-fetch the extension's current digest
- * credential rather than trusting anything in the payload — see
- * `projection.ts`'s `projectExtension` for why `updated` is not a no-op.
+ * Every event carries only an id (06: events stay thin), so `created`/
+ * `updated` both re-fetch current state rather than trusting anything in the
+ * payload — see `projection.ts`'s `projectExtension`/`projectDid` for why
+ * `updated` is not a no-op.
  *
  * `envelope.orgContext.tenantId` is trusted here: pbx-config-service's own
  * `extension.repo.ts` sets it explicitly on every `pbx.extension.*` event
@@ -42,24 +49,43 @@ export function createPbxConsumer(
     logger,
     registry: telephonyEvents,
     durable: 'telephony-config-pbx',
-    subjects: ['pbx.extension.created', 'pbx.extension.updated', 'pbx.extension.deleted'],
+    subjects: [
+      'pbx.extension.created',
+      'pbx.extension.updated',
+      'pbx.extension.deleted',
+      'pbx.did.created',
+      'pbx.did.updated',
+      'pbx.did.deleted',
+    ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
     handler: async (envelope, trx) => {
-      const data = envelope.data as ExtensionEventData;
       const tenantId = envelope.orgContext.tenantId;
       if (tenantId === undefined) {
-        logger.warn({ eventId: envelope.id }, 'pbx.extension event with no tenantId; skipping');
+        logger.warn({ eventId: envelope.id }, 'pbx event with no tenantId; skipping');
         return;
       }
 
       switch (envelope.type) {
         case 'pbx.extension.created':
         case 'pbx.extension.updated':
-          await projection.projectExtension(trx, tenantId, data.extensionId);
+          await projection.projectExtension(
+            trx,
+            tenantId,
+            (envelope.data as ExtensionEventData).extensionId,
+          );
           return;
 
         case 'pbx.extension.deleted':
-          await projection.removeExtension(trx, data.extensionId);
+          await projection.removeExtension(trx, (envelope.data as ExtensionEventData).extensionId);
+          return;
+
+        case 'pbx.did.created':
+        case 'pbx.did.updated':
+          await projection.projectDid(trx, tenantId, (envelope.data as DidEventData).didId);
+          return;
+
+        case 'pbx.did.deleted':
+          await projection.removeDid(trx, (envelope.data as DidEventData).didId);
           return;
 
         default:

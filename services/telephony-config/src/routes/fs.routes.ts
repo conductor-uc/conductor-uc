@@ -3,6 +3,7 @@ import { secretEquals } from '@cuc/crypto';
 import type { Server } from '@cuc/http';
 import type { Logger } from '@cuc/logger';
 
+import { fromContextId } from '../context-id.js';
 import type { ReadModelRepo } from '../repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../schema.js';
 import { buildDialplanDocument, buildDirectoryDocument, NOT_FOUND_DOCUMENT } from '../xml.js';
@@ -113,22 +114,14 @@ export function registerFsRoutes(
     if (body.section !== 'dialplan') return NOT_FOUND_DOCUMENT;
 
     // Trusted signals only (03 §3.2: "Tenant data is never inferred from
-    // the context name"): OpenSIPs sets both as custom SIP headers on the
+    // the context name"): OpenSIPs sets these as custom SIP headers on the
     // leg toward FS, which FreeSWITCH auto-exposes as `sip_h_*` channel
     // variables — confirmed live, not assumed.
-    const tenantId = body['variable_sip_h_X-Tenant-Id'];
     const callDirection = body['variable_sip_h_X-Call-Direction'];
     const destinationNumber = body['Caller-Destination-Number'];
     const callerContext = body['Caller-Context'];
 
-    // Only ext→ext is in scope this task (S1-13's own line: "extension-to-
-    // extension dialing within the tenant... calls to unknown numbers
-    // rejected"). `from-trunk` DID routing is S2-03; anything else is
-    // honestly out of scope, not silently guessed at.
     if (
-      callDirection !== 'internal' ||
-      tenantId === undefined ||
-      tenantId === '' ||
       destinationNumber === undefined ||
       destinationNumber === '' ||
       callerContext === undefined ||
@@ -137,25 +130,111 @@ export function registerFsRoutes(
       return NOT_FOUND_DOCUMENT;
     }
 
-    const extension = await readModel.findExtensionByNumber(tenantId, destinationNumber);
-    if (extension === undefined) {
-      logger.info(
-        { tenantId, destinationNumber },
-        'dialplan: no extension with that number in this tenant',
+    if (callDirection === 'internal') {
+      const tenantId = body['variable_sip_h_X-Tenant-Id'];
+      if (tenantId === undefined || tenantId === '') return NOT_FOUND_DOCUMENT;
+
+      const extension = await readModel.findExtensionByNumber(tenantId, destinationNumber);
+      if (extension === undefined) {
+        logger.info(
+          { tenantId, destinationNumber },
+          'dialplan: no extension with that number in this tenant',
+        );
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      // The bridge's R-URI needs the tenant's own SIP domain (`xml.ts`'s own
+      // doc comment on why) — not derivable from any trusted request field,
+      // so this is the one dialplan lookup that also needs a domain read.
+      const domain = await readModel.findDomain(db.kysely, tenantId);
+      if (domain === undefined) {
+        logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      return buildDialplanDocument(callerContext, destinationNumber, domain.fqdn, opensipsSipUri);
+    }
+
+    if (callDirection === 'inbound') {
+      // `route{}`'s from-trunk case (S2-03; `opensips.cfg.template`'s
+      // `check_source_address` branch) — the trunk's id, `context_info`'s
+      // hyphens stripped (03 §2's header-setting story; `context-id.ts`).
+      // Trunk identity, not tenant, is what OpenSIPs can actually vouch for
+      // here (the `address` table's own row only carries a trunk id) — the
+      // owning tenant comes from this service's own already-projected trunk
+      // mirror below, not from anything the request itself claims.
+      const trunkContextId = body['variable_sip_h_X-Trunk-Id'];
+      if (trunkContextId === undefined || trunkContextId === '') return NOT_FOUND_DOCUMENT;
+
+      const trunk = await readModel.findTrunkById(fromContextId(trunkContextId));
+      if (trunk === undefined) {
+        logger.warn({ trunkContextId }, 'dialplan: no projected trunk for that context id');
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      // Scoped to the *trunk's* tenant: a DID owned by a different tenant is
+      // simply not found here (`did.repo.ts`'s own comment on why
+      // `scoped(ctx)` alone gives this for free) — this task's own "Done
+      // when": "a DID owned by tenant B that arrives on tenant A's trunk is
+      // rejected".
+      const did = await readModel.findDidByE164(trunk.tenantId, destinationNumber);
+      if (did === undefined) {
+        logger.info(
+          { tenantId: trunk.tenantId, destinationNumber },
+          'dialplan: no DID with that number on this trunk’s tenant',
+        );
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      // Bound to a *different* trunk of the same tenant: still a reject, not
+      // just a tenant check (05 §3.3: a DID is bound to one specific trunk).
+      if (did.trunkId !== trunk.id) {
+        logger.info(
+          { didId: did.id, trunkId: trunk.id },
+          'dialplan: DID is bound to a different trunk',
+        );
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      // Only `extension` resolves to a real call through S2-03 — every other
+      // destination type has no owning subsystem yet (docs/decisions.md
+      // G-25), so this is an honest miss, not a guess at behavior only a
+      // later stage can define.
+      if (did.destinationType !== 'extension') {
+        logger.info(
+          { didId: did.id, destinationType: did.destinationType },
+          'dialplan: DID destination type has no owning subsystem yet',
+        );
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      const extension = await readModel.findExtensionById(did.destinationId);
+      if (extension === undefined) {
+        logger.warn(
+          { didId: did.id, destinationId: did.destinationId },
+          'dialplan: DID’s destination extension no longer exists',
+        );
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      const domain = await readModel.findDomain(db.kysely, trunk.tenantId);
+      if (domain === undefined) {
+        logger.warn({ tenantId: trunk.tenantId }, 'dialplan: tenant has no projected domain');
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      return buildDialplanDocument(
+        callerContext,
+        destinationNumber,
+        domain.fqdn,
+        opensipsSipUri,
+        extension.number,
       );
-      return NOT_FOUND_DOCUMENT;
     }
 
-    // The bridge's R-URI needs the tenant's own SIP domain (`xml.ts`'s own
-    // doc comment on why) — not derivable from any trusted request field,
-    // so this is the one dialplan lookup that also needs a domain read.
-    const domain = await readModel.findDomain(db.kysely, tenantId);
-    if (domain === undefined) {
-      logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
-      return NOT_FOUND_DOCUMENT;
-    }
-
-    return buildDialplanDocument(callerContext, destinationNumber, domain.fqdn, opensipsSipUri);
+    // Neither ext→ext (S1-13) nor from-trunk (S2-03) — honestly out of scope,
+    // not silently guessed at.
+    return NOT_FOUND_DOCUMENT;
   });
 
   app.post('/fs/configuration', { config: { public: true } }, async (request, reply) => {

@@ -45,4 +45,24 @@ export interface PbxConfigServiceDb extends EventTables {
     created_at: Date;
     updated_at: Date;
   };
+  /**
+   * S2-03 (05 §3.3). `sms_enabled`/`fax_enabled` are not modeled yet — no
+   * service reads or writes them through S2-03 (`domain/dids.ts`'s own
+   * comment on why), the same incremental-schema-growth pattern `extensions`
+   * above already establishes.
+   */
+  dids: {
+    id: string;
+    tenant_id: string;
+    /** E.164, globally unique across every tenant (`dids_e164_idx`). */
+    e164: string;
+    /** A trunk-service trunk id. Not a local FK: trunk-service is a different service (05 §1.1). */
+    trunk_id: string;
+    destination_type: string;
+    /** An id in whatever table `destination_type` names — `extensions.id` when `destination_type` is `'extension'`. */
+    destination_id: string;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
 }

@@ -1,6 +1,7 @@
 import type { Database } from '@cuc/db';
 import type { Kysely } from 'kysely';
 
+import { fromContextId, toContextId } from '../context-id.js';
 import type { OpenSipsDb } from '../opensips-schema.js';
 
 /**
@@ -11,22 +12,6 @@ import type { OpenSipsDb } from '../opensips-schema.js';
  * `NULL`.
  */
 const REGISTRANT_EXPIRY_SECONDS = 3600;
-
-/** A v4 UUID's hyphens stripped, to fit `address.context_info` (`CHAR(32)`). */
-function toContextId(trunkId: string): string {
-  return trunkId.replace(/-/g, '');
-}
-
-/** The inverse of {@link toContextId} — reassembles a standard 8-4-4-4-12 UUID. */
-function fromContextId(contextId: string): string {
-  return [
-    contextId.slice(0, 8),
-    contextId.slice(8, 12),
-    contextId.slice(12, 16),
-    contextId.slice(16, 20),
-    contextId.slice(20),
-  ].join('-');
-}
 
 /**
  * Writes to the `opensips` schema's `domain` and `subscriber` tables

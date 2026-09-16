@@ -4,7 +4,7 @@ import { connectBus } from '@cuc/events';
 import type { Logger } from '@cuc/logger';
 import { silentLogger, startTestDatabase, startTestNats, type TestNatsHandle } from '@cuc/testing';
 
-import type { DigestCredential, PbxConfigClient } from '../src/pbx-config-client.js';
+import type { DidConfig, DigestCredential, PbxConfigClient } from '../src/pbx-config-client.js';
 import type { OpenSipsMiClient } from '../src/opensips-mi-client.js';
 import type { OpenSipsDb } from '../src/opensips-schema.js';
 import { createProjection, type Projection } from '../src/projection.js';
@@ -63,14 +63,17 @@ function fakeMiClient(): FakeMiClient {
 
 export interface FakePbxConfigClient extends PbxConfigClient {
   credentials: Record<string, DigestCredential>;
+  dids: Record<string, DidConfig>;
 }
 
-/** A digest-credential lookup whose answers are set per test — no live pbx-config-service needed. */
+/** A digest-credential/DID lookup whose answers are set per test — no live pbx-config-service needed. */
 function fakePbxConfigClient(): FakePbxConfigClient {
   const state: FakePbxConfigClient = {
     credentials: {},
+    dids: {},
     findCredential: (_tenantId: string, extensionId: string) =>
       Promise.resolve(state.credentials[extensionId]),
+    findDid: (_tenantId: string, didId: string) => Promise.resolve(state.dids[didId]),
   };
   return state;
 }
@@ -271,6 +274,7 @@ export async function startBusHarness(): Promise<BusHarness> {
 }
 
 export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void> {
+  await db.kysely.deleteFrom('dids').execute();
   await db.kysely.deleteFrom('trunk_ips').execute();
   await db.kysely.deleteFrom('trunks').execute();
   await db.kysely.deleteFrom('extensions').execute();

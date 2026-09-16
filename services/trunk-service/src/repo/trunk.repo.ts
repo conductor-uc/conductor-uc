@@ -436,8 +436,17 @@ export function createTrunkRepo(
       });
     },
 
+    /**
+     * Emits `trunk.trunk.updated` (not a distinct `trunk.ip.*` event, S2-02's
+     * own `dr_gateways`-independent-of-routing precedent for keeping the
+     * event surface small): telephony-config's `projection.ts` re-fetches
+     * the trunk's *full* current state including `ips` on any `.updated`,
+     * the same "thin event" story every other mutation here already tells —
+     * an ip-mode/both trunk's `address` projection depends on this firing,
+     * or it is never re-projected until the next reconciliation pass.
+     */
     async addIp(ctx: DbContext, trunkId: string, cidr: string): Promise<TrunkIp> {
-      requireTenant(ctx);
+      const { tenantId } = requireTenant(ctx);
       const trunk = await db
         .scoped(ctx)
         .selectFrom('trunks')
@@ -449,11 +458,22 @@ export function createTrunkRepo(
       const validated = validateCidr(cidr);
       const id = randomUUID();
       try {
-        await db
-          .scoped(ctx)
-          .insertInto('trunk_ips')
-          .values({ id, trunk_id: trunkId, cidr: validated, created_at: new Date() })
-          .execute();
+        await db.scoped(ctx).transaction(async (trx, raw) => {
+          await trx
+            .insertInto('trunk_ips')
+            .values({ id, trunk_id: trunkId, cidr: validated, created_at: new Date() })
+            .execute();
+
+          await enqueueEvent(raw, trunkEvents, {
+            type: 'trunk.trunk.updated',
+            data: { trunkId },
+            orgContext: { tenantId },
+            ...(ctx.actorId === undefined || ctx.orgId === undefined
+              ? {}
+              : { actor: { type: 'user', id: ctx.actorId, orgId: ctx.orgId } }),
+            ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
+          });
+        });
       } catch (error) {
         if (isDuplicateKeyError(error)) {
           throw new InvalidTrunkConfigError(`'${validated}' is already on this trunk.`);
@@ -465,15 +485,28 @@ export function createTrunkRepo(
     },
 
     async removeIp(ctx: DbContext, trunkId: string, ipId: string): Promise<void> {
-      const result = await db
-        .scoped(ctx)
-        .deleteFrom('trunk_ips')
-        .where('trunk_id', '=', trunkId)
-        .where('id', '=', ipId)
-        .executeTakeFirst();
-      if (Number(result.numDeletedRows) === 0) {
-        throw new TrunkIpNotFoundError(`No IP '${ipId}' on trunk '${trunkId}'.`);
-      }
+      const { tenantId } = requireTenant(ctx);
+
+      await db.scoped(ctx).transaction(async (trx, raw) => {
+        const result = await trx
+          .deleteFrom('trunk_ips')
+          .where('trunk_id', '=', trunkId)
+          .where('id', '=', ipId)
+          .executeTakeFirst();
+        if (Number(result.numDeletedRows) === 0) {
+          throw new TrunkIpNotFoundError(`No IP '${ipId}' on trunk '${trunkId}'.`);
+        }
+
+        await enqueueEvent(raw, trunkEvents, {
+          type: 'trunk.trunk.updated',
+          data: { trunkId },
+          orgContext: { tenantId },
+          ...(ctx.actorId === undefined || ctx.orgId === undefined
+            ? {}
+            : { actor: { type: 'user', id: ctx.actorId, orgId: ctx.orgId } }),
+          ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
+        });
+      });
     },
 
     /**
