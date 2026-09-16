@@ -53,6 +53,14 @@ export interface SeedResult {
    * get a real one.
    */
   readonly tenantOutbound: { readonly id: string; readonly fqdn: string };
+  /**
+   * S2-05: a tenant dedicated to toll-fraud-control tests, kept separate
+   * from `tenantOutbound` (S2-04's own outbound-failover test) even though
+   * both need a real country — those tests run in a different file and
+   * would otherwise race to mutate the *same* tenant's `orgs.limits` via
+   * `setLimits` below.
+   */
+  readonly tenantFraud: { readonly id: string; readonly fqdn: string };
   /** `{ number: { password, realm } }`, one entry per seeded extension. */
   readonly extensions: Record<string, { readonly password: string; readonly realm: string }>;
 }
@@ -193,6 +201,14 @@ export async function seed(): Promise<SeedResult> {
       'outbound',
       'Outbound failover test tenant',
     );
+    const tenantFraud = await findOrCreateOrg(
+      orgRepo,
+      orgDb,
+      'tenant',
+      reseller.id,
+      'fraud',
+      'Toll-fraud controls test tenant',
+    );
 
     const extensions: SeedResult['extensions'] = {};
 
@@ -227,6 +243,7 @@ export async function seed(): Promise<SeedResult> {
     await seedExtension(tenantB.id, '102', 'SIP Test 102 (tenant B)');
     await seedExtension(tenantSuspended.id, '103', 'SIP Test 103 (suspended)');
     await seedExtension(tenantOutbound.id, '104', 'SIP Test 104 (outbound failover)');
+    await seedExtension(tenantFraud.id, '105', 'SIP Test 105 (toll-fraud controls)');
 
     // Suspended last, and idempotent: `suspend()` on an already-suspended
     // tenant is a real InvalidOrgStatusTransitionError, not "nothing to do".
@@ -251,6 +268,10 @@ export async function seed(): Promise<SeedResult> {
         id: tenantOutbound.id,
         fqdn: await tenantFqdn(orgDb, tenantOutbound.id),
       },
+      tenantFraud: {
+        id: tenantFraud.id,
+        fqdn: await tenantFqdn(orgDb, tenantFraud.id),
+      },
       extensions,
     };
     logger.info(result, 'seed complete');
@@ -261,7 +282,42 @@ export async function seed(): Promise<SeedResult> {
   }
 }
 
+/**
+ * S2-05: sets a tenant's `orgs.limits` directly, for a toll-fraud-control
+ * test that needs to change it between cases (the seed data above is only
+ * ever created once, idempotently — this is the one piece of *mutable*
+ * per-test fixture state `seed()` itself has no reason to own). Same
+ * direct-repo-bypass rationale as `seed()`'s own top comment.
+ */
+export async function setLimits(tenantId: string, limits: Record<string, unknown>): Promise<void> {
+  const orgDb = createDatabase<OrgServiceDb>({
+    host: env('ORG_DB_HOST'),
+    port: Number(env('ORG_DB_PORT')),
+    user: env('ORG_DB_USER'),
+    password: env('ORG_DB_PASSWORD'),
+    database: env('ORG_DB_NAME'),
+    poolSize: 2,
+    logger,
+  });
+  try {
+    const orgRepo = createOrgRepo(orgDb, { platformBaseDomain: env('PLATFORM_BASE_DOMAIN') });
+    await orgRepo.update({}, tenantId, { limits });
+  } finally {
+    await orgDb.destroy();
+  }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const result = await seed();
-  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (process.argv[2] === 'set-limits') {
+    const tenantId = process.argv[3];
+    const limitsJson = process.argv[4];
+    if (tenantId === undefined || limitsJson === undefined) {
+      throw new Error('usage: seed.js set-limits <tenantId> <limitsJson>');
+    }
+    await setLimits(tenantId, JSON.parse(limitsJson) as Record<string, unknown>);
+    process.stdout.write('{"ok":true}\n');
+  } else {
+    const result = await seed();
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  }
 }

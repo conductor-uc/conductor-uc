@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeToE164 } from '../src/domain/e164.js';
+import { destinationCountry, normalizeToE164 } from '../src/domain/e164.js';
 
 describe('normalizeToE164', () => {
   // +1 415 555 2671 is libphonenumber's own documented example US number —
@@ -32,5 +32,19 @@ describe('normalizeToE164', () => {
 
   it('returns undefined for non-digit garbage', () => {
     expect(normalizeToE164('not-a-number', 'US')).toBeUndefined();
+  });
+});
+
+describe('destinationCountry', () => {
+  it("returns the number's own region for a US E.164 number", () => {
+    expect(destinationCountry('+14155552671')).toBe('US');
+  });
+
+  it("returns the number's own region for a GB E.164 number, regardless of any tenant country", () => {
+    expect(destinationCountry('+442079460958')).toBe('GB');
+  });
+
+  it('returns undefined for an unparseable number', () => {
+    expect(destinationCountry('not-a-number')).toBeUndefined();
   });
 });

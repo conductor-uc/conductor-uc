@@ -8,6 +8,7 @@ const TenantParamsSchema = Type.Object({ id: Type.String({ minLength: 1 }) });
 const DomainResponseSchema = Type.Object({ fqdn: Type.String() });
 const ResellerResponseSchema = Type.Object({ resellerId: Type.String() });
 const CountryResponseSchema = Type.Object({ country: Type.String() });
+const LimitsResponseSchema = Type.Object({ limits: Type.Record(Type.String(), Type.Unknown()) });
 
 /**
  * `GET /internal/v1/tenants/:id/domain` (06). What pbx-config-service calls
@@ -96,6 +97,36 @@ export function registerInternalRoutes(
         throw ProblemError.notFound('No such tenant.');
       }
       return { country: org.country } satisfies Static<typeof CountryResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:id/limits` (S2-05) — the raw `orgs.limits`
+   * bag, passed through untyped: this service owns *storage* of a tenant's
+   * generic limits (05's data table describes the column with no fixed
+   * shape, the same way it left `trunks.caller_id_policy` open before
+   * S2-04 gave that one a shape), not the *meaning* of any particular key
+   * inside it. `domain/fraud-limits.ts` (telephony-config) is what defines
+   * and defensively parses the toll-fraud subset
+   * (`maxConcurrentChannels`/`maxCallsPerSecond`/`internationalAllowed`/
+   * `countryAllowList`) this service has no reason to know about.
+   */
+  app.get(
+    '/internal/v1/tenants/:id/limits',
+    {
+      config: { public: true },
+      schema: { params: TenantParamsSchema, response: { 200: LimitsResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const org = await orgs.findById(request.params.id);
+      if (org === undefined || org.type !== 'tenant') {
+        throw ProblemError.notFound('No such tenant.');
+      }
+      return { limits: org.limits } satisfies Static<typeof LimitsResponseSchema>;
     },
   );
 }

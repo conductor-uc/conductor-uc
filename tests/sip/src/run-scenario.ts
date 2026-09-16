@@ -97,6 +97,7 @@ export interface SeedResult {
   readonly tenantB: { readonly id: string; readonly fqdn: string };
   readonly tenantSuspended: { readonly id: string; readonly fqdn: string };
   readonly tenantOutbound: { readonly id: string; readonly fqdn: string };
+  readonly tenantFraud: { readonly id: string; readonly fqdn: string };
   readonly extensions: Record<string, SeedExtension>;
 }
 
@@ -165,6 +166,53 @@ export async function seedFixtures(): Promise<SeedResult> {
   const start = stdout.lastIndexOf('\n{');
   const jsonText = start === -1 ? stdout : stdout.slice(start + 1);
   return JSON.parse(jsonText) as SeedResult;
+}
+
+/**
+ * S2-05: sets a tenant's `orgs.limits` (`seed.ts`'s own `setLimits`) —
+ * the one piece of mutable per-test fixture state a toll-fraud-control
+ * test needs to change between cases. Same throwaway-container rationale
+ * as `seedFixtures` (org-service has no published host port).
+ */
+export async function setTenantLimits(
+  tenantId: string,
+  limits: Record<string, unknown>,
+): Promise<void> {
+  const env = sipTestEnv();
+  const dbHost = envOr('SIP_TEST_DB_HOST', 'mariadb');
+  const dbPort = envOr('SIP_TEST_DB_PORT', '3306');
+  await execFileAsync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      env.network,
+      '-v',
+      `${REPO_ROOT}:/repo`,
+      '-w',
+      '/repo/tests/sip',
+      '-e',
+      `ORG_DB_HOST=${dbHost}`,
+      '-e',
+      `ORG_DB_PORT=${dbPort}`,
+      '-e',
+      'ORG_DB_USER=org_service',
+      '-e',
+      `ORG_DB_PASSWORD=${envOr('ORG_SERVICE_DB_PASSWORD', 'dev-org-password')}`,
+      '-e',
+      'ORG_DB_NAME=org_service',
+      '-e',
+      `PLATFORM_BASE_DOMAIN=${envOr('PLATFORM_BASE_DOMAIN', 'platform.test')}`,
+      'node:22',
+      'node',
+      'dist/src/seed.js',
+      'set-limits',
+      tenantId,
+      JSON.stringify(limits),
+    ],
+    { maxBuffer: 16 * 1024 * 1024 },
+  );
 }
 
 /** `docker exec`s the real MI command — see `project_s1_14_checkpoint.md`:
@@ -579,11 +627,23 @@ export interface DelayedCallerHandle {
  * inside the already-started container, is inlined into the same shell
  * invocation that immediately sends traffic, and is never visible to the
  * host process launching it.
+ *
+ * Also reused, as of S2-05, for the general "detached caller, read the
+ * result back later" shape alone (`au`/`ap`/`authUri`, for a *registered*
+ * caller like `uac_call.xml`/`uac_call_hold.xml`) — a toll-fraud
+ * concurrent-channel test needs one call held open while a second is
+ * attempted, which means the first cannot be started with
+ * `runForeground` (blocks until it completes). The `ip` field is simply
+ * unused by that caller; nothing about the detached-container mechanics
+ * below is trunk-specific.
  */
 export async function startDelayedCaller(opts: {
   readonly scenario: string;
   readonly csvLine: string;
   readonly containerName: string;
+  readonly au?: string;
+  readonly ap?: string;
+  readonly authUri?: string;
 }): Promise<DelayedCallerHandle> {
   const env = sipTestEnv();
   await execFileAsync('docker', ['rm', '-f', opts.containerName]).catch(() => undefined);
@@ -610,18 +670,32 @@ export async function startDelayedCaller(opts: {
     buildSippCommand({
       scenarioPath: `/scenarios/${opts.scenario}`,
       csvPath: '/data/fields.csv',
+      au: opts.au,
+      ap: opts.ap,
+      authUri: opts.authUri,
       remoteHost: env.opensipsTarget,
       logPrefix: 'delayed',
     }),
   ]);
 
-  const { stdout } = await execFileAsync('docker', [
-    'inspect',
-    opts.containerName,
-    '--format',
-    `{{ (index .NetworkSettings.Networks "${env.network}").IPAddress }}`,
-  ]);
-  const ip = stdout.trim();
+  // `docker run -d` returning is not always synchronous with the network
+  // attachment being visible to `docker inspect` yet — never observed
+  // across this function's original `trunk_invite*.xml` callers (S2-03),
+  // each of which happens to start with its own multi-second `<pause>`
+  // (long enough to never race this), but a scenario with no leading
+  // pause (S2-05's `uac_call_hold.xml`) can ask before it's ready. A short
+  // poll is cheap and only ever taken on the rare empty-IP case.
+  let ip = '';
+  for (let attempt = 1; attempt <= 10 && ip === ''; attempt += 1) {
+    const { stdout } = await execFileAsync('docker', [
+      'inspect',
+      opts.containerName,
+      '--format',
+      `{{ (index .NetworkSettings.Networks "${env.network}").IPAddress }}`,
+    ]);
+    ip = stdout.trim();
+    if (ip === '' && attempt < 10) await new Promise((resolve) => setTimeout(resolve, 200));
+  }
   if (ip === '')
     throw new Error(`could not determine ${opts.containerName}'s IP on ${env.network}`);
 

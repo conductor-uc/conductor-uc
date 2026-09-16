@@ -67,6 +67,13 @@ modparam("pike", "sampling_time_unit", 2)
 modparam("pike", "reqs_density_per_unit", 30)
 modparam("pike", "remove_latency", 120)
 
+#### Per-tenant outbound calls-per-second limiting (S2-05; 07 §6) — distinct
+#### from pike above: pike guards against a flood from one *source IP*,
+#### this guards against one *tenant* (a compromised phone/extension,
+#### calling from a perfectly ordinary IP) placing calls too fast.
+loadmodule "ratelimit.so"
+modparam("ratelimit", "default_algorithm", "TAILDROP")
+
 #### Multi-domain (03 §2's "multi-domain"): which SIP domains this
 #### deployment answers for — one per tenant's primary domain plus one per
 #### verified reseller base domain (02 §3), projected by telephony-config.
@@ -399,6 +406,20 @@ route{
         # link back to its read model OpenSIPs' own script can reach.
         # FS's `/fs/dialplan` (S1-13) trusts this exact header for ext→ext
         # tenant scoping (03 §3.2: "never inferred from the context name").
+
+        # S2-05 (07 §6: "outbound calls-per-second limits, enforced in
+        # OpenSIPs (ratelimit)"). One pipe per tenant (`$var(tenant_id)` as
+        # the pipe name — `rl_check`'s own sample usage already passes a
+        # pvar there, unlike `do_routing()`'s `groupID`, confirmed NOT to
+        # accept one, G-28). The threshold itself is a single shared
+        # platform-wide constant, not yet `orgs.limits.maxCallsPerSecond` —
+        # docs/decisions.md's own gap entry on why.
+        if (!rl_check($var(tenant_id), 10, "TAILDROP")) {
+            xlog("L_WARN", "ratelimit: tenant $var(tenant_id) exceeded outbound CPS\n");
+            send_reply(503, "Service Unavailable");
+            exit;
+        }
+
         append_hf("X-Call-Direction: internal\r\n");
         append_hf("X-Tenant-Id: $var(tenant_id)\r\n");
     } else {

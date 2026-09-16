@@ -5,7 +5,9 @@ import type { Logger } from '@cuc/logger';
 
 import { fromContextId } from '../context-id.js';
 import { resolveOutboundCallerId, type CallerId } from '../domain/caller-id.js';
-import { normalizeToE164 } from '../domain/e164.js';
+import { destinationCountry, normalizeToE164 } from '../domain/e164.js';
+import { isOutboundCallAllowed, parseFraudLimits } from '../domain/fraud-limits.js';
+import type { OrgClient } from '../org-client.js';
 import type { OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../schema.js';
 import {
@@ -80,6 +82,8 @@ export function registerFsRoutes(
   /** OpenSIPs' SIP listener, e.g. `opensips:5060` — see `xml.ts`'s `buildDialplanDocument`. */
   opensipsSipUri: string,
   logger: Logger,
+  /** S2-05: `handleOutboundDial`'s live (uncached) toll-fraud limits lookup — see `org-client.ts`'s own doc comment on why this one isn't cached the way `findCountry`'s result is. */
+  orgClient: OrgClient,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -149,6 +153,31 @@ export function registerFsRoutes(
       return NOT_FOUND_DOCUMENT;
     }
 
+    // S2-05 (07 §6: "International calling off by default. Country and
+    // prefix allow-lists per tenant."). Fetched live, not cached
+    // (`org-client.ts`'s own comment on why) — a genuine failure to reach
+    // org-service fails this call closed too, the same as any other lookup
+    // miss in this function, not a silent "assume unlimited."
+    let rawLimits: Record<string, unknown> | undefined;
+    try {
+      rawLimits = await orgClient.findLimits(tenantId);
+    } catch (error) {
+      logger.warn(
+        { tenantId, error: error instanceof Error ? error.message : String(error) },
+        'dialplan: could not fetch fraud limits; failing the call closed',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+    const limits = parseFraudLimits(rawLimits ?? {});
+    const destCountry = destinationCountry(normalized);
+    if (!isOutboundCallAllowed(limits, country, destCountry)) {
+      logger.info(
+        { tenantId, destCountry, tenantCountry: country },
+        'dialplan: international call blocked by tenant policy',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+
     const routes = await readModel.findOutboundRoutesForTenant(tenantId);
     const route = findBestOutboundRoute(routes, normalized);
     if (route === undefined) {
@@ -196,6 +225,8 @@ export function registerFsRoutes(
       opensipsSipUri,
       drGroupId,
       callerId,
+      tenantId,
+      limits.maxConcurrentChannels,
     );
   }
 

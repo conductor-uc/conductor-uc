@@ -99,4 +99,15 @@
        stage) pushes to S3 and deletes the local copy. Nothing durable lives
        on the node (CLAUDE.md rule 5). -->
   <X-PRE-PROCESS cmd="set" data="recordings_dir=/var/spool/cuc/rec"/>
+
+  <!-- S2-05: `mod_redis` (autoload_configs/redis.conf.xml) — the shared
+       counter `xml.ts`'s `buildOutboundDialplanDocument` writes a per-tenant
+       `limit` action for, via the "redis" backend. Defaults match this
+       repo's own compose service name/port directly (same convention
+       `OPENSIPS_REDIS_URL`'s own default already uses) since, unlike a
+       password, there's no unsafe default to avoid here. -->
+  <X-PRE-PROCESS cmd="set" data="fs_redis_host=redis"/>
+  <X-PRE-PROCESS cmd="env-set" data="fs_redis_host=$FS_REDIS_HOST"/>
+  <X-PRE-PROCESS cmd="set" data="fs_redis_port=6379"/>
+  <X-PRE-PROCESS cmd="env-set" data="fs_redis_port=$FS_REDIS_PORT"/>
 </include>

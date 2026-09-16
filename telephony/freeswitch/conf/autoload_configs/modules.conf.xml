@@ -31,6 +31,15 @@
     <load module="mod_http_cache"/>
     <load module="mod_lua"/>
 
+    <!-- S2-05: registers the "redis" backend `mod_dptools`' own `limit`
+         application (03 §3/07 §6: "FS limit with a Redis backend") can name
+         as its first argument — a shared counter across every FS node, not
+         one instance's own local hash table, which is the whole point once
+         more than one exists (S1-10's dispatcher still seeds exactly one
+         today). `redis.conf.xml` points it at this stack's own `redis`
+         service. -->
+    <load module="mod_redis"/>
+
     <!-- Codec Interfaces (03 §3: "codecs (mod_opus, G.711, G.722, …)") —
          G.711 and G.722 are built into FreeSWITCH's core, not separate
          modules; mod_opus is the one that needs loading. mod_spandsp is
