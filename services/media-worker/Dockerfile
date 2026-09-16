@@ -25,12 +25,22 @@ RUN pnpm --filter @cuc/media-worker --prod deploy --legacy /app
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app
 
-# --no-install-recommends: ffmpeg's own recommended set pulls in X11/font
-# packages this headless transcode path never uses.
+# DEBIAN_FRONTEND=noninteractive: without it, ffmpeg's own dependency tree
+# (tzdata, pulled in transitively) can prompt for a timezone during its
+# postinst script — `-y` only auto-answers apt's own "continue? [Y/n]", not
+# debconf prompts a package's *own* postinst raises, and with no TTY in a
+# `docker build` that hangs the build indefinitely rather than failing
+# loudly (a well-documented Debian/Docker interaction, not specific to this
+# package). `TZ` gives debconf's own noninteractive path a concrete answer
+# rather than an arbitrary default. --no-install-recommends: ffmpeg's own
+# recommended set pulls in X11/font packages this headless transcode path
+# never uses.
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Etc/UTC
 RUN apt-get update && \
     apt-get install --no-install-recommends -y ffmpeg && \
     rm -rf /var/lib/apt/lists/* && \
-    useradd --system --create-home=false --uid 10001 worker
+    useradd --no-create-home --uid 10001 worker
 
 COPY --from=build --chown=worker:worker /app /app
 
