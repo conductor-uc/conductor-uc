@@ -23,6 +23,7 @@ services:
       TELEPHONY_CONFIG_SERVICE_DB_PASSWORD: ${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD:-dev-telephony-config-password}
       TRUNK_SERVICE_DB_PASSWORD: ${TRUNK_SERVICE_DB_PASSWORD:-dev-trunk-service-password}
       MEDIA_WORKER_DB_PASSWORD: ${MEDIA_WORKER_DB_PASSWORD:-dev-media-worker-password}
+      CALLFLOW_SERVICE_DB_PASSWORD: ${CALLFLOW_SERVICE_DB_PASSWORD:-dev-callflow-service-password}
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     ports:
       - '${MARIADB_PORT:-3306}:3306'
@@ -352,6 +353,28 @@ services:
       STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
+
+  callflow-service:
+    build:
+      context: ../..
+      dockerfile: services/callflow-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    environment:
+      SERVICE_NAME: callflow-service
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: callflow_service
+      DB_PASSWORD: ${CALLFLOW_SERVICE_DB_PASSWORD:-dev-callflow-service-password}
+      DB_NAME: callflow_service
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
 
 volumes:
   mariadb-data:
