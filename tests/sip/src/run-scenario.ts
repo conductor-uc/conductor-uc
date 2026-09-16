@@ -678,13 +678,24 @@ export async function startDelayedCaller(opts: {
     }),
   ]);
 
-  const { stdout } = await execFileAsync('docker', [
-    'inspect',
-    opts.containerName,
-    '--format',
-    `{{ (index .NetworkSettings.Networks "${env.network}").IPAddress }}`,
-  ]);
-  const ip = stdout.trim();
+  // `docker run -d` returning is not always synchronous with the network
+  // attachment being visible to `docker inspect` yet — never observed
+  // across this function's original `trunk_invite*.xml` callers (S2-03),
+  // each of which happens to start with its own multi-second `<pause>`
+  // (long enough to never race this), but a scenario with no leading
+  // pause (S2-05's `uac_call_hold.xml`) can ask before it's ready. A short
+  // poll is cheap and only ever taken on the rare empty-IP case.
+  let ip = '';
+  for (let attempt = 1; attempt <= 10 && ip === ''; attempt += 1) {
+    const { stdout } = await execFileAsync('docker', [
+      'inspect',
+      opts.containerName,
+      '--format',
+      `{{ (index .NetworkSettings.Networks "${env.network}").IPAddress }}`,
+    ]);
+    ip = stdout.trim();
+    if (ip === '' && attempt < 10) await new Promise((resolve) => setTimeout(resolve, 200));
+  }
   if (ip === '')
     throw new Error(`could not determine ${opts.containerName}'s IP on ${env.network}`);
 
