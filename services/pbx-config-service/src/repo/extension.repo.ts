@@ -70,6 +70,9 @@ export interface DigestCredential {
   readonly ha1: string;
   readonly ha1b: string;
   readonly realm: string;
+  /** The extension's own caller-ID override (S2-04's own precedence: extension, then a bound DID, then the trunk's policy). */
+  readonly callerIdName: string | null;
+  readonly callerIdNumber: string | null;
 }
 
 export class ExtensionNotFoundError extends Error {
@@ -393,6 +396,8 @@ export function createExtensionRepo(
           'sip_credentials.ha1b',
           'sip_credentials.realm',
           'extensions.number',
+          'extensions.caller_id_name as callerIdName',
+          'extensions.caller_id_number as callerIdNumber',
         ])
         // Belt-and-suspenders alongside `scoped(ctx)`'s own filter on
         // `sip_credentials.tenant_id`: both rows are already guaranteed the

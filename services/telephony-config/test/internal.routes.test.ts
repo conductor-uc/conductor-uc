@@ -48,6 +48,8 @@ describe.skipIf(skipReason !== undefined)(
         secret: 's3cret-password',
         fromDomain: 'acme.platform.test',
         status: 'active',
+        callerIdName: null,
+        callerIdNumber: null,
         ...overrides,
       });
       return { tenantId, trunkId };

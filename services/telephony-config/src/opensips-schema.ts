@@ -2,16 +2,25 @@ import type { Generated } from 'kysely';
 
 /**
  * The `opensips` schema tables this service projects into (S1-12's `domain`/
- * `subscriber`; S2-02 adds `registrant`/`address`/`dr_gateways` — trunk-
- * service's projection, per 06's telephony-config section). `dr_rules` and
- * `dr_groups` are not projected yet: `dr_rules`' content (prefix, priority,
- * gateway order) comes from a tenant's *outbound routes*, which trunk-service
- * does not own until S2-04, and `dr_groups`' own keying (which `username`/
- * `domain` pair `do_routing()`'s group-selection matches against) is
- * inseparable from the outbound-call `route{}` branch S2-04 also owns —
- * see docs/decisions.md G-23. `dr_gateways` has no such dependency (one row
- * per trunk, independent of how a tenant's calls get routed to it), so it
- * is projected now.
+ * `subscriber`; S2-02 adds `registrant`/`address`/`dr_gateways`; S2-04 adds
+ * `dr_rules` — trunk-service's projection, per 06's telephony-config
+ * section). `dr_groups` is still not projected: `do_routing()`'s own
+ * `groupID` parameter turned out to be compile-time-only (confirmed live —
+ * passing a runtime pvar fails config parsing, "Variable in param [1] is
+ * not an integer", despite `README.drouting` documenting it as a plain
+ * `(int, optional)`), which rules out communicating a per-call tenant group
+ * id through it *or* through `dr_groups`' own (username, domain)-keyed
+ * auto-detection (rejected anyway: the caller identity on an FS-originated
+ * outbound leg is not guaranteed to be a real registered subscriber's own
+ * AOR). Tenant isolation instead lives in `$rU` itself — `route{}`'s
+ * outbound branch calls `do_routing()` with the group param omitted (a
+ * single shared `default_group`, modparam), and FS's own outbound dialplan
+ * document (`xml.ts`'s `buildOutboundDialplanDocument`) prepends the
+ * tenant's own `tenant_dr_groups.dr_group_id` — zero-padded to
+ * `opensips-projection.repo.ts`'s `DR_TAG_WIDTH` — to the dialed number
+ * before the re-INVITE ever reaches OpenSIPs, so the prefix trie can only
+ * ever match that tenant's own `dr_rules` rows. Resolves docs/decisions.md
+ * G-23.
  *
  * Column shapes are copied from OpenSIPs' own vendored table definitions
  * (`telephony/opensips/db-schema/{domain,auth_db,registrant,drouting,
@@ -101,6 +110,30 @@ export interface OpenSipsDb {
     probe_mode: number;
     state: number;
     socket: string | null;
+    description: string | null;
+  };
+  /**
+   * `drouting`'s rule table (S2-04; 03 §1: "Owns (`drouting`, one rule
+   * group per tenant)"). One row per outbound route — `groupid` is the
+   * tenant's own `tenant_dr_groups.dr_group_id` (a plain int; the column
+   * cannot hold a UUID `tenant_id` directly), `prefix` is the route's own
+   * E.164 prefix pattern, `gwlist` is the route's `trunk_ids`, comma-joined
+   * in try-order (`sort_alg` stays `'N'`, the vendored default — "use the
+   * given order", exactly the failover sequence 03 §2.1 calls for). `attrs`
+   * carries `strip:prepend`, read back via `do_routing()`'s own
+   * `rule_attrs_pvar` output and applied to `$rU` in script before relaying.
+   */
+  dr_rules: {
+    ruleid: Generated<number>;
+    groupid: string;
+    prefix: string;
+    timerec: string | null;
+    priority: number;
+    routeid: string | null;
+    gwlist: string | null;
+    sort_alg: string;
+    sort_profile: number | null;
+    attrs: string | null;
     description: string | null;
   };
 }

@@ -3,6 +3,7 @@ import { databaseOrSkipReason } from '@cuc/testing';
 import { createServer, type Server } from '@cuc/http';
 
 import { toContextId } from '../src/context-id.js';
+import { drTag } from '../src/repo/opensips-projection.repo.js';
 import { registerFsRoutes } from '../src/routes/fs.routes.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
@@ -103,6 +104,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         username: '101',
         ha1: 'a'.repeat(32),
         realm: 'acme.platform.test',
+        callerIdName: null,
+        callerIdNumber: null,
       });
 
       const response = await app.inject({
@@ -143,6 +146,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         username: number,
         ha1: 'a'.repeat(32),
         realm: 'acme.platform.test',
+        callerIdName: null,
+        callerIdNumber: null,
       });
     }
 
@@ -296,6 +301,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         secret: null,
         fromDomain: null,
         status: 'active',
+        callerIdName: null,
+        callerIdNumber: null,
       });
       await h.readModel.upsertExtension(h.db.kysely, {
         id: crypto.randomUUID(),
@@ -304,6 +311,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         username: extensionNumber,
         ha1: 'a'.repeat(32),
         realm: 'acme.platform.test',
+        callerIdName: null,
+        callerIdNumber: null,
       });
     }
 
@@ -436,6 +445,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         secret: null,
         fromDomain: null,
         status: 'active',
+        callerIdName: null,
+        callerIdNumber: null,
       });
       const extensionId = await extensionIdFor(tenantId);
       await h.readModel.upsertDid(h.db.kysely, {
@@ -509,6 +520,192 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         payload: inboundPayload({
           'Caller-Destination-Number': '+19998887777',
           'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+  });
+
+  describe('/fs/dialplan (S2-04: outbound dialing)', () => {
+    async function seedTenant(tenantId: string, country: string): Promise<void> {
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        fqdn: 'acme.platform.test',
+      });
+      await h.readModel.setTenantCountry(h.db.kysely, tenantId, country);
+    }
+
+    async function seedTrunk(
+      tenantId: string,
+      overrides: { callerIdName?: string | null; callerIdNumber?: string | null } = {},
+    ): Promise<string> {
+      const trunkId = crypto.randomUUID();
+      await h.readModel.upsertTrunk(h.db.kysely, {
+        id: trunkId,
+        tenantId,
+        name: 'Carrier',
+        authMode: 'ip',
+        host: 'carrier.test',
+        port: 5060,
+        transport: 'udp',
+        username: null,
+        secret: null,
+        fromDomain: null,
+        status: 'active',
+        callerIdName: overrides.callerIdName ?? null,
+        callerIdNumber: overrides.callerIdNumber ?? null,
+      });
+      return trunkId;
+    }
+
+    async function seedRoute(
+      tenantId: string,
+      trunkIds: readonly string[],
+      pattern = '+1',
+    ): Promise<void> {
+      await h.readModel.upsertOutboundRoute(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        priority: 0,
+        pattern,
+        trunkIds,
+        strip: 0,
+        prepend: null,
+      });
+    }
+
+    /** The tag `buildOutboundDialplanDocument` must have prepended — fetched back, not predicted, since `dr_group_id` is `AUTO_INCREMENT` (same reasoning as `trunk.consumer.test.ts`'s own `tenantDrTag`). */
+    async function tenantDrTag(tenantId: string): Promise<string> {
+      const groupId = await h.readModel.findOrCreateDrGroupId(h.db.kysely, tenantId);
+      return drTag(groupId);
+    }
+
+    function outboundPayload(fields: Record<string, string>) {
+      return form({
+        section: 'dialplan',
+        'Caller-Context': 'public',
+        'variable_sip_h_X-Call-Direction': 'internal',
+        ...fields,
+      });
+    }
+
+    it('bridges to a tenant-tagged, plus-free number, with no X-Dr-Group-Id header (G-28/G-29)', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      await seedRoute(tenantId, [trunkId]);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: outboundPayload({
+          'Caller-Destination-Number': '+14155552671',
+          'variable_sip_h_X-Tenant-Id': tenantId,
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const tag = await tenantDrTag(tenantId);
+      expect(response.body).toContain(
+        `data="{sip_route_uri=sip:opensips:5060}sofia/internal/${tag}14155552671@acme.platform.test"`,
+      );
+      // Superseded design (G-28): `do_routing()`'s `groupID` param turned
+      // out to be compile-time-only, so this header is no longer set.
+      expect(response.body).not.toContain('X-Dr-Group-Id');
+      // The dialplan *condition* still matches the original dialed number
+      // (only the bridge target — checked above — carries the tag).
+      expect(response.body).toContain('name="outbound-+14155552671"');
+    });
+
+    it("applies the calling extension's caller ID override to the bridge vars", async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      await seedRoute(tenantId, [trunkId]);
+      await h.readModel.upsertExtension(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        number: '101',
+        username: '101',
+        ha1: 'a'.repeat(32),
+        realm: 'acme.platform.test',
+        callerIdName: 'Front Desk',
+        callerIdNumber: '+15559990000',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: outboundPayload({
+          'Caller-Destination-Number': '+14155552671',
+          'variable_sip_h_X-Tenant-Id': tenantId,
+          variable_sip_from_user: '101',
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('origination_caller_id_number=+15559990000');
+      expect(response.body).toContain('origination_caller_id_name=&apos;Front Desk&apos;');
+    });
+
+    it('returns not-found when the tenant has no known country', async () => {
+      const tenantId = crypto.randomUUID();
+      // No `seedTenant`/`setTenantCountry` call — mirrors a tenant whose
+      // `org.tenant.created` was consumed before `country` existed at all
+      // (`seed.ts`'s own comment on why the SIP suite needs a fresh tenant
+      // for this).
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        fqdn: 'acme.platform.test',
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: outboundPayload({
+          'Caller-Destination-Number': '+14155552671',
+          'variable_sip_h_X-Tenant-Id': tenantId,
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+
+    it('returns not-found when no outbound route matches the normalized number', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId, 'US');
+      const trunkId = await seedTrunk(tenantId);
+      await seedRoute(tenantId, [trunkId], '+44'); // UK-only route; dialing a US number
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: outboundPayload({
+          'Caller-Destination-Number': '+14155552671',
+          'variable_sip_h_X-Tenant-Id': tenantId,
         }),
       });
 

@@ -1,3 +1,4 @@
+import type { Generated } from '@cuc/db';
 import type { EventTables } from '@cuc/events';
 
 /**
@@ -24,8 +25,30 @@ export interface TelephonyConfigDb extends EventTables {
     /** An org-service org id (`orgId` from `org.tenant.*`). */
     id: string;
     status: 'active' | 'suspended';
+    /**
+     * ISO 3166-1 alpha-2, org-service's own `orgs.country` (S2-04) — the
+     * default region `domain/e164.ts` normalizes an outbound-dialed number
+     * against. Fetched once via `org-client.ts` when `org.tenant.created`
+     * fires; null for a tenant created before this column existed, or if
+     * that fetch ever failed (no retry/backfill exists yet — a gap,
+     * docs/decisions.md).
+     */
+    country: string | null;
     created_at: Date;
     updated_at: Date;
+  };
+  /**
+   * A stable, small per-tenant integer (S2-04) — what OpenSIPs' `route{}`
+   * passes explicitly as `do_routing()`'s `groupID` argument (via the
+   * `X-Dr-Group-Id` header `xml.ts`'s outbound dialplan document sets), and
+   * what `dr_rules.groupid` is projected from (`projection.ts`). A UUID
+   * `tenant_id` cannot go directly into that column (`drouting`'s own
+   * vendored schema types it a plain `INT`) — this table exists solely to
+   * hand out one via `AUTO_INCREMENT`, never touched by anything but that.
+   */
+  tenant_dr_groups: {
+    dr_group_id: Generated<number>;
+    tenant_id: string;
   };
   /**
    * A tenant's current primary SIP domain. At most one row per tenant
@@ -62,6 +85,13 @@ export interface TelephonyConfigDb extends EventTables {
     username: string;
     ha1: string;
     realm: string;
+    /**
+     * The extension's own caller-ID override (S2-04's own precedence:
+     * extension, then a bound DID, then the trunk's policy — `projection.ts`'s
+     * `resolveOutboundCallerId`). Null means "no override at this tier."
+     */
+    caller_id_name: string | null;
+    caller_id_number: string | null;
     created_at: Date;
     updated_at: Date;
   };
@@ -93,6 +123,9 @@ export interface TelephonyConfigDb extends EventTables {
     secret: string | null;
     from_domain: string | null;
     status: string;
+    /** S2-04's caller-ID precedence, third tier (G-22) — flattened from trunk-service's `{name, number}` `caller_id_policy`. */
+    caller_id_name: string | null;
+    caller_id_number: string | null;
     created_at: Date;
     updated_at: Date;
   };
@@ -121,6 +154,25 @@ export interface TelephonyConfigDb extends EventTables {
     trunk_id: string;
     destination_type: string;
     destination_id: string;
+    created_at: Date;
+    updated_at: Date;
+  };
+  /**
+   * S2-04's own local mirror of trunk-service's `outbound_routes` (05 §3.4)
+   * — what `dr_rules` is projected from (`projection.ts`'s `projectOutboundRoute`)
+   * and what `/fs/dialplan`'s outbound branch matches a normalized dialed
+   * number against, the same "local read model on the call-setup hot path"
+   * story `trunks` above already tells.
+   */
+  outbound_routes: {
+    id: string;
+    tenant_id: string;
+    priority: number;
+    pattern: string;
+    /** JSON array of trunk ids, in try-order — same driver-parsing quirk `trunks.secret` etc. never hit, since this one really is JSON. */
+    trunk_ids: string;
+    strip: number;
+    prepend: string | null;
     created_at: Date;
     updated_at: Date;
   };

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-04: stands in for a carrier trunk that is up — the *second*, failover
+  gateway in an outbound route's ordered trunk list, dialed only after
+  `carrier_reject_503.xml`'s 503 sends `failure_route[outbound_gw]`
+  (`opensips.cfg.template`) into `use_next_gw()`. Answers like
+  `answer_call.xml` (S1-14), but without that scenario's `[field0]`/CSV
+  dependency — `startBackgroundUas` mounts no `-inf` file, same reasoning as
+  `carrier_registrar.xml` (S2-02).
+-->
+<scenario name="Carrier trunk - answers and hangs up">
+  <recv request="INVITE" crlf="true" timeout="60000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 180 Ringing
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Contact: <sip:carrier@[local_ip]:[local_port]>
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <send retrans="500">
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Contact: <sip:carrier@[local_ip]:[local_port]>
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0
+      a=rtpmap:0 PCMU/8000
+    ]]>
+  </send>
+
+  <recv request="ACK" rtd="true" crlf="true">
+  </recv>
+
+  <recv request="BYE" crlf="true" timeout="60000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>

@@ -87,6 +87,8 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       ha1: 'a'.repeat(32),
       ha1b: 'b'.repeat(32),
       realm: 'acme.platform.test',
+      callerIdName: null,
+      callerIdNumber: null,
     };
 
     await publish('pbx.extension.created', tenantId, {
@@ -120,6 +122,8 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       ha1: 'a'.repeat(32),
       ha1b: 'b'.repeat(32),
       realm: 'old.platform.test',
+      callerIdName: null,
+      callerIdNumber: null,
     };
     await publish('pbx.extension.created', tenantId, {
       extensionId,
@@ -135,6 +139,8 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       ha1: 'c'.repeat(32),
       ha1b: 'd'.repeat(32),
       realm: 'new.platform.test',
+      callerIdName: null,
+      callerIdNumber: null,
     };
     await publish('pbx.extension.updated', tenantId, { extensionId });
     const pass = await runOnceUntilHandled(c);
@@ -156,6 +162,8 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       ha1: 'a'.repeat(32),
       ha1b: 'b'.repeat(32),
       realm: 'acme.platform.test',
+      callerIdName: null,
+      callerIdNumber: null,
     };
     await publish('pbx.extension.created', tenantId, {
       extensionId,
@@ -190,6 +198,8 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
       ha1: 'a'.repeat(32),
       ha1b: 'b'.repeat(32),
       realm: 'acme.platform.test',
+      callerIdName: null,
+      callerIdNumber: null,
     };
 
     const eventId = await publish('pbx.extension.created', tenantId, {

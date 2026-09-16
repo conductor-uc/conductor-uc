@@ -4,6 +4,12 @@ import { natsOrSkipReason, databaseOrSkipReason } from '@cuc/testing';
 
 import { createTrunkConsumer } from '../src/consumers/trunk.consumer.js';
 import { telephonyEvents } from '../src/events.js';
+import {
+  DEFAULT_DR_GROUP_ID,
+  DR_TAG_WIDTH,
+  drTag,
+  outboundGwid,
+} from '../src/repo/opensips-projection.repo.js';
 import type { TrunkConfig } from '../src/trunk-config-client.js';
 import { resetOpenSipsSchema, resetSchema, startBusHarness, type BusHarness } from './harness.js';
 
@@ -36,6 +42,7 @@ describe.skipIf(skipReason !== undefined)('trunk consumer', () => {
     await resetSchema(h.db);
     await resetOpenSipsSchema(h.opensipsDb);
     h.trunkConfig.trunks = {};
+    h.trunkConfig.outboundRoutes = {};
     await h.bus.jsm.streams.purge('TRUNK');
   });
 
@@ -44,7 +51,13 @@ describe.skipIf(skipReason !== undefined)('trunk consumer', () => {
   }
 
   async function publish(
-    type: 'trunk.trunk.created' | 'trunk.trunk.updated' | 'trunk.trunk.deleted',
+    type:
+      | 'trunk.trunk.created'
+      | 'trunk.trunk.updated'
+      | 'trunk.trunk.deleted'
+      | 'trunk.outbound_route.created'
+      | 'trunk.outbound_route.updated'
+      | 'trunk.outbound_route.deleted',
     tenantId: string,
     data: Record<string, unknown>,
   ): Promise<string> {
@@ -76,6 +89,7 @@ describe.skipIf(skipReason !== undefined)('trunk consumer', () => {
       fromDomain: 'acme.platform.test',
       status: 'active',
       ips: [],
+      callerIdPolicy: null,
       ...overrides,
     };
   }
@@ -110,6 +124,15 @@ describe.skipIf(skipReason !== undefined)('trunk consumer', () => {
 
     const gateways = await h.opensipsProjection.listDrGateways();
     expect(gateways).toContain(trunk.id);
+
+    // S2-04: a register-credential trunk's `dr_gateways.attrs` carries what
+    // `uac_auth()` needs to answer the carrier's own outbound challenge.
+    const gatewayRow = await h.opensipsDb.kysely
+      .selectFrom('dr_gateways')
+      .select('attrs')
+      .where('gwid', '=', trunk.id)
+      .executeTakeFirstOrThrow();
+    expect(gatewayRow.attrs).toBe('trunkuser:s3cret-password:sip.carrier.test');
   });
 
   it('trunk.trunk.created (ip mode) projects an address row per CIDR, no registrant', async () => {
@@ -209,5 +232,240 @@ describe.skipIf(skipReason !== undefined)('trunk consumer', () => {
       .where('id', '=', eventId)
       .execute();
     expect(consumedRows).toHaveLength(1);
+  });
+
+  describe('trunk.outbound_route.* (S2-04)', () => {
+    /** A route's trunks must already be locally projected (`readModel.findTrunkById`) — `projectOutboundRoute`'s own comment on why. */
+    async function projectTrunk(
+      c: EventConsumer,
+      tenantId: string,
+      overrides: Partial<TrunkConfig> = {},
+    ): Promise<string> {
+      const trunk = registerModeTrunk({
+        tenantId,
+        authMode: 'ip',
+        username: null,
+        secret: null,
+        ...overrides,
+      });
+      h.trunkConfig.trunks[trunk.id] = trunk;
+      await publish('trunk.trunk.created', tenantId, {
+        trunkId: trunk.id,
+        name: trunk.name,
+        authMode: trunk.authMode,
+      });
+      await runOnceUntilHandled(c);
+      return trunk.id;
+    }
+
+    /** The tenant's own `dr_group_id` (`findOrCreateDrGroupId`) — not predictable in advance (`AUTO_INCREMENT`, never reset between tests in the same file run), so tests fetch it back and derive the expected {@link drTag} from it, the same way production code does. */
+    async function tenantDrTag(tenantId: string): Promise<string> {
+      const row = await h.db.kysely
+        .selectFrom('tenant_dr_groups')
+        .select('dr_group_id')
+        .where('tenant_id', '=', tenantId)
+        .executeTakeFirstOrThrow();
+      return drTag(row.dr_group_id);
+    }
+
+    it('created projects a dr_rules row and one synthesized gateway per trunk, strip/prepend on the gateway, prefix/strip tagged by tenant (G-28/G-29)', async () => {
+      const c = consumer();
+      await c.ensure();
+      const tenantId = crypto.randomUUID();
+      const trunkA = await projectTrunk(c, tenantId, { host: 'carrier-a.test' });
+      const trunkB = await projectTrunk(c, tenantId, { host: 'carrier-b.test' });
+      const routeId = crypto.randomUUID();
+      h.trunkConfig.outboundRoutes[routeId] = {
+        id: routeId,
+        tenantId,
+        priority: 0,
+        pattern: '+1',
+        trunkIds: [trunkA, trunkB],
+        strip: 1,
+        prepend: '+1',
+      };
+
+      await publish('trunk.outbound_route.created', tenantId, { outboundRouteId: routeId });
+      const pass = await runOnceUntilHandled(c);
+      expect(pass.handled).toBeGreaterThanOrEqual(1);
+
+      const tag = await tenantDrTag(tenantId);
+      const rule = await h.opensipsDb.kysely
+        .selectFrom('dr_rules')
+        .selectAll()
+        .where('description', '=', routeId)
+        .executeTakeFirstOrThrow();
+      // No leading `+` (drouting rejects one in a prefix outright, G-29)
+      // and tagged by tenant ahead of the pattern's own digits (G-28) —
+      // `groupid` itself is always the shared `DEFAULT_DR_GROUP_ID`, not a
+      // per-tenant value; real isolation is the tag's job.
+      expect(rule).toMatchObject({
+        prefix: `${tag}1`,
+        sort_alg: 'N',
+        groupid: String(DEFAULT_DR_GROUP_ID),
+      });
+      const gwids = rule.gwlist!.split(',');
+      expect(gwids).toHaveLength(2);
+
+      const gateways = await h.opensipsDb.kysely
+        .selectFrom('dr_gateways')
+        .selectAll()
+        .where('gwid', 'in', gwids)
+        .orderBy('address', 'asc')
+        .execute();
+      expect(gateways).toHaveLength(2);
+      // `strip` is the route's own value *plus* `DR_TAG_WIDTH`, since
+      // `do_routing()`/`use_next_gw()` must eat the tag off `$rU` too, not
+      // just what the route itself asked to strip.
+      expect(gateways[0]).toMatchObject({
+        address: 'carrier-a.test:5060',
+        strip: DR_TAG_WIDTH + 1,
+        pri_prefix: '+1',
+      });
+      expect(gateways[1]).toMatchObject({
+        address: 'carrier-b.test:5060',
+        strip: DR_TAG_WIDTH + 1,
+        pri_prefix: '+1',
+      });
+    });
+
+    it('assigns the same tenant tag to every route for the same tenant', async () => {
+      const c = consumer();
+      await c.ensure();
+      const tenantId = crypto.randomUUID();
+      const trunkId = await projectTrunk(c, tenantId);
+      const routeA = crypto.randomUUID();
+      const routeB = crypto.randomUUID();
+      h.trunkConfig.outboundRoutes[routeA] = {
+        id: routeA,
+        tenantId,
+        priority: 0,
+        pattern: '+1',
+        trunkIds: [trunkId],
+        strip: 0,
+        prepend: null,
+      };
+      h.trunkConfig.outboundRoutes[routeB] = {
+        id: routeB,
+        tenantId,
+        priority: 1,
+        pattern: '',
+        trunkIds: [trunkId],
+        strip: 0,
+        prepend: null,
+      };
+
+      await publish('trunk.outbound_route.created', tenantId, { outboundRouteId: routeA });
+      await runOnceUntilHandled(c);
+      await publish('trunk.outbound_route.created', tenantId, { outboundRouteId: routeB });
+      await runOnceUntilHandled(c);
+
+      const tag = await tenantDrTag(tenantId);
+      const rules = await h.opensipsDb.kysely
+        .selectFrom('dr_rules')
+        .select(['description', 'prefix'])
+        .where('description', 'in', [routeA, routeB])
+        .execute();
+      expect(rules).toHaveLength(2);
+      const byRoute = new Map(rules.map((r) => [r.description, r.prefix]));
+      // routeA's pattern is '+1' (tag + '1'); routeB's is '' (the tag alone,
+      // drouting's own "no digit matched -> default rule" catch-all shape).
+      expect(byRoute.get(routeA)).toBe(`${tag}1`);
+      expect(byRoute.get(routeB)).toBe(tag);
+    });
+
+    it('updated re-fetches and re-projects a changed trunk list, dropping the stale gateway', async () => {
+      // Four sequential publish+poll round trips (two trunk projections, a
+      // route create, a route update) — same "runOnce needs a retry" NATS
+      // slack as `org.consumer.test.ts` (gap G-17), just with one more hop.
+      const c = consumer();
+      await c.ensure();
+      const tenantId = crypto.randomUUID();
+      const trunkA = await projectTrunk(c, tenantId, { host: 'carrier-a.test' });
+      const trunkB = await projectTrunk(c, tenantId, { host: 'carrier-b.test' });
+      const routeId = crypto.randomUUID();
+      const route = {
+        id: routeId,
+        tenantId,
+        priority: 0,
+        pattern: '+1',
+        trunkIds: [trunkA],
+        strip: 0,
+        prepend: null,
+      };
+      h.trunkConfig.outboundRoutes[routeId] = route;
+      await publish('trunk.outbound_route.created', tenantId, { outboundRouteId: routeId });
+      await runOnceUntilHandled(c);
+
+      h.trunkConfig.outboundRoutes[routeId] = { ...route, trunkIds: [trunkB] };
+      await publish('trunk.outbound_route.updated', tenantId, { outboundRouteId: routeId });
+      const pass = await runOnceUntilHandled(c);
+      expect(pass.handled).toBeGreaterThanOrEqual(1);
+
+      const rule = await h.opensipsDb.kysely
+        .selectFrom('dr_rules')
+        .select('gwlist')
+        .where('description', '=', routeId)
+        .executeTakeFirstOrThrow();
+      const gateway = await h.opensipsDb.kysely
+        .selectFrom('dr_gateways')
+        .select('address')
+        .where('gwid', '=', rule.gwlist!)
+        .executeTakeFirstOrThrow();
+      expect(gateway.address).toBe('carrier-b.test:5060');
+
+      // The stale *per-route* synthesized gateway for trunkA is gone — not
+      // trunkA's own S2-02 per-trunk gateway (still used for inbound LCR,
+      // and untouched by this route no longer naming it).
+      const staleGateway = await h.opensipsDb.kysely
+        .selectFrom('dr_gateways')
+        .select('address')
+        .where('gwid', '=', outboundGwid(routeId, trunkA))
+        .executeTakeFirst();
+      expect(staleGateway).toBeUndefined();
+    }, 40000);
+
+    it('deleted removes the dr_rules row and its synthesized gateways', async () => {
+      const c = consumer();
+      await c.ensure();
+      const tenantId = crypto.randomUUID();
+      const trunkId = await projectTrunk(c, tenantId);
+      const routeId = crypto.randomUUID();
+      h.trunkConfig.outboundRoutes[routeId] = {
+        id: routeId,
+        tenantId,
+        priority: 0,
+        pattern: '+1',
+        trunkIds: [trunkId],
+        strip: 0,
+        prepend: null,
+      };
+      await publish('trunk.outbound_route.created', tenantId, { outboundRouteId: routeId });
+      await runOnceUntilHandled(c);
+
+      const before = await h.opensipsDb.kysely
+        .selectFrom('dr_rules')
+        .select('gwlist')
+        .where('description', '=', routeId)
+        .executeTakeFirstOrThrow();
+
+      await publish('trunk.outbound_route.deleted', tenantId, { outboundRouteId: routeId });
+      const pass = await runOnceUntilHandled(c);
+      expect(pass.handled).toBeGreaterThanOrEqual(1);
+
+      const rules = await h.opensipsDb.kysely
+        .selectFrom('dr_rules')
+        .select('ruleid')
+        .where('description', '=', routeId)
+        .execute();
+      expect(rules).toHaveLength(0);
+
+      const gateways = await h.opensipsDb.kysely
+        .selectFrom('dr_gateways')
+        .select('gwid')
+        .where('gwid', '=', before.gwlist!)
+        .execute();
+      expect(gateways).toHaveLength(0);
+    });
   });
 });

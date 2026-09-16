@@ -118,6 +118,16 @@ loadmodule "uac.so"
 loadmodule "uac_auth.so"
 loadmodule "uac_registrant.so"
 modparam("uac_registrant", "db_url", "${OPENSIPS_DB_URL}")
+# S2-04: answers a carrier's 401/407 challenge on an outbound trunk call.
+# `route[outbound_gw]` fills these three AVPs from the selected gateway's
+# own `dr_gateways.attrs` (`username:password:host`, projected by
+# `opensips-projection.repo.ts`'s `drGatewayAttrsFor`) before every
+# `t_relay()` — `uac_auth()` itself (from plain `uac`, not `uac_auth.so`,
+# which only holds this shared config) is callable only from a
+# `failure_route`.
+modparam("uac_auth", "auth_realm_avp", "$avp(auth_realm)")
+modparam("uac_auth", "auth_username_avp", "$avp(auth_user)")
+modparam("uac_auth", "auth_password_avp", "$avp(auth_pass)")
 # Module default is 100s (README.uac_registrant.gz) — with the also-default
 # hash_size of 1 (2 buckets), a newly projected registrant can wait up to
 # ~2x this value for its first REGISTER. Dev/test wants that fast (S2-02's
@@ -129,6 +139,13 @@ modparam("uac_registrant", "timer_interval", ${OPENSIPS_REGISTRANT_TIMER_INTERVA
 #### group per tenant)"), projected from trunk-service's outbound routes.
 loadmodule "drouting.so"
 modparam("drouting", "db_url", "${OPENSIPS_DB_URL}")
+# S2-04: no `dr_groups` row is ever seeded (see `route{}`'s own long
+# comment on why), so every `do_routing()` call's own FROM-based
+# auto-lookup always misses — without this, an unmatched lookup fails
+# outright (`README.drouting`: `default_group`'s own default is "NONE",
+# confirmed live). A single shared constant is safe here because real
+# tenant isolation lives in the `$rU` prefix tag, not the group id.
+modparam("drouting", "default_group", 0)
 
 #### Load balancing across FS nodes (03 §1: "Owns (dispatcher with OPTIONS
 #### probing)") — the plan's own "a dispatcher to the FS set".
@@ -298,7 +315,57 @@ route{
         }
         fix_nated_contact();
         if (!lookup("location")) {
-            send_reply(404, "Not Found");
+            # Not a registered local user — S2-04: 03 §2.1's "else ->
+            # do_routing(group = tenant's dr group)" branch.
+            #
+            # **Not `do_routing()`'s own `groupID` param** (tried first,
+            # confirmed live to be unusable): that parameter's fixup is
+            # compile-time only — passing a runtime pvar there
+            # (`$avp(dr_group)`) fails config parsing outright ("Variable in
+            # param [1] is not an integer"), even though `README.drouting`
+            # documents it as `(int, optional)` with no hint this is
+            # compile-time-only. That rules out communicating a per-call
+            # tenant group id through this param at all, by any means (an
+            # `X-Dr-Group-Id`-style header included) — the param can only
+            # ever be a literal or omitted.
+            #
+            # With the param omitted, `do_routing()` falls back to its own
+            # (FROM username, domain) `dr_groups` auto-lookup — rejected
+            # for the same reason `opensips-schema.ts`'s own comment gives:
+            # the FROM identity on this FS-originated leg is not guaranteed
+            # to be a real registered subscriber's own AOR.
+            #
+            # Instead: tenant isolation moves into `$rU` itself. FS's own
+            # outbound dialplan document (`xml.ts`'s
+            # `buildOutboundDialplanDocument`) prepends the tenant's own
+            # `tenant_dr_groups.dr_group_id`, zero-padded to a fixed
+            # `DR_TAG_WIDTH` (`opensips-projection.repo.ts`), to the dialed
+            # number *before* FS ever sends this re-INVITE — e.g. tenant 1
+            # dialing +14155552671 arrives here as `$rU` =
+            # `00000114155552671`. `dr_rules.prefix` for that tenant's own
+            # routes carries the exact same tag prefix
+            # (`projectOutboundRoute`), so the prefix trie can only ever
+            # match *this* tenant's own rules — a different tenant's tag
+            # diverges in the first `DR_TAG_WIDTH` digits and can never be a
+            # prefix of this `$rU`, the same fixed-width-disambiguation
+            # trick `outboundGwid` already uses. `default_group` (modparam,
+            # below) is the fallback every call takes, since no `dr_groups`
+            # row is ever seeded — a single shared constant is fine
+            # precisely because the tag already does the real isolation.
+            #
+            # No `rule_attrs_pvar` output: strip/prepend now live on the
+            # selected *gateway* row (`dr_gateways.strip`/`pri_prefix`,
+            # `strip` widened by `DR_TAG_WIDTH` to also eat the tag),
+            # applied automatically by `do_routing()`/`use_next_gw()` to
+            # `$rU` — nothing left to read back out of the rule itself.
+            # `gw_attrs_pvar` (`$avp(gw_attrs)`) carries the selected
+            # gateway's own `attrs` column instead — `route[outbound_gw]`'s
+            # register-mode credentials, when the trunk has any.
+            if (!do_routing(, "F", , , $avp(gw_attrs))) {
+                send_reply(404, "Not Found");
+                exit;
+            }
+            route(outbound_gw);
             exit;
         }
         route(relay);
@@ -366,6 +433,72 @@ route{
 route[relay] {
     if (!t_relay()) {
         send_reply(500, "Internal Error");
+    }
+    exit;
+}
+
+# S2-04: relays an outbound call to the gateway `do_routing()` (or, on
+# retry, `use_next_gw()`) just selected, arming trunk credentials first.
+# `failure_route[outbound_gw]` is where the actual failover lives — this
+# block only ever sends the *first* attempt.
+route[outbound_gw] {
+    if (!topology_hiding()) {
+        xlog("L_ERR", "topology_hiding failed for $ru (outbound trunk)\n");
+        send_reply(500, "Server Internal Error");
+        exit;
+    }
+    fix_nated_contact();
+    route(outbound_gw_auth);
+    t_on_failure("outbound_gw");
+    route(relay);
+    exit;
+}
+
+# Register-mode trunks (S2-02) carry `username:password:host` in the
+# selected gateway's own `attrs` column (`drGatewayAttrsFor`,
+# `projection.ts`) — IP-auth trunks leave `$avp(gw_attrs)` unset, and
+# these three stay unset too, so `uac_auth()` in `failure_route[outbound_gw]`
+# never fires a challenge response for them. The trunk's own `host` is
+# assumed to double as the realm the carrier's 401/407 will challenge on
+# (docs/decisions.md gap: not yet verified against a real carrier).
+route[outbound_gw_auth] {
+    if ($avp(gw_attrs) != NULL) {
+        $avp(auth_user) = $(avp(gw_attrs){s.select,0,:});
+        $avp(auth_pass) = $(avp(gw_attrs){s.select,1,:});
+        $avp(auth_realm) = $(avp(gw_attrs){s.select,2,:});
+    } else {
+        $avp(auth_user) = NULL;
+        $avp(auth_pass) = NULL;
+        $avp(auth_realm) = NULL;
+    }
+}
+
+failure_route[outbound_gw] {
+    # 401/407: answer the carrier's own challenge and retry the *same*
+    # gateway — not a failover case, `use_next_gw()` is not involved.
+    if (t_check_status("401|407")) {
+        if (uac_auth("MD5,MD5-sess")) {
+            t_relay();
+        }
+        exit;
+    }
+
+    # Everything else that should trigger failover to the next trunk in
+    # this route's priority order (03 §2.1/S2-04's own "Done when": "SIPp
+    # confirms failover to the secondary trunk on 503") — a 5xx from the
+    # carrier or a transaction timeout (`t_check_status` never matches a
+    # local timeout, so that path always reaches here too). A 3xx/4xx
+    # other than 401/407 is a carrier-specific rejection (bad number,
+    # etc.) that another trunk is no more likely to accept, so those are
+    # deliberately left to propagate unhandled instead of also triggering
+    # failover.
+    if (t_check_status("[5-6][0-9][0-9]") || t_check_status("408")) {
+        if (use_next_gw(, $avp(gw_attrs))) {
+            route(outbound_gw_auth);
+            t_on_failure("outbound_gw");
+            t_relay();
+        }
+        exit;
     }
     exit;
 }

@@ -3,6 +3,7 @@ import { createConsumer, type Bus, type EventConsumer } from '@cuc/events';
 import type { Logger } from '@cuc/logger';
 
 import { telephonyEvents } from '../events.js';
+import type { OrgClient } from '../org-client.js';
 import type { Projection } from '../projection.js';
 import type { ReadModelRepo } from '../repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../schema.js';
@@ -41,6 +42,7 @@ export function createOrgConsumer(
   logger: Logger,
   readModel: ReadModelRepo,
   projection: Projection,
+  orgClient: OrgClient,
   options: OrgConsumerOptions = {},
 ): EventConsumer {
   return createConsumer<TelephonyConfigDb>({
@@ -61,6 +63,21 @@ export function createOrgConsumer(
         case 'org.tenant.created': {
           const data = envelope.data as TenantCreatedData;
           await readModel.upsertTenant(trx, { id: data.orgId, status: 'active' });
+
+          // S2-04: fetched once here, not re-fetched on later
+          // `org.tenant.updated` (this consumer does not subscribe to it —
+          // `events.ts`'s own comment on why) — a tenant that changes
+          // country later keeps normalizing against the old one until a
+          // gap this task does not close (docs/decisions.md) is fixed.
+          const country = await orgClient.findCountry(data.orgId);
+          if (country !== undefined) {
+            await readModel.setTenantCountry(trx, data.orgId, country);
+          } else {
+            logger.warn(
+              { tenantId: data.orgId },
+              'tenant not found in org-service for country lookup',
+            );
+          }
           return;
         }
 

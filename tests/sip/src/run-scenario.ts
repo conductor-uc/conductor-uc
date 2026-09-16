@@ -96,6 +96,7 @@ export interface SeedResult {
   readonly tenantA: { readonly id: string; readonly fqdn: string };
   readonly tenantB: { readonly id: string; readonly fqdn: string };
   readonly tenantSuspended: { readonly id: string; readonly fqdn: string };
+  readonly tenantOutbound: { readonly id: string; readonly fqdn: string };
   readonly extensions: Record<string, SeedExtension>;
 }
 
@@ -464,18 +465,30 @@ export async function stopContainer(containerName: string): Promise<void> {
 }
 
 /**
- * Point-in-time check for a `startUas` container that's expected to stay
- * idle (the "wrong tenant"/isolation-losing UAS): true once it has ever
- * accepted an INVITE. Does **not** wait for the container to exit — an
- * idle UAS by definition never will (it's still parked in
- * `answer_call.xml`'s own `<recv request="INVITE">`), so waiting would
- * just be a guaranteed timeout on every passing isolation test.
+ * Point-in-time check for a `startUas`/`startBackgroundUas` container that
+ * may or may not have handled a call yet: true once it ever has. Does
+ * **not** wait for the container to exit — an idle UAS (the "wrong
+ * tenant"/isolation-losing case) by definition never will, so waiting
+ * would just be a guaranteed timeout on every passing isolation test.
+ *
+ * Matches "Scenario Screen" 's own `Peak was N calls` line, not
+ * "Statistics Screen" 's `Incoming call created | periodic | cumulative`
+ * row (tried first — S2-04, confirmed live): a container that never exits
+ * or is signaled to reset (every `startUas`/`startBackgroundUas` one, by
+ * design) only ever prints the periodic Scenario Screen, never the
+ * Statistics one, so the original pattern silently never matched *anything*
+ * — always `false`, regardless of real call activity. Every existing
+ * caller of this function only ever asserted `false` before this fix, so
+ * the bug was invisible: a call that never happened and one whose evidence
+ * this function couldn't see were indistinguishable. `Peak was` is
+ * monotonic for the container's lifetime (never decreases), so this is
+ * robust regardless of how many polling intervals have elapsed since.
  */
 export async function uasReceivedCall(containerName: string): Promise<boolean> {
   const { stdout } = await execFileAsync('docker', ['logs', containerName], {
     maxBuffer: 16 * 1024 * 1024,
   }).catch(() => ({ stdout: '' }));
-  const matches = [...stdout.matchAll(/Incoming call created\s*\|\s*\d+\s*\|\s*(\d+)/g)];
+  const matches = [...stdout.matchAll(/Peak was (\d+) calls?/g)];
   const last = matches.at(-1);
   return last !== undefined && Number(last[1]) > 0;
 }

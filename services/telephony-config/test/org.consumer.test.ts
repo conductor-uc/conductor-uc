@@ -53,7 +53,7 @@ describe.skipIf(skipReason !== undefined)('org consumer', () => {
   });
 
   function consumer() {
-    return createOrgConsumer(h.db, h.bus, h.logger, h.readModel, h.projection, {
+    return createOrgConsumer(h.db, h.bus, h.logger, h.readModel, h.projection, h.orgClient, {
       pullTimeoutMs: 5000,
     });
   }

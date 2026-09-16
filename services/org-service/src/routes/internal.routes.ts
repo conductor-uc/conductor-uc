@@ -7,6 +7,7 @@ import type { OrgRepo } from '../repo/org.repo.js';
 const TenantParamsSchema = Type.Object({ id: Type.String({ minLength: 1 }) });
 const DomainResponseSchema = Type.Object({ fqdn: Type.String() });
 const ResellerResponseSchema = Type.Object({ resellerId: Type.String() });
+const CountryResponseSchema = Type.Object({ country: Type.String() });
 
 /**
  * `GET /internal/v1/tenants/:id/domain` (06). What pbx-config-service calls
@@ -68,6 +69,33 @@ export function registerInternalRoutes(
         throw ProblemError.notFound('No such tenant.');
       }
       return { resellerId: org.resellerId } satisfies Static<typeof ResellerResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:id/country` (S2-04) — how telephony-config
+   * learns a tenant's country for E.164 normalization of outbound-dialed
+   * numbers (`domain/e164.ts`'s own comment on why). Same shape as
+   * `/reseller` above: this service never gets the country from an event
+   * (`org.tenant.created`'s payload is deliberately thin), so a consumer
+   * that needs it fetches it here, once, at tenant-creation time.
+   */
+  app.get(
+    '/internal/v1/tenants/:id/country',
+    {
+      config: { public: true },
+      schema: { params: TenantParamsSchema, response: { 200: CountryResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const org = await orgs.findById(request.params.id);
+      if (org === undefined || org.type !== 'tenant') {
+        throw ProblemError.notFound('No such tenant.');
+      }
+      return { country: org.country } satisfies Static<typeof CountryResponseSchema>;
     },
   );
 }

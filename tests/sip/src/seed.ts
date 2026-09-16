@@ -41,6 +41,18 @@ export interface SeedResult {
   readonly tenantA: { readonly id: string; readonly fqdn: string };
   readonly tenantB: { readonly id: string; readonly fqdn: string };
   readonly tenantSuspended: { readonly id: string; readonly fqdn: string };
+  /**
+   * S2-04: a tenant created fresh by *this* run, not reused across sessions
+   * like `tenantA`/`tenantB` — outbound dialing needs telephony-config's own
+   * `tenants.country` (migration `005_add_outbound_routing`), which is only
+   * ever set by consuming a live `org.tenant.created` event (`org.consumer.ts`;
+   * there is no backfill for a tenant whose event was consumed before that
+   * migration existed, a documented gap). `tenantA`/`tenantB` predate it in
+   * every environment this suite has ever run against, so their local mirror
+   * row's `country` is permanently `NULL` — a fresh tenant is the only way to
+   * get a real one.
+   */
+  readonly tenantOutbound: { readonly id: string; readonly fqdn: string };
   /** `{ number: { password, realm } }`, one entry per seeded extension. */
   readonly extensions: Record<string, { readonly password: string; readonly realm: string }>;
 }
@@ -173,6 +185,14 @@ export async function seed(): Promise<SeedResult> {
       'gonesoon',
       'Suspended tenant',
     );
+    const tenantOutbound = await findOrCreateOrg(
+      orgRepo,
+      orgDb,
+      'tenant',
+      reseller.id,
+      'outbound',
+      'Outbound failover test tenant',
+    );
 
     const extensions: SeedResult['extensions'] = {};
 
@@ -206,6 +226,7 @@ export async function seed(): Promise<SeedResult> {
     await seedExtension(tenantA.id, '102', 'SIP Test 102');
     await seedExtension(tenantB.id, '102', 'SIP Test 102 (tenant B)');
     await seedExtension(tenantSuspended.id, '103', 'SIP Test 103 (suspended)');
+    await seedExtension(tenantOutbound.id, '104', 'SIP Test 104 (outbound failover)');
 
     // Suspended last, and idempotent: `suspend()` on an already-suspended
     // tenant is a real InvalidOrgStatusTransitionError, not "nothing to do".
@@ -225,6 +246,10 @@ export async function seed(): Promise<SeedResult> {
       tenantSuspended: {
         id: tenantSuspended.id,
         fqdn: await tenantFqdn(orgDb, tenantSuspended.id),
+      },
+      tenantOutbound: {
+        id: tenantOutbound.id,
+        fqdn: await tenantFqdn(orgDb, tenantOutbound.id),
       },
       extensions,
     };

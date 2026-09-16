@@ -4,6 +4,7 @@ import { connectBus } from '@cuc/events';
 import type { Logger } from '@cuc/logger';
 import { silentLogger, startTestDatabase, startTestNats, type TestNatsHandle } from '@cuc/testing';
 
+import type { OrgClient } from '../src/org-client.js';
 import type { DidConfig, DigestCredential, PbxConfigClient } from '../src/pbx-config-client.js';
 import type { OpenSipsMiClient } from '../src/opensips-mi-client.js';
 import type { OpenSipsDb } from '../src/opensips-schema.js';
@@ -14,7 +15,11 @@ import {
 } from '../src/repo/opensips-projection.repo.js';
 import { createReadModelRepo, type ReadModelRepo } from '../src/repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../src/schema.js';
-import type { TrunkConfig, TrunkConfigClient } from '../src/trunk-config-client.js';
+import type {
+  OutboundRouteConfig,
+  TrunkConfig,
+  TrunkConfigClient,
+} from '../src/trunk-config-client.js';
 import { migrations } from '../migrations/index.js';
 
 /** OpenSIPs' own SIP URI, as `config.ts`'s `OPENSIPS_SIP_URI` would carry it. */
@@ -29,6 +34,7 @@ export interface Harness {
   readonly mi: FakeMiClient;
   readonly pbxConfig: FakePbxConfigClient;
   readonly trunkConfig: FakeTrunkConfigClient;
+  readonly orgClient: FakeOrgClient;
   readonly logger: Logger;
   close(): Promise<void>;
 }
@@ -80,21 +86,39 @@ function fakePbxConfigClient(): FakePbxConfigClient {
 
 export interface FakeTrunkConfigClient extends TrunkConfigClient {
   trunks: Record<string, TrunkConfig>;
+  outboundRoutes: Record<string, OutboundRouteConfig>;
 }
 
-/** A trunk-config lookup whose answers are set per test — no live trunk-service needed. */
+/** A trunk-config/outbound-route lookup whose answers are set per test — no live trunk-service needed. */
 function fakeTrunkConfigClient(): FakeTrunkConfigClient {
   const state: FakeTrunkConfigClient = {
     trunks: {},
+    outboundRoutes: {},
     findTrunk: (_tenantId: string, trunkId: string) => Promise.resolve(state.trunks[trunkId]),
     listAllTrunks: () => Promise.resolve(Object.values(state.trunks)),
+    findOutboundRoute: (_tenantId: string, outboundRouteId: string) =>
+      Promise.resolve(state.outboundRoutes[outboundRouteId]),
+    listAllOutboundRoutes: () => Promise.resolve(Object.values(state.outboundRoutes)),
+  };
+  return state;
+}
+
+export interface FakeOrgClient extends OrgClient {
+  countries: Record<string, string>;
+}
+
+/** A tenant-country lookup whose answers are set per test — no live org-service needed. */
+function fakeOrgClient(): FakeOrgClient {
+  const state: FakeOrgClient = {
+    countries: {},
+    findCountry: (tenantId: string) => Promise.resolve(state.countries[tenantId]),
   };
   return state;
 }
 
 /**
- * Creates `domain`, `subscriber`, `registrant`, `address`, and `dr_gateways`
- * exactly as OpenSIPs' own vendored schema does
+ * Creates `domain`, `subscriber`, `registrant`, `address`, `dr_gateways`,
+ * and `dr_rules` exactly as OpenSIPs' own vendored schema does
  * (`telephony/opensips/db-schema/{domain,auth_db,registrant,permissions,
  * drouting}-create.sql`), minus bookkeeping columns/tables this service
  * never reads or writes — only column shapes matter here, and a real
@@ -183,6 +207,21 @@ async function createOpenSipsTables(db: Database<OpenSipsDb>): Promise<void> {
     .column('gwid')
     .unique()
     .execute();
+
+  await db.kysely.schema
+    .createTable('dr_rules')
+    .addColumn('ruleid', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('groupid', 'char(255)', (col) => col.notNull())
+    .addColumn('prefix', 'char(64)', (col) => col.notNull())
+    .addColumn('timerec', 'char(255)')
+    .addColumn('priority', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('routeid', 'char(255)')
+    .addColumn('gwlist', 'char(255)')
+    .addColumn('sort_alg', 'char(1)', (col) => col.notNull().defaultTo('N'))
+    .addColumn('sort_profile', 'integer')
+    .addColumn('attrs', 'char(255)')
+    .addColumn('description', 'char(128)')
+    .execute();
 }
 
 /** A migrated read-model schema, a fake `opensips` schema, and the repos over both. */
@@ -218,6 +257,7 @@ export async function startHarness(): Promise<Harness> {
   const mi = fakeMiClient();
   const pbxConfig = fakePbxConfigClient();
   const trunkConfig = fakeTrunkConfigClient();
+  const orgClient = fakeOrgClient();
   const projection = createProjection(
     readModel,
     opensipsProjection,
@@ -237,6 +277,7 @@ export async function startHarness(): Promise<Harness> {
     mi,
     pbxConfig,
     trunkConfig,
+    orgClient,
     logger,
     async close() {
       await db.destroy();
@@ -275,10 +316,12 @@ export async function startBusHarness(): Promise<BusHarness> {
 
 export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void> {
   await db.kysely.deleteFrom('dids').execute();
+  await db.kysely.deleteFrom('outbound_routes').execute();
   await db.kysely.deleteFrom('trunk_ips').execute();
   await db.kysely.deleteFrom('trunks').execute();
   await db.kysely.deleteFrom('extensions').execute();
   await db.kysely.deleteFrom('domains').execute();
+  await db.kysely.deleteFrom('tenant_dr_groups').execute();
   await db.kysely.deleteFrom('tenants').execute();
   await db.kysely.deleteFrom('outbox').execute();
   await db.kysely.deleteFrom('consumed_events').execute();
@@ -289,5 +332,6 @@ export async function resetOpenSipsSchema(db: Database<OpenSipsDb>): Promise<voi
   await db.kysely.deleteFrom('domain').execute();
   await db.kysely.deleteFrom('registrant').execute();
   await db.kysely.deleteFrom('address').execute();
+  await db.kysely.deleteFrom('dr_rules').execute();
   await db.kysely.deleteFrom('dr_gateways').execute();
 }

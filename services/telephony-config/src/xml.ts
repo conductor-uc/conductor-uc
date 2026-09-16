@@ -10,6 +10,8 @@
  * (developer.signalwire.com/freeswitch/integration/xml-curl).
  */
 
+import { drTag, stripLeadingPlus } from './repo/opensips-projection.repo.js';
+
 export function escapeXml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -137,6 +139,81 @@ export function buildDialplanDocument(
     '  <section name="dialplan">\n' +
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="ext-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          <action application="bridge" data="${escapeXml(target)}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/**
+ * A `from-ext` outbound-to-PSTN match (S2-04; 03 §2.1's "request from FS:
+ * ... else -> do_routing(group = tenant's dr group)"). The condition matches
+ * `destinationNumber` exactly as the extension dialed it (whatever
+ * FreeSWITCH itself reports as `Caller-Destination-Number`) — the bridge
+ * target's user part is `normalizedNumber`, the tenant-country-normalized
+ * E.164 form (`domain/e164.ts`), since that is what a carrier gateway and
+ * `drouting`'s own prefix matching both expect.
+ *
+ * The bridge target's domain stays the tenant's own SIP domain, the same
+ * "route back through OpenSIPs for a decision it alone can make" pattern
+ * `buildDialplanDocument`'s own comment explains — `lookup("location")`
+ * will miss (a PSTN number is never a registered AOR), which is exactly
+ * the trigger `route{}`'s outbound branch needs to fall through to
+ * `do_routing()` instead of a plain 404.
+ *
+ * `X-Dr-Group-Id` is a custom header set here, not looked up by OpenSIPs
+ * from any DB table (`opensips-schema.ts`'s own comment on why): the FROM
+ * identity on this FS-originated leg is not guaranteed to be a real
+ * registered subscriber's own AOR, so `drouting`'s built-in (username,
+ * domain)-keyed group auto-detection cannot be trusted the way it can for
+ * an inbound REGISTER. This service already knows the tenant's own
+ * `dr_group_id` (`read-model.repo.ts`'s `findOrCreateDrGroupId`) at the
+ * moment it builds this document, so it hands it over explicitly instead.
+ *
+ * `origination_caller_id_name`/`_number` are FreeSWITCH's own standard
+ * channel-variable-prefix keys for setting the caller identity on an
+ * originated leg — unlike `X-Dr-Group-Id`, a well-documented mechanism, not
+ * something this task had to invent.
+ */
+export function buildOutboundDialplanDocument(
+  callerContext: string,
+  destinationNumber: string,
+  normalizedNumber: string,
+  tenantDomain: string,
+  opensipsSipUri: string,
+  drGroupId: number,
+  callerId: { readonly name: string | null; readonly number: string | null } | null,
+): string {
+  const vars: string[] = [`sip_route_uri=sip:${opensipsSipUri}`];
+  if (callerId?.number !== null && callerId?.number !== undefined) {
+    vars.push(`origination_caller_id_number=${callerId.number}`);
+  }
+  if (callerId?.name !== null && callerId?.name !== undefined) {
+    vars.push(`origination_caller_id_name='${callerId.name}'`);
+  }
+
+  // G-28/G-29 (docs/decisions.md): `do_routing()`'s own `groupID` param
+  // turned out to be compile-time-only, so there is no way to hand
+  // OpenSIPs a per-call tenant group id through a header/AVP any more —
+  // tenant isolation instead rides along in `$rU` itself, as a fixed-width
+  // tag ahead of the dialed digits (`opensips-projection.repo.ts`'s
+  // `drTag`/`DR_TAG_WIDTH`, mirrored by `dr_rules.prefix`). No leading `+`
+  // either (`drouting` rejects one in a prefix outright) — the dialplan
+  // *condition* above still matches the original, unmodified
+  // `destinationNumber`, only the bridge target is retagged/replumbed.
+  const taggedNumber = drTag(drGroupId) + stripLeadingPlus(normalizedNumber);
+  const target = `{${vars.join(',')}}sofia/internal/${taggedNumber}@${tenantDomain}`;
+
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="outbound-${escapeXml(destinationNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
     `          <action application="bridge" data="${escapeXml(target)}"/>\n` +
     '        </condition>\n' +

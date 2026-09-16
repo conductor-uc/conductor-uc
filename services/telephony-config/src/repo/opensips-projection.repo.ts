@@ -5,6 +5,65 @@ import { fromContextId, toContextId } from '../context-id.js';
 import type { OpenSipsDb } from '../opensips-schema.js';
 
 /**
+ * `(routeId, trunkId) -> gwid` (S2-04) — both are v4 UUIDs; `gwid` is
+ * `CHAR(64)` in the vendored schema, too short for two hyphenated UUIDs
+ * plus a separator (73 chars), so this strips hyphens from both (the same
+ * `toContextId` trick `address.context_info` already uses) and
+ * concatenates with no separator at all: 32 + 32 = exactly 64, and since
+ * both halves are fixed-width, the join is unambiguous without one.
+ */
+export function outboundGwid(routeId: string, trunkId: string): string {
+  return toContextId(routeId) + toContextId(trunkId);
+}
+
+/** The `routeId` half of an {@link outboundGwid} — what `deleteOutboundGatewaysForRoute`'s own `LIKE` prefix matches against. */
+function outboundGwidRoutePrefix(routeId: string): string {
+  return toContextId(routeId);
+}
+
+/**
+ * How wide a {@link drTag} is, in digits (S2-04, docs/decisions.md G-28) —
+ * zero-padded so every tenant's tag is exactly this many characters, the
+ * same fixed-width-disambiguation trick {@link outboundGwid} already uses:
+ * no tenant's tag can ever be a proper prefix of another's, so `dr_rules`'
+ * prefix trie can only match the tag's own tenant. Six digits supports up
+ * to 999,999 `tenant_dr_groups` rows — `dr_group_id` is `AUTO_INCREMENT`
+ * and never reused, so this is a ceiling on lifetime tenant-count-ever, not
+ * concurrent tenants.
+ */
+export const DR_TAG_WIDTH = 6;
+
+/**
+ * `do_routing()`'s own `groupID` parameter turned out to be compile-time
+ * only — a runtime pvar there fails config parsing outright (confirmed
+ * live, G-28). This tag is what replaces it: prepended to the dialed
+ * number by FS's own outbound dialplan document
+ * (`xml.ts`'s `buildOutboundDialplanDocument`) *before* the re-INVITE ever
+ * reaches OpenSIPs, and to `dr_rules.prefix` for that same tenant's routes
+ * (`projectOutboundRoute`) — `$rU` and the rule it must match always carry
+ * the identical tag, so the prefix trie is the actual isolation mechanism,
+ * not `do_routing()`'s group selection (called with that param omitted, a
+ * single shared `default_group` modparam constant).
+ */
+export function drTag(groupId: number): string {
+  return String(groupId).padStart(DR_TAG_WIDTH, '0');
+}
+
+/**
+ * `dr_rules.groupid` (G-28) — every row uses this same literal, matching
+ * `opensips.cfg.template`'s `modparam("drouting", "default_group", 0)`,
+ * since `do_routing()` is always called with its own group param omitted
+ * (a per-tenant value there was the design this constant replaces). Real
+ * per-tenant isolation is {@link drTag}'s job, not this column's.
+ */
+export const DEFAULT_DR_GROUP_ID = 0;
+
+/** Strips a leading `+` — `dr_rules.prefix` and the number FS bridges to must both be digit-only (G-29: `drouting` rejects `+` in a prefix outright). Every other layer (the domain model, `e164.ts`, the route pre-check in `fs.routes.ts`) keeps the `+`; only the two OpenSIPs-projection boundaries strip it. */
+export function stripLeadingPlus(value: string): string {
+  return value.startsWith('+') ? value.slice(1) : value;
+}
+
+/**
  * `registrant.expiry`, in seconds — also the module's own retry-after-
  * failure interval when `failure_retry_interval` is unset (the default,
  * per `README.uac_registrant.gz`). A standard SIP registration lifetime;
@@ -222,11 +281,26 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
      * since `dr_rules`/`do_routing()` (S2-04) will reference it by `gwid`
      * once outbound routes exist to route to it (docs/decisions.md G-23).
      */
+    /**
+     * `attrs` carries `username:password:realm` for a trunk with a register
+     * credential (S2-04) — `route{}`'s outbound branch reads it back via
+     * `do_routing()`'s `gw_attrs_pvar` and sets it as `uac_auth`'s AVPs
+     * before relaying, so an outbound INVITE to that gateway can answer a
+     * 401/407 challenge. `null` for an ip-mode trunk with nothing to
+     * authenticate with — `uac_auth()` simply never gets called for it (no
+     * challenge ever arrives for a carrier that trusts by source IP).
+     * Assumes the trunk's own `host` doubles as the realm its challenges
+     * use — the same convention `registrant`'s own AOR domain already
+     * relies on; a carrier whose challenge realm differs needs a real fix,
+     * flagged if it ever surfaces (docs/decisions.md).
+     */
     async upsertDrGateway(gateway: {
       gwid: string;
       address: string;
       description: string;
+      attrs?: string | null;
     }): Promise<void> {
+      const attrs = gateway.attrs ?? null;
       await k
         .insertInto('dr_gateways')
         .values({
@@ -235,13 +309,13 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
           address: gateway.address,
           strip: 0,
           pri_prefix: null,
-          attrs: null,
+          attrs,
           probe_mode: 0,
           state: 0,
           socket: null,
           description: gateway.description,
         })
-        .onDuplicateKeyUpdate({ address: gateway.address, description: gateway.description })
+        .onDuplicateKeyUpdate({ address: gateway.address, description: gateway.description, attrs })
         .execute();
     },
 
@@ -256,6 +330,141 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
         .select('gwid')
         .execute()
         .then((rows) => rows.map((row) => row.gwid));
+    },
+
+    /**
+     * `drouting`'s rule table (S2-04) — one row per outbound route, keyed
+     * on the route's own id via `description` (the vendored schema has no
+     * dedicated "external id" column; `routeid`/`ruleid` are drouting's own
+     * concepts, not ours). `gwlist` is the route's `trunkIds`, comma-joined
+     * in try-order — `sort_alg` stays the table's own `'N'` default so
+     * `do_routing()`/`use_next_gw()` walk it in exactly that order (03 §2.1's
+     * failover sequence).
+     */
+    /**
+     * A per-route gateway (S2-04): `dr_gateways.strip`/`pri_prefix` are the
+     * module's own built-in, gateway-level number-rewriting fields —
+     * `do_routing()`/`use_next_gw()` apply them automatically to `$rU` as
+     * part of selecting that gateway, no manual script string manipulation
+     * needed. Since a single trunk can be referenced by more than one
+     * outbound route, each potentially wanting a *different* strip/prepend
+     * (05 §3.4 puts those fields on `outbound_routes`, not `trunks`), this
+     * is a synthesized row keyed on `(routeId, trunkId)`, not the trunk's
+     * own bare `gwid` — S2-02's own per-trunk `dr_gateways` row (used for
+     * inbound LCR gateway existence, independent of any route) is left
+     * alone, a separate row entirely.
+     */
+    async upsertOutboundGateway(gateway: {
+      routeId: string;
+      trunkId: string;
+      address: string;
+      description: string;
+      strip: number;
+      prepend: string | null;
+      attrs?: string | null;
+    }): Promise<void> {
+      const attrs = gateway.attrs ?? null;
+      await k
+        .insertInto('dr_gateways')
+        .values({
+          gwid: outboundGwid(gateway.routeId, gateway.trunkId),
+          type: 0,
+          address: gateway.address,
+          strip: gateway.strip,
+          pri_prefix: gateway.prepend,
+          attrs,
+          probe_mode: 0,
+          state: 0,
+          socket: null,
+          description: gateway.description,
+        })
+        .onDuplicateKeyUpdate({
+          address: gateway.address,
+          strip: gateway.strip,
+          pri_prefix: gateway.prepend,
+          attrs,
+          description: gateway.description,
+        })
+        .execute();
+    },
+
+    /** Every synthesized gateway this route fed, removed together with the route's own `dr_rules` row. */
+    async deleteOutboundGatewaysForRoute(routeId: string): Promise<void> {
+      await k
+        .deleteFrom('dr_gateways')
+        .where('gwid', 'like', `${outboundGwidRoutePrefix(routeId)}%`)
+        .execute();
+    },
+
+    /**
+     * `drouting`'s rule table (S2-04) — one row per outbound route, keyed
+     * on the route's own id via `description` (the vendored schema has no
+     * dedicated "external id" column; `routeid`/`ruleid` are drouting's own
+     * concepts, not ours). `gwlist` is the route's own synthesized gateway
+     * ids (`upsertOutboundGateway`'s `outboundGwid`), comma-joined in
+     * try-order — `sort_alg` stays the table's own `'N'` default so
+     * `do_routing()`/`use_next_gw()` walk it in exactly that order (03 §2.1's
+     * failover sequence). `prefix` is expected to already carry the calling
+     * tenant's own {@link drTag} (`projectOutboundRoute`'s job) — `groupid`
+     * itself is always {@link DEFAULT_DR_GROUP_ID}, not a per-tenant value
+     * (G-28).
+     */
+    async upsertDrRule(rule: {
+      routeId: string;
+      prefix: string;
+      priority: number;
+      gwlist: readonly string[];
+    }): Promise<void> {
+      const gwlist = rule.gwlist.join(',');
+      const existing = await k
+        .selectFrom('dr_rules')
+        .select('ruleid')
+        .where('description', '=', rule.routeId)
+        .executeTakeFirst();
+
+      if (existing === undefined) {
+        await k
+          .insertInto('dr_rules')
+          .values({
+            groupid: String(DEFAULT_DR_GROUP_ID),
+            prefix: rule.prefix,
+            timerec: null,
+            priority: rule.priority,
+            routeid: null,
+            gwlist,
+            sort_alg: 'N',
+            sort_profile: null,
+            attrs: null,
+            description: rule.routeId,
+          })
+          .execute();
+      } else {
+        await k
+          .updateTable('dr_rules')
+          .set({
+            groupid: String(DEFAULT_DR_GROUP_ID),
+            prefix: rule.prefix,
+            priority: rule.priority,
+            gwlist,
+          })
+          .where('ruleid', '=', existing.ruleid)
+          .execute();
+      }
+    },
+
+    async deleteDrRule(routeId: string): Promise<void> {
+      await k.deleteFrom('dr_rules').where('description', '=', routeId).execute();
+    },
+
+    /** Every rule's own route id (`description`), for reconciliation. */
+    listDrRules(): Promise<string[]> {
+      return k
+        .selectFrom('dr_rules')
+        .select('description')
+        .execute()
+        .then((rows) =>
+          rows.map((row) => row.description).filter((id): id is string => id !== null),
+        );
     },
   };
 }
