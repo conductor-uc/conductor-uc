@@ -30,7 +30,9 @@ export class CompileError extends Error {
   readonly issues: readonly ValidationIssue[];
 
   constructor(issues: readonly ValidationIssue[]) {
-    super(`Graph failed validation:\n${issues.map((i) => `  - [${i.kind}] ${i.message}`).join('\n')}`);
+    super(
+      `Graph failed validation:\n${issues.map((i) => `  - [${i.kind}] ${i.message}`).join('\n')}`,
+    );
     this.issues = issues;
   }
 }
@@ -56,7 +58,11 @@ export function compileGraph(graph: FlowGraphInput): FlowIR {
     const schema = NODE_CONFIG_SCHEMAS[node.type];
     if (!Check(schema, node.config)) {
       throw new CompileError([
-        { kind: 'bad_reference', message: `Node '${node.id}' config does not match the '${node.type}' schema.`, nodeId: node.id },
+        {
+          kind: 'bad_reference',
+          message: `Node '${node.id}' config does not match the '${node.type}' schema.`,
+          nodeId: node.id,
+        },
       ]);
     }
 

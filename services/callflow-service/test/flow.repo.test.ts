@@ -117,9 +117,9 @@ describe.skipIf(skipReason !== undefined)('flow repo', () => {
   });
 
   it('updateDraft on an unknown flow throws FlowNotFoundError', async () => {
-    await expect(repo.updateDraft({ tenantId: randomUUID() }, randomUUID(), validGraph())).rejects.toThrow(
-      FlowNotFoundError,
-    );
+    await expect(
+      repo.updateDraft({ tenantId: randomUUID() }, randomUUID(), validGraph()),
+    ).rejects.toThrow(FlowNotFoundError);
   });
 
   it('validateDraft reports issues without mutating anything', async () => {
@@ -158,11 +158,11 @@ describe.skipIf(skipReason !== undefined)('flow repo', () => {
     expect(ir?.nodes['hu1']).toEqual({ id: 'hu1', type: 'hangup', config: {}, ports: {} });
 
     // Changing the draft afterward must not touch the already-published version's IR.
-    await repo.updateDraft(
-      { tenantId },
-      created.id,
-      { entryPoints: { main: 'hu2' }, nodes: [{ id: 'hu2', type: 'hangup', config: {} }], edges: [] },
-    );
+    await repo.updateDraft({ tenantId }, created.id, {
+      entryPoints: { main: 'hu2' },
+      nodes: [{ id: 'hu2', type: 'hangup', config: {} }],
+      edges: [],
+    });
     const irAfterDraftChange = await repo.findPublishedIr({ tenantId }, created.id);
     expect(irAfterDraftChange).toEqual(ir);
   });
@@ -182,11 +182,11 @@ describe.skipIf(skipReason !== undefined)('flow repo', () => {
     await repo.updateDraft({ tenantId }, created.id, validGraph());
     const v1 = await repo.publish({ tenantId }, created.id);
 
-    await repo.updateDraft(
-      { tenantId },
-      created.id,
-      { entryPoints: { main: 'hu2' }, nodes: [{ id: 'hu2', type: 'hangup', config: {} }], edges: [] },
-    );
+    await repo.updateDraft({ tenantId }, created.id, {
+      entryPoints: { main: 'hu2' },
+      nodes: [{ id: 'hu2', type: 'hangup', config: {} }],
+      edges: [],
+    });
     const v2 = await repo.publish({ tenantId }, created.id);
 
     expect(v2.versionNumber).toBe(v1.versionNumber + 1);
@@ -201,11 +201,11 @@ describe.skipIf(skipReason !== undefined)('flow repo', () => {
     const v1 = await repo.publish({ tenantId }, created.id);
     const irV1 = await repo.findPublishedIr({ tenantId }, created.id);
 
-    await repo.updateDraft(
-      { tenantId },
-      created.id,
-      { entryPoints: { main: 'hu2' }, nodes: [{ id: 'hu2', type: 'hangup', config: {} }], edges: [] },
-    );
+    await repo.updateDraft({ tenantId }, created.id, {
+      entryPoints: { main: 'hu2' },
+      nodes: [{ id: 'hu2', type: 'hangup', config: {} }],
+      edges: [],
+    });
     await repo.publish({ tenantId }, created.id);
 
     const rolledBack = await repo.rollback({ tenantId }, created.id, v1.versionNumber);
@@ -225,7 +225,9 @@ describe.skipIf(skipReason !== undefined)('flow repo', () => {
     await repo.updateDraft({ tenantId }, created.id, validGraph());
     await repo.publish({ tenantId }, created.id);
 
-    await expect(repo.rollback({ tenantId }, created.id, 99)).rejects.toThrow(FlowVersionNotFoundError);
+    await expect(repo.rollback({ tenantId }, created.id, 99)).rejects.toThrow(
+      FlowVersionNotFoundError,
+    );
   });
 
   it('findPublishedIr returns undefined for a flow that has never published', async () => {

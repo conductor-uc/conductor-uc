@@ -41,7 +41,9 @@ export class InvalidDraftGraphError extends Error {
   readonly issues: readonly ValidationIssue[];
 
   constructor(issues: readonly ValidationIssue[]) {
-    super(`Draft graph is not valid:\n${issues.map((i) => `  - [${i.kind}] ${i.message}`).join('\n')}`);
+    super(
+      `Draft graph is not valid:\n${issues.map((i) => `  - [${i.kind}] ${i.message}`).join('\n')}`,
+    );
     this.issues = issues;
   }
 }

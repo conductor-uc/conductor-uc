@@ -20,7 +20,11 @@ const ParamsSchema = Type.Object({
  * Returns 404 when the flow has never published — flow_runner's own job to
  * decide what "no flow to run" means for a call, not this service's.
  */
-export function registerInternalRoutes(app: Server, flows: FlowRepo, internalServiceToken: string): void {
+export function registerInternalRoutes(
+  app: Server,
+  flows: FlowRepo,
+  internalServiceToken: string,
+): void {
   app.get(
     '/internal/v1/tenants/:tenantId/flows/:id/ir',
     { config: { public: true }, schema: { params: ParamsSchema } },

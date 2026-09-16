@@ -115,7 +115,20 @@ export function isNodeType(type: string): type is NodeType {
 }
 
 /** DTMF digit ports a `menu` node may wire, plus its two fixed ports. */
-export const MENU_DIGIT_PORTS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '#'] as const;
+export const MENU_DIGIT_PORTS = [
+  '0',
+  '1',
+  '2',
+  '3',
+  '4',
+  '5',
+  '6',
+  '7',
+  '8',
+  '9',
+  '*',
+  '#',
+] as const;
 export const MENU_FIXED_PORTS = ['timeout', 'invalid'] as const;
 
 /**

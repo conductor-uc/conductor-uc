@@ -111,7 +111,10 @@ function toProblem(error: unknown): ProblemError {
       'invalid_draft_graph',
       {
         detail: error.message,
-        errors: error.issues.map((issue) => ({ field: issue.nodeId ?? '', message: issue.message })),
+        errors: error.issues.map((issue) => ({
+          field: issue.nodeId ?? '',
+          message: issue.message,
+        })),
       },
     );
   }
@@ -210,7 +213,9 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
       config: { permission: 'callflow.edit', dataClass: 'config' },
       schema: {
         params: FlowParamsSchema,
-        response: { 200: Type.Object({ valid: Type.Boolean(), issues: Type.Array(ValidationIssueSchema) }) },
+        response: {
+          200: Type.Object({ valid: Type.Boolean(), issues: Type.Array(ValidationIssueSchema) }),
+        },
       },
     },
     async (request) => {
@@ -243,11 +248,19 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
     '/v1/tenants/:tenantId/flows/:id/rollback',
     {
       config: { permission: 'callflow.publish', dataClass: 'config' },
-      schema: { params: FlowParamsSchema, body: RollbackBodySchema, response: { 200: VersionSummarySchema } },
+      schema: {
+        params: FlowParamsSchema,
+        body: RollbackBodySchema,
+        response: { 200: VersionSummarySchema },
+      },
     },
     async (request) => {
       try {
-        const version = await flows.rollback(ctxFor(request), request.params.id, request.body.versionNumber);
+        const version = await flows.rollback(
+          ctxFor(request),
+          request.params.id,
+          request.body.versionNumber,
+        );
         return toVersionResponse(version);
       } catch (error) {
         throw toProblem(error);

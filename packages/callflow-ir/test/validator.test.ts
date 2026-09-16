@@ -3,22 +3,26 @@ import { describe, expect, it } from 'vitest';
 import type { EdgeInput, FlowGraphInput, NodeInput } from '../src/nodes.js';
 import { validateGraph } from '../src/validator.js';
 
-function graph(nodes: NodeInput[], edges: EdgeInput[], entryPoints: Record<string, string> = { main: nodes[0]?.id ?? '' }): FlowGraphInput {
+function graph(
+  nodes: NodeInput[],
+  edges: EdgeInput[],
+  entryPoints: Record<string, string> = { main: nodes[0]?.id ?? '' },
+): FlowGraphInput {
   return { entryPoints, nodes, edges };
 }
 
 describe('validateGraph', () => {
   it('accepts a minimal valid graph', () => {
-    const g = graph(
-      [{ id: 'n1', type: 'hangup', config: {} }],
-      [],
-      { main: 'n1' },
-    );
+    const g = graph([{ id: 'n1', type: 'hangup', config: {} }], [], { main: 'n1' });
     expect(validateGraph(g)).toEqual([]);
   });
 
   it('flags a graph with no entry points', () => {
-    const g: FlowGraphInput = { entryPoints: {}, nodes: [{ id: 'n1', type: 'hangup', config: {} }], edges: [] };
+    const g: FlowGraphInput = {
+      entryPoints: {},
+      nodes: [{ id: 'n1', type: 'hangup', config: {} }],
+      edges: [],
+    };
     expect(validateGraph(g).map((i) => i.kind)).toContain('missing_entry_point');
   });
 
@@ -29,7 +33,9 @@ describe('validateGraph', () => {
       edges: [],
     };
     const issues = validateGraph(g);
-    expect(issues.some((i) => i.kind === 'bad_reference' && i.message.includes('ghost'))).toBe(true);
+    expect(issues.some((i) => i.kind === 'bad_reference' && i.message.includes('ghost'))).toBe(
+      true,
+    );
   });
 
   it('flags an unreachable node', () => {
@@ -107,7 +113,11 @@ describe('validateGraph', () => {
   it('accepts a fully-wired menu node with digit and fixed ports', () => {
     const g = graph(
       [
-        { id: 'menu1', type: 'menu', config: { promptMediaAssetId: 'm1', timeoutSeconds: 5, maxInvalidAttempts: 3 } },
+        {
+          id: 'menu1',
+          type: 'menu',
+          config: { promptMediaAssetId: 'm1', timeoutSeconds: 5, maxInvalidAttempts: 3 },
+        },
         { id: 'sales', type: 'hangup', config: {} },
         { id: 'to', type: 'hangup', config: {} },
         { id: 'inv', type: 'hangup', config: {} },
@@ -125,7 +135,11 @@ describe('validateGraph', () => {
   it('flags a digit conflict: two edges wired to the same menu digit', () => {
     const g = graph(
       [
-        { id: 'menu1', type: 'menu', config: { promptMediaAssetId: 'm1', timeoutSeconds: 5, maxInvalidAttempts: 3 } },
+        {
+          id: 'menu1',
+          type: 'menu',
+          config: { promptMediaAssetId: 'm1', timeoutSeconds: 5, maxInvalidAttempts: 3 },
+        },
         { id: 'a', type: 'hangup', config: {} },
         { id: 'b', type: 'hangup', config: {} },
         { id: 'to', type: 'hangup', config: {} },

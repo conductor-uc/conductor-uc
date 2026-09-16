@@ -12,7 +12,11 @@ function fullGraph(): FlowGraphInput {
   return {
     entryPoints: { main: 'menu1' },
     nodes: [
-      { id: 'menu1', type: 'menu', config: { promptMediaAssetId: 'greeting', timeoutSeconds: 5, maxInvalidAttempts: 3 } },
+      {
+        id: 'menu1',
+        type: 'menu',
+        config: { promptMediaAssetId: 'greeting', timeoutSeconds: 5, maxInvalidAttempts: 3 },
+      },
       { id: 'play1', type: 'play', config: { mediaAssetId: 'hours' } },
       { id: 'tc1', type: 'time_condition', config: { timezone: 'America/Chicago' } },
       { id: 'ext1', type: 'extension', config: { extensionId: 'ext-100', ringSeconds: 20 } },
@@ -90,7 +94,11 @@ describe('compileGraph', () => {
     const invalid: FlowGraphInput = {
       entryPoints: { main: 'menu1' },
       nodes: [
-        { id: 'menu1', type: 'menu', config: { promptMediaAssetId: 'm1', timeoutSeconds: 5, maxInvalidAttempts: 3 } },
+        {
+          id: 'menu1',
+          type: 'menu',
+          config: { promptMediaAssetId: 'm1', timeoutSeconds: 5, maxInvalidAttempts: 3 },
+        },
         { id: 'a', type: 'hangup', config: {} },
         { id: 'b', type: 'hangup', config: {} },
         { id: 'to', type: 'hangup', config: {} },
