@@ -23,7 +23,20 @@ export interface ExtensionRow {
   readonly username: string;
   readonly ha1: string;
   readonly realm: string;
+  readonly callerIdName: string | null;
+  readonly callerIdNumber: string | null;
 }
+
+const EXTENSION_COLUMNS = [
+  'id',
+  'tenant_id as tenantId',
+  'number',
+  'username',
+  'ha1',
+  'realm',
+  'caller_id_name as callerIdName',
+  'caller_id_number as callerIdNumber',
+] as const;
 
 export interface DidRow {
   readonly id: string;
@@ -32,6 +45,16 @@ export interface DidRow {
   readonly trunkId: string;
   readonly destinationType: string;
   readonly destinationId: string;
+}
+
+export interface OutboundRouteRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly priority: number;
+  readonly pattern: string;
+  readonly trunkIds: readonly string[];
+  readonly strip: number;
+  readonly prepend: string | null;
 }
 
 export interface TrunkRow {
@@ -46,7 +69,25 @@ export interface TrunkRow {
   readonly secret: string | null;
   readonly fromDomain: string | null;
   readonly status: string;
+  readonly callerIdName: string | null;
+  readonly callerIdNumber: string | null;
 }
+
+const TRUNK_COLUMNS = [
+  'id',
+  'tenant_id as tenantId',
+  'name',
+  'auth_mode as authMode',
+  'host',
+  'port',
+  'transport',
+  'username',
+  'secret',
+  'from_domain as fromDomain',
+  'status',
+  'caller_id_name as callerIdName',
+  'caller_id_number as callerIdNumber',
+] as const;
 
 type Executor = Kysely<TelephonyConfigDb> | Transaction<TelephonyConfigDb>;
 
@@ -147,14 +188,14 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .execute();
     },
 
-    /** Returns the previous row (if `username`/`realm` changed), for projection cleanup. */
+    /** Returns the previous row (if anything changed), for projection cleanup. */
     async upsertExtension(
       trx: Executor,
       extension: ExtensionRow,
     ): Promise<ExtensionRow | undefined> {
       const previous = await trx
         .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
+        .select(EXTENSION_COLUMNS)
         .where('id', '=', extension.id)
         .executeTakeFirst();
 
@@ -169,6 +210,8 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
             username: extension.username,
             ha1: extension.ha1,
             realm: extension.realm,
+            caller_id_name: extension.callerIdName,
+            caller_id_number: extension.callerIdNumber,
             created_at: now,
             updated_at: now,
           })
@@ -181,6 +224,8 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
             username: extension.username,
             ha1: extension.ha1,
             realm: extension.realm,
+            caller_id_name: extension.callerIdName,
+            caller_id_number: extension.callerIdNumber,
             updated_at: now,
           })
           .where('id', '=', extension.id)
@@ -192,7 +237,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     async deleteExtension(trx: Executor, id: string): Promise<ExtensionRow | undefined> {
       const existing = await trx
         .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
+        .select(EXTENSION_COLUMNS)
         .where('id', '=', id)
         .executeTakeFirst();
       if (existing === undefined) return undefined;
@@ -204,17 +249,14 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     listExtensionsForTenant(trx: Executor, tenantId: string): Promise<ExtensionRow[]> {
       return trx
         .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
+        .select(EXTENSION_COLUMNS)
         .where('tenant_id', '=', tenantId)
         .execute();
     },
 
     /** Every extension this service knows about, for reconciliation. */
     listExtensions(): Promise<ExtensionRow[]> {
-      return db.kysely
-        .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
-        .execute();
+      return db.kysely.selectFrom('extensions').select(EXTENSION_COLUMNS).execute();
     },
 
     /** `/fs/directory`'s domain lookup (S1-13): which tenant a SIP domain belongs to. */
@@ -234,7 +276,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     findExtensionByNumber(tenantId: string, number: string): Promise<ExtensionRow | undefined> {
       return db.kysely
         .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
+        .select(EXTENSION_COLUMNS)
         .where('tenant_id', '=', tenantId)
         .where('number', '=', number)
         .executeTakeFirst();
@@ -248,7 +290,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     findExtensionById(id: string): Promise<ExtensionRow | undefined> {
       return db.kysely
         .selectFrom('extensions')
-        .select(['id', 'tenant_id as tenantId', 'number', 'username', 'ha1', 'realm'])
+        .select(EXTENSION_COLUMNS)
         .where('id', '=', id)
         .executeTakeFirst();
     },
@@ -257,19 +299,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     async upsertTrunk(trx: Executor, trunk: TrunkRow): Promise<TrunkRow | undefined> {
       const previous = await trx
         .selectFrom('trunks')
-        .select([
-          'id',
-          'tenant_id as tenantId',
-          'name',
-          'auth_mode as authMode',
-          'host',
-          'port',
-          'transport',
-          'username',
-          'secret',
-          'from_domain as fromDomain',
-          'status',
-        ])
+        .select(TRUNK_COLUMNS)
         .where('id', '=', trunk.id)
         .executeTakeFirst();
 
@@ -289,6 +319,8 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
             secret: trunk.secret,
             from_domain: trunk.fromDomain,
             status: trunk.status,
+            caller_id_name: trunk.callerIdName,
+            caller_id_number: trunk.callerIdNumber,
             created_at: now,
             updated_at: now,
           })
@@ -306,6 +338,8 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
             secret: trunk.secret,
             from_domain: trunk.fromDomain,
             status: trunk.status,
+            caller_id_name: trunk.callerIdName,
+            caller_id_number: trunk.callerIdNumber,
             updated_at: now,
           })
           .where('id', '=', trunk.id)
@@ -317,19 +351,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     async deleteTrunk(trx: Executor, id: string): Promise<TrunkRow | undefined> {
       const existing = await trx
         .selectFrom('trunks')
-        .select([
-          'id',
-          'tenant_id as tenantId',
-          'name',
-          'auth_mode as authMode',
-          'host',
-          'port',
-          'transport',
-          'username',
-          'secret',
-          'from_domain as fromDomain',
-          'status',
-        ])
+        .select(TRUNK_COLUMNS)
         .where('id', '=', id)
         .executeTakeFirst();
       if (existing === undefined) return undefined;
@@ -343,41 +365,14 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
     findTrunkById(id: string): Promise<TrunkRow | undefined> {
       return db.kysely
         .selectFrom('trunks')
-        .select([
-          'id',
-          'tenant_id as tenantId',
-          'name',
-          'auth_mode as authMode',
-          'host',
-          'port',
-          'transport',
-          'username',
-          'secret',
-          'from_domain as fromDomain',
-          'status',
-        ])
+        .select(TRUNK_COLUMNS)
         .where('id', '=', id)
         .executeTakeFirst();
     },
 
     /** Every trunk this service knows about, for reconciliation. */
     listTrunks(): Promise<TrunkRow[]> {
-      return db.kysely
-        .selectFrom('trunks')
-        .select([
-          'id',
-          'tenant_id as tenantId',
-          'name',
-          'auth_mode as authMode',
-          'host',
-          'port',
-          'transport',
-          'username',
-          'secret',
-          'from_domain as fromDomain',
-          'status',
-        ])
-        .execute();
+      return db.kysely.selectFrom('trunks').select(TRUNK_COLUMNS).execute();
     },
 
     /** Every IP currently mirrored for a trunk. */
@@ -487,6 +482,140 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .where('e164', '=', e164)
         .executeTakeFirst();
     },
+
+    /**
+     * S2-04's caller-ID precedence, second tier: does this extension own one
+     * of the tenant's own DIDs? (`projection.ts`'s `resolveOutboundCallerId`.)
+     * Scoped to `tenantId` for the same reason `findDidByE164` is — belt and
+     * suspenders alongside `destination_id`'s own uniqueness within a tenant.
+     */
+    findDidByDestination(tenantId: string, destinationId: string): Promise<DidRow | undefined> {
+      return db.kysely
+        .selectFrom('dids')
+        .select([
+          'id',
+          'tenant_id as tenantId',
+          'e164',
+          'trunk_id as trunkId',
+          'destination_type as destinationType',
+          'destination_id as destinationId',
+        ])
+        .where('tenant_id', '=', tenantId)
+        .where('destination_type', '=', 'extension')
+        .where('destination_id', '=', destinationId)
+        .executeTakeFirst();
+    },
+
+    /** ISO 3166-1 alpha-2, or `undefined` if not yet known (`org-client.ts`'s own comment on when that happens). */
+    async findTenantCountry(tenantId: string): Promise<string | undefined> {
+      const row = await db.kysely
+        .selectFrom('tenants')
+        .select('country')
+        .where('id', '=', tenantId)
+        .executeTakeFirst();
+      return row?.country ?? undefined;
+    },
+
+    async setTenantCountry(trx: Executor, tenantId: string, country: string): Promise<void> {
+      await trx.updateTable('tenants').set({ country }).where('id', '=', tenantId).execute();
+    },
+
+    /**
+     * The tenant's own small integer `dr_rules.groupid`/`X-Dr-Group-Id`
+     * value (`schema.ts`'s own comment on `tenant_dr_groups` for why this
+     * exists at all) — assigned the first time it's needed and stable after
+     * that. `INSERT ... ON DUPLICATE KEY UPDATE tenant_id = tenant_id` is a
+     * no-op write that still lets a single statement double as "insert if
+     * missing, then tell me the id either way" without a races-prone
+     * select-then-insert.
+     */
+    async findOrCreateDrGroupId(trx: Executor, tenantId: string): Promise<number> {
+      await trx
+        .insertInto('tenant_dr_groups')
+        .values({ tenant_id: tenantId })
+        .onDuplicateKeyUpdate({ tenant_id: tenantId })
+        .execute();
+      const row = await trx
+        .selectFrom('tenant_dr_groups')
+        .select('dr_group_id')
+        .where('tenant_id', '=', tenantId)
+        .executeTakeFirstOrThrow();
+      return row.dr_group_id;
+    },
+
+    /**
+     * Replaces one outbound route's mirrored row (S2-04) — same "local
+     * mirror is the trusted desired state" pattern `trunks` already
+     * establishes. Returns the previous row, if any, so `projection.ts` can
+     * tell whether `dr_rules` actually needs re-writing.
+     */
+    async upsertOutboundRoute(trx: Executor, route: OutboundRouteRow): Promise<void> {
+      const now = new Date();
+      await trx
+        .insertInto('outbound_routes')
+        .values({
+          id: route.id,
+          tenant_id: route.tenantId,
+          priority: route.priority,
+          pattern: route.pattern,
+          trunk_ids: JSON.stringify(route.trunkIds),
+          strip: route.strip,
+          prepend: route.prepend,
+          created_at: now,
+          updated_at: now,
+        })
+        .onDuplicateKeyUpdate({
+          priority: route.priority,
+          pattern: route.pattern,
+          trunk_ids: JSON.stringify(route.trunkIds),
+          strip: route.strip,
+          prepend: route.prepend,
+          updated_at: now,
+        })
+        .execute();
+    },
+
+    async deleteOutboundRoute(trx: Executor, id: string): Promise<void> {
+      await trx.deleteFrom('outbound_routes').where('id', '=', id).execute();
+    },
+
+    /** `/fs/dialplan`'s outbound branch (S2-04): a tenant's own routes, longest/most-specific pattern first. */
+    findOutboundRoutesForTenant(tenantId: string): Promise<OutboundRouteRow[]> {
+      return db.kysely
+        .selectFrom('outbound_routes')
+        .select([
+          'id',
+          'tenant_id as tenantId',
+          'priority',
+          'pattern',
+          'trunk_ids as trunkIds',
+          'strip',
+          'prepend',
+        ])
+        .where('tenant_id', '=', tenantId)
+        .orderBy('priority', 'asc')
+        .execute()
+        .then((rows) => rows.map(parseOutboundRouteRow));
+    },
+  };
+}
+
+/** `outbound_routes.trunk_ids` is declared `json` — same driver-parsing quirk `trunks`' own columns document elsewhere in this file. */
+function parseOutboundRouteRow(row: {
+  id: string;
+  tenantId: string;
+  priority: number;
+  pattern: string;
+  trunkIds: unknown;
+  strip: number;
+  prepend: string | null;
+}): OutboundRouteRow {
+  return {
+    ...row,
+    trunkIds:
+      typeof row.trunkIds === 'string'
+        ? (JSON.parse(row.trunkIds) as string[])
+        : (row.trunkIds as string[]),
   };
 }
 

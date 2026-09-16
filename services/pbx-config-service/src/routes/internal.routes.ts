@@ -15,6 +15,8 @@ const CredentialResponseSchema = Type.Object({
   ha1: Type.String(),
   ha1b: Type.String(),
   realm: Type.String(),
+  callerIdName: Type.Union([Type.String(), Type.Null()]),
+  callerIdNumber: Type.Union([Type.String(), Type.Null()]),
 });
 const DidResponseSchema = Type.Object({
   id: Type.String(),

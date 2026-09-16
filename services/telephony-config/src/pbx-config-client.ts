@@ -19,6 +19,9 @@ export interface DigestCredential {
   readonly ha1: string;
   readonly ha1b: string;
   readonly realm: string;
+  /** S2-04's caller-ID precedence, first tier: the extension's own override, if set. */
+  readonly callerIdName: string | null;
+  readonly callerIdNumber: string | null;
 }
 
 /**

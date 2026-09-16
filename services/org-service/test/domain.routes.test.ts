@@ -363,6 +363,64 @@ describe.skipIf(skipReason !== undefined)('domain-service HTTP routes', () => {
     });
   });
 
+  describe('GET /internal/v1/tenants/:id/country', () => {
+    it('rejects a request with no bearer token', async () => {
+      const reseller = await makeReseller();
+      const tenant = await orgs.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${tenant.id}/country`,
+      });
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it("returns the tenant's country with the right token", async () => {
+      const reseller = await makeReseller();
+      const tenant = await orgs.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${tenant.id}/country`,
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ country: 'US' });
+    });
+
+    it('404s a reseller org id (not a tenant)', async () => {
+      const reseller = await makeReseller();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${reseller.id}/country`,
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('404s an unknown tenant id', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/v1/tenants/no-such-tenant/country',
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
   it('every public route declares permission and dataClass (CLAUDE.md rule 3)', () => {
     for (const route of app.registeredRoutes) {
       if (route.url.startsWith('/v1/')) {

@@ -4,9 +4,45 @@ import type { Server } from '@cuc/http';
 import type { Logger } from '@cuc/logger';
 
 import { fromContextId } from '../context-id.js';
-import type { ReadModelRepo } from '../repo/read-model.repo.js';
+import { resolveOutboundCallerId, type CallerId } from '../domain/caller-id.js';
+import { normalizeToE164 } from '../domain/e164.js';
+import type { OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../schema.js';
-import { buildDialplanDocument, buildDirectoryDocument, NOT_FOUND_DOCUMENT } from '../xml.js';
+import {
+  buildDialplanDocument,
+  buildDirectoryDocument,
+  buildOutboundDialplanDocument,
+  NOT_FOUND_DOCUMENT,
+} from '../xml.js';
+
+/**
+ * The most specific outbound route matching `normalizedNumber` (S2-04):
+ * longest `pattern` prefix wins, ties broken by the lower `priority` — the
+ * same "longest prefix, then priority" precedence `drouting`'s own
+ * `do_routing()` implements downstream. This is a coarse pre-check, not the
+ * real routing decision: OpenSIPs' `route{}` (via `do_routing()`) is what
+ * actually selects and fails over between gateways once the call gets
+ * there. What this needs it for is (1) deciding whether to attempt
+ * outbound routing at all, and (2) picking which trunk's `caller_id_policy`
+ * feeds the third tier of `resolveOutboundCallerId`.
+ */
+function findBestOutboundRoute(
+  routes: readonly OutboundRouteRow[],
+  normalizedNumber: string,
+): OutboundRouteRow | undefined {
+  let best: OutboundRouteRow | undefined;
+  for (const route of routes) {
+    if (!normalizedNumber.startsWith(route.pattern)) continue;
+    if (
+      best === undefined ||
+      route.pattern.length > best.pattern.length ||
+      (route.pattern.length === best.pattern.length && route.priority < best.priority)
+    ) {
+      best = route;
+    }
+  }
+  return best;
+}
 
 /**
  * `/fs/directory` and `/fs/dialplan` (S1-13; 03 §3.1) — two of the three
@@ -74,6 +110,95 @@ export function registerFsRoutes(
     return username === 'fs-node' && secretEquals(fsXmlCurlToken, password);
   }
 
+  /**
+   * `/fs/dialplan`'s outbound-to-PSTN branch (S2-04; 03 §2.1: "request from
+   * FS: ... else -> do_routing(...)"). Reached when the `internal`-direction
+   * lookup above finds no matching extension for `destinationNumber` — this
+   * is the fallback that decides whether it's a real outbound call instead
+   * of a plain miss.
+   *
+   * `variable_sip_from_user` is FreeSWITCH's own auto-exposed channel
+   * variable for the From header's user part (a *standard* header, unlike
+   * the `X-*` custom ones this file's other branches read via
+   * `variable_sip_h_*` — no `_h_` infix for a header FreeSWITCH itself
+   * already understands). Since OpenSIPs relays a registered phone's
+   * original INVITE to FS unmodified aside from adding its own trusted
+   * `X-*` headers (`opensips.cfg.template`'s `is_from_local` branch never
+   * rewrites From), this is the calling extension's own dialable number —
+   * confirmed live, not assumed, the same discipline every other trusted
+   * field in this file follows. A miss here (the SIP username and dialable
+   * number have diverged after a renumbering, `schema.ts`'s own comment on
+   * why that can happen) degrades to trunk-policy-only caller ID rather
+   * than blocking the call.
+   */
+  async function handleOutboundDial(
+    body: Record<string, string>,
+    tenantId: string,
+    destinationNumber: string,
+    callerContext: string,
+  ): Promise<string> {
+    const country = await readModel.findTenantCountry(tenantId);
+    if (country === undefined) {
+      logger.info({ tenantId }, 'dialplan: tenant has no known country; cannot normalize outbound');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    const normalized = normalizeToE164(destinationNumber, country);
+    if (normalized === undefined) {
+      logger.info({ tenantId, destinationNumber }, 'dialplan: could not normalize to E.164');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    const routes = await readModel.findOutboundRoutesForTenant(tenantId);
+    const route = findBestOutboundRoute(routes, normalized);
+    if (route === undefined) {
+      logger.info({ tenantId, normalized }, 'dialplan: no outbound route matches this number');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    const domain = await readModel.findDomain(db.kysely, tenantId);
+    if (domain === undefined) {
+      logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    const callingNumber = body['variable_sip_from_user'];
+    const callingExtension =
+      callingNumber === undefined || callingNumber === ''
+        ? undefined
+        : await readModel.findExtensionByNumber(tenantId, callingNumber);
+
+    const extensionCallerId: CallerId | null =
+      callingExtension === undefined
+        ? null
+        : { name: callingExtension.callerIdName, number: callingExtension.callerIdNumber };
+    const boundDid =
+      callingExtension === undefined
+        ? undefined
+        : await readModel.findDidByDestination(tenantId, callingExtension.id);
+    const didCallerId: CallerId | null =
+      boundDid === undefined ? null : { name: null, number: boundDid.e164 };
+
+    const primaryTrunk = await readModel.findTrunkById(route.trunkIds[0] ?? '');
+    const trunkCallerId: CallerId | null =
+      primaryTrunk === undefined
+        ? null
+        : { name: primaryTrunk.callerIdName, number: primaryTrunk.callerIdNumber };
+
+    const callerId = resolveOutboundCallerId(extensionCallerId, didCallerId, trunkCallerId);
+    const drGroupId = await readModel.findOrCreateDrGroupId(db.kysely, tenantId);
+
+    return buildOutboundDialplanDocument(
+      callerContext,
+      destinationNumber,
+      normalized,
+      domain.fqdn,
+      opensipsSipUri,
+      drGroupId,
+      callerId,
+    );
+  }
+
   app.post(
     '/fs/directory',
     // No `schema`: FS posts form-urlencoded, not JSON, and the response is
@@ -136,11 +261,12 @@ export function registerFsRoutes(
 
       const extension = await readModel.findExtensionByNumber(tenantId, destinationNumber);
       if (extension === undefined) {
-        logger.info(
-          { tenantId, destinationNumber },
-          'dialplan: no extension with that number in this tenant',
-        );
-        return NOT_FOUND_DOCUMENT;
+        // Not a known extension — S2-04: this may still be a real call, just
+        // an outbound one to the PSTN, not a rejection. `route{}`'s "request
+        // from FS" branch already falls through to `do_routing()` on the
+        // exact same signal (a `lookup("location")` miss on this same
+        // R-URI) once this response bridges the call back to it.
+        return handleOutboundDial(body, tenantId, destinationNumber, callerContext);
       }
 
       // The bridge's R-URI needs the tenant's own SIP domain (`xml.ts`'s own

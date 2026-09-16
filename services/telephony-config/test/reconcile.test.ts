@@ -112,6 +112,8 @@ describe.skipIf(skipReason !== undefined)('reconciler', () => {
       username: '101',
       ha1: 'a'.repeat(32),
       realm: 'acme.platform.test',
+      callerIdName: null,
+      callerIdNumber: null,
     });
 
     const report = await reconciler().reconcileOnce();

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-04: stands in for a carrier trunk that is down/overloaded — the
+  *first*, lower-priority gateway in an outbound route's ordered trunk list.
+  Immediately rejects the INVITE with 503, the exact "Done when" trigger
+  ("SIPp confirms failover to the secondary trunk on 503") that
+  `failure_route[outbound_gw]` (`telephony/opensips/opensips.cfg.template`)
+  reacts to by calling `use_next_gw()` and retrying the route's next trunk.
+
+  A pure UAS, same "no CSV fields, only [last_...] header echoes" shape as
+  `carrier_registrar.xml` (S2-02) — run via `startBackgroundUas`, which does
+  not mount a `-inf` CSV file. No `<recv request="ACK">`: a stateful SIP
+  proxy (OpenSIPs' `t_relay()`) generates the ACK for a non-2xx final
+  response to INVITE on this leg itself (RFC 3261 §17.1.1) — optional here
+  only so an unusually slow proxy doesn't count as "unexpected message".
+-->
+<scenario name="Carrier trunk - rejects with 503">
+  <recv request="INVITE" crlf="true" timeout="60000">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      SIP/2.0 503 Service Unavailable
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv request="ACK" optional="true">
+  </recv>
+
+</scenario>

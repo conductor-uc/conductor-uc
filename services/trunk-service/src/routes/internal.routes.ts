@@ -1,11 +1,27 @@
 import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
+import type { OutboundRouteRepo } from '../repo/outbound-route.repo.js';
 import type { TrunkRepo } from '../repo/trunk.repo.js';
 
 const TenantTrunkParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
   id: Type.String({ minLength: 1 }),
+});
+
+const OutboundRouteViewSchema = Type.Object({
+  id: Type.String(),
+  tenantId: Type.String(),
+  priority: Type.Integer(),
+  pattern: Type.String(),
+  trunkIds: Type.Array(Type.String()),
+  strip: Type.Integer(),
+  prepend: Type.Union([Type.String(), Type.Null()]),
+});
+
+const CallerIdPolicySchema = Type.Object({
+  name: Type.Union([Type.String(), Type.Null()]),
+  number: Type.Union([Type.String(), Type.Null()]),
 });
 
 const ProjectionViewSchema = Type.Object({
@@ -22,6 +38,8 @@ const ProjectionViewSchema = Type.Object({
   fromDomain: Type.Union([Type.String(), Type.Null()]),
   codecs: Type.Array(Type.String()),
   maxChannels: Type.Union([Type.Integer(), Type.Null()]),
+  /** S2-04's caller-ID precedence, third tier (G-22). */
+  callerIdPolicy: Type.Union([CallerIdPolicySchema, Type.Null()]),
   status: Type.String(),
   ips: Type.Array(Type.String()),
 });
@@ -45,6 +63,7 @@ const ProjectionViewSchema = Type.Object({
 export function registerInternalRoutes(
   app: Server,
   trunks: TrunkRepo,
+  outboundRoutes: OutboundRouteRepo,
   internalServiceToken: string,
 ): void {
   app.get(
@@ -77,6 +96,45 @@ export function registerInternalRoutes(
       return {
         rows: views.map((trunk) => ({ ...trunk, codecs: [...trunk.codecs], ips: [...trunk.ips] })),
       };
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/outbound-routes/:id` and
+   * `GET /internal/v1/outbound-routes` (S2-04) — the same shape as the
+   * trunk routes above: `trunk.outboundRoute.*` events carry only an id
+   * (06: events stay thin), and reconciliation needs every route at once.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/outbound-routes/:id',
+    {
+      config: { public: true },
+      schema: { params: TenantTrunkParamsSchema, response: { 200: OutboundRouteViewSchema } },
+    },
+    async (request) => {
+      requireInternalToken(request.headers.authorization, internalServiceToken);
+
+      const { tenantId, id } = request.params;
+      const route = await outboundRoutes.findById({ tenantId }, id);
+      if (route === undefined) {
+        throw ProblemError.notFound('No outbound route with that id in that tenant.');
+      }
+      return { ...route, trunkIds: [...route.trunkIds] } satisfies Static<
+        typeof OutboundRouteViewSchema
+      >;
+    },
+  );
+
+  app.get(
+    '/internal/v1/outbound-routes',
+    {
+      config: { public: true },
+      schema: { response: { 200: Type.Object({ rows: Type.Array(OutboundRouteViewSchema) }) } },
+    },
+    async (request) => {
+      requireInternalToken(request.headers.authorization, internalServiceToken);
+      const routes = await outboundRoutes.listAll();
+      return { rows: routes.map((route) => ({ ...route, trunkIds: [...route.trunkIds] })) };
     },
   );
 }

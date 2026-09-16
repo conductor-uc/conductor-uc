@@ -3,9 +3,9 @@ import type { EventTables } from '@cuc/events';
 /**
  * This service's own schema (05 §3.4). No cross-schema joins (05 §1.1).
  *
- * Only `trunks` and `trunk_ips` — 05 §3.4 also lists `outbound_routes` and
- * `emergency_routes` under trunk-service, but S2-01's scope is trunk CRUD,
- * IPs, and credentials only; those two tables arrive with S2-04 and S2-06.
+ * `emergency_routes` is still not here — 05 §3.4 lists it under
+ * trunk-service too, but it arrives with S2-06 (its own "Depends on: S2-04"
+ * line in the plan).
  */
 export interface TrunkServiceDb extends EventTables {
   trunks: {
@@ -48,5 +48,25 @@ export interface TrunkServiceDb extends EventTables {
     /** IPv4 or IPv6 CIDR, used for inbound trunk identification. */
     cidr: string;
     created_at: Date;
+  };
+  /**
+   * S2-04 (05 §3.4). `pattern` is an E.164 prefix, not a full regex —
+   * `domain/outbound-route.ts`'s own comment on why. `trunk_ids` is a JSON
+   * array, ordered (failover sequence, 03 §2.1) — `dr_rules.gwlist` is
+   * exactly this list, comma-joined, once projected (S2-04's `projection.ts`).
+   */
+  outbound_routes: {
+    id: string;
+    tenant_id: string;
+    priority: number;
+    pattern: string;
+    /** JSON array of trunk ids, in try-order. */
+    trunk_ids: string;
+    strip: number;
+    /** Null means prepend nothing. */
+    prepend: string | null;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
   };
 }

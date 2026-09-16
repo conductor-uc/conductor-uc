@@ -2,9 +2,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
  * This service's event contracts (06's trunk-service section:
- * `trunk.trunk.created|updated|deleted`). `trunk.route.changed` belongs to
- * outbound-route management (S2-04), not S2-01, so it is not declared here
- * yet — added when that task actually emits it.
+ * `trunk.trunk.created|updated|deleted`; S2-04 adds
+ * `trunk.outbound_route.created|updated|deleted`, the same thin-event shape).
  */
 export const trunkEvents = defineEvents({
   'trunk.trunk.created': {
@@ -25,5 +24,20 @@ export const trunkEvents = defineEvents({
     schemaVersion: 1,
     description: 'A trunk was deleted.',
     data: Type.Object({ trunkId: Type.String({ minLength: 1 }) }),
+  },
+  'trunk.outbound_route.created': {
+    schemaVersion: 1,
+    description: 'An outbound route was created for a tenant.',
+    data: Type.Object({ outboundRouteId: Type.String({ minLength: 1 }) }),
+  },
+  'trunk.outbound_route.updated': {
+    schemaVersion: 1,
+    description: "An outbound route's pattern, trunk list, strip, or prepend changed.",
+    data: Type.Object({ outboundRouteId: Type.String({ minLength: 1 }) }),
+  },
+  'trunk.outbound_route.deleted': {
+    schemaVersion: 1,
+    description: 'An outbound route was deleted.',
+    data: Type.Object({ outboundRouteId: Type.String({ minLength: 1 }) }),
   },
 });

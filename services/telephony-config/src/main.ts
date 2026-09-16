@@ -10,6 +10,7 @@ import { createPbxConsumer } from './consumers/pbx.consumer.js';
 import { createTrunkConsumer } from './consumers/trunk.consumer.js';
 import { createOpenSipsMiClient } from './opensips-mi-client.js';
 import type { OpenSipsDb } from './opensips-schema.js';
+import { createOrgClient } from './org-client.js';
 import { createPbxConfigClient } from './pbx-config-client.js';
 import { createProjection } from './projection.js';
 import { createOpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
@@ -80,6 +81,10 @@ const trunkConfigClient = createTrunkConfigClient({
   baseUrl: config.TRUNK_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
+const orgClient = createOrgClient({
+  baseUrl: config.ORG_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
 const miClient = createOpenSipsMiClient({ url: config.OPENSIPS_MI_URL });
 
 const readModel = createReadModelRepo(db);
@@ -94,7 +99,7 @@ const projection = createProjection(
   config.OPENSIPS_SIP_URI,
 );
 
-const orgConsumer = createOrgConsumer(db, bus, logger, readModel, projection);
+const orgConsumer = createOrgConsumer(db, bus, logger, readModel, projection, orgClient);
 await orgConsumer.ensure();
 const orgConsumerLoop = orgConsumer.run();
 

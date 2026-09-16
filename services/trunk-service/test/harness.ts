@@ -7,6 +7,10 @@ import { connectBus } from '@cuc/events';
 import type { Logger } from '@cuc/logger';
 import { silentLogger, startTestDatabase, startTestNats, type TestNatsHandle } from '@cuc/testing';
 
+import {
+  createOutboundRouteRepo,
+  type OutboundRouteRepo,
+} from '../src/repo/outbound-route.repo.js';
 import { createTrunkRepo, type TrunkRepo } from '../src/repo/trunk.repo.js';
 import type { TenantResellerLookup } from '../src/org-client.js';
 import type { TrunkServiceDb } from '../src/schema.js';
@@ -16,6 +20,7 @@ export interface Harness {
   readonly db: Database<TrunkServiceDb>;
   readonly kek: KekProvider;
   readonly trunks: TrunkRepo;
+  readonly outboundRoutes: OutboundRouteRepo;
   readonly resellers: FakeTenantResellers;
   readonly logger: Logger;
   close(): Promise<void>;
@@ -56,11 +61,13 @@ export async function startHarness(): Promise<Harness> {
   const kek = fileKekFromConfig({ CRYPTO_KEKS: `1:${TEST_KEK}`, CRYPTO_KEK_CURRENT: '1' });
   const resellers = fakeTenantResellers();
   const trunks = createTrunkRepo(db, resellers.lookup, kek);
+  const outboundRoutes = createOutboundRouteRepo(db);
 
   return {
     db,
     kek,
     trunks,
+    outboundRoutes,
     resellers,
     logger,
     async close() {
@@ -97,6 +104,7 @@ export async function startBusHarness(): Promise<BusHarness> {
 }
 
 export async function resetSchema(db: Database<TrunkServiceDb>): Promise<void> {
+  await db.kysely.deleteFrom('outbound_routes').execute();
   await db.kysely.deleteFrom('trunk_ips').execute();
   await db.kysely.deleteFrom('trunks').execute();
   await db.kysely.deleteFrom('outbox').execute();

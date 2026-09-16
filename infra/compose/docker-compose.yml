@@ -297,6 +297,7 @@ services:
       OPENSIPS_SIP_URI: opensips:${OPENSIPS_SIP_PORT:-5060}
       PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
       TRUNK_SERVICE_URL: http://trunk-service:8080
+      ORG_SERVICE_URL: http://org-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
       RECONCILE_INTERVAL_MS: '900000'

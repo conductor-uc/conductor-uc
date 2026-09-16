@@ -56,6 +56,8 @@ export const configSchema = Type.Object({
   PBX_CONFIG_SERVICE_URL: Env.url(),
   /** Base URL for trunk-service's internal API, e.g. http://trunk-service:8080 (S2-02). */
   TRUNK_SERVICE_URL: Env.url(),
+  /** Base URL for org-service's internal API, e.g. http://org-service:8080 (S2-04, `org-client.ts`'s country lookup). */
+  ORG_SERVICE_URL: Env.url(),
   /**
    * Shared bearer token pbx-config-service's and trunk-service's
    * `/internal/v1` routes expect (07 §1's precedent, same variable name

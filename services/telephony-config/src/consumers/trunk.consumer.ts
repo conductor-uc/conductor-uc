@@ -10,24 +10,29 @@ interface TrunkEventData {
   readonly trunkId: string;
 }
 
+interface OutboundRouteEventData {
+  readonly outboundRouteId: string;
+}
+
 export interface TrunkConsumerOptions {
   /** How long one pull waits for a message (`@cuc/events`' default: 1s). Longer in tests. */
   readonly pullTimeoutMs?: number;
 }
 
 /**
- * The `TRUNK` stream consumer (S2-02): `trunk.trunk.created`, `.updated`,
- * `.deleted` — keeps `opensips.registrant`/`address`/`dr_gateways` in sync
- * with trunk-service.
+ * The `TRUNK` stream consumer (S2-02; S2-04 adds `trunk.outbound_route.*`):
+ * `trunk.trunk.created`, `.updated`, `.deleted` keep
+ * `opensips.registrant`/`address`/`dr_gateways` in sync with trunk-service,
+ * and `trunk.outbound_route.created`, `.updated`, `.deleted` keep
+ * `opensips.dr_rules` in sync.
  *
- * Every event carries only `trunkId` (06: events stay thin), so
- * `created`/`updated` both re-fetch the trunk's current full config rather
- * than trusting anything in the payload — same story as
- * `pbx.consumer.ts`/`projectExtension`.
+ * Every event carries only an id (06: events stay thin), so `created`/
+ * `updated` both re-fetch current state rather than trusting anything in
+ * the payload — same story as `pbx.consumer.ts`/`projectExtension`.
  *
  * `envelope.orgContext.tenantId` is trusted here: trunk-service's own
- * `trunk.repo.ts` sets it explicitly on every `trunk.trunk.*` event, the
- * same as pbx-config-service does for `pbx.extension.*`.
+ * repos set it explicitly on every event they publish, the same as
+ * pbx-config-service does for `pbx.extension.*`/`pbx.did.*`.
  */
 export function createTrunkConsumer(
   db: Database<TelephonyConfigDb>,
@@ -42,24 +47,46 @@ export function createTrunkConsumer(
     logger,
     registry: telephonyEvents,
     durable: 'telephony-config-trunk',
-    subjects: ['trunk.trunk.created', 'trunk.trunk.updated', 'trunk.trunk.deleted'],
+    subjects: [
+      'trunk.trunk.created',
+      'trunk.trunk.updated',
+      'trunk.trunk.deleted',
+      'trunk.outbound_route.created',
+      'trunk.outbound_route.updated',
+      'trunk.outbound_route.deleted',
+    ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
     handler: async (envelope, trx) => {
-      const data = envelope.data as TrunkEventData;
       const tenantId = envelope.orgContext.tenantId;
       if (tenantId === undefined) {
-        logger.warn({ eventId: envelope.id }, 'trunk.trunk event with no tenantId; skipping');
+        logger.warn({ eventId: envelope.id }, 'trunk event with no tenantId; skipping');
         return;
       }
 
       switch (envelope.type) {
         case 'trunk.trunk.created':
         case 'trunk.trunk.updated':
-          await projection.projectTrunk(trx, tenantId, data.trunkId);
+          await projection.projectTrunk(trx, tenantId, (envelope.data as TrunkEventData).trunkId);
           return;
 
         case 'trunk.trunk.deleted':
-          await projection.removeTrunk(trx, data.trunkId);
+          await projection.removeTrunk(trx, (envelope.data as TrunkEventData).trunkId);
+          return;
+
+        case 'trunk.outbound_route.created':
+        case 'trunk.outbound_route.updated':
+          await projection.projectOutboundRoute(
+            trx,
+            tenantId,
+            (envelope.data as OutboundRouteEventData).outboundRouteId,
+          );
+          return;
+
+        case 'trunk.outbound_route.deleted':
+          await projection.removeOutboundRoute(
+            trx,
+            (envelope.data as OutboundRouteEventData).outboundRouteId,
+          );
           return;
 
         default:

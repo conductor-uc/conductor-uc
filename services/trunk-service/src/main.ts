@@ -7,8 +7,10 @@ import { createLogger } from '@cuc/logger';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { createOrgClient } from './org-client.js';
+import { createOutboundRouteRepo } from './repo/outbound-route.repo.js';
 import { createTrunkRepo } from './repo/trunk.repo.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
+import { registerOutboundRouteRoutes } from './routes/outbound-route.routes.js';
 import { registerTrunkRoutes } from './routes/trunk.routes.js';
 import type { TrunkServiceDb } from './schema.js';
 import { createTelephonyConfigClient } from './telephony-config-client.js';
@@ -66,6 +68,7 @@ const orgClient = createOrgClient({
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
 const trunkRepo = createTrunkRepo(db, orgClient.resellerForTenant, kek);
+const outboundRouteRepo = createOutboundRouteRepo(db);
 const telephonyConfigClient = createTelephonyConfigClient({
   baseUrl: config.TELEPHONY_CONFIG_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
@@ -91,7 +94,8 @@ app.addReadinessCheck('outbox', async () => {
 });
 
 registerTrunkRoutes(app, trunkRepo, bus, telephonyConfigClient);
-registerInternalRoutes(app, trunkRepo, config.INTERNAL_SERVICE_TOKEN);
+registerOutboundRouteRoutes(app, outboundRouteRepo);
+registerInternalRoutes(app, trunkRepo, outboundRouteRepo, config.INTERNAL_SERVICE_TOKEN);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

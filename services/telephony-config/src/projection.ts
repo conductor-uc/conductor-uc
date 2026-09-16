@@ -3,10 +3,29 @@ import type { Logger } from '@cuc/logger';
 
 import type { OpenSipsMiClient } from './opensips-mi-client.js';
 import type { PbxConfigClient } from './pbx-config-client.js';
-import type { ReadModelRepo, TrunkRow } from './repo/read-model.repo.js';
-import type { OpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
+import type { OutboundRouteRow, ReadModelRepo, TrunkRow } from './repo/read-model.repo.js';
+import {
+  DR_TAG_WIDTH,
+  drTag,
+  outboundGwid,
+  stripLeadingPlus,
+  type OpenSipsProjectionRepo,
+} from './repo/opensips-projection.repo.js';
 import type { TelephonyConfigDb } from './schema.js';
-import type { TrunkConfig, TrunkConfigClient } from './trunk-config-client.js';
+import type { OutboundRouteConfig, TrunkConfig, TrunkConfigClient } from './trunk-config-client.js';
+
+/**
+ * `dr_gateways.attrs` for a trunk with a register credential (S2-04) —
+ * `route{}`'s outbound branch reads this back to answer a carrier's own
+ * 401/407 challenge with `uac_auth()`. `null` for an ip-mode trunk with
+ * nothing to authenticate with.
+ */
+function drGatewayAttrsFor(
+  trunk: Pick<TrunkConfig, 'username' | 'secret' | 'host'>,
+): string | null {
+  if (trunk.username === null || trunk.secret === null) return null;
+  return `${trunk.username}:${trunk.secret}:${trunk.host}`;
+}
 
 /** `203.0.113.0/24` -> `{ ip: '203.0.113.0', mask: 24 }` (03 §1's `address` table). */
 export function parseCidr(cidr: string): { ip: string; mask: number } {
@@ -100,6 +119,8 @@ export function createProjection(
         username: credential.username,
         ha1: credential.ha1,
         realm: credential.realm,
+        callerIdName: credential.callerIdName,
+        callerIdNumber: credential.callerIdNumber,
       });
 
       if (
@@ -219,11 +240,16 @@ export function createProjection(
       }
 
       const gatewayChanged =
-        previous === undefined || previous.host !== trunk.host || previous.port !== trunk.port;
+        previous === undefined ||
+        previous.host !== trunk.host ||
+        previous.port !== trunk.port ||
+        previous.username !== trunk.username ||
+        previous.secret !== trunk.secret;
       await opensips.upsertDrGateway({
         gwid: trunk.id,
         address: `${trunk.host}:${String(trunk.port)}`,
         description: trunk.name,
+        attrs: drGatewayAttrsFor(trunk),
       });
       if (gatewayChanged) await mi.call('dr_reload');
     },
@@ -253,6 +279,103 @@ export function createProjection(
       await opensips.deleteDrGateway(trunkId);
       await mi.call('dr_reload');
     },
+
+    /**
+     * Fetches an outbound route's current definition and projects it into
+     * `dr_rules` (S2-04) — shared by `trunk.outbound_route.created` and
+     * `.updated`, the same "thin event, re-fetch current state" story every
+     * other projection here tells. A 404 from trunk-service means the route
+     * is already gone (raced with a delete) — nothing to project.
+     */
+    async projectOutboundRoute(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      outboundRouteId: string,
+    ): Promise<void> {
+      const route = await trunkConfig.findOutboundRoute(tenantId, outboundRouteId);
+      if (route === undefined) {
+        logger.warn({ tenantId, outboundRouteId }, 'outbound route not found in trunk-service');
+        return;
+      }
+
+      const groupId = await readModel.findOrCreateDrGroupId(trx, tenantId);
+
+      // Full replace, not a diff: an `.updated` event's own `trunkIds` may
+      // have dropped a trunk since the last projection, and this is the
+      // simplest way to guarantee no stale synthesized gateway lingers for
+      // it — matches `replaceAddresses`' own "replace the whole set" shape
+      // (S2-02), for the same reason (the vendored schema gives no natural
+      // per-row upsert key to diff against cheaply).
+      await opensips.deleteOutboundGatewaysForRoute(route.id);
+
+      // A trunk this route names but that this service has not (yet, or
+      // ever) projected is skipped rather than failing the whole route —
+      // the same "honest miss, not a guess" discipline the rest of this
+      // file follows; `reconcile.ts` has no equivalent repair pass for this
+      // yet (docs/decisions.md gap).
+      const gwids: string[] = [];
+      for (const trunkId of route.trunkIds) {
+        const trunk = await readModel.findTrunkById(trunkId);
+        if (trunk === undefined) {
+          logger.warn(
+            { outboundRouteId: route.id, trunkId },
+            'outbound route names a trunk this service has not projected; skipping it',
+          );
+          continue;
+        }
+        await opensips.upsertOutboundGateway({
+          routeId: route.id,
+          trunkId,
+          address: `${trunk.host}:${String(trunk.port)}`,
+          description: `${trunk.name} (${route.pattern || 'catch-all'})`,
+          // Widened by `DR_TAG_WIDTH`: `$rU` reaching this gateway carries
+          // the tenant's own tag ahead of the dialed number (G-28), and
+          // `strip` must eat that tag too, not just the route's own value.
+          strip: DR_TAG_WIDTH + route.strip,
+          prepend: route.prepend,
+          attrs: drGatewayAttrsFor(trunk),
+        });
+        gwids.push(outboundGwid(route.id, trunkId));
+      }
+
+      await readModel.upsertOutboundRoute(trx, toOutboundRouteRow(route));
+      await opensips.upsertDrRule({
+        routeId: route.id,
+        // G-28/G-29: tenant-tagged and digit-only — `drouting` rejects a
+        // leading `+` outright, and the tag is what `do_routing()`'s own
+        // (now-omitted) group param can no longer provide.
+        prefix: drTag(groupId) + stripLeadingPlus(route.pattern),
+        priority: route.priority,
+        gwlist: gwids,
+      });
+      await mi.call('dr_reload');
+    },
+
+    /**
+     * `trunk.outbound_route.deleted`: remove the local mirror, every
+     * synthesized per-route gateway it fed, and the `dr_rules` row itself.
+     */
+    async removeOutboundRoute(
+      trx: Transaction<TelephonyConfigDb>,
+      outboundRouteId: string,
+    ): Promise<void> {
+      await readModel.deleteOutboundRoute(trx, outboundRouteId);
+      await opensips.deleteOutboundGatewaysForRoute(outboundRouteId);
+      await opensips.deleteDrRule(outboundRouteId);
+      await mi.call('dr_reload');
+    },
+  };
+}
+
+function toOutboundRouteRow(route: OutboundRouteConfig): OutboundRouteRow {
+  return {
+    id: route.id,
+    tenantId: route.tenantId,
+    priority: route.priority,
+    pattern: route.pattern,
+    trunkIds: route.trunkIds,
+    strip: route.strip,
+    prepend: route.prepend,
   };
 }
 
@@ -269,6 +392,8 @@ function toTrunkRow(trunk: TrunkConfig): TrunkRow {
     secret: trunk.secret,
     fromDomain: trunk.fromDomain,
     status: trunk.status,
+    callerIdName: trunk.callerIdPolicy?.name ?? null,
+    callerIdNumber: trunk.callerIdPolicy?.number ?? null,
   };
 }
 

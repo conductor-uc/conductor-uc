@@ -110,4 +110,19 @@ export const telephonyEvents = defineEvents({
     description: 'A trunk was deleted.',
     data: Type.Object({ trunkId: Type.String({ minLength: 1 }) }),
   },
+  'trunk.outbound_route.created': {
+    schemaVersion: 1,
+    description: 'An outbound route was created for a tenant.',
+    data: Type.Object({ outboundRouteId: Type.String({ minLength: 1 }) }),
+  },
+  'trunk.outbound_route.updated': {
+    schemaVersion: 1,
+    description: "An outbound route's pattern, trunk list, strip, or prepend changed.",
+    data: Type.Object({ outboundRouteId: Type.String({ minLength: 1 }) }),
+  },
+  'trunk.outbound_route.deleted': {
+    schemaVersion: 1,
+    description: 'An outbound route was deleted.',
+    data: Type.Object({ outboundRouteId: Type.String({ minLength: 1 }) }),
+  },
 });
