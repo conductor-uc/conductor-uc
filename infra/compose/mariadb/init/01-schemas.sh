@@ -36,6 +36,10 @@ create_service_db trunk_service trunk_service "${TRUNK_SERVICE_DB_PASSWORD}"
 # own schema/user, same 05 §1.1 rule as every other service, not an
 # exception to the pattern above.
 create_service_db media_worker media_worker "${MEDIA_WORKER_DB_PASSWORD}"
+# S2-11: same as media_worker above — outbox/consumed_events only
+# (`services/call-control/src/schema.ts`'s own doc comment); call ownership
+# itself lives in Redis (04 §3), not here.
+create_service_db call_control call_control "${CALL_CONTROL_DB_PASSWORD}"
 
 # `opensips` is the one schema not owned by a Node service (05 §1.1's rule
 # still applies — one schema, one user, granted only on its own schema):
