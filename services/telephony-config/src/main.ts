@@ -3,6 +3,7 @@ import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
+import { storageFromConfig } from '@cuc/storage';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
@@ -99,6 +100,7 @@ const orgClient = createOrgClient({
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
 const miClient = createOpenSipsMiClient({ url: config.OPENSIPS_MI_URL });
+const storage = storageFromConfig(config, logger);
 
 const readModel = createReadModelRepo(db);
 const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
@@ -158,6 +160,7 @@ registerFsRoutes(
   logger,
   orgClient,
   pbxConfigClient,
+  storage,
 );
 registerInternalRoutes(
   app,

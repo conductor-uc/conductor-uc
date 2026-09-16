@@ -63,6 +63,20 @@ describe.skipIf(skipReason !== undefined)('@cuc/storage', () => {
         expect(await download(getUrl)).toBe('hello from a real upload');
       });
 
+      it('round-trips an object directly through putObject/getObject, no presigned URL involved', async () => {
+        const storage = makeStorage(mode);
+        const tenant = storage.forTenant(randomUUID());
+        await tenant.provisionBucket();
+
+        await tenant.putObject('raw/upload.bin', Buffer.from('server-side bytes'), {
+          contentType: 'application/octet-stream',
+        });
+
+        expect((await tenant.getObject('raw/upload.bin')).toString('utf8')).toBe(
+          'server-side bytes',
+        );
+      });
+
       it('provisionBucket is idempotent — calling it twice does not throw', async () => {
         const storage = makeStorage(mode);
         const tenant = storage.forTenant(randomUUID());

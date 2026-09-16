@@ -78,7 +78,7 @@ Constraint: a DB check constraint plus a service invariant guarantee that `type=
 | `parking_lots` | `id`, `tenant_id`, `slot_start`, `slot_end`, `timeout`, `return_dest` |
 | `conference_rooms` | `id`, `tenant_id`, `number`, `pin_enc`, `video` (bool), `layout`, `max_members` |
 | `schedules` | `id`, `tenant_id`, `timezone`, `rules` (JSON), `holidays` (JSON) |
-| `media_assets` | `id`, `tenant_id`, `kind` (`prompt`/`moh`/`greeting`), `object_key`, `format`, `duration_ms`, `sha256` |
+| `media_assets` | `id`, `tenant_id`, `kind` (`prompt`/`moh`/`greeting`), `status` (`pending`/`processing`/`ready`/`failed`, S2-07), `content_type`, `object_key` (the raw upload), `variant_8k_key`/`variant_16k_key` (transcoded, null until `ready`), `duration_ms`, `sha256` |
 | `emergency_locations` | Depends on G-1 |
 
 ### 3.4 trunk-service
@@ -98,6 +98,10 @@ Constraint: a DB check constraint plus a service invariant guarantee that `type=
 
 `cdrs` (range-partitioned by month on `start_at`, indexed by `(tenant_id, start_at)`). Columns follow the CDR v1 schema ([06 §cdr-service](06-services.md#cdr-service)). Also `cdr_legs`, `ingest_dedupe` (`call_uuid`, `node_id`), `webhook_subscriptions`, and `webhook_deliveries`.
 
+### 3.7 media-worker (S2-07)
+
+No business tables of its own — `outbox`/`consumed_events` only, the same `@cuc/events` schema every service carries. It exists purely to isolate one operation: transcoding a tenant's raw, untrusted media upload with `ffmpeg`, kept out of pbx-config-service's own process/image (which owns `media_assets` above and holds tenant secrets) so a hostile upload's blast radius is contained to a service with no database of its own to reach. Consumes `pbx.media_asset.finalize_requested`, fetches the raw upload and writes the two transcoded WAV variants directly via `@cuc/storage`'s `getObject`/`putObject` (§4 below), and reports back to pbx-config-service over its internal API rather than through its own outbox — see `services/media-worker/src/consumers/media-asset.consumer.ts`'s own doc comment for the full reasoning.
+
 ## 4. Object storage layout (D-011, O-9)
 
 Default: **one bucket per tenant**, as the SAD specifies. It sits behind a `@cuc/storage` abstraction that also supports a **prefix-per-tenant** mode, because some S3-compatible providers cap the number of buckets per account.
@@ -106,7 +110,9 @@ Default: **one bucket per tenant**, as the SAD specifies. It sits behind a `@cuc
 bucket: {STORAGE_BUCKET_PREFIX}-t-{tenantShortId}      (per-tenant mode)
   recordings/{yyyy}/{mm}/{dd}/{callUuid}/{legOrMixed}.{opus|wav}
   voicemail/{mailboxId}/{messageId}.wav
-  assets/{assetId}.{wav}
+  media-assets/{assetId}/raw                             (S2-07: the tenant's own upload, whatever format they sent)
+  media-assets/{assetId}/8k.wav                          (S2-07: transcoded, mono, for narrowband playback)
+  media-assets/{assetId}/16k.wav                         (S2-07: transcoded, mono, for wideband playback)
   fax/{yyyy}/{mm}/{faxId}.{tiff|pdf}
   exports/{exportId}.csv
 bucket: {STORAGE_BUCKET_PREFIX}-platform

@@ -2,6 +2,7 @@ import { Env, Type, baseEnvSchema, loadConfig } from '@cuc/config';
 import { dbEnvSchema } from '@cuc/db';
 import { eventsEnvSchema } from '@cuc/events';
 import { httpEnvSchema } from '@cuc/http';
+import { storageEnvSchema } from '@cuc/storage';
 
 /**
  * Everything this service reads from the environment.
@@ -23,6 +24,7 @@ export const configSchema = Type.Object({
   ...baseEnvSchema.properties,
   ...dbEnvSchema.properties,
   ...eventsEnvSchema.properties,
+  ...storageEnvSchema.properties,
   ...httpEnvSchema.properties,
 
   OPENSIPS_DB_HOST: Env.string({ default: '127.0.0.1', description: 'MariaDB host.' }),

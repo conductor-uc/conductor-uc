@@ -1,7 +1,8 @@
 import type { Database } from '@cuc/db';
 import { secretEquals } from '@cuc/crypto';
-import type { Server } from '@cuc/http';
+import { Type, type Server } from '@cuc/http';
 import type { Logger } from '@cuc/logger';
+import type { Storage } from '@cuc/storage';
 
 import { enqueueEvent } from '@cuc/events';
 
@@ -22,6 +23,13 @@ import {
   NOT_FOUND_DOCUMENT,
   type EmergencyLocationDetail,
 } from '../xml.js';
+
+/** `/fs/media/:tenantId/:assetId/:rate` (S2-07) — `rate` names which transcoded variant, not a raw Hz value FS would need to parse. */
+const MediaParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  assetId: Type.String({ minLength: 1 }),
+  rate: Type.Union([Type.Literal('8k'), Type.Literal('16k')]),
+});
 
 /**
  * The most specific outbound route matching `normalizedNumber` (S2-04):
@@ -92,6 +100,8 @@ export function registerFsRoutes(
   orgClient: OrgClient,
   /** S2-06: `handleEmergencyDial`'s live emergency-location lookup (G-1) — which numbers *are* the tenant's emergency numbers is answered by `readModel.findEmergencyRouteForTenant` instead (the local mirror `projection.ts` already keeps current), the same "local read model on the call-setup hot path" story every other dialplan lookup here follows. */
   pbxConfigClient: PbxConfigClient,
+  /** S2-07: `/fs/media/:tenantId/:assetId/:rate`'s own byte proxy — see that route's own doc comment for why this fetches bytes directly rather than redirecting. */
+  storage: Storage,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -517,6 +527,76 @@ export function registerFsRoutes(
     // not silently guessed at.
     return NOT_FOUND_DOCUMENT;
   });
+
+  /**
+   * `GET /fs/media/:tenantId/:assetId/:rate` (S2-07) — what a
+   * `http_cache://` URL in a dialplan/IVR document (a future stage's own
+   * job: S2-10's `flow_runner.lua`, per the plan's own dependency graph;
+   * this task ends at making the resolver itself real) resolves to. FS's
+   * own `mod_http_cache` does a plain GET and caches the response on local
+   * disk keyed by the URL — "a node restart simply re-caches" (this task's
+   * own "Done when") is just that local cache being gone after a restart,
+   * nothing this service needs to do anything about.
+   *
+   * Fetches and returns the transcoded bytes directly (`@cuc/storage`'s
+   * `getObject`) rather than the otherwise-more-obvious "302 to a presigned
+   * GET URL" — deliberately: whether `mod_http_cache`'s own underlying HTTP
+   * client follows redirects at all is not documented anywhere this task
+   * found, and this codebase's own hard-won lesson (G-19, G-20, G-24 in
+   * docs/decisions.md) is that an unverified assumption about a FreeSWITCH
+   * module's real wire behavior is exactly the kind of thing that only
+   * surfaces live, expensively. Proxying the bytes needs no such assumption
+   * — a plain 200 with a body is unambiguous to any HTTP client — at the
+   * cost of this service's own bandwidth for however long a node's local
+   * cache takes to warm (S2-07 in scope; a CDN/edge-cache in front of this
+   * route is a future scaling concern, not this task's).
+   */
+  app.get(
+    '/fs/media/:tenantId/:assetId/:rate',
+    { config: { public: true }, schema: { params: MediaParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+
+      const { tenantId, assetId, rate } = request.params;
+      const asset = await pbxConfigClient.findMediaAsset(tenantId, assetId);
+      if (asset === undefined || asset.status !== 'ready') {
+        logger.info(
+          { tenantId, assetId, status: asset?.status },
+          'media: asset not found or not ready',
+        );
+        reply.code(404);
+        return '';
+      }
+
+      const variantKey = rate === '8k' ? asset.variant8kKey : asset.variant16kKey;
+      if (variantKey === null) {
+        // Unreachable in practice — `complete` (pbx-config-service) only
+        // ever sets both variant keys together with `status: 'ready'` — but
+        // an honest 404 beats trusting that invariant blindly here too.
+        logger.error({ tenantId, assetId, rate }, 'media: ready asset missing its own variant key');
+        reply.code(404);
+        return '';
+      }
+
+      let bytes: Buffer;
+      try {
+        bytes = await storage.forTenant(tenantId).getObject(variantKey);
+      } catch (error) {
+        logger.error(
+          { tenantId, assetId, rate, err: error },
+          'media: could not read the transcoded variant from storage',
+        );
+        reply.code(502);
+        return '';
+      }
+
+      reply.type('audio/wav');
+      return bytes;
+    },
+  );
 
   app.post('/fs/configuration', { config: { public: true } }, async (request, reply) => {
     if (!authorized(request.headers.authorization)) {

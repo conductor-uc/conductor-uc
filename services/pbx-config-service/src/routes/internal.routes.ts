@@ -4,6 +4,7 @@ import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 import type { DidRepo } from '../repo/did.repo.js';
 import type { EmergencyLocationRepo } from '../repo/emergency-location.repo.js';
 import type { ExtensionRepo } from '../repo/extension.repo.js';
+import { MediaAssetNotFoundError, type MediaAssetRepo } from '../repo/media-asset.repo.js';
 
 const ParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
@@ -29,6 +30,26 @@ const EmergencyLocationResponseSchema = Type.Object({
   state: Type.String(),
   postalCode: Type.String(),
   country: Type.String(),
+});
+const MediaAssetInternalResponseSchema = Type.Object({
+  id: Type.String(),
+  kind: Type.String(),
+  status: Type.String(),
+  contentType: Type.String(),
+  objectKey: Type.String(),
+  /** Null until `status` is `'ready'` — the transcode worker's own `:complete` sets both together. */
+  variant8kKey: Type.Union([Type.String(), Type.Null()]),
+  variant16kKey: Type.Union([Type.String(), Type.Null()]),
+});
+const CompleteMediaAssetBodySchema = Type.Object({
+  durationMs: Type.Number({ minimum: 0 }),
+  sha256: Type.String({ minLength: 1 }),
+  sizeBytes: Type.Number({ minimum: 0 }),
+  variant8kKey: Type.String({ minLength: 1 }),
+  variant16kKey: Type.String({ minLength: 1 }),
+});
+const FailMediaAssetBodySchema = Type.Object({
+  errorMessage: Type.String({ minLength: 1 }),
 });
 const DidResponseSchema = Type.Object({
   id: Type.String(),
@@ -65,6 +86,7 @@ export function registerInternalRoutes(
   extensions: ExtensionRepo,
   dids: DidRepo,
   emergencyLocations: EmergencyLocationRepo,
+  mediaAssets: MediaAssetRepo,
   internalServiceToken: string,
 ): void {
   app.get(
@@ -149,6 +171,124 @@ export function registerInternalRoutes(
         throw ProblemError.notFound('No emergency location with that id in that tenant.');
       }
       return location satisfies Static<typeof EmergencyLocationResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/media-assets/:id` (S2-07) — what the
+   * transcode worker calls after `pbx.media_asset.finalize_requested` fires,
+   * to learn the raw upload's own `objectKey`/`contentType` (the event
+   * itself carries only the id — 06's "thin event" rule). The worker never
+   * reads this service's database directly (S2-07's own isolation choice).
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/media-assets/:id',
+    {
+      config: { public: true },
+      schema: { params: ParamsSchema, response: { 200: MediaAssetInternalResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      const asset = await mediaAssets.findById({ tenantId }, id);
+      if (asset === undefined) {
+        throw ProblemError.notFound('No media asset with that id in that tenant.');
+      }
+      return {
+        id: asset.id,
+        kind: asset.kind,
+        status: asset.status,
+        contentType: asset.contentType,
+        objectKey: asset.objectKey,
+        variant8kKey: asset.variant8kKey,
+        variant16kKey: asset.variant16kKey,
+      } satisfies Static<typeof MediaAssetInternalResponseSchema>;
+    },
+  );
+
+  /**
+   * `POST /internal/v1/tenants/:tenantId/media-assets/:id/complete` (S2-07)
+   * — the transcode worker's own success callback: both WAV variants are
+   * already written to the tenant's bucket (`presignPut`-derived keys the
+   * worker minted itself the same way this service's own routes do), this
+   * just records the result and flips `status` to `ready`. A synchronous
+   * internal call, not a further event: JetStream's own redelivery already
+   * covers a transient failure here by retrying the *whole* consumer
+   * handler (`@cuc/events`' `createConsumer`), at the cost of redoing the
+   * transcode, not losing it.
+   */
+  app.post(
+    '/internal/v1/tenants/:tenantId/media-assets/:id/complete',
+    {
+      config: { public: true },
+      schema: {
+        params: ParamsSchema,
+        body: CompleteMediaAssetBodySchema,
+        response: { 200: MediaAssetInternalResponseSchema },
+      },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      try {
+        const asset = await mediaAssets.complete({ tenantId }, id, request.body);
+        return {
+          id: asset.id,
+          kind: asset.kind,
+          status: asset.status,
+          contentType: asset.contentType,
+          objectKey: asset.objectKey,
+          variant8kKey: asset.variant8kKey,
+          variant16kKey: asset.variant16kKey,
+        } satisfies Static<typeof MediaAssetInternalResponseSchema>;
+      } catch (error) {
+        if (error instanceof MediaAssetNotFoundError) throw ProblemError.notFound(error.message);
+        throw error;
+      }
+    },
+  );
+
+  /** `POST /internal/v1/tenants/:tenantId/media-assets/:id/fail` (S2-07) — the transcode worker's own failure callback (e.g. `ffmpeg` rejected the upload as not real audio). */
+  app.post(
+    '/internal/v1/tenants/:tenantId/media-assets/:id/fail',
+    {
+      config: { public: true },
+      schema: {
+        params: ParamsSchema,
+        body: FailMediaAssetBodySchema,
+        response: { 200: MediaAssetInternalResponseSchema },
+      },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      try {
+        const asset = await mediaAssets.fail({ tenantId }, id, request.body.errorMessage);
+        return {
+          id: asset.id,
+          kind: asset.kind,
+          status: asset.status,
+          contentType: asset.contentType,
+          objectKey: asset.objectKey,
+          variant8kKey: asset.variant8kKey,
+          variant16kKey: asset.variant16kKey,
+        } satisfies Static<typeof MediaAssetInternalResponseSchema>;
+      } catch (error) {
+        if (error instanceof MediaAssetNotFoundError) throw ProblemError.notFound(error.message);
+        throw error;
+      }
     },
   );
 }

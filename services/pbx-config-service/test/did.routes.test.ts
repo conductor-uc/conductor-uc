@@ -1,11 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { databaseOrSkipReason } from '@cuc/testing';
+import { databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 
 import { registerDidRoutes } from '../src/routes/did.routes.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
-const skipReason = await databaseOrSkipReason();
+const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
 const TEST_INTERNAL_SECRET = 'test-internal-header-secret';
 
 describe.skipIf(skipReason !== undefined)('pbx-config-service DID HTTP routes', () => {

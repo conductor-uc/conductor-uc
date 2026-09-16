@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { crossTenantProbe, databaseOrSkipReason } from '@cuc/testing';
+import { crossTenantProbe, databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 
 import {
   EmergencyLocationNotFoundError,
@@ -11,7 +11,7 @@ import { computeSipDigest } from '../src/domain/sip-credentials.js';
 import { InvalidExtensionNumberError } from '../src/domain/numbering.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
-const skipReason = await databaseOrSkipReason();
+const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
 
 describe.skipIf(skipReason !== undefined)('extension repo', () => {
   let h: Harness;

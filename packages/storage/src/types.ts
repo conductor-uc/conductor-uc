@@ -17,6 +17,10 @@ export interface PresignPutOptions extends PresignOptions {
   readonly contentType?: string;
 }
 
+export interface PutObjectOptions {
+  readonly contentType?: string;
+}
+
 /**
  * An S3 lifecycle rule, restated to the one shape every call site of this
  * package needs — expire objects under a prefix after N days. A tenant's

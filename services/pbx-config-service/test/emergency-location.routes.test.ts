@@ -1,11 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { databaseOrSkipReason } from '@cuc/testing';
+import { databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 
 import { registerEmergencyLocationRoutes } from '../src/routes/emergency-location.routes.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
-const skipReason = await databaseOrSkipReason();
+const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
 const TEST_INTERNAL_SECRET = 'test-internal-header-secret';
 
 const VALID_BODY = {

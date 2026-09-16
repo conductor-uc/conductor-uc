@@ -49,6 +49,18 @@ export const pbxEvents = defineEvents({
     description: 'A DID was deleted.',
     data: Type.Object({ didId: Type.String({ minLength: 1 }) }),
   },
+  /**
+   * S2-07: the tenant confirmed their raw upload landed
+   * (`media-asset.repo.ts`'s `finalize`) — the transcode worker's own
+   * trigger. Thin (06): the worker calls this service's own
+   * `GET /internal/v1/tenants/:tenantId/media-assets/:id` for the current
+   * `objectKey`/`contentType` rather than trusting anything on the event.
+   */
+  'pbx.media_asset.finalize_requested': {
+    schemaVersion: 1,
+    description: "A tenant's uploaded media asset is ready for the transcode worker to pick up.",
+    data: Type.Object({ mediaAssetId: Type.String({ minLength: 1 }) }),
+  },
   'org.domain.added': {
     schemaVersion: 1,
     description:

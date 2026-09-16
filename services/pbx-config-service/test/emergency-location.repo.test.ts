@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { crossTenantProbe, databaseOrSkipReason } from '@cuc/testing';
+import { crossTenantProbe, databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 
 import { InvalidEmergencyLocationError } from '../src/domain/emergency-location.js';
 import {
@@ -8,7 +8,7 @@ import {
 } from '../src/repo/emergency-location.repo.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
-const skipReason = await databaseOrSkipReason();
+const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
 
 describe.skipIf(skipReason !== undefined)('emergency location repo', () => {
   let h: Harness;

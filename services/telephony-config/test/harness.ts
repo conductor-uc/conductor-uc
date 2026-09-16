@@ -2,13 +2,22 @@ import { createDatabase, migrateToLatest, type Database } from '@cuc/db';
 import type { Bus } from '@cuc/events';
 import { connectBus } from '@cuc/events';
 import type { Logger } from '@cuc/logger';
-import { silentLogger, startTestDatabase, startTestNats, type TestNatsHandle } from '@cuc/testing';
+import { createStorage, type Storage } from '@cuc/storage';
+import {
+  silentLogger,
+  startTestDatabase,
+  startTestNats,
+  startTestS3,
+  type TestNatsHandle,
+  type TestS3Handle,
+} from '@cuc/testing';
 
 import type { OrgClient } from '../src/org-client.js';
 import type {
   DidConfig,
   DigestCredential,
   EmergencyLocationConfig,
+  MediaAssetConfig,
   PbxConfigClient,
 } from '../src/pbx-config-client.js';
 import type { OpenSipsMiClient } from '../src/opensips-mi-client.js';
@@ -41,6 +50,7 @@ export interface Harness {
   readonly pbxConfig: FakePbxConfigClient;
   readonly trunkConfig: FakeTrunkConfigClient;
   readonly orgClient: FakeOrgClient;
+  readonly storage: Storage;
   readonly logger: Logger;
   close(): Promise<void>;
 }
@@ -77,19 +87,22 @@ export interface FakePbxConfigClient extends PbxConfigClient {
   credentials: Record<string, DigestCredential>;
   dids: Record<string, DidConfig>;
   emergencyLocations: Record<string, EmergencyLocationConfig>;
+  mediaAssets: Record<string, MediaAssetConfig>;
 }
 
-/** A digest-credential/DID/emergency-location lookup whose answers are set per test — no live pbx-config-service needed. */
+/** A digest-credential/DID/emergency-location/media-asset lookup whose answers are set per test — no live pbx-config-service needed. */
 function fakePbxConfigClient(): FakePbxConfigClient {
   const state: FakePbxConfigClient = {
     credentials: {},
     dids: {},
     emergencyLocations: {},
+    mediaAssets: {},
     findCredential: (_tenantId: string, extensionId: string) =>
       Promise.resolve(state.credentials[extensionId]),
     findDid: (_tenantId: string, didId: string) => Promise.resolve(state.dids[didId]),
     findEmergencyLocation: (_tenantId: string, locationId: string) =>
       Promise.resolve(state.emergencyLocations[locationId]),
+    findMediaAsset: (_tenantId: string, id: string) => Promise.resolve(state.mediaAssets[id]),
   };
   return state;
 }
@@ -242,9 +255,10 @@ async function createOpenSipsTables(db: Database<OpenSipsDb>): Promise<void> {
     .execute();
 }
 
-/** A migrated read-model schema, a fake `opensips` schema, and the repos over both. */
+/** A migrated read-model schema, a fake `opensips` schema, a real MinIO-backed storage, and the repos over all three. */
 export async function startHarness(): Promise<Harness> {
   const logger = silentLogger();
+  const s3Handle: TestS3Handle = await startTestS3();
 
   const handle = await startTestDatabase();
   const db = createDatabase<TelephonyConfigDb>({
@@ -276,6 +290,16 @@ export async function startHarness(): Promise<Harness> {
   const pbxConfig = fakePbxConfigClient();
   const trunkConfig = fakeTrunkConfigClient();
   const orgClient = fakeOrgClient();
+  const storage = createStorage({
+    mode: 'prefix-per-tenant',
+    bucketPrefix: 'cuc-telephony-config-test',
+    endpoint: s3Handle.endpoint,
+    region: s3Handle.region,
+    accessKeyId: s3Handle.accessKeyId,
+    secretAccessKey: s3Handle.secretAccessKey,
+    forcePathStyle: s3Handle.forcePathStyle,
+    logger,
+  });
   const projection = createProjection(
     readModel,
     opensipsProjection,
@@ -296,12 +320,14 @@ export async function startHarness(): Promise<Harness> {
     pbxConfig,
     trunkConfig,
     orgClient,
+    storage,
     logger,
     async close() {
       await db.destroy();
       await handle.stop();
       await opensipsDb.destroy();
       await opensipsHandle.stop();
+      await s3Handle.stop();
     },
   };
 }
