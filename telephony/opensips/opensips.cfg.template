@@ -178,9 +178,18 @@ loadmodule "topology_hiding.so"
 loadmodule "nathelper.so"
 modparam("nathelper", "natping_interval", 30)
 
-#### Presence / BLF (03 §1: "Owns (presence, pua_dialoginfo)"). Loaded and
-#### DB-wired; no presence routing logic yet (nothing in M1 needs it) — a
-#### later stage adds the PUBLISH/SUBSCRIBE handling.
+#### Presence / BLF (03 §1: "Owns (presence, pua_dialoginfo)"; S2-17).
+#### `dialog.so` above already creates a dialog for every dialog-forming
+#### request relayed through `topology_hiding()` (its own docs: internally
+#### calls `create_dialog()` when none exists yet) — `pua_dialoginfo`
+#### registers its own dialog callbacks the moment the module loads, so no
+#### extra per-call action is needed in route{} beyond that existing
+#### `topology_hiding()` call to get early/confirmed/terminated state
+#### changes flowing into `pua`, and from there into `presence`'s own
+#### `presentity`/`active_watchers` tables (`db-schema/presence-create.sql`,
+#### already provisioned since S1-11). Only the SUBSCRIBE side (route{}'s
+#### own `is_method("SUBSCRIBE")` block) is new here — see G-38 for what
+#### could not be confirmed against a real running instance.
 loadmodule "presence.so"
 modparam("presence", "db_url", "${OPENSIPS_DB_URL}")
 loadmodule "presence_dialoginfo.so"
@@ -284,6 +293,37 @@ route{
         }
         if (!save("location")) {
             xlog("L_ERR", "usrloc: failed to save location for $tu\n");
+        }
+        exit;
+    }
+
+    if (is_method("SUBSCRIBE")) {
+        # S2-17: extension BLF. Authenticated the same way REGISTER is
+        # (phones already hold the same digest credentials) — an
+        # unauthenticated SUBSCRIBE would otherwise let anyone watch any
+        # extension's call state with no proof of identity at all.
+        if (!is_uri_host_local()) {
+            send_reply(404, "Not here");
+            exit;
+        }
+        if (!www_authorize("", "subscriber")) {
+            www_challenge("", "auth");
+            exit;
+        }
+        # Tenant scoping (CLAUDE.md rule 2's own principle, applied at the
+        # SIP edge): the watcher's own domain (From) must match the
+        # presentity's domain (R-URI/To) — `handle_subscribe()` itself has
+        # no concept of tenancy and would otherwise happily let a phone
+        # authenticated in one tenant's domain watch a presentity URI in a
+        # different tenant's domain, since `presentity`/`active_watchers`
+        # are keyed by (username, domain) with no cross-domain check of
+        # their own (`db-schema/presence-create.sql`).
+        if ($fd != $td) {
+            send_reply(403, "Forbidden");
+            exit;
+        }
+        if (!handle_subscribe()) {
+            xlog("L_ERR", "presence: handle_subscribe failed for $ru\n");
         }
         exit;
     }
