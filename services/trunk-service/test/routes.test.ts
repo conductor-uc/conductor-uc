@@ -337,7 +337,7 @@ describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
       expect(response.json()).toEqual({ registrationStatus: 'registered' });
     });
 
-    it("defaults to not_registered when telephony-config has no record of the trunk", async () => {
+    it('defaults to not_registered when telephony-config has no record of the trunk', async () => {
       const tenantId = crypto.randomUUID();
       h.resellers.resellerIds[tenantId] = 'reseller-a';
       const created = await app

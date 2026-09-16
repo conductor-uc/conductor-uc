@@ -38,13 +38,18 @@ describe.skipIf(skipReason !== undefined)('S2-02 trunk registration', () => {
     await stopContainer(REGISTRAR_CONTAINER);
   });
 
-  it(
-    'a register-mode trunk registers with a SIPp carrier registrar, and :status reports it',
-    async () => {
-      const registrar = startBackgroundUas('carrier_registrar.xml', REGISTRAR_CONTAINER, REGISTRAR_PORT);
-      await registrar.ready();
+  it('a register-mode trunk registers with a SIPp carrier registrar, and :status reports it', async () => {
+    const registrar = startBackgroundUas(
+      'carrier_registrar.xml',
+      REGISTRAR_CONTAINER,
+      REGISTRAR_PORT,
+    );
+    await registrar.ready();
 
-      const created = await dockerCurlJson('POST', `${TRUNK_SERVICE_URL}/v1/tenants/${seed.tenantA.id}/trunks`, {
+    const created = await dockerCurlJson(
+      'POST',
+      `${TRUNK_SERVICE_URL}/v1/tenants/${seed.tenantA.id}/trunks`,
+      {
         name: 'S2-02 SIPp acceptance test',
         authMode: 'register',
         host: REGISTRAR_CONTAINER,
@@ -53,19 +58,21 @@ describe.skipIf(skipReason !== undefined)('S2-02 trunk registration', () => {
         username: 'sip-test-trunk-user',
         secret: 'sip-test-trunk-secret',
         codecs: ['PCMU'],
-      });
-      expect(created.status).toBe(201);
-      const trunkId = (created.json as { id: string }).id;
+      },
+    );
+    expect(created.status).toBe(201);
+    const trunkId = (created.json as { id: string }).id;
 
-      try {
-        const status = await pollUntilRegistered(seed.tenantA.id, trunkId, 45_000);
-        expect(status).toBe('registered');
-      } finally {
-        await dockerCurlJson('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${seed.tenantA.id}/trunks/${trunkId}`);
-      }
-    },
-    60_000,
-  );
+    try {
+      const status = await pollUntilRegistered(seed.tenantA.id, trunkId, 45_000);
+      expect(status).toBe('registered');
+    } finally {
+      await dockerCurlJson(
+        'DELETE',
+        `${TRUNK_SERVICE_URL}/v1/tenants/${seed.tenantA.id}/trunks/${trunkId}`,
+      );
+    }
+  }, 60_000);
 });
 
 async function pollUntilRegistered(
@@ -80,7 +87,8 @@ async function pollUntilRegistered(
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}/status`,
     );
     const last =
-      (response.json as { registrationStatus?: string } | undefined)?.registrationStatus ?? 'unknown';
+      (response.json as { registrationStatus?: string } | undefined)?.registrationStatus ??
+      'unknown';
     if (last === 'registered' || Date.now() > deadline) return last;
     await new Promise((resolve) => setTimeout(resolve, 2_000));
   }

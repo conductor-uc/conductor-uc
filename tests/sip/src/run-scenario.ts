@@ -500,7 +500,11 @@ export interface UasScenarioHandle {
  * below) plus a long `-timeout` keep the process alive for the whole test
  * regardless of how long the real timer takes.
  */
-export function startBackgroundUas(scenario: string, containerName: string, port: number): UasScenarioHandle {
+export function startBackgroundUas(
+  scenario: string,
+  containerName: string,
+  port: number,
+): UasScenarioHandle {
   const env = sipTestEnv();
   const ready = (async (): Promise<void> => {
     await execFileAsync('docker', ['rm', '-f', containerName]).catch(() => undefined);

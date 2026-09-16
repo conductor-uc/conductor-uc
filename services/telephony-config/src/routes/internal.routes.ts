@@ -107,7 +107,11 @@ export function registerInternalRoutes(
       const key = registrantKeyFor(trunk, opensipsSipUri);
       let result: RegListResult;
       try {
-        result = await mi.query<RegListResult>('reg_list', [key.aor, key.bindingUri, key.registrar]);
+        result = await mi.query<RegListResult>('reg_list', [
+          key.aor,
+          key.bindingUri,
+          key.registrar,
+        ]);
       } catch (error) {
         logger.warn({ err: error, trunkId: id }, 'reg_list failed; reporting status as failed');
         return { status: 'failed' } satisfies StatusResponse;

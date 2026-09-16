@@ -195,7 +195,10 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
      * deterministic round trip for a standard v4 UUID) rather than
      * truncated, which would risk collisions between trunks.
      */
-    async replaceAddresses(trunkId: string, cidrs: readonly { ip: string; mask: number }[]): Promise<void> {
+    async replaceAddresses(
+      trunkId: string,
+      cidrs: readonly { ip: string; mask: number }[],
+    ): Promise<void> {
       const contextId = toContextId(trunkId);
       await k.deleteFrom('address').where('context_info', '=', contextId).execute();
       if (cidrs.length === 0) return;
@@ -222,7 +225,9 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
         .select(['context_info as trunkId', 'ip', 'mask'])
         .where('context_info', 'is not', null)
         .execute()
-        .then((rows) => rows.map((row) => ({ trunkId: fromContextId(row.trunkId!), ip: row.ip, mask: row.mask })));
+        .then((rows) =>
+          rows.map((row) => ({ trunkId: fromContextId(row.trunkId!), ip: row.ip, mask: row.mask })),
+        );
     },
 
     /**

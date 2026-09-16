@@ -11,11 +11,7 @@
  */
 
 export type TrunkRegistrationStatus =
-  | 'registered'
-  | 'registering'
-  | 'failed'
-  | 'not_registered'
-  | 'not_applicable';
+  'registered' | 'registering' | 'failed' | 'not_registered' | 'not_applicable';
 
 export interface TrunkStatus {
   readonly status: TrunkRegistrationStatus;

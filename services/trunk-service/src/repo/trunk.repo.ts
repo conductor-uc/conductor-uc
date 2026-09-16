@@ -512,7 +512,10 @@ export function createTrunkRepo(
      * internal-service-token check in `routes/internal.routes.ts` rather
      * than the `secret.reveal` permission.
      */
-    async findForProjection(tenantId: string, id: string): Promise<TrunkProjectionView | undefined> {
+    async findForProjection(
+      tenantId: string,
+      id: string,
+    ): Promise<TrunkProjectionView | undefined> {
       const ctx = { tenantId };
       const trunk = await db
         .scoped(ctx)

@@ -165,7 +165,11 @@ export function createProjection(
       }
       if (needsRegistration && trunk.username !== null && trunk.secret !== null) {
         const key = registrantKeyFor(trunk, opensipsSipUri);
-        await opensips.upsertRegistrant({ ...key, username: trunk.username, password: trunk.secret });
+        await opensips.upsertRegistrant({
+          ...key,
+          username: trunk.username,
+          password: trunk.secret,
+        });
         reloadRegistrant = true;
       }
       if (reloadRegistrant) await mi.call('reg_reload');

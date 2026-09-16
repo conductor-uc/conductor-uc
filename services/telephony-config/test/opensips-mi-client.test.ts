@@ -130,7 +130,9 @@ describe('createOpenSipsMiClient', () => {
     it('throws OpenSipsMiClientError on a JSON-RPC error response', async () => {
       const fake = await fakeMiHttp((_req, _body, res) => {
         res.writeHead(200, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -1, message: 'no such command' } }));
+        res.end(
+          JSON.stringify({ jsonrpc: '2.0', error: { code: -1, message: 'no such command' } }),
+        );
       });
       close = fake.close;
 

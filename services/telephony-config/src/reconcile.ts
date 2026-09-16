@@ -133,7 +133,10 @@ export function createReconciler(
     const desiredRegistrants = new Map(
       registerTrunks.map((t) => {
         const key = registrantKeyFor(t, opensipsSipUri);
-        return [registrantKey(key.aor, key.registrar, key.bindingUri), { ...key, trunk: t }] as const;
+        return [
+          registrantKey(key.aor, key.registrar, key.bindingUri),
+          { ...key, trunk: t },
+        ] as const;
       }),
     );
     const projectedRegistrantKeys = new Map(
@@ -177,9 +180,7 @@ export function createReconciler(
         }),
     );
     const projectedAddressKeys = new Map(
-      projectedAddresses.map(
-        (a) => [addressKey(a.trunkId, a.ip, a.mask), a] as const,
-      ),
+      projectedAddresses.map((a) => [addressKey(a.trunkId, a.ip, a.mask), a] as const),
     );
 
     let addressesAdded = 0;

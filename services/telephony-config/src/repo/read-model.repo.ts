@@ -370,10 +370,7 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
 
     /** Every (trunkId, cidr) pair this service knows about, for reconciliation. */
     listAllTrunkIps(): Promise<{ trunkId: string; cidr: string }[]> {
-      return db.kysely
-        .selectFrom('trunk_ips')
-        .select(['trunk_id as trunkId', 'cidr'])
-        .execute();
+      return db.kysely.selectFrom('trunk_ips').select(['trunk_id as trunkId', 'cidr']).execute();
     },
 
     /**

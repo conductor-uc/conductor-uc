@@ -60,7 +60,10 @@ describe('createTrunkConfigClient', () => {
       });
       close = fake.close;
 
-      const client = createTrunkConfigClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+      const client = createTrunkConfigClient({
+        baseUrl: fake.baseUrl,
+        internalServiceToken: TOKEN,
+      });
       const result = await client.findTrunk('tenant1', 'trunk1');
 
       expect(seenPath).toBe('/internal/v1/tenants/tenant1/trunks/trunk1');
@@ -75,7 +78,10 @@ describe('createTrunkConfigClient', () => {
       });
       close = fake.close;
 
-      const client = createTrunkConfigClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+      const client = createTrunkConfigClient({
+        baseUrl: fake.baseUrl,
+        internalServiceToken: TOKEN,
+      });
       await expect(client.findTrunk('tenant1', 'missing')).resolves.toBeUndefined();
     });
 
@@ -86,7 +92,10 @@ describe('createTrunkConfigClient', () => {
       });
       close = fake.close;
 
-      const client = createTrunkConfigClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+      const client = createTrunkConfigClient({
+        baseUrl: fake.baseUrl,
+        internalServiceToken: TOKEN,
+      });
       await expect(client.findTrunk('tenant1', 'trunk1')).rejects.toThrow(TrunkConfigClientError);
     });
 
@@ -109,7 +118,10 @@ describe('createTrunkConfigClient', () => {
       });
       close = fake.close;
 
-      const client = createTrunkConfigClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+      const client = createTrunkConfigClient({
+        baseUrl: fake.baseUrl,
+        internalServiceToken: TOKEN,
+      });
       const result = await client.listAllTrunks();
 
       expect(seenPath).toBe('/internal/v1/trunks');
@@ -123,7 +135,10 @@ describe('createTrunkConfigClient', () => {
       });
       close = fake.close;
 
-      const client = createTrunkConfigClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+      const client = createTrunkConfigClient({
+        baseUrl: fake.baseUrl,
+        internalServiceToken: TOKEN,
+      });
       await expect(client.listAllTrunks()).rejects.toThrow(TrunkConfigClientError);
     });
   });

@@ -3,12 +3,7 @@ import { databaseOrSkipReason } from '@cuc/testing';
 import { createServer, type Server } from '@cuc/http';
 
 import { registerInternalRoutes } from '../src/routes/internal.routes.js';
-import {
-  resetSchema,
-  startHarness,
-  TEST_OPENSIPS_SIP_URI,
-  type Harness,
-} from './harness.js';
+import { resetSchema, startHarness, TEST_OPENSIPS_SIP_URI, type Harness } from './harness.js';
 
 const skipReason = await databaseOrSkipReason();
 const TOKEN = 'test-internal-service-token';
@@ -36,7 +31,9 @@ describe.skipIf(skipReason !== undefined)(
       h.mi.regListResults = {};
     });
 
-    async function seedTrunk(overrides: Partial<Parameters<typeof h.readModel.upsertTrunk>[1]> = {}) {
+    async function seedTrunk(
+      overrides: Partial<Parameters<typeof h.readModel.upsertTrunk>[1]> = {},
+    ) {
       const tenantId = crypto.randomUUID();
       const trunkId = crypto.randomUUID();
       await h.readModel.upsertTrunk(h.db.kysely, {
