@@ -41,7 +41,10 @@ describe('createEslClient', () => {
     server.broadcastEvent({ 'Event-Name': 'HEARTBEAT', 'Core-UUID': 'x' });
     await waitFor(() => events.length === 1);
 
-    expect(events[0]).toEqual({ nodeId: 'fs-1', event: { 'Event-Name': 'HEARTBEAT', 'Core-UUID': 'x' } });
+    expect(events[0]).toEqual({
+      nodeId: 'fs-1',
+      event: { 'Event-Name': 'HEARTBEAT', 'Core-UUID': 'x' },
+    });
   });
 
   it('reconnects with backoff after the connection drops, and resumes delivering events', async () => {

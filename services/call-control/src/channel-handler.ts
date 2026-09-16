@@ -49,7 +49,9 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
               from: action.call.from,
               to: action.call.to,
             },
-            ...(action.call.tenantId === null ? {} : { orgContext: { tenantId: action.call.tenantId } }),
+            ...(action.call.tenantId === null
+              ? {}
+              : { orgContext: { tenantId: action.call.tenantId } }),
           });
           await registry.createCall(action.call, callSafetyTtlMs);
           return;
@@ -59,7 +61,10 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
             type: 'call.channel.answered',
             data: { callUuid: action.callUuid, nodeId: action.nodeId },
           });
-          await registry.updateCall(action.callUuid, { state: 'answered', answeredAt: action.answeredAt });
+          await registry.updateCall(action.callUuid, {
+            state: 'answered',
+            answeredAt: action.answeredAt,
+          });
           return;
 
         case 'bridged':
@@ -81,7 +86,11 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
         case 'hungup':
           await enqueueEvent(db, callEvents, {
             type: 'call.channel.hungup',
-            data: { callUuid: action.callUuid, nodeId: action.nodeId, hangupCause: action.hangupCause },
+            data: {
+              callUuid: action.callUuid,
+              nodeId: action.nodeId,
+              hangupCause: action.hangupCause,
+            },
             ...(action.tenantId === null ? {} : { orgContext: { tenantId: action.tenantId } }),
           });
           await registry.endCall(action.callUuid, action.nodeId, action.tenantId);

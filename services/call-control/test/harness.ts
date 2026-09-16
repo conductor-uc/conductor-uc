@@ -1,6 +1,11 @@
 import { createDatabase, migrateToLatest, type Database } from '@cuc/db';
 import type { Logger } from '@cuc/logger';
-import { silentLogger, startTestDatabase, startTestRedis, type TestRedisHandle } from '@cuc/testing';
+import {
+  silentLogger,
+  startTestDatabase,
+  startTestRedis,
+  type TestRedisHandle,
+} from '@cuc/testing';
 import { Redis } from 'ioredis';
 
 import { createCallRegistry, type CallRegistry } from '../src/redis/registry.js';

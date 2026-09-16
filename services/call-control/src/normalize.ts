@@ -17,8 +17,18 @@ import type { CallRecord } from './redis/registry.js';
  */
 export type ChannelAction =
   | { readonly kind: 'created'; readonly call: CallRecord }
-  | { readonly kind: 'answered'; readonly callUuid: string; readonly nodeId: string; readonly answeredAt: string }
-  | { readonly kind: 'bridged'; readonly callUuid: string; readonly nodeId: string; readonly bridgedTo: string }
+  | {
+      readonly kind: 'answered';
+      readonly callUuid: string;
+      readonly nodeId: string;
+      readonly answeredAt: string;
+    }
+  | {
+      readonly kind: 'bridged';
+      readonly callUuid: string;
+      readonly nodeId: string;
+      readonly bridgedTo: string;
+    }
   | { readonly kind: 'held'; readonly callUuid: string; readonly nodeId: string }
   | {
       readonly kind: 'hungup';
@@ -30,7 +40,10 @@ export type ChannelAction =
   | { readonly kind: 'heartbeat'; readonly nodeId: string }
   | { readonly kind: 'ignored' };
 
-export function normalizeEslEvent(nodeId: string, raw: Readonly<Record<string, string>>): ChannelAction {
+export function normalizeEslEvent(
+  nodeId: string,
+  raw: Readonly<Record<string, string>>,
+): ChannelAction {
   const eventName = raw['Event-Name'];
 
   if (eventName === 'HEARTBEAT') return { kind: 'heartbeat', nodeId };

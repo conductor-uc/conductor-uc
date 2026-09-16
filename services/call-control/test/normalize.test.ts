@@ -30,7 +30,10 @@ describe('normalizeEslEvent', () => {
   });
 
   it('defaults direction to inbound and tenantId to null when absent', () => {
-    const action = normalizeEslEvent('fs-1', { 'Event-Name': 'CHANNEL_CREATE', 'Unique-ID': 'abc' });
+    const action = normalizeEslEvent('fs-1', {
+      'Event-Name': 'CHANNEL_CREATE',
+      'Unique-ID': 'abc',
+    });
     expect(action.kind).toBe('created');
     if (action.kind === 'created') {
       expect(action.call.direction).toBe('inbound');
@@ -44,7 +47,12 @@ describe('normalizeEslEvent', () => {
       'Unique-ID': 'abc',
       'Event-Date-Timestamp': '1700000000000000',
     });
-    expect(action).toEqual({ kind: 'answered', callUuid: 'abc', nodeId: 'fs-1', answeredAt: '1700000000000' });
+    expect(action).toEqual({
+      kind: 'answered',
+      callUuid: 'abc',
+      nodeId: 'fs-1',
+      answeredAt: '1700000000000',
+    });
   });
 
   it('maps CHANNEL_BRIDGE to a bridged action with the other leg id', () => {
@@ -58,17 +66,21 @@ describe('normalizeEslEvent', () => {
   });
 
   it('ignores CHANNEL_BRIDGE with no other-leg id', () => {
-    expect(normalizeEslEvent('fs-1', { 'Event-Name': 'CHANNEL_BRIDGE', 'Unique-ID': 'abc' })).toEqual({
+    expect(
+      normalizeEslEvent('fs-1', { 'Event-Name': 'CHANNEL_BRIDGE', 'Unique-ID': 'abc' }),
+    ).toEqual({
       kind: 'ignored',
     });
   });
 
   it('maps CHANNEL_HOLD to a held action', () => {
-    expect(normalizeEslEvent('fs-1', { 'Event-Name': 'CHANNEL_HOLD', 'Unique-ID': 'abc' })).toEqual({
-      kind: 'held',
-      callUuid: 'abc',
-      nodeId: 'fs-1',
-    });
+    expect(normalizeEslEvent('fs-1', { 'Event-Name': 'CHANNEL_HOLD', 'Unique-ID': 'abc' })).toEqual(
+      {
+        kind: 'held',
+        callUuid: 'abc',
+        nodeId: 'fs-1',
+      },
+    );
   });
 
   it('maps CHANNEL_HANGUP_COMPLETE to a hungup action with the hangup cause', () => {
@@ -79,7 +91,13 @@ describe('normalizeEslEvent', () => {
         'Hangup-Cause': 'USER_BUSY',
         'variable_sip_h_X-Tenant-Id': 'tenant-1',
       }),
-    ).toEqual({ kind: 'hungup', callUuid: 'abc', nodeId: 'fs-1', tenantId: 'tenant-1', hangupCause: 'USER_BUSY' });
+    ).toEqual({
+      kind: 'hungup',
+      callUuid: 'abc',
+      nodeId: 'fs-1',
+      tenantId: 'tenant-1',
+      hangupCause: 'USER_BUSY',
+    });
   });
 
   it('maps HEARTBEAT to a heartbeat action regardless of Unique-ID', () => {
@@ -90,11 +108,15 @@ describe('normalizeEslEvent', () => {
   });
 
   it('ignores an event with no Unique-ID', () => {
-    expect(normalizeEslEvent('fs-1', { 'Event-Name': 'CHANNEL_CREATE' })).toEqual({ kind: 'ignored' });
+    expect(normalizeEslEvent('fs-1', { 'Event-Name': 'CHANNEL_CREATE' })).toEqual({
+      kind: 'ignored',
+    });
   });
 
   it('ignores an event type it does not care about', () => {
-    expect(normalizeEslEvent('fs-1', { 'Event-Name': 'CHANNEL_BRIDGE', 'Unique-ID': 'abc' })).toEqual({
+    expect(
+      normalizeEslEvent('fs-1', { 'Event-Name': 'CHANNEL_BRIDGE', 'Unique-ID': 'abc' }),
+    ).toEqual({
       kind: 'ignored',
     });
   });

@@ -71,7 +71,10 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
     },
 
     async endCall(callUuid, nodeId, tenantId) {
-      const tx = redis.multi().del(k(`call:${callUuid}`)).srem(k(`node:${nodeId}:calls`), callUuid);
+      const tx = redis
+        .multi()
+        .del(k(`call:${callUuid}`))
+        .srem(k(`node:${nodeId}:calls`), callUuid);
       if (tenantId !== null) tx.srem(k(`tenant:${tenantId}:calls`), callUuid);
       await tx.exec();
     },

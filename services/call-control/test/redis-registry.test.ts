@@ -59,7 +59,9 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
 
     expect(await h.registry.getCall(callUuid)).toBeUndefined();
     expect(await h.registry.callsForNode('fs-1')).not.toContain(callUuid);
-    expect(await h.redis.smembers(`${h.keyPrefix}tenant:${tenantId}:calls`)).not.toContain(callUuid);
+    expect(await h.redis.smembers(`${h.keyPrefix}tenant:${tenantId}:calls`)).not.toContain(
+      callUuid,
+    );
   });
 
   it('tracks accurately under many concurrently created calls, and cleans up on hangup (stand-in for the "50 concurrent calls" acceptance criterion, per #44)', async () => {

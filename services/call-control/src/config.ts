@@ -68,7 +68,9 @@ export function parseFsNodes(entries: readonly string[]): FsNodeConfig[] {
     const [id, host, portString] = parts as [string, string, string];
     const port = Number(portString);
     if (id === '' || host === '' || !Number.isInteger(port) || port <= 0 || port > 65535) {
-      throw new Error(`Invalid FS_NODES entry '${entry}': expected 'id:host:port' with a valid port.`);
+      throw new Error(
+        `Invalid FS_NODES entry '${entry}': expected 'id:host:port' with a valid port.`,
+      );
     }
     return { id, host, port };
   });

@@ -49,8 +49,16 @@ type ConnectionState = 'connecting' | 'authenticating' | 'subscribing' | 'ready'
  * `onEvent`.
  */
 export function createEslClient(options: EslClientOptions): EslClient {
-  const { node, password, logger, reconnectMinDelayMs, reconnectMaxDelayMs, onEvent, onConnect, onDisconnect } =
-    options;
+  const {
+    node,
+    password,
+    logger,
+    reconnectMinDelayMs,
+    reconnectMaxDelayMs,
+    onEvent,
+    onConnect,
+    onDisconnect,
+  } = options;
   const connectFn = options.connect ?? ((port: number, host: string) => netConnect(port, host));
 
   let stopped = true;
