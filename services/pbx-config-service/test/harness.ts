@@ -5,7 +5,15 @@ import { fileKekFromConfig, type KekProvider } from '@cuc/crypto';
 import type { Bus } from '@cuc/events';
 import { connectBus } from '@cuc/events';
 import type { Logger } from '@cuc/logger';
-import { silentLogger, startTestDatabase, startTestNats, type TestNatsHandle } from '@cuc/testing';
+import { createStorage, type Storage } from '@cuc/storage';
+import {
+  silentLogger,
+  startTestDatabase,
+  startTestNats,
+  startTestS3,
+  type TestNatsHandle,
+  type TestS3Handle,
+} from '@cuc/testing';
 
 import { createDidRepo, type DidRepo } from '../src/repo/did.repo.js';
 import {
@@ -13,6 +21,7 @@ import {
   type EmergencyLocationRepo,
 } from '../src/repo/emergency-location.repo.js';
 import { createExtensionRepo, type ExtensionRepo } from '../src/repo/extension.repo.js';
+import { createMediaAssetRepo, type MediaAssetRepo } from '../src/repo/media-asset.repo.js';
 import type { TenantDomainLookup } from '../src/org-client.js';
 import type { PbxConfigServiceDb } from '../src/schema.js';
 import type { TrunkLookup } from '../src/trunk-client.js';
@@ -24,6 +33,8 @@ export interface Harness {
   readonly extensions: ExtensionRepo;
   readonly dids: DidRepo;
   readonly emergencyLocations: EmergencyLocationRepo;
+  readonly storage: Storage;
+  readonly mediaAssets: MediaAssetRepo;
   readonly domains: FakeTenantDomains;
   readonly trunks: FakeTrunkLookup;
   readonly logger: Logger;
@@ -62,10 +73,11 @@ function fakeTrunkLookup(): FakeTrunkLookup {
   return state;
 }
 
-/** A migrated schema, KEK, and extension/DID repos — no NATS. For repo/route tests. */
+/** A migrated schema, KEK, extension/DID/media-asset repos (a real MinIO backs storage), and no NATS. For repo/route tests. */
 export async function startHarness(): Promise<Harness> {
   const logger = silentLogger();
   const handle = await startTestDatabase();
+  const s3Handle: TestS3Handle = await startTestS3();
 
   const db = createDatabase<PbxConfigServiceDb>({
     host: handle.host,
@@ -84,6 +96,17 @@ export async function startHarness(): Promise<Harness> {
   const trunks = fakeTrunkLookup();
   const dids = createDidRepo(db, trunks.exists);
   const emergencyLocations = createEmergencyLocationRepo(db);
+  const storage = createStorage({
+    mode: 'prefix-per-tenant',
+    bucketPrefix: 'cuc-pbx-test',
+    endpoint: s3Handle.endpoint,
+    region: s3Handle.region,
+    accessKeyId: s3Handle.accessKeyId,
+    secretAccessKey: s3Handle.secretAccessKey,
+    forcePathStyle: s3Handle.forcePathStyle,
+    logger,
+  });
+  const mediaAssets = createMediaAssetRepo(db, storage);
 
   return {
     db,
@@ -91,12 +114,15 @@ export async function startHarness(): Promise<Harness> {
     extensions,
     dids,
     emergencyLocations,
+    storage,
+    mediaAssets,
     domains,
     trunks,
     logger,
     async close() {
       await db.destroy();
       await handle.stop();
+      await s3Handle.stop();
     },
   };
 }
@@ -132,6 +158,7 @@ export async function resetSchema(db: Database<PbxConfigServiceDb>): Promise<voi
   await db.kysely.deleteFrom('sip_credentials').execute();
   await db.kysely.deleteFrom('extensions').execute();
   await db.kysely.deleteFrom('emergency_locations').execute();
+  await db.kysely.deleteFrom('media_assets').execute();
   await db.kysely.deleteFrom('outbox').execute();
   await db.kysely.deleteFrom('consumed_events').execute();
 }

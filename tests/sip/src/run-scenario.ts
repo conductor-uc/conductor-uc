@@ -52,6 +52,7 @@ export interface SipTestEnv {
   readonly opensipsContainer: string;
   readonly opensipsTarget: string;
   readonly sippImage: string;
+  readonly freeswitchContainer: string;
 }
 
 /** Same variable names/defaults `infra/compose/.env(.example)` itself uses. */
@@ -63,6 +64,7 @@ export function sipTestEnv(): SipTestEnv {
     // any container on the network regardless of compose project prefix.
     opensipsTarget: envOr('SIP_TEST_OPENSIPS_TARGET', 'opensips:5060'),
     sippImage: envOr('SIP_TEST_SIPP_IMAGE', 'ctaloi/sipp'),
+    freeswitchContainer: envOr('SIP_TEST_FREESWITCH_CONTAINER', 'conductor-uc-freeswitch-1'),
   };
 }
 
@@ -253,6 +255,29 @@ export async function clearRegistration(aor: string): Promise<void> {
     'location',
     aor,
   ]);
+}
+
+/**
+ * `docker exec`s a real `fs_cli -x` command against the FreeSWITCH
+ * container — the same "verify the raw capability directly, not through
+ * the full routing stack yet" precedent G-19 (docs/decisions.md) already
+ * established for this exact CLI, back when no dialplan wiring existed for
+ * an outbound call either. S2-07's own media-asset playback has the same
+ * shape: no callflow/IVR feature exists yet to trigger it through a real
+ * call flow (S2-10's own future job, per the plan's dependency graph), so
+ * this is how its own acceptance test exercises FS's `http_cache://`
+ * resolution directly instead.
+ */
+export async function fsCli(command: string): Promise<string> {
+  const env = sipTestEnv();
+  const { stdout } = await execFileAsync('docker', [
+    'exec',
+    env.freeswitchContainer,
+    'fs_cli',
+    '-x',
+    command,
+  ]);
+  return stdout;
 }
 
 export interface SippStats {
@@ -771,4 +796,43 @@ export async function dockerCurlJson(
   const bodyText = stdout.slice(0, lastNewline);
   const status = Number(stdout.slice(lastNewline + 1).trim());
   return { status, json: bodyText === '' ? undefined : (JSON.parse(bodyText) as unknown) };
+}
+
+/**
+ * Uploads a local file's real bytes to a presigned PUT URL (S2-07) — a
+ * presigned URL's own host (`minio`, `STORAGE_ENDPOINT`) only resolves on
+ * the compose network, the same "cannot reach it from the host" reasoning
+ * `dockerCurlJson`'s own doc comment gives, so this bind-mounts the file
+ * into a throwaway container rather than uploading from the host process.
+ */
+export async function dockerCurlUpload(
+  url: string,
+  filePath: string,
+  contentType: string,
+): Promise<{ status: number }> {
+  const env = sipTestEnv();
+  const { stdout } = await execFileAsync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      env.network,
+      '-v',
+      `${filePath}:/upload/payload:ro`,
+      'curlimages/curl:latest',
+      '-s',
+      '-X',
+      'PUT',
+      '-H',
+      `content-type: ${contentType}`,
+      '--data-binary',
+      '@/upload/payload',
+      url,
+      '-w',
+      '%{http_code}',
+    ],
+    { maxBuffer: 16 * 1024 * 1024 },
+  );
+  return { status: Number(stdout.trim()) };
 }

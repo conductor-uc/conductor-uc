@@ -95,4 +95,33 @@ export interface PbxConfigServiceDb extends EventTables {
     updated_at: Date;
     version: number;
   };
+  /**
+   * A tenant-uploaded prompt/MOH/greeting (S2-07; 05 §3.3, G-5). `status`
+   * walks `pending` (row created, presigned PUT handed out) ->
+   * `processing` (client called `:finalize`, `pbx.media_asset.finalize_requested`
+   * enqueued) -> `ready` | `failed` (the transcode worker's own callback,
+   * `internal.routes.ts`'s `:complete`/`:fail`) — `domain/media-asset.ts`
+   * owns the actual transition rules. `object_key` is the tenant's own raw
+   * upload; `variant_8k_key`/`variant_16k_key` are null until `ready`.
+   */
+  media_assets: {
+    id: string;
+    tenant_id: string;
+    /** `'prompt' | 'moh' | 'greeting'` — `domain/media-asset.ts` owns the enum. */
+    kind: string;
+    label: string;
+    status: string;
+    /** The raw upload's own declared content type (e.g. `audio/mpeg`) — what `presignPut` advertised, not verified against the actual bytes here. */
+    content_type: string;
+    object_key: string;
+    variant_8k_key: string | null;
+    variant_16k_key: string | null;
+    duration_ms: number | null;
+    sha256: string | null;
+    size_bytes: number | null;
+    error_message: string | null;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
 }

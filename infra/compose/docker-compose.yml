@@ -22,6 +22,7 @@ services:
       EXAMPLE_SERVICE_DB_PASSWORD: ${EXAMPLE_SERVICE_DB_PASSWORD:-dev-example-password}
       TELEPHONY_CONFIG_SERVICE_DB_PASSWORD: ${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD:-dev-telephony-config-password}
       TRUNK_SERVICE_DB_PASSWORD: ${TRUNK_SERVICE_DB_PASSWORD:-dev-trunk-service-password}
+      MEDIA_WORKER_DB_PASSWORD: ${MEDIA_WORKER_DB_PASSWORD:-dev-media-worker-password}
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     ports:
       - '${MARIADB_PORT:-3306}:3306'
@@ -218,6 +219,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      minio:
+        condition: service_healthy
       org-service:
         condition: service_started
       trunk-service:
@@ -238,6 +241,13 @@ services:
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
       CRYPTO_KEK_CURRENT: '1'
+      # S2-07: media-asset uploads land here (presigned PUT), same bucket
+      # story org-service's own brand assets already use.
+      STORAGE_BUCKET_PREFIX: cuc-dev
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
+      STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
+      STORAGE_FORCE_PATH_STYLE: 'true'
 
   trunk-service:
     build:
@@ -307,6 +317,41 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
       RECONCILE_INTERVAL_MS: '900000'
+
+  media-worker:
+    # S2-07: isolated from pbx-config-service on purpose — the one service
+    # in this stack that runs `ffmpeg` against tenant-uploaded, untrusted
+    # audio (`services/media-worker/Dockerfile`'s own doc comment).
+    build:
+      context: ../..
+      dockerfile: services/media-worker/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      pbx-config-service:
+        condition: service_started
+    environment:
+      SERVICE_NAME: media-worker
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: media_worker
+      DB_PASSWORD: ${MEDIA_WORKER_DB_PASSWORD:-dev-media-worker-password}
+      DB_NAME: media_worker
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      STORAGE_BUCKET_PREFIX: cuc-dev
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
+      STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
+      STORAGE_FORCE_PATH_STYLE: 'true'
 
 volumes:
   mariadb-data:

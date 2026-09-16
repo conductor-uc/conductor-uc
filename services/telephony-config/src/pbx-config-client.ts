@@ -44,6 +44,23 @@ export interface EmergencyLocationConfig {
 }
 
 /**
+ * A media asset's current state (S2-07) — what `/fs/media/:id`'s resolver
+ * (`routes/fs.routes.ts`) fetches live, at the moment FS's own `http_cache`
+ * module actually asks for it (never mirrored — the same "must reflect the
+ * very latest write" reasoning `findEmergencyLocation` above already
+ * documents, and this is an even colder path: fetched once per node until
+ * that node's own local disk cache expires or the node restarts).
+ */
+export interface MediaAssetConfig {
+  readonly id: string;
+  readonly kind: string;
+  readonly status: string;
+  /** Null until `status` is `'ready'`. */
+  readonly variant8kKey: string | null;
+  readonly variant16kKey: string | null;
+}
+
+/**
  * A DID's current state (S2-03) — what `pbx.did.*`'s "thin event, re-fetch
  * current state" projection (`projection.ts`'s `projectDid`) fetches to keep
  * telephony-config's own local `dids` mirror current.
@@ -78,6 +95,8 @@ export interface PbxConfigClient {
     tenantId: string,
     locationId: string,
   ): Promise<EmergencyLocationConfig | undefined>;
+  /** Undefined when the asset does not exist in that tenant (a 404). */
+  findMediaAsset(tenantId: string, id: string): Promise<MediaAssetConfig | undefined>;
 }
 
 export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfigClient {
@@ -161,6 +180,30 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
       }
 
       return (await response.json()) as EmergencyLocationConfig;
+    },
+
+    async findMediaAsset(tenantId: string, id: string): Promise<MediaAssetConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/media-assets/${encodeURIComponent(id)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the media asset lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return (await response.json()) as MediaAssetConfig;
     },
   };
 }

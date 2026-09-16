@@ -32,6 +32,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       h.logger,
       h.orgClient,
       h.pbxConfig,
+      h.storage,
     );
     await app.ready();
   });
@@ -1080,6 +1081,99 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(response.statusCode).toBe(200);
       expect(response.body).toContain('name="emergency-911"');
       expect(response.body).not.toContain('name="ext-911"');
+    });
+  });
+
+  describe('/fs/media/:tenantId/:assetId/:rate (S2-07: media asset playback)', () => {
+    async function seedReadyAsset(
+      tenantId: string,
+      wav8k: Buffer,
+      wav16k: Buffer,
+    ): Promise<string> {
+      const assetId = crypto.randomUUID();
+      const variant8kKey = `media-assets/${assetId}/8k.wav`;
+      const variant16kKey = `media-assets/${assetId}/16k.wav`;
+      const tenantStorage = h.storage.forTenant(tenantId);
+      await tenantStorage.provisionBucket();
+      await tenantStorage.putObject(variant8kKey, wav8k, { contentType: 'audio/wav' });
+      await tenantStorage.putObject(variant16kKey, wav16k, { contentType: 'audio/wav' });
+      h.pbxConfig.mediaAssets[assetId] = {
+        id: assetId,
+        kind: 'prompt',
+        status: 'ready',
+        variant8kKey,
+        variant16kKey,
+      };
+      return assetId;
+    }
+
+    it('serves the 8k variant bytes for a ready asset', async () => {
+      const tenantId = crypto.randomUUID();
+      const wav8k = Buffer.from('fake 8k wav bytes');
+      const wav16k = Buffer.from('fake 16k wav bytes');
+      const assetId = await seedReadyAsset(tenantId, wav8k, wav16k);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/media/${tenantId}/${assetId}/8k`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.headers['content-type']).toContain('audio/wav');
+      expect(response.rawPayload).toEqual(wav8k);
+    });
+
+    it('serves the 16k variant bytes for a ready asset', async () => {
+      const tenantId = crypto.randomUUID();
+      const wav8k = Buffer.from('fake 8k wav bytes');
+      const wav16k = Buffer.from('fake 16k wav bytes');
+      const assetId = await seedReadyAsset(tenantId, wav8k, wav16k);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/media/${tenantId}/${assetId}/16k`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.rawPayload).toEqual(wav16k);
+    });
+
+    it('401s with no Authorization header', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/media/${crypto.randomUUID()}/${crypto.randomUUID()}/8k`,
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('404s for an asset that does not exist', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/media/${crypto.randomUUID()}/${crypto.randomUUID()}/8k`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('404s for an asset that has not finished transcoding yet', async () => {
+      const tenantId = crypto.randomUUID();
+      const assetId = crypto.randomUUID();
+      h.pbxConfig.mediaAssets[assetId] = {
+        id: assetId,
+        kind: 'prompt',
+        status: 'processing',
+        variant8kKey: null,
+        variant16kKey: null,
+      };
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/media/${tenantId}/${assetId}/8k`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(response.statusCode).toBe(404);
     });
   });
 });

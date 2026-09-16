@@ -20,5 +20,6 @@ export {
   type LifecycleRule,
   type PresignOptions,
   type PresignPutOptions,
+  type PutObjectOptions,
   type StorageMode,
 } from './types.js';

@@ -1,11 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { databaseOrSkipReason } from '@cuc/testing';
+import { databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 import { createServer, type Server } from '@cuc/http';
 
 import { registerInternalRoutes } from '../src/routes/internal.routes.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
-const skipReason = await databaseOrSkipReason();
+const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
 const TOKEN = 'test-internal-service-token';
 
 describe.skipIf(skipReason !== undefined)(
@@ -17,7 +17,7 @@ describe.skipIf(skipReason !== undefined)(
     beforeAll(async () => {
       h = await startHarness();
       app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-      registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, TOKEN);
+      registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, TOKEN);
       await app.ready();
     });
 
@@ -151,7 +151,7 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/di
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-    registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, TOKEN);
+    registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, TOKEN);
     await app.ready();
   });
 
@@ -276,5 +276,131 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/di
       headers: { authorization: `Bearer ${TOKEN}` },
     });
     expect(response.statusCode).toBe(404);
+  });
+});
+
+describe.skipIf(skipReason !== undefined)('media asset internal routes (S2-07)', () => {
+  let h: Harness;
+  let app: Server;
+
+  beforeAll(async () => {
+    h = await startHarness();
+    app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
+    registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, TOKEN);
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+    await h?.close();
+  });
+
+  afterEach(async () => {
+    await resetSchema(h.db);
+  });
+
+  it('GET returns a media asset for a valid token', async () => {
+    const tenantId = crypto.randomUUID();
+    const { asset } = await h.mediaAssets.create(
+      { tenantId },
+      { kind: 'prompt', label: 'Welcome greeting', contentType: 'audio/mpeg' },
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${tenantId}/media-assets/${asset.id}`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: asset.id,
+      kind: 'prompt',
+      status: 'pending',
+      contentType: 'audio/mpeg',
+      objectKey: asset.objectKey,
+      variant8kKey: null,
+      variant16kKey: null,
+    });
+  });
+
+  it('GET 401s with no token', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${crypto.randomUUID()}/media-assets/${crypto.randomUUID()}`,
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('GET 404s an unknown asset', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${crypto.randomUUID()}/media-assets/${crypto.randomUUID()}`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it(":complete records the transcode worker's own result and returns status ready", async () => {
+    const tenantId = crypto.randomUUID();
+    const { asset } = await h.mediaAssets.create(
+      { tenantId },
+      { kind: 'prompt', label: 'Welcome greeting', contentType: 'audio/mpeg' },
+    );
+    await h.mediaAssets.finalize({ tenantId }, asset.id);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/internal/v1/tenants/${tenantId}/media-assets/${asset.id}/complete`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+      payload: {
+        durationMs: 4200,
+        sha256: 'a'.repeat(64),
+        sizeBytes: 65536,
+        variant8kKey: `media-assets/${asset.id}/8k.wav`,
+        variant16kKey: `media-assets/${asset.id}/16k.wav`,
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      status: 'ready',
+      variant8kKey: `media-assets/${asset.id}/8k.wav`,
+      variant16kKey: `media-assets/${asset.id}/16k.wav`,
+    });
+  });
+
+  it(":fail records the transcode worker's own error and returns status failed", async () => {
+    const tenantId = crypto.randomUUID();
+    const { asset } = await h.mediaAssets.create(
+      { tenantId },
+      { kind: 'prompt', label: 'Welcome greeting', contentType: 'audio/mpeg' },
+    );
+    await h.mediaAssets.finalize({ tenantId }, asset.id);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/internal/v1/tenants/${tenantId}/media-assets/${asset.id}/fail`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+      payload: { errorMessage: 'ffmpeg: invalid data found when processing input' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ status: 'failed' });
+  });
+
+  it(':complete 401s with no token', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/internal/v1/tenants/${crypto.randomUUID()}/media-assets/${crypto.randomUUID()}/complete`,
+      payload: {
+        durationMs: 1,
+        sha256: 'a'.repeat(64),
+        sizeBytes: 1,
+        variant8kKey: 'x',
+        variant16kKey: 'y',
+      },
+    });
+    expect(response.statusCode).toBe(401);
   });
 });

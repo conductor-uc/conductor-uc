@@ -3,6 +3,7 @@ import { cryptoEnvSchema } from '@cuc/crypto';
 import { dbEnvSchema } from '@cuc/db';
 import { eventsEnvSchema } from '@cuc/events';
 import { httpEnvSchema } from '@cuc/http';
+import { storageEnvSchema } from '@cuc/storage';
 
 /**
  * Everything this service reads from the environment.
@@ -16,6 +17,7 @@ export const configSchema = Type.Object({
   ...dbEnvSchema.properties,
   ...eventsEnvSchema.properties,
   ...cryptoEnvSchema.properties,
+  ...storageEnvSchema.properties,
   ...httpEnvSchema.properties,
 
   /** Base URL for org-service's internal API, e.g. http://org-service:8080. */

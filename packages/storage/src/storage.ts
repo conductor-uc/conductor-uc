@@ -19,6 +19,7 @@ import {
   type LifecycleRule,
   type PresignOptions,
   type PresignPutOptions,
+  type PutObjectOptions,
   type StorageMode,
 } from './types.js';
 
@@ -40,6 +41,17 @@ export interface ScopedStorage {
   locate(key: string): ObjectLocation;
   presignGet(key: string, options?: PresignOptions): Promise<string>;
   presignPut(key: string, options?: PresignPutOptions): Promise<string>;
+  /**
+   * Reads an object's bytes directly, server-side — unlike `presignGet`,
+   * which only ever hands a *client* a URL. For a small, trusted, own-process
+   * workload only (S2-07's own transcode worker fetching a tenant's raw
+   * upload to feed `ffmpeg`): whole-object-in-memory, no streaming, since
+   * every caller so far is short voice media, not anything approaching a
+   * size where that would matter.
+   */
+  getObject(key: string): Promise<Buffer>;
+  /** The write half of {@link getObject} — writes bytes directly rather than handing a client a presigned PUT URL. */
+  putObject(key: string, body: Buffer, options?: PutObjectOptions): Promise<void>;
   /**
    * Creates this scope's bucket if it does not exist yet, with server-side
    * encryption and a public-access block (05 §4). Idempotent: a bucket that
@@ -163,6 +175,27 @@ export function createStorage(options: CreateStorageOptions): Storage {
               : { ContentType: presignOptions.contentType }),
           }),
           { expiresIn: clampTtl(presignOptions?.ttlSeconds, MAX_PUT_TTL_SECONDS) },
+        );
+      },
+      async getObject(key) {
+        const { bucket, key: realKey } = locate(key);
+        const result = await client.send(new GetObjectCommand({ Bucket: bucket, Key: realKey }));
+        if (result.Body === undefined) {
+          throw new Error(`Object '${key}' in bucket '${bucket}' has no body.`);
+        }
+        return Buffer.from(await result.Body.transformToByteArray());
+      },
+      async putObject(key, body, putOptions) {
+        const { bucket, key: realKey } = locate(key);
+        await client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: realKey,
+            Body: body,
+            ...(putOptions?.contentType === undefined
+              ? {}
+              : { ContentType: putOptions.contentType }),
+          }),
         );
       },
       async provisionBucket() {
