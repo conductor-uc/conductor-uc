@@ -54,11 +54,17 @@ export const configSchema = Type.Object({
 
   /** Base URL for pbx-config-service's internal API, e.g. http://pbx-config-service:8080. */
   PBX_CONFIG_SERVICE_URL: Env.url(),
+  /** Base URL for trunk-service's internal API, e.g. http://trunk-service:8080 (S2-02). */
+  TRUNK_SERVICE_URL: Env.url(),
   /**
-   * Shared bearer token pbx-config-service's `/internal/v1` routes expect
-   * (07 §1's precedent, same variable name pbx-config-service itself uses
-   * for the identical purpose against org-service, S1-09) — must match that
-   * service's own INTERNAL_SERVICE_TOKEN.
+   * Shared bearer token pbx-config-service's and trunk-service's
+   * `/internal/v1` routes expect (07 §1's precedent, same variable name
+   * those services use for the identical purpose against org-service) —
+   * must match those services' own INTERNAL_SERVICE_TOKEN. Also what this
+   * service's own `/internal/v1/tenants/:tenantId/trunks/:id/status`
+   * (S2-02) requires from ITS caller (trunk-service's `:status` action) —
+   * one shared token for every internal caller in both directions, same as
+   * every other pair of services in this repo.
    */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
 

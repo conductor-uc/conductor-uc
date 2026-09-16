@@ -156,6 +156,9 @@ services:
       # dialing out — a CIDR check was tried first and confirmed wrong on
       # this flat compose network (opensips.cfg.template's own comment).
       OPENSIPS_FS_DESTINATION: ${OPENSIPS_FS_DESTINATION:-sip:freeswitch:5060}
+      # S2-02: fast in dev/test so a newly created trunk registers within
+      # seconds rather than the module's ~100-200s default worst case.
+      OPENSIPS_REGISTRANT_TIMER_INTERVAL: ${OPENSIPS_REGISTRANT_TIMER_INTERVAL:-10}
     ports:
       - '${OPENSIPS_SIP_PORT:-5060}:5060/udp'
       - '${OPENSIPS_SIP_PORT:-5060}:5060/tcp'
@@ -250,6 +253,7 @@ services:
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
       ORG_SERVICE_URL: http://org-service:8080
+      TELEPHONY_CONFIG_URL: http://telephony-config:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
@@ -269,6 +273,8 @@ services:
         condition: service_started
       pbx-config-service:
         condition: service_started
+      trunk-service:
+        condition: service_started
     environment:
       SERVICE_NAME: telephony-config
       DB_HOST: mariadb
@@ -287,6 +293,7 @@ services:
       OPENSIPS_MI_URL: http://opensips:${OPENSIPS_MI_PORT:-8888}/mi
       OPENSIPS_SIP_URI: opensips:${OPENSIPS_SIP_PORT:-5060}
       PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
+      TRUNK_SERVICE_URL: http://trunk-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
       RECONCILE_INTERVAL_MS: '900000'

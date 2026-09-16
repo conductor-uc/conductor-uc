@@ -17,6 +17,7 @@ import {
   TrunkNotFoundError,
   type TrunkRepo,
 } from '../repo/trunk.repo.js';
+import type { TelephonyConfigClient } from '../telephony-config-client.js';
 
 const TenantParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
 const TrunkParamsSchema = Type.Object({
@@ -90,6 +91,15 @@ const RevealBodySchema = Type.Object({
   reason: Type.Optional(Type.String({ minLength: 1, maxLength: 1024 })),
 });
 const RevealResponseSchema = Type.Object({ username: Type.String(), secret: Type.String() });
+
+const RegistrationStatusSchema = Type.Union([
+  Type.Literal('registered'),
+  Type.Literal('registering'),
+  Type.Literal('failed'),
+  Type.Literal('not_registered'),
+  Type.Literal('not_applicable'),
+]);
+const StatusResponseSchema = Type.Object({ registrationStatus: RegistrationStatusSchema });
 
 function toResponse(trunk: {
   id: string;
@@ -166,7 +176,12 @@ function toProblem(error: unknown): ProblemError {
  * other services: no service evaluates the full role/grant `allowed()`
  * formula per request yet, only the route-level H1/H3 hard rules).
  */
-export function registerTrunkRoutes(app: Server, trunks: TrunkRepo, bus: Bus): void {
+export function registerTrunkRoutes(
+  app: Server,
+  trunks: TrunkRepo,
+  bus: Bus,
+  telephony: TelephonyConfigClient,
+): void {
   app.get(
     '/v1/tenants/:tenantId/trunks',
     {
@@ -292,6 +307,24 @@ export function registerTrunkRoutes(app: Server, trunks: TrunkRepo, bus: Bus): v
         throw toProblem(error);
       }
       return reply.status(204).send();
+    },
+  );
+
+  app.get(
+    '/v1/tenants/:tenantId/trunks/:id/status',
+    {
+      // 06: "returns registration state (read from OpenSIPs via
+      // telephony-config's internal API)" — trunk config, not a secret, so
+      // the ordinary trunk.manage/config contract applies.
+      config: { permission: 'trunk.manage', dataClass: 'config' },
+      schema: { params: TrunkParamsSchema, response: { 200: StatusResponseSchema } },
+    },
+    async (request) => {
+      const found = await trunks.findById(ctxFor(request), request.params.id);
+      if (found === undefined) throw ProblemError.notFound('No trunk with that id.');
+
+      const status = await telephony.findStatus(request.params.tenantId, request.params.id);
+      return { registrationStatus: status?.status ?? 'not_registered' };
     },
   );
 

@@ -14,7 +14,11 @@ import {
 } from '../src/repo/opensips-projection.repo.js';
 import { createReadModelRepo, type ReadModelRepo } from '../src/repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../src/schema.js';
+import type { TrunkConfig, TrunkConfigClient } from '../src/trunk-config-client.js';
 import { migrations } from '../migrations/index.js';
+
+/** OpenSIPs' own SIP URI, as `config.ts`'s `OPENSIPS_SIP_URI` would carry it. */
+export const TEST_OPENSIPS_SIP_URI = 'opensips-test:5060';
 
 export interface Harness {
   readonly db: Database<TelephonyConfigDb>;
@@ -24,24 +28,37 @@ export interface Harness {
   readonly projection: Projection;
   readonly mi: FakeMiClient;
   readonly pbxConfig: FakePbxConfigClient;
+  readonly trunkConfig: FakeTrunkConfigClient;
   readonly logger: Logger;
   close(): Promise<void>;
 }
 
 export interface FakeMiClient extends OpenSipsMiClient {
   readonly calls: string[];
+  /** `reg_list`'s canned answer, keyed by the `aor` positional param — set per test. */
+  regListResults: Record<string, unknown>;
 }
 
-/** Records every `domain_reload` call rather than needing a real OpenSIPs. */
+/** Records every reload call rather than needing a real OpenSIPs; `query('reg_list', ...)` answers from `regListResults`. */
 function fakeMiClient(): FakeMiClient {
   const calls: string[] = [];
-  return {
+  const state: FakeMiClient = {
     calls,
+    regListResults: {},
     call(method: string) {
       calls.push(method);
       return Promise.resolve();
     },
+    query<T>(method: string, params?: readonly unknown[]) {
+      calls.push(method);
+      if (method === 'reg_list') {
+        const aor = typeof params?.[0] === 'string' ? params[0] : '';
+        return Promise.resolve((state.regListResults[aor] ?? { Records: [] }) as T);
+      }
+      return Promise.resolve(undefined as T);
+    },
   };
+  return state;
 }
 
 export interface FakePbxConfigClient extends PbxConfigClient {
@@ -58,12 +75,27 @@ function fakePbxConfigClient(): FakePbxConfigClient {
   return state;
 }
 
+export interface FakeTrunkConfigClient extends TrunkConfigClient {
+  trunks: Record<string, TrunkConfig>;
+}
+
+/** A trunk-config lookup whose answers are set per test — no live trunk-service needed. */
+function fakeTrunkConfigClient(): FakeTrunkConfigClient {
+  const state: FakeTrunkConfigClient = {
+    trunks: {},
+    findTrunk: (_tenantId: string, trunkId: string) => Promise.resolve(state.trunks[trunkId]),
+    listAllTrunks: () => Promise.resolve(Object.values(state.trunks)),
+  };
+  return state;
+}
+
 /**
- * Creates `domain` and `subscriber` exactly as OpenSIPs' own vendored
- * schema does (`telephony/opensips/db-schema/{domain,auth_db}-create.sql`),
- * minus the `version` bookkeeping table this service never reads or writes
- * — only column shapes matter here, and a real MariaDB, not a mock,
- * verifies this service's actual SQL against them.
+ * Creates `domain`, `subscriber`, `registrant`, `address`, and `dr_gateways`
+ * exactly as OpenSIPs' own vendored schema does
+ * (`telephony/opensips/db-schema/{domain,auth_db,registrant,permissions,
+ * drouting}-create.sql`), minus bookkeeping columns/tables this service
+ * never reads or writes — only column shapes matter here, and a real
+ * MariaDB, not a mock, verifies this service's actual SQL against them.
  */
 async function createOpenSipsTables(db: Database<OpenSipsDb>): Promise<void> {
   await db.kysely.schema
@@ -90,6 +122,62 @@ async function createOpenSipsTables(db: Database<OpenSipsDb>): Promise<void> {
     .createIndex('account_idx')
     .on('subscriber')
     .columns(['username', 'domain'])
+    .unique()
+    .execute();
+
+  await db.kysely.schema
+    .createTable('registrant')
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('registrar', 'char(255)', (col) => col.notNull().defaultTo(''))
+    .addColumn('proxy', 'char(255)')
+    .addColumn('aor', 'char(255)', (col) => col.notNull().defaultTo(''))
+    .addColumn('third_party_registrant', 'char(255)')
+    .addColumn('username', 'char(64)')
+    .addColumn('password', 'char(64)')
+    .addColumn('binding_uri', 'char(255)', (col) => col.notNull().defaultTo(''))
+    .addColumn('binding_params', 'char(64)')
+    .addColumn('expiry', 'integer')
+    .addColumn('forced_socket', 'char(64)')
+    .addColumn('cluster_shtag', 'char(64)')
+    .addColumn('state', 'integer', (col) => col.notNull().defaultTo(0))
+    .execute();
+  await db.kysely.schema
+    .createIndex('registrant_idx')
+    .on('registrant')
+    .columns(['aor', 'binding_uri', 'registrar'])
+    .unique()
+    .execute();
+
+  await db.kysely.schema
+    .createTable('address')
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('grp', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('ip', 'char(50)', (col) => col.notNull())
+    .addColumn('mask', 'integer', (col) => col.notNull().defaultTo(32))
+    .addColumn('port', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('proto', 'char(4)', (col) => col.notNull().defaultTo('any'))
+    .addColumn('pattern', 'char(64)')
+    .addColumn('context_info', 'char(32)')
+    .execute();
+
+  await db.kysely.schema
+    .createTable('dr_gateways')
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('gwid', 'char(64)', (col) => col.notNull())
+    .addColumn('type', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('address', 'char(128)', (col) => col.notNull())
+    .addColumn('strip', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('pri_prefix', 'char(16)')
+    .addColumn('attrs', 'char(255)')
+    .addColumn('probe_mode', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('state', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('socket', 'char(128)')
+    .addColumn('description', 'char(128)')
+    .execute();
+  await db.kysely.schema
+    .createIndex('dr_gw_idx')
+    .on('dr_gateways')
+    .column('gwid')
     .unique()
     .execute();
 }
@@ -126,7 +214,16 @@ export async function startHarness(): Promise<Harness> {
   const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
   const mi = fakeMiClient();
   const pbxConfig = fakePbxConfigClient();
-  const projection = createProjection(readModel, opensipsProjection, mi, pbxConfig, logger);
+  const trunkConfig = fakeTrunkConfigClient();
+  const projection = createProjection(
+    readModel,
+    opensipsProjection,
+    mi,
+    pbxConfig,
+    logger,
+    trunkConfig,
+    TEST_OPENSIPS_SIP_URI,
+  );
 
   return {
     db,
@@ -136,6 +233,7 @@ export async function startHarness(): Promise<Harness> {
     projection,
     mi,
     pbxConfig,
+    trunkConfig,
     logger,
     async close() {
       await db.destroy();
@@ -173,6 +271,8 @@ export async function startBusHarness(): Promise<BusHarness> {
 }
 
 export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void> {
+  await db.kysely.deleteFrom('trunk_ips').execute();
+  await db.kysely.deleteFrom('trunks').execute();
   await db.kysely.deleteFrom('extensions').execute();
   await db.kysely.deleteFrom('domains').execute();
   await db.kysely.deleteFrom('tenants').execute();
@@ -183,4 +283,7 @@ export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void
 export async function resetOpenSipsSchema(db: Database<OpenSipsDb>): Promise<void> {
   await db.kysely.deleteFrom('subscriber').execute();
   await db.kysely.deleteFrom('domain').execute();
+  await db.kysely.deleteFrom('registrant').execute();
+  await db.kysely.deleteFrom('address').execute();
+  await db.kysely.deleteFrom('dr_gateways').execute();
 }

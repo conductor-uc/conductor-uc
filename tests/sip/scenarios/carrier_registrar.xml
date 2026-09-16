@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-02: stands in for a carrier's SIP registrar. OpenSIPs' `uac_registrant`
+  module is the UAC here (it sends REGISTER on its own periodic timer, never
+  in response to an inbound request) — this scenario is the pure-UAS
+  counterpart, the same "no-auth-challenge-needed" shape as `answer_call.xml`.
+  Accepting the very first REGISTER with no 401/407 challenge is enough to
+  prove the module reaches REGISTERED_STATE (3) — this task's own acceptance
+  test does not exercise the auth-challenge path.
+-->
+<scenario name="Carrier registrar - accepts a REGISTER">
+  <recv request="REGISTER" crlf="true" timeout="60000">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      [last_Contact:]
+      Expires: 3600
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>

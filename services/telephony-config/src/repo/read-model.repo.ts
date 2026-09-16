@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Database } from '@cuc/db';
 import type { Kysely, Transaction } from 'kysely';
 
@@ -21,6 +23,20 @@ export interface ExtensionRow {
   readonly username: string;
   readonly ha1: string;
   readonly realm: string;
+}
+
+export interface TrunkRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly name: string;
+  readonly authMode: string;
+  readonly host: string;
+  readonly port: number;
+  readonly transport: string;
+  readonly username: string | null;
+  readonly secret: string | null;
+  readonly fromDomain: string | null;
+  readonly status: string;
 }
 
 type Executor = Kysely<TelephonyConfigDb> | Transaction<TelephonyConfigDb>;
@@ -213,6 +229,188 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .where('tenant_id', '=', tenantId)
         .where('number', '=', number)
         .executeTakeFirst();
+    },
+
+    /** Returns the previous row, if any, so a consumer can clean up a stale projection (S2-02). */
+    async upsertTrunk(trx: Executor, trunk: TrunkRow): Promise<TrunkRow | undefined> {
+      const previous = await trx
+        .selectFrom('trunks')
+        .select([
+          'id',
+          'tenant_id as tenantId',
+          'name',
+          'auth_mode as authMode',
+          'host',
+          'port',
+          'transport',
+          'username',
+          'secret',
+          'from_domain as fromDomain',
+          'status',
+        ])
+        .where('id', '=', trunk.id)
+        .executeTakeFirst();
+
+      const now = new Date();
+      if (previous === undefined) {
+        await trx
+          .insertInto('trunks')
+          .values({
+            id: trunk.id,
+            tenant_id: trunk.tenantId,
+            name: trunk.name,
+            auth_mode: trunk.authMode,
+            host: trunk.host,
+            port: trunk.port,
+            transport: trunk.transport,
+            username: trunk.username,
+            secret: trunk.secret,
+            from_domain: trunk.fromDomain,
+            status: trunk.status,
+            created_at: now,
+            updated_at: now,
+          })
+          .execute();
+      } else {
+        await trx
+          .updateTable('trunks')
+          .set({
+            name: trunk.name,
+            auth_mode: trunk.authMode,
+            host: trunk.host,
+            port: trunk.port,
+            transport: trunk.transport,
+            username: trunk.username,
+            secret: trunk.secret,
+            from_domain: trunk.fromDomain,
+            status: trunk.status,
+            updated_at: now,
+          })
+          .where('id', '=', trunk.id)
+          .execute();
+      }
+      return previous;
+    },
+
+    async deleteTrunk(trx: Executor, id: string): Promise<TrunkRow | undefined> {
+      const existing = await trx
+        .selectFrom('trunks')
+        .select([
+          'id',
+          'tenant_id as tenantId',
+          'name',
+          'auth_mode as authMode',
+          'host',
+          'port',
+          'transport',
+          'username',
+          'secret',
+          'from_domain as fromDomain',
+          'status',
+        ])
+        .where('id', '=', id)
+        .executeTakeFirst();
+      if (existing === undefined) return undefined;
+
+      await trx.deleteFrom('trunk_ips').where('trunk_id', '=', id).execute();
+      await trx.deleteFrom('trunks').where('id', '=', id).execute();
+      return existing;
+    },
+
+    /** `/internal/v1/tenants/:tenantId/trunks/:id/status`'s lookup (S2-02). */
+    findTrunkById(id: string): Promise<TrunkRow | undefined> {
+      return db.kysely
+        .selectFrom('trunks')
+        .select([
+          'id',
+          'tenant_id as tenantId',
+          'name',
+          'auth_mode as authMode',
+          'host',
+          'port',
+          'transport',
+          'username',
+          'secret',
+          'from_domain as fromDomain',
+          'status',
+        ])
+        .where('id', '=', id)
+        .executeTakeFirst();
+    },
+
+    /** Every trunk this service knows about, for reconciliation. */
+    listTrunks(): Promise<TrunkRow[]> {
+      return db.kysely
+        .selectFrom('trunks')
+        .select([
+          'id',
+          'tenant_id as tenantId',
+          'name',
+          'auth_mode as authMode',
+          'host',
+          'port',
+          'transport',
+          'username',
+          'secret',
+          'from_domain as fromDomain',
+          'status',
+        ])
+        .execute();
+    },
+
+    /** Every IP currently mirrored for a trunk. */
+    listTrunkIps(trx: Executor, trunkId: string): Promise<string[]> {
+      return trx
+        .selectFrom('trunk_ips')
+        .select('cidr')
+        .where('trunk_id', '=', trunkId)
+        .execute()
+        .then((rows) => rows.map((row) => row.cidr));
+    },
+
+    /** Every (trunkId, cidr) pair this service knows about, for reconciliation. */
+    listAllTrunkIps(): Promise<{ trunkId: string; cidr: string }[]> {
+      return db.kysely.selectFrom('trunk_ips').select(['trunk_id as trunkId', 'cidr']).execute();
+    },
+
+    /**
+     * Replaces a trunk's mirrored IP set and returns the diff (which CIDRs
+     * were added/removed), so a consumer can add/remove exactly those rows
+     * in `opensips.address` rather than reprojecting every IP unconditionally.
+     */
+    async replaceTrunkIps(
+      trx: Executor,
+      trunkId: string,
+      cidrs: readonly string[],
+    ): Promise<{ added: string[]; removed: string[] }> {
+      const existing = await trx
+        .selectFrom('trunk_ips')
+        .select('cidr')
+        .where('trunk_id', '=', trunkId)
+        .execute()
+        .then((rows) => new Set(rows.map((row) => row.cidr)));
+      const desired = new Set(cidrs);
+
+      const added = [...desired].filter((cidr) => !existing.has(cidr));
+      const removed = [...existing].filter((cidr) => !desired.has(cidr));
+
+      if (added.length + removed.length === 0) return { added: [], removed: [] };
+
+      await trx.deleteFrom('trunk_ips').where('trunk_id', '=', trunkId).execute();
+      if (cidrs.length > 0) {
+        await trx
+          .insertInto('trunk_ips')
+          .values(
+            cidrs.map((cidr) => ({
+              id: randomUUID(),
+              trunk_id: trunkId,
+              cidr,
+              created_at: new Date(),
+            })),
+          )
+          .execute();
+      }
+      return { added, removed };
     },
   };
 }

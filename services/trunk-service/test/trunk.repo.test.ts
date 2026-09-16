@@ -252,6 +252,56 @@ describe.skipIf(skipReason !== undefined)('trunk repo', () => {
     });
   });
 
+  describe('findForProjection / listAllForProjection', () => {
+    it('returns the decrypted secret and IPs for one trunk', async () => {
+      const tenantId = crypto.randomUUID();
+      h.resellers.resellerIds[tenantId] = 'reseller-a';
+      const created = await h.trunks.create(ctxFor(tenantId), baseInput);
+      await h.trunks.addIp(ctxFor(tenantId), created.id, '203.0.113.0/24');
+
+      const view = await h.trunks.findForProjection(tenantId, created.id);
+      expect(view).toMatchObject({
+        id: created.id,
+        username: 'trunkuser',
+        secret: 's3cret-password',
+        ips: ['203.0.113.0/24'],
+      });
+    });
+
+    it('returns a null secret for an ip-mode trunk', async () => {
+      const tenantId = crypto.randomUUID();
+      h.resellers.resellerIds[tenantId] = 'reseller-a';
+      const created = await h.trunks.create(ctxFor(tenantId), ipModeInput);
+
+      const view = await h.trunks.findForProjection(tenantId, created.id);
+      expect(view).toMatchObject({ username: null, secret: null });
+    });
+
+    it('is undefined for a trunk in a different tenant', async () => {
+      const tenantId = crypto.randomUUID();
+      const otherTenantId = crypto.randomUUID();
+      h.resellers.resellerIds[tenantId] = 'reseller-a';
+      const created = await h.trunks.create(ctxFor(tenantId), baseInput);
+
+      expect(await h.trunks.findForProjection(otherTenantId, created.id)).toBeUndefined();
+    });
+
+    it('lists every trunk across every tenant, with the same detail', async () => {
+      const tenantA = crypto.randomUUID();
+      const tenantB = crypto.randomUUID();
+      h.resellers.resellerIds[tenantA] = 'reseller-a';
+      h.resellers.resellerIds[tenantB] = 'reseller-b';
+      const trunkA = await h.trunks.create(ctxFor(tenantA), baseInput);
+      const trunkB = await h.trunks.create(ctxFor(tenantB), ipModeInput);
+      await h.trunks.addIp(ctxFor(tenantB), trunkB.id, '198.51.100.0/24');
+
+      const views = await h.trunks.listAllForProjection();
+      const byId = new Map(views.map((v) => [v.id, v]));
+      expect(byId.get(trunkA.id)).toMatchObject({ secret: 's3cret-password' });
+      expect(byId.get(trunkB.id)).toMatchObject({ secret: null, ips: ['198.51.100.0/24'] });
+    });
+  });
+
   // 05 §2.4: every repository test suite includes a cross-tenant probe.
   crossTenantProbe({
     name: 'trunks',
