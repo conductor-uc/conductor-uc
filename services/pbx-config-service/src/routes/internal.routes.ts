@@ -5,6 +5,7 @@ import type { DidRepo } from '../repo/did.repo.js';
 import type { EmergencyLocationRepo } from '../repo/emergency-location.repo.js';
 import type { ExtensionRepo } from '../repo/extension.repo.js';
 import { MediaAssetNotFoundError, type MediaAssetRepo } from '../repo/media-asset.repo.js';
+import type { RingGroupRepo } from '../repo/ring-group.repo.js';
 
 const ParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
@@ -65,6 +66,15 @@ const DidResponseSchema = Type.Object({
   ]),
   destinationId: Type.String(),
 });
+const RingGroupResponseSchema = Type.Object({
+  id: Type.String(),
+  label: Type.String(),
+  strategy: Type.String(),
+  memberExtensionIds: Type.Array(Type.String()),
+  ringTimeoutSeconds: Type.Number(),
+  noAnswerDestinationType: Type.Union([Type.String(), Type.Null()]),
+  noAnswerDestinationId: Type.Union([Type.String(), Type.Null()]),
+});
 
 /**
  * `GET /internal/v1/tenants/:tenantId/extensions/:id` (S1-12). What
@@ -87,6 +97,7 @@ export function registerInternalRoutes(
   dids: DidRepo,
   emergencyLocations: EmergencyLocationRepo,
   mediaAssets: MediaAssetRepo,
+  ringGroups: RingGroupRepo,
   internalServiceToken: string,
 ): void {
   app.get(
@@ -289,6 +300,40 @@ export function registerInternalRoutes(
         if (error instanceof MediaAssetNotFoundError) throw ProblemError.notFound(error.message);
         throw error;
       }
+    },
+  );
+  /**
+   * `GET /internal/v1/tenants/:tenantId/ring-groups/:id` (S2-08) — how
+   * telephony-config's `pbx.ring_group.*` consumer re-fetches a ring group's
+   * current state to project into its own local read model, the same "thin
+   * event" pattern `dids` above already establishes.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/ring-groups/:id',
+    {
+      config: { public: true },
+      schema: { params: ParamsSchema, response: { 200: RingGroupResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      const ringGroup = await ringGroups.findById({ tenantId }, id);
+      if (ringGroup === undefined) {
+        throw ProblemError.notFound('No ring group with that id in that tenant.');
+      }
+      return {
+        id: ringGroup.id,
+        label: ringGroup.label,
+        strategy: ringGroup.strategy,
+        memberExtensionIds: [...ringGroup.memberExtensionIds],
+        ringTimeoutSeconds: ringGroup.ringTimeoutSeconds,
+        noAnswerDestinationType: ringGroup.noAnswerDestinationType,
+        noAnswerDestinationId: ringGroup.noAnswerDestinationId,
+      } satisfies Static<typeof RingGroupResponseSchema>;
     },
   );
 }

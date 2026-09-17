@@ -3,6 +3,7 @@ import { secretEquals } from '@cuc/crypto';
 import { Type, type Server } from '@cuc/http';
 import type { Logger } from '@cuc/logger';
 import type { Storage } from '@cuc/storage';
+import type { Redis } from 'ioredis';
 
 import { enqueueEvent } from '@cuc/events';
 
@@ -14,12 +15,14 @@ import { telephonyEvents } from '../events.js';
 import type { OrgClient } from '../org-client.js';
 import type { PbxConfigClient } from '../pbx-config-client.js';
 import type { OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
+import { nextRoundRobinStart } from '../ring-group-counter.js';
 import type { TelephonyConfigDb } from '../schema.js';
 import {
   buildDialplanDocument,
   buildDirectoryDocument,
   buildEmergencyDialplanDocument,
   buildOutboundDialplanDocument,
+  buildRingGroupDialplanDocument,
   NOT_FOUND_DOCUMENT,
   type EmergencyLocationDetail,
 } from '../xml.js';
@@ -88,6 +91,12 @@ function findBestOutboundRoute(
  * with a hand-built string (`../xml.ts`), never Fastify's schema-driven JSON
  * serializer.
  */
+
+/** `ring_groups.member_extension_ids` is stored as JSON text in this service's own mirror (`schema.ts`'s own comment) — same driver-quirk parsing every other JSON-as-text column in this codebase already handles. */
+function parseMemberExtensionIds(value: string): string[] {
+  return JSON.parse(value) as string[];
+}
+
 export function registerFsRoutes(
   app: Server,
   db: Database<TelephonyConfigDb>,
@@ -102,6 +111,8 @@ export function registerFsRoutes(
   pbxConfigClient: PbxConfigClient,
   /** S2-07: `/fs/media/:tenantId/:assetId/:rate`'s own byte proxy — see that route's own doc comment for why this fetches bytes directly rather than redirecting. */
   storage: Storage,
+  /** S2-08: `ring-group-counter.ts`'s own `round_robin` counter — `null` when `REDIS_URL` is not configured (tests that never exercise a ring-group DID). */
+  redis: Redis | null,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -487,23 +498,14 @@ export function registerFsRoutes(
         return NOT_FOUND_DOCUMENT;
       }
 
-      // Only `extension` resolves to a real call through S2-03 — every other
-      // destination type has no owning subsystem yet (docs/decisions.md
-      // G-25), so this is an honest miss, not a guess at behavior only a
-      // later stage can define.
-      if (did.destinationType !== 'extension') {
+      // Only `extension` and (S2-08) `ring_group` resolve to a real call —
+      // every other destination type has no owning subsystem yet
+      // (docs/decisions.md G-25), so this is an honest miss, not a guess at
+      // behavior only a later stage can define.
+      if (did.destinationType !== 'extension' && did.destinationType !== 'ring_group') {
         logger.info(
           { didId: did.id, destinationType: did.destinationType },
           'dialplan: DID destination type has no owning subsystem yet',
-        );
-        return NOT_FOUND_DOCUMENT;
-      }
-
-      const extension = await readModel.findExtensionById(did.destinationId);
-      if (extension === undefined) {
-        logger.warn(
-          { didId: did.id, destinationId: did.destinationId },
-          'dialplan: DID’s destination extension no longer exists',
         );
         return NOT_FOUND_DOCUMENT;
       }
@@ -514,12 +516,84 @@ export function registerFsRoutes(
         return NOT_FOUND_DOCUMENT;
       }
 
-      return buildDialplanDocument(
+      if (did.destinationType === 'extension') {
+        const extension = await readModel.findExtensionById(did.destinationId);
+        if (extension === undefined) {
+          logger.warn(
+            { didId: did.id, destinationId: did.destinationId },
+            'dialplan: DID’s destination extension no longer exists',
+          );
+          return NOT_FOUND_DOCUMENT;
+        }
+
+        return buildDialplanDocument(
+          callerContext,
+          destinationNumber,
+          domain.fqdn,
+          opensipsSipUri,
+          extension.number,
+        );
+      }
+
+      // did.destinationType === 'ring_group' (S2-08).
+      const ringGroup = await readModel.findRingGroupById(did.destinationId);
+      if (ringGroup === undefined) {
+        logger.warn(
+          { didId: did.id, destinationId: did.destinationId },
+          'dialplan: DID’s destination ring group no longer exists',
+        );
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      const memberIds = parseMemberExtensionIds(ringGroup.memberExtensionIds);
+      const members = (
+        await Promise.all(memberIds.map((id) => readModel.findExtensionById(id)))
+      ).filter((extension): extension is NonNullable<typeof extension> => extension !== undefined);
+      if (members.length === 0) {
+        logger.warn(
+          { didId: did.id, ringGroupId: ringGroup.id },
+          'dialplan: ring group has no resolvable members',
+        );
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      let orderedMembers = members;
+      if (ringGroup.strategy === 'round_robin') {
+        const start =
+          redis === null
+            ? 0
+            : await nextRoundRobinStart(redis, trunk.tenantId, ringGroup.id, members.length);
+        orderedMembers = [...members.slice(start), ...members.slice(0, start)];
+      } else if (ringGroup.strategy === 'random') {
+        orderedMembers = [...members];
+        for (let i = orderedMembers.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const atI = orderedMembers[i];
+          const atJ = orderedMembers[j];
+          if (atI === undefined || atJ === undefined) continue;
+          orderedMembers[i] = atJ;
+          orderedMembers[j] = atI;
+        }
+      }
+
+      let noAnswerBridgeNumber: string | null = null;
+      if (
+        ringGroup.noAnswerDestinationType === 'extension' &&
+        ringGroup.noAnswerDestinationId !== null
+      ) {
+        const fallback = await readModel.findExtensionById(ringGroup.noAnswerDestinationId);
+        noAnswerBridgeNumber = fallback?.number ?? null;
+      }
+
+      return buildRingGroupDialplanDocument(
         callerContext,
         destinationNumber,
         domain.fqdn,
         opensipsSipUri,
-        extension.number,
+        orderedMembers.map((extension) => extension.number),
+        ringGroup.strategy as 'simultaneous' | 'sequential' | 'round_robin' | 'random',
+        ringGroup.ringTimeoutSeconds,
+        noAnswerBridgeNumber,
       );
     }
 

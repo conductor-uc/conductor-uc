@@ -6,6 +6,7 @@ import * as addTrunks from './003_add_trunks.js';
 import * as addDids from './004_add_dids.js';
 import * as addOutboundRouting from './005_add_outbound_routing.js';
 import * as addEmergencyCalling from './006_add_emergency_calling.js';
+import * as addRingGroups from './007_add_ring_groups.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -23,4 +24,5 @@ export const migrations: Record<string, Migration> = {
   '004_add_dids': addDids,
   '005_add_outbound_routing': addOutboundRouting,
   '006_add_emergency_calling': addEmergencyCalling,
+  '007_add_ring_groups': addRingGroups,
 };

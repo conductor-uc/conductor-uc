@@ -188,6 +188,44 @@ export function createProjection(
     },
 
     /**
+     * Fetches a ring group's current state and mirrors it locally (S2-08) —
+     * shared by `pbx.ring_group.created` and `.updated`, the same "thin
+     * event, re-fetch current state" story `projectDid` tells. No `opensips`
+     * counterpart either: a ring group's own dial-string resolution is
+     * entirely FS's own dialplan decision (`/fs/dialplan`'s ring-group
+     * branch), not anything OpenSIPs' script needs to know about. A 404 from
+     * pbx-config-service means the ring group is already gone (raced with a
+     * delete) — nothing to project.
+     */
+    async projectRingGroup(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      ringGroupId: string,
+    ): Promise<void> {
+      const ringGroup = await pbxConfig.findRingGroup(tenantId, ringGroupId);
+      if (ringGroup === undefined) {
+        logger.warn({ tenantId, ringGroupId }, 'ring group not found in pbx-config-service');
+        return;
+      }
+
+      await readModel.upsertRingGroup(trx, {
+        id: ringGroup.id,
+        tenantId,
+        label: ringGroup.label,
+        strategy: ringGroup.strategy,
+        memberExtensionIds: JSON.stringify(ringGroup.memberExtensionIds),
+        ringTimeoutSeconds: ringGroup.ringTimeoutSeconds,
+        noAnswerDestinationType: ringGroup.noAnswerDestinationType,
+        noAnswerDestinationId: ringGroup.noAnswerDestinationId,
+      });
+    },
+
+    /** `pbx.ring_group.deleted`: remove the local mirror. Nothing else to clean up (no `opensips` projection). */
+    async removeRingGroup(trx: Transaction<TelephonyConfigDb>, ringGroupId: string): Promise<void> {
+      await readModel.deleteRingGroup(trx, ringGroupId);
+    },
+
+    /**
      * Fetches a trunk's current full config (including its decrypted
      * secret and IPs) and projects it into `registrant` (register/both),
      * `address` (ip/both), and `dr_gateways` (always — 03 §1's LCR needs a

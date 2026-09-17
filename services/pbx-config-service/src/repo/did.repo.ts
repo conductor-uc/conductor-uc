@@ -7,6 +7,7 @@ import { enqueueEvent } from '@cuc/events';
 import {
   DidNumberTakenError,
   ExtensionDestinationNotFoundError,
+  RingGroupDestinationNotFoundError,
   TrunkNotFoundError,
   validateE164,
   type DestinationType,
@@ -41,7 +42,12 @@ export class DidNotFoundError extends Error {
   override readonly name = 'DidNotFoundError';
 }
 
-export { DidNumberTakenError, TrunkNotFoundError, ExtensionDestinationNotFoundError };
+export {
+  DidNumberTakenError,
+  TrunkNotFoundError,
+  ExtensionDestinationNotFoundError,
+  RingGroupDestinationNotFoundError,
+};
 
 interface DidRow {
   id: string;
@@ -66,10 +72,11 @@ function toDid(row: DidRow): Did {
 /**
  * Validates that a DID's `trunk_id`/`destination_id` actually refer to real
  * rows, the same way `extension.repo.ts`'s `create()` validates the tenant
- * has a realm before generating credentials. Only `extension` destinations
- * are checked against a real table (`extensions`, this service's own) —
- * every other destination type has no owning subsystem yet
- * (`domain/dids.ts`'s own comment), so there is nothing to validate against.
+ * has a realm before generating credentials. Only `extension` and (S2-08)
+ * `ring_group` destinations are checked against a real table (this service's
+ * own `extensions`/`ring_groups`) — every other destination type has no
+ * owning subsystem yet (`domain/dids.ts`'s own comment), so there is nothing
+ * to validate against.
  */
 async function assertReferencesExist(
   db: Database<PbxConfigServiceDb>,
@@ -93,6 +100,19 @@ async function assertReferencesExist(
     if (extension === undefined) {
       throw new ExtensionDestinationNotFoundError(
         `No extension with id '${destinationId}' in this tenant.`,
+      );
+    }
+  }
+  if (destinationType === 'ring_group') {
+    const ringGroup = await db
+      .scoped(ctx)
+      .selectFrom('ring_groups')
+      .select('id')
+      .where('id', '=', destinationId)
+      .executeTakeFirst();
+    if (ringGroup === undefined) {
+      throw new RingGroupDestinationNotFoundError(
+        `No ring group with id '${destinationId}' in this tenant.`,
       );
     }
   }

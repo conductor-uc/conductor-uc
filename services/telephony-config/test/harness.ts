@@ -7,10 +7,13 @@ import {
   silentLogger,
   startTestDatabase,
   startTestNats,
+  startTestRedis,
   startTestS3,
   type TestNatsHandle,
+  type TestRedisHandle,
   type TestS3Handle,
 } from '@cuc/testing';
+import { Redis } from 'ioredis';
 
 import type { OrgClient } from '../src/org-client.js';
 import type {
@@ -19,6 +22,7 @@ import type {
   EmergencyLocationConfig,
   MediaAssetConfig,
   PbxConfigClient,
+  RingGroupConfig,
 } from '../src/pbx-config-client.js';
 import type { OpenSipsMiClient } from '../src/opensips-mi-client.js';
 import type { OpenSipsDb } from '../src/opensips-schema.js';
@@ -51,6 +55,7 @@ export interface Harness {
   readonly trunkConfig: FakeTrunkConfigClient;
   readonly orgClient: FakeOrgClient;
   readonly storage: Storage;
+  readonly redis: Redis;
   readonly logger: Logger;
   close(): Promise<void>;
 }
@@ -88,21 +93,25 @@ export interface FakePbxConfigClient extends PbxConfigClient {
   dids: Record<string, DidConfig>;
   emergencyLocations: Record<string, EmergencyLocationConfig>;
   mediaAssets: Record<string, MediaAssetConfig>;
+  ringGroups: Record<string, RingGroupConfig>;
 }
 
-/** A digest-credential/DID/emergency-location/media-asset lookup whose answers are set per test — no live pbx-config-service needed. */
+/** A digest-credential/DID/emergency-location/media-asset/ring-group lookup whose answers are set per test — no live pbx-config-service needed. */
 function fakePbxConfigClient(): FakePbxConfigClient {
   const state: FakePbxConfigClient = {
     credentials: {},
     dids: {},
     emergencyLocations: {},
     mediaAssets: {},
+    ringGroups: {},
     findCredential: (_tenantId: string, extensionId: string) =>
       Promise.resolve(state.credentials[extensionId]),
     findDid: (_tenantId: string, didId: string) => Promise.resolve(state.dids[didId]),
     findEmergencyLocation: (_tenantId: string, locationId: string) =>
       Promise.resolve(state.emergencyLocations[locationId]),
     findMediaAsset: (_tenantId: string, id: string) => Promise.resolve(state.mediaAssets[id]),
+    findRingGroup: (_tenantId: string, ringGroupId: string) =>
+      Promise.resolve(state.ringGroups[ringGroupId]),
   };
   return state;
 }
@@ -259,6 +268,8 @@ async function createOpenSipsTables(db: Database<OpenSipsDb>): Promise<void> {
 export async function startHarness(): Promise<Harness> {
   const logger = silentLogger();
   const s3Handle: TestS3Handle = await startTestS3();
+  const redisHandle: TestRedisHandle = await startTestRedis();
+  const redis = new Redis(redisHandle.url, { lazyConnect: false, maxRetriesPerRequest: 2 });
 
   const handle = await startTestDatabase();
   const db = createDatabase<TelephonyConfigDb>({
@@ -321,8 +332,11 @@ export async function startHarness(): Promise<Harness> {
     trunkConfig,
     orgClient,
     storage,
+    redis,
     logger,
     async close() {
+      redis.disconnect();
+      await redisHandle.stop();
       await db.destroy();
       await handle.stop();
       await opensipsDb.destroy();

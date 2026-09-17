@@ -73,7 +73,7 @@ Constraint: a DB check constraint plus a service invariant guarantee that `type=
 | `sip_credentials` | `id`, `tenant_id`, `extension_id`, `username`, `secret_enc` (envelope-encrypted), `ha1`, `ha1b`, `realm` |
 | `devices` | `id`, `tenant_id`, `extension_id`, `mac`, `vendor`, `model` (for Stage 8) |
 | `dids` | `id`, `tenant_id`, `e164` (globally unique), `trunk_id`, `destination_type`, `destination_id`, `sms_enabled`, `fax_enabled` |
-| `ring_groups` / `ring_group_members` | `strategy` (`simultaneous`/`sequential`/`round_robin`/`random`), `ring_timeout`, `no_answer_dest` |
+| `ring_groups` | `id`, `tenant_id`, `label`, `strategy` (`simultaneous`/`sequential`/`round_robin`/`random`, S2-08), `member_extension_ids` (JSON array, in ring order — no separate members table, same "ordered list as JSON" choice `outbound_routes.trunk_ids` already made), `ring_timeout_seconds`, `no_answer_destination_type`/`_id` (same `DestinationType` union `dids` uses; only `extension` resolves to a real fallback bridge today, G-25) |
 | `queues` / `queue_agents` / `queue_tiers` | Maps to `mod_callcenter` concepts; `strategy`, `moh_asset_id`, `max_wait`, `announce` |
 | `parking_lots` | `id`, `tenant_id`, `slot_start`, `slot_end`, `timeout`, `return_dest` |
 | `conference_rooms` | `id`, `tenant_id`, `number`, `pin_enc`, `video` (bool), `layout`, `max_members` |

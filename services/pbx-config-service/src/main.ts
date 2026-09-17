@@ -13,11 +13,13 @@ import { createDidRepo } from './repo/did.repo.js';
 import { createEmergencyLocationRepo } from './repo/emergency-location.repo.js';
 import { createExtensionRepo } from './repo/extension.repo.js';
 import { createMediaAssetRepo } from './repo/media-asset.repo.js';
+import { createRingGroupRepo } from './repo/ring-group.repo.js';
 import { registerDidRoutes } from './routes/did.routes.js';
 import { registerEmergencyLocationRoutes } from './routes/emergency-location.routes.js';
 import { registerExtensionRoutes } from './routes/extension.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerMediaAssetRoutes } from './routes/media-asset.routes.js';
+import { registerRingGroupRoutes } from './routes/ring-group.routes.js';
 import type { PbxConfigServiceDb } from './schema.js';
 import { createTrunkClient } from './trunk-client.js';
 
@@ -82,6 +84,7 @@ const didRepo = createDidRepo(db, trunkClient.exists);
 const emergencyLocationRepo = createEmergencyLocationRepo(db);
 const storage = storageFromConfig(config, logger);
 const mediaAssetRepo = createMediaAssetRepo(db, storage);
+const ringGroupRepo = createRingGroupRepo(db);
 
 const domainConsumer = createDomainConsumer(db, bus, logger, extensionRepo);
 await domainConsumer.ensure();
@@ -110,12 +113,14 @@ registerExtensionRoutes(app, extensionRepo, bus);
 registerDidRoutes(app, didRepo);
 registerEmergencyLocationRoutes(app, emergencyLocationRepo);
 registerMediaAssetRoutes(app, mediaAssetRepo);
+registerRingGroupRoutes(app, ringGroupRepo);
 registerInternalRoutes(
   app,
   extensionRepo,
   didRepo,
   emergencyLocationRepo,
   mediaAssetRepo,
+  ringGroupRepo,
   config.INTERNAL_SERVICE_TOKEN,
 );
 

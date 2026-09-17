@@ -22,6 +22,7 @@ import {
 } from '../src/repo/emergency-location.repo.js';
 import { createExtensionRepo, type ExtensionRepo } from '../src/repo/extension.repo.js';
 import { createMediaAssetRepo, type MediaAssetRepo } from '../src/repo/media-asset.repo.js';
+import { createRingGroupRepo, type RingGroupRepo } from '../src/repo/ring-group.repo.js';
 import type { TenantDomainLookup } from '../src/org-client.js';
 import type { PbxConfigServiceDb } from '../src/schema.js';
 import type { TrunkLookup } from '../src/trunk-client.js';
@@ -35,6 +36,7 @@ export interface Harness {
   readonly emergencyLocations: EmergencyLocationRepo;
   readonly storage: Storage;
   readonly mediaAssets: MediaAssetRepo;
+  readonly ringGroups: RingGroupRepo;
   readonly domains: FakeTenantDomains;
   readonly trunks: FakeTrunkLookup;
   readonly logger: Logger;
@@ -107,6 +109,7 @@ export async function startHarness(): Promise<Harness> {
     logger,
   });
   const mediaAssets = createMediaAssetRepo(db, storage);
+  const ringGroups = createRingGroupRepo(db);
 
   return {
     db,
@@ -116,6 +119,7 @@ export async function startHarness(): Promise<Harness> {
     emergencyLocations,
     storage,
     mediaAssets,
+    ringGroups,
     domains,
     trunks,
     logger,
@@ -155,6 +159,7 @@ export async function startBusHarness(): Promise<BusHarness> {
 
 export async function resetSchema(db: Database<PbxConfigServiceDb>): Promise<void> {
   await db.kysely.deleteFrom('dids').execute();
+  await db.kysely.deleteFrom('ring_groups').execute();
   await db.kysely.deleteFrom('sip_credentials').execute();
   await db.kysely.deleteFrom('extensions').execute();
   await db.kysely.deleteFrom('emergency_locations').execute();

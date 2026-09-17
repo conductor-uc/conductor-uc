@@ -4,6 +4,7 @@ import { connectBus, createRelay } from '@cuc/events';
 import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { storageFromConfig } from '@cuc/storage';
+import { Redis } from 'ioredis';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
@@ -101,6 +102,11 @@ const orgClient = createOrgClient({
 });
 const miClient = createOpenSipsMiClient({ url: config.OPENSIPS_MI_URL });
 const storage = storageFromConfig(config, logger);
+// S2-08: the round-robin ring-group counter (`ring-group-counter.ts`) —
+// same `lazyConnect: false`/`maxRetriesPerRequest` shape api-gateway's own
+// rate-limiter client uses, so this fails fast at startup rather than
+// retrying forever silently.
+const redisClient = new Redis(config.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: 2 });
 
 const readModel = createReadModelRepo(db);
 const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
@@ -146,6 +152,9 @@ app.addReadinessCheck('opensips_db', async () => ({
   status: (await opensipsDb.ping()) ? 'pass' : 'fail',
 }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
+app.addReadinessCheck('redis', async () => ({
+  status: (await redisClient.ping()) === 'PONG' ? 'pass' : 'fail',
+}));
 app.addReadinessCheck('outbox', async () => {
   const lag = await relay.lag();
   return { status: 'pass', detail: `${String(lag)} pending` };
@@ -161,6 +170,7 @@ registerFsRoutes(
   orgClient,
   pbxConfigClient,
   storage,
+  redisClient,
 );
 registerInternalRoutes(
   app,
@@ -197,6 +207,7 @@ async function shutdown(signal: string): Promise<void> {
   await bus.close();
   await db.destroy();
   await opensipsDb.destroy();
+  redisClient.disconnect();
   logger.info('shutdown complete');
   process.exit(0);
 }
