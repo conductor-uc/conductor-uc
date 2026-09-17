@@ -36,6 +36,7 @@ create_service_db trunk_service trunk_service "${TRUNK_SERVICE_DB_PASSWORD}"
 # own schema/user, same 05 §1.1 rule as every other service, not an
 # exception to the pattern above.
 create_service_db media_worker media_worker "${MEDIA_WORKER_DB_PASSWORD}"
+create_service_db voicemail_service voicemail_service "${VOICEMAIL_SERVICE_DB_PASSWORD}"
 
 # `opensips` is the one schema not owned by a Node service (05 §1.1's rule
 # still applies — one schema, one user, granted only on its own schema):

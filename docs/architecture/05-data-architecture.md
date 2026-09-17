@@ -102,6 +102,10 @@ Constraint: a DB check constraint plus a service invariant guarantee that `type=
 
 No business tables of its own — `outbox`/`consumed_events` only, the same `@cuc/events` schema every service carries. It exists purely to isolate one operation: transcoding a tenant's raw, untrusted media upload with `ffmpeg`, kept out of pbx-config-service's own process/image (which owns `media_assets` above and holds tenant secrets) so a hostile upload's blast radius is contained to a service with no database of its own to reach. Consumes `pbx.media_asset.finalize_requested`, fetches the raw upload and writes the two transcoded WAV variants directly via `@cuc/storage`'s `getObject`/`putObject` (§4 below), and reports back to pbx-config-service over its internal API rather than through its own outbox — see `services/media-worker/src/consumers/media-asset.consumer.ts`'s own doc comment for the full reasoning.
 
+### 3.8 voicemail-service (S2-16)
+
+`mailboxes` (`id`, `tenant_id`, `extension_id`, `pin_enc` — envelope-encrypted, same `@cuc/crypto` pattern as SIP credentials — `greeting_status`, `greeting_object_key`), `messages` (`id`, `tenant_id`, `mailbox_id`, `status` `pending`/`ready`/`failed`, `object_key`, `caller_id_name`, `caller_id_number`, `duration_ms`, `size_bytes`, `is_read`). No transcode step (unlike media-worker): the Lua voicemail app records directly to a playable WAV, so this service only ever presigns uploads and records the result. Its own internal API is what telephony-config's `/fs/voicemail/...` routes proxy for the FS Lua app (`telephony/freeswitch/scripts/voicemail.lua`) — CLAUDE.md rule 4 means the Lua app never calls this service directly. Emits `voicemail.message.created` and `voicemail.mailbox.mwi_changed` (the latter currently has no consumer — docs/decisions.md G-39).
+
 ## 4. Object storage layout (D-011, O-9)
 
 Default: **one bucket per tenant**, as the SAD specifies. It sits behind a `@cuc/storage` abstraction that also supports a **prefix-per-tenant** mode, because some S3-compatible providers cap the number of buckets per account.
@@ -110,6 +114,7 @@ Default: **one bucket per tenant**, as the SAD specifies. It sits behind a `@cuc
 bucket: {STORAGE_BUCKET_PREFIX}-t-{tenantShortId}      (per-tenant mode)
   recordings/{yyyy}/{mm}/{dd}/{callUuid}/{legOrMixed}.{opus|wav}
   voicemail/{mailboxId}/{messageId}.wav
+  voicemail/{mailboxId}/greeting.wav
   media-assets/{assetId}/raw                             (S2-07: the tenant's own upload, whatever format they sent)
   media-assets/{assetId}/8k.wav                          (S2-07: transcoded, mono, for narrowband playback)
   media-assets/{assetId}/16k.wav                         (S2-07: transcoded, mono, for wideband playback)

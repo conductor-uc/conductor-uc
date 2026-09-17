@@ -129,9 +129,31 @@ export function buildDialplanDocument(
    * `destinationNumber` for the ext→ext case, where they are always the same.
    */
   bridgeNumber: string = destinationNumber,
+  /**
+   * S2-16: when the bridged extension has a mailbox, a no-answer/busy/
+   * unreachable leg falls through to the voicemail Lua app instead of just
+   * hanging up — `continue_on_fail` is what makes FreeSWITCH proceed to the
+   * *next* action on those specific hangup causes rather than ending the
+   * call the moment `bridge` fails (a well-documented `mod_dptools`
+   * mechanism, not invented here). This exact XML shape is unverified
+   * against a real FS node in this task (no live SIPp run) — flagged as
+   * G-38 in docs/decisions.md, the same "unverified FS behavior, flagged
+   * rather than silently assumed" discipline as G-19/G-20/G-24/G-35/G-36.
+   */
+  voicemail?: { readonly tenantId: string; readonly mailboxId: string },
 ): string {
   const target =
     `{sip_route_uri=sip:${opensipsSipUri}}` + `sofia/internal/${bridgeNumber}@${tenantDomain}`;
+
+  const actions = [`<action application="bridge" data="${escapeXml(target)}"/>`];
+  if (voicemail !== undefined) {
+    actions.unshift(
+      '<action application="set" data="continue_on_fail=NORMAL_CLEARING,USER_BUSY,NO_ANSWER,ORIGINATOR_CANCEL,UNALLOCATED_NUMBER"/>',
+    );
+    actions.push(
+      `<action application="lua" data="voicemail.lua leave ${escapeXml(voicemail.tenantId)} ${escapeXml(voicemail.mailboxId)}"/>`,
+    );
+  }
 
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
@@ -140,7 +162,41 @@ export function buildDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="ext-${escapeXml(destinationNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
-    `          <action application="bridge" data="${escapeXml(target)}"/>\n` +
+    actions.map((action) => `          ${action}\n`).join('') +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/**
+ * S2-16: `voicemail.lua`'s own entry points — a DID dialed directly into a
+ * mailbox (`destination_type = 'voicemail'`, G-25's own "each later stage
+ * teaches `/fs/dialplan` to resolve its own destination type" — this is
+ * that stage for voicemail) or a retrieval feature code dialed from inside
+ * a tenant's own domain. `mode` picks which Lua entry point runs; the
+ * feature-code digit string itself (`fs.routes.ts`'s own caller) is this
+ * task's own choice, not sourced from any spec — flagged in
+ * docs/decisions.md (G-38) as unverified/arbitrary, same as the dialplan
+ * shape above.
+ */
+export function buildVoicemailDialplanDocument(
+  callerContext: string,
+  destinationNumber: string,
+  mode: 'leave' | 'retrieve',
+  tenantId: string,
+  mailboxId: string,
+): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="voicemail-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          <action application="lua" data="voicemail.lua ${mode} ${escapeXml(tenantId)} ${escapeXml(mailboxId)}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +
     '    </context>\n' +
