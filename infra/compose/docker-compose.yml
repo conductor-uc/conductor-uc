@@ -25,6 +25,7 @@ services:
       MEDIA_WORKER_DB_PASSWORD: ${MEDIA_WORKER_DB_PASSWORD:-dev-media-worker-password}
       CALL_CONTROL_DB_PASSWORD: ${CALL_CONTROL_DB_PASSWORD:-dev-call-control-password}
       CALLFLOW_SERVICE_DB_PASSWORD: ${CALLFLOW_SERVICE_DB_PASSWORD:-dev-callflow-service-password}
+      VOICEMAIL_SERVICE_DB_PASSWORD: ${VOICEMAIL_SERVICE_DB_PASSWORD:-dev-voicemail-service-password}
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     ports:
       - '${MARIADB_PORT:-3306}:3306'
@@ -298,6 +299,8 @@ services:
         condition: service_started
       trunk-service:
         condition: service_started
+      voicemail-service:
+        condition: service_started
     environment:
       SERVICE_NAME: telephony-config
       DB_HOST: mariadb
@@ -323,9 +326,21 @@ services:
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
       ORG_SERVICE_URL: http://org-service:8080
+      VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
       RECONCILE_INTERVAL_MS: '900000'
+      # S2-07 wired `storage` into this service's `/fs/media/...` route but
+      # never added these — a real, previously-unnoticed gap that would have
+      # failed this service's own startup (`STORAGE_BUCKET_PREFIX`/
+      # `STORAGE_ACCESS_KEY_ID`/`STORAGE_SECRET_ACCESS_KEY` have no config
+      # defaults). Fixed here since S2-16's own `/fs/voicemail/.../audio`
+      # route depends on it working, not left as a flagged-only gap.
+      STORAGE_BUCKET_PREFIX: cuc-dev
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
+      STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
+      STORAGE_FORCE_PATH_STYLE: 'true'
 
   media-worker:
     # S2-07: isolated from pbx-config-service on purpose — the one service
@@ -399,6 +414,7 @@ services:
       # for auth to succeed; there is one shared value in dev, same as
       # `FS_XML_CURL_TOKEN`'s pattern elsewhere in this file.
       FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}
+
   callflow-service:
     build:
       context: ../..
@@ -420,6 +436,38 @@ services:
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+
+  voicemail-service:
+    build:
+      context: ../..
+      dockerfile: services/voicemail-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      SERVICE_NAME: voicemail-service
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: voicemail_service
+      DB_PASSWORD: ${VOICEMAIL_SERVICE_DB_PASSWORD:-dev-voicemail-service-password}
+      DB_NAME: voicemail_service
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
+      CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
+      CRYPTO_KEK_CURRENT: '1'
+      STORAGE_BUCKET_PREFIX: cuc-dev
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
+      STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
+      STORAGE_FORCE_PATH_STYLE: 'true'
 
 volumes:
   mariadb-data:

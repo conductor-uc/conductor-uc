@@ -33,6 +33,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       h.orgClient,
       h.pbxConfig,
       h.storage,
+      h.voicemail,
     );
     await app.ready();
   });
@@ -287,6 +288,137 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(response.statusCode).toBe(200);
       expect(response.body).toContain('<result status="not found"/>');
     });
+
+    function extensionIdFor(tenantId: string): Promise<string> {
+      return h.db.kysely
+        .selectFrom('extensions')
+        .select('id')
+        .where('tenant_id', '=', tenantId)
+        .executeTakeFirstOrThrow()
+        .then((row) => row.id);
+    }
+
+    it('S2-16: adds a no-answer voicemail fallback when the bridged extension has a mailbox', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedExtension(tenantId, '102');
+      const extensionId = await extensionIdFor(tenantId);
+      const mailboxId = crypto.randomUUID();
+      h.voicemail.mailboxes[mailboxId] = {
+        id: mailboxId,
+        tenantId,
+        extensionId,
+        pin: '1234',
+        greetingStatus: 'none',
+        greetingObjectKey: null,
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'Caller-Destination-Number': '102',
+          'variable_sip_h_X-Tenant-Id': tenantId,
+          'variable_sip_h_X-Call-Direction': 'internal',
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(
+        'data="{sip_route_uri=sip:opensips:5060}sofia/internal/102@acme.platform.test"',
+      );
+      expect(response.body).toContain('continue_on_fail=');
+      expect(response.body).toContain(`data="voicemail.lua leave ${tenantId} ${mailboxId}"`);
+    });
+
+    it('S2-16: no fallback action when the extension has no mailbox', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedExtension(tenantId, '102');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'Caller-Destination-Number': '102',
+          'variable_sip_h_X-Tenant-Id': tenantId,
+          'variable_sip_h_X-Call-Direction': 'internal',
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toContain('voicemail.lua');
+    });
+
+    it('S2-16: *97 dials the calling extension’s own mailbox retrieval menu', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedExtension(tenantId, '102');
+      const extensionId = await extensionIdFor(tenantId);
+      const mailboxId = crypto.randomUUID();
+      h.voicemail.mailboxes[mailboxId] = {
+        id: mailboxId,
+        tenantId,
+        extensionId,
+        pin: '1234',
+        greetingStatus: 'none',
+        greetingObjectKey: null,
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'Caller-Destination-Number': '*97',
+          'variable_sip_h_X-Tenant-Id': tenantId,
+          'variable_sip_h_X-Call-Direction': 'internal',
+          'variable_sip_from_user': '102',
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(`data="voicemail.lua retrieve ${tenantId} ${mailboxId}"`);
+    });
+
+    it('S2-16: *97 is a miss when the calling extension has no mailbox', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedExtension(tenantId, '102');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'Caller-Destination-Number': '*97',
+          'variable_sip_h_X-Tenant-Id': tenantId,
+          'variable_sip_h_X-Call-Direction': 'internal',
+          'variable_sip_from_user': '102',
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('<result status="not found"/>');
+    });
   });
 
   describe('/fs/dialplan (S2-03: from-trunk DID routing)', () => {
@@ -383,6 +515,37 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(response.body).toContain(
         'data="{sip_route_uri=sip:opensips:5060}sofia/internal/102@acme.platform.test"',
       );
+    });
+
+    it('S2-16: a DID bound directly to a mailbox dials into voicemail leave mode', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await seedTrunkAndExtension(tenantId, trunkId, '102');
+      const mailboxId = crypto.randomUUID();
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15559998888',
+        trunkId,
+        destinationType: 'voicemail',
+        destinationId: mailboxId,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({
+          'Caller-Destination-Number': '+15559998888',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(`data="voicemail.lua leave ${tenantId} ${mailboxId}"`);
     });
 
     it('rejects an INVITE whose source IP matched no trunk (no X-Trunk-Id)', async () => {
@@ -1171,6 +1334,197 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       const response = await app.inject({
         method: 'GET',
         url: `/fs/media/${tenantId}/${assetId}/8k`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('/fs/voicemail/... (S2-16: voicemail)', () => {
+    function seedMailbox(tenantId: string, extensionId: string, pin = '1234') {
+      const id = crypto.randomUUID();
+      h.voicemail.mailboxes[id] = {
+        id,
+        tenantId,
+        extensionId,
+        pin,
+        greetingStatus: 'none',
+        greetingObjectKey: null,
+      };
+      return id;
+    }
+
+    it('401s every voicemail route with no Authorization header', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/voicemail/${crypto.randomUUID()}/mailbox/by-extension/${crypto.randomUUID()}`,
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('finds a mailbox by extension id, and 404s an unknown one', async () => {
+      const tenantId = crypto.randomUUID();
+      const extensionId = crypto.randomUUID();
+      const mailboxId = seedMailbox(tenantId, extensionId);
+
+      const found = await app.inject({
+        method: 'GET',
+        url: `/fs/voicemail/${tenantId}/mailbox/by-extension/${extensionId}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(found.statusCode).toBe(200);
+      expect(found.json()).toMatchObject({ id: mailboxId });
+
+      const missing = await app.inject({
+        method: 'GET',
+        url: `/fs/voicemail/${tenantId}/mailbox/by-extension/${crypto.randomUUID()}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(missing.statusCode).toBe(404);
+    });
+
+    it('verifies a PIN', async () => {
+      const tenantId = crypto.randomUUID();
+      const mailboxId = seedMailbox(tenantId, crypto.randomUUID(), '4242');
+
+      const valid = await app.inject({
+        method: 'POST',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/verify-pin`,
+        headers: { authorization: BASIC_AUTH },
+        payload: { pin: '4242' },
+      });
+      expect(valid.json()).toMatchObject({ valid: true });
+
+      const invalid = await app.inject({
+        method: 'POST',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/verify-pin`,
+        headers: { authorization: BASIC_AUTH },
+        payload: { pin: '0000' },
+      });
+      expect(invalid.json()).toMatchObject({ valid: false });
+    });
+
+    it('the full leave-message round trip: create, upload, complete, list, play the real bytes, mark read, delete', async () => {
+      const tenantId = crypto.randomUUID();
+      const mailboxId = seedMailbox(tenantId, crypto.randomUUID());
+      await h.storage.forTenant(tenantId).provisionBucket();
+
+      const created = await app.inject({
+        method: 'POST',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/messages`,
+        headers: { authorization: BASIC_AUTH },
+        payload: { callerIdNumber: '+15005550001' },
+      });
+      expect(created.statusCode).toBe(201);
+      const { messageId, uploadUrl }: { messageId: string; uploadUrl: string } = created.json();
+
+      const wav = Buffer.from('real spool bytes');
+      const uploaded = await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'content-type': 'audio/wav' },
+        body: wav,
+      });
+      expect(uploaded.ok).toBe(true);
+
+      const completed = await app.inject({
+        method: 'POST',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/messages/${messageId}/complete`,
+        headers: { authorization: BASIC_AUTH },
+        payload: { durationMs: 4000, sizeBytes: wav.length },
+      });
+      expect(completed.statusCode).toBe(200);
+      expect(completed.json()).toMatchObject({ status: 'ready' });
+
+      const list = await app.inject({
+        method: 'GET',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/messages`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(list.json()).toMatchObject({ rows: [{ id: messageId }] });
+
+      const audio = await app.inject({
+        method: 'GET',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/messages/${messageId}/audio`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(audio.statusCode).toBe(200);
+      expect(audio.headers['content-type']).toContain('audio/wav');
+      expect(audio.rawPayload).toEqual(wav);
+
+      const markedRead = await app.inject({
+        method: 'POST',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/messages/${messageId}/mark-read`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(markedRead.json()).toMatchObject({ isRead: true });
+
+      const deleted = await app.inject({
+        method: 'POST',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/messages/${messageId}/delete`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(deleted.statusCode).toBe(204);
+    });
+
+    it('404s message audio for one that has not finished uploading yet', async () => {
+      const tenantId = crypto.randomUUID();
+      const mailboxId = seedMailbox(tenantId, crypto.randomUUID());
+      const created = await app.inject({
+        method: 'POST',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/messages`,
+        headers: { authorization: BASIC_AUTH },
+        payload: {},
+      });
+      const { messageId }: { messageId: string } = created.json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/messages/${messageId}/audio`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('uploads and completes a greeting, then serves its real bytes', async () => {
+      const tenantId = crypto.randomUUID();
+      const mailboxId = seedMailbox(tenantId, crypto.randomUUID());
+      await h.storage.forTenant(tenantId).provisionBucket();
+
+      const presigned = await app.inject({
+        method: 'POST',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/greeting/presign`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(presigned.statusCode).toBe(201);
+      const { uploadUrl }: { uploadUrl: string } = presigned.json();
+
+      const wav = Buffer.from('real greeting bytes');
+      await fetch(uploadUrl, { method: 'PUT', headers: { 'content-type': 'audio/wav' }, body: wav });
+
+      const completed = await app.inject({
+        method: 'POST',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/greeting/complete`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(completed.statusCode).toBe(200);
+      expect(completed.json()).toMatchObject({ greetingStatus: 'ready' });
+
+      const audio = await app.inject({
+        method: 'GET',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/greeting/audio`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(audio.statusCode).toBe(200);
+      expect(audio.rawPayload).toEqual(wav);
+    });
+
+    it('404s greeting audio for a mailbox with no greeting yet', async () => {
+      const tenantId = crypto.randomUUID();
+      const mailboxId = seedMailbox(tenantId, crypto.randomUUID());
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/greeting/audio`,
         headers: { authorization: BASIC_AUTH },
       });
       expect(response.statusCode).toBe(404);
