@@ -61,6 +61,21 @@ export const pbxEvents = defineEvents({
     description: "A tenant's uploaded media asset is ready for the transcode worker to pick up.",
     data: Type.Object({ mediaAssetId: Type.String({ minLength: 1 }) }),
   },
+  'pbx.ring_group.created': {
+    schemaVersion: 1,
+    description: 'A ring/hunt group was created.',
+    data: Type.Object({ ringGroupId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.ring_group.updated': {
+    schemaVersion: 1,
+    description: "A ring group's strategy, members, timeout, or no-answer destination changed.",
+    data: Type.Object({ ringGroupId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.ring_group.deleted': {
+    schemaVersion: 1,
+    description: 'A ring group was deleted.',
+    data: Type.Object({ ringGroupId: Type.String({ minLength: 1 }) }),
+  },
   'org.domain.added': {
     schemaVersion: 1,
     description:

@@ -1,5 +1,5 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { databaseOrSkipReason } from '@cuc/testing';
+import { databaseOrSkipReason, redisOrSkipReason } from '@cuc/testing';
 import { createServer, type Server } from '@cuc/http';
 
 import { toContextId } from '../src/context-id.js';
@@ -7,7 +7,7 @@ import { drTag } from '../src/repo/opensips-projection.repo.js';
 import { registerFsRoutes } from '../src/routes/fs.routes.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
-const skipReason = await databaseOrSkipReason();
+const skipReason = (await databaseOrSkipReason()) ?? (await redisOrSkipReason());
 const TOKEN = 'test-fs-xml-curl-token';
 const BASIC_AUTH = `Basic ${Buffer.from(`fs-node:${TOKEN}`).toString('base64')}`;
 
@@ -33,6 +33,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       h.orgClient,
       h.pbxConfig,
       h.storage,
+      h.redis,
     );
     await app.ready();
   });
@@ -489,6 +490,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
     });
 
     it('rejects a DID whose destination type has no owning subsystem yet (docs/decisions.md G-25)', async () => {
+      // `ring_group` gained a real owning subsystem in S2-08 (see the
+      // describe block below) — `queue` (S2-13) is still the honest miss.
       const tenantId = crypto.randomUUID();
       const trunkId = crypto.randomUUID();
       await seedTrunkAndExtension(tenantId, trunkId, '102');
@@ -497,7 +500,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         tenantId,
         e164: '+15551234567',
         trunkId,
-        destinationType: 'ring_group',
+        destinationType: 'queue',
         destinationId: crypto.randomUUID(),
       });
 
@@ -538,6 +541,240 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
 
       expect(response.statusCode).toBe(200);
       expect(response.body).toContain('<result status="not found"/>');
+    });
+  });
+
+  describe('/fs/dialplan (S2-08: DID -> ring group)', () => {
+    async function seedTrunk(tenantId: string, trunkId: string): Promise<void> {
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        fqdn: 'acme.platform.test',
+      });
+      await h.readModel.upsertTrunk(h.db.kysely, {
+        id: trunkId,
+        tenantId,
+        name: 'Carrier',
+        authMode: 'ip',
+        host: 'carrier.test',
+        port: 5060,
+        transport: 'udp',
+        username: null,
+        secret: null,
+        fromDomain: null,
+        status: 'active',
+        callerIdName: null,
+        callerIdNumber: null,
+      });
+    }
+
+    async function seedExtension(tenantId: string, number: string): Promise<string> {
+      const id = crypto.randomUUID();
+      await h.readModel.upsertExtension(h.db.kysely, {
+        id,
+        tenantId,
+        number,
+        username: number,
+        ha1: 'a'.repeat(32),
+        realm: 'acme.platform.test',
+        callerIdName: null,
+        callerIdNumber: null,
+        emergencyLocationId: crypto.randomUUID(),
+      });
+      return id;
+    }
+
+    function inboundPayload(fields: Record<string, string>) {
+      return form({
+        section: 'dialplan',
+        'Caller-Context': 'public',
+        'variable_sip_h_X-Call-Direction': 'inbound',
+        ...fields,
+      });
+    }
+
+    it('bridges a simultaneous ring group to every member at once', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await seedTrunk(tenantId, trunkId);
+      const ext1 = await seedExtension(tenantId, '101');
+      const ext2 = await seedExtension(tenantId, '102');
+      const ringGroupId = crypto.randomUUID();
+      await h.readModel.upsertRingGroup(h.db.kysely, {
+        id: ringGroupId,
+        tenantId,
+        label: 'Sales',
+        strategy: 'simultaneous',
+        memberExtensionIds: JSON.stringify([ext1, ext2]),
+        ringTimeoutSeconds: 20,
+        noAnswerDestinationType: null,
+        noAnswerDestinationId: null,
+      });
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'ring_group',
+        destinationId: ringGroupId,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({
+          'Caller-Destination-Number': '+15551234567',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(
+        'data="{sip_route_uri=sip:opensips:5060,call_timeout=20}' +
+          'sofia/internal/101@acme.platform.test,sofia/internal/102@acme.platform.test"',
+      );
+    });
+
+    it('bridges a sequential ring group with per-leg timeouts, in member order', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await seedTrunk(tenantId, trunkId);
+      const ext1 = await seedExtension(tenantId, '101');
+      const ext2 = await seedExtension(tenantId, '102');
+      const ringGroupId = crypto.randomUUID();
+      await h.readModel.upsertRingGroup(h.db.kysely, {
+        id: ringGroupId,
+        tenantId,
+        label: 'Support',
+        strategy: 'sequential',
+        memberExtensionIds: JSON.stringify([ext1, ext2]),
+        ringTimeoutSeconds: 15,
+        noAnswerDestinationType: null,
+        noAnswerDestinationId: null,
+      });
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15559876543',
+        trunkId,
+        destinationType: 'ring_group',
+        destinationId: ringGroupId,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({
+          'Caller-Destination-Number': '+15559876543',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      const legs = '[leg_timeout=15]sofia/internal/101@acme.platform.test|[leg_timeout=15]sofia/internal/102@acme.platform.test';
+      expect(response.body).toContain(legs);
+    });
+
+    it('falls back to the no-answer extension when the ring group bridge fails', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await seedTrunk(tenantId, trunkId);
+      const ext1 = await seedExtension(tenantId, '101');
+      const fallback = await seedExtension(tenantId, '199');
+      const ringGroupId = crypto.randomUUID();
+      await h.readModel.upsertRingGroup(h.db.kysely, {
+        id: ringGroupId,
+        tenantId,
+        label: 'Support',
+        strategy: 'sequential',
+        memberExtensionIds: JSON.stringify([ext1]),
+        ringTimeoutSeconds: 15,
+        noAnswerDestinationType: 'extension',
+        noAnswerDestinationId: fallback,
+      });
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15551112222',
+        trunkId,
+        destinationType: 'ring_group',
+        destinationId: ringGroupId,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: inboundPayload({
+          'Caller-Destination-Number': '+15551112222',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('sofia/internal/199@acme.platform.test');
+    });
+
+    it('rotates round-robin starting member across successive calls via the Redis counter', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await seedTrunk(tenantId, trunkId);
+      const ext1 = await seedExtension(tenantId, '101');
+      const ext2 = await seedExtension(tenantId, '102');
+      const ringGroupId = crypto.randomUUID();
+      await h.readModel.upsertRingGroup(h.db.kysely, {
+        id: ringGroupId,
+        tenantId,
+        label: 'RoundRobin',
+        strategy: 'round_robin',
+        memberExtensionIds: JSON.stringify([ext1, ext2]),
+        ringTimeoutSeconds: 10,
+        noAnswerDestinationType: null,
+        noAnswerDestinationId: null,
+      });
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15553334444',
+        trunkId,
+        destinationType: 'ring_group',
+        destinationId: ringGroupId,
+      });
+
+      const payload = inboundPayload({
+        'Caller-Destination-Number': '+15553334444',
+        'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+      });
+      const headers = { 'content-type': 'application/x-www-form-urlencoded', authorization: BASIC_AUTH };
+
+      const first = await app.inject({ method: 'POST', url: '/fs/dialplan', headers, payload });
+      const second = await app.inject({ method: 'POST', url: '/fs/dialplan', headers, payload });
+
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+      // First call starts at member[0] (101), second at member[1] (102) —
+      // the Redis-backed counter (`ring-group-counter.ts`) rotates the
+      // start position on every call to the same ring group.
+      const firstLegs = first.body.split('data="')[1] ?? '';
+      const secondLegs = second.body.split('data="')[1] ?? '';
+      expect(firstLegs.indexOf('101@acme.platform.test')).toBeLessThan(
+        firstLegs.indexOf('102@acme.platform.test'),
+      );
+      expect(secondLegs.indexOf('102@acme.platform.test')).toBeLessThan(
+        secondLegs.indexOf('101@acme.platform.test'),
+      );
     });
   });
 

@@ -292,6 +292,8 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       org-service:
         condition: service_started
       pbx-config-service:
@@ -326,6 +328,7 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
       RECONCILE_INTERVAL_MS: '900000'
+      REDIS_URL: redis://redis:6379
 
   media-worker:
     # S2-07: isolated from pbx-config-service on purpose — the one service

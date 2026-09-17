@@ -14,6 +14,10 @@ interface DidEventData {
   readonly didId: string;
 }
 
+interface RingGroupEventData {
+  readonly ringGroupId: string;
+}
+
 export interface PbxConsumerOptions {
   /** How long one pull waits for a message (`@cuc/events`' default: 1s). Longer in tests. */
   readonly pullTimeoutMs?: number;
@@ -56,6 +60,9 @@ export function createPbxConsumer(
       'pbx.did.created',
       'pbx.did.updated',
       'pbx.did.deleted',
+      'pbx.ring_group.created',
+      'pbx.ring_group.updated',
+      'pbx.ring_group.deleted',
     ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
     handler: async (envelope, trx) => {
@@ -86,6 +93,22 @@ export function createPbxConsumer(
 
         case 'pbx.did.deleted':
           await projection.removeDid(trx, (envelope.data as DidEventData).didId);
+          return;
+
+        case 'pbx.ring_group.created':
+        case 'pbx.ring_group.updated':
+          await projection.projectRingGroup(
+            trx,
+            tenantId,
+            (envelope.data as RingGroupEventData).ringGroupId,
+          );
+          return;
+
+        case 'pbx.ring_group.deleted':
+          await projection.removeRingGroup(
+            trx,
+            (envelope.data as RingGroupEventData).ringGroupId,
+          );
           return;
 
         default:

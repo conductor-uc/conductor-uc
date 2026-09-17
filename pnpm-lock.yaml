@@ -645,6 +645,9 @@ importers:
       '@cuc/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      ioredis:
+        specifier: ^5.9.0
+        version: 5.11.1
       kysely:
         specifier: ^0.29.5
         version: 0.29.5

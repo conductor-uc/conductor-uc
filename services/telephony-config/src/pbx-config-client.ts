@@ -73,6 +73,22 @@ export interface DidConfig {
   readonly destinationId: string;
 }
 
+/**
+ * A ring group's current state (S2-08) — what `pbx.ring_group.*`'s "thin
+ * event, re-fetch current state" projection (`projection.ts`'s
+ * `projectRingGroup`) fetches to keep telephony-config's own local
+ * `ring_groups` mirror current.
+ */
+export interface RingGroupConfig {
+  readonly id: string;
+  readonly label: string;
+  readonly strategy: string;
+  readonly memberExtensionIds: readonly string[];
+  readonly ringTimeoutSeconds: number;
+  readonly noAnswerDestinationType: string | null;
+  readonly noAnswerDestinationId: string | null;
+}
+
 export class PbxConfigClientError extends Error {
   override readonly name = 'PbxConfigClientError';
 }
@@ -97,6 +113,8 @@ export interface PbxConfigClient {
   ): Promise<EmergencyLocationConfig | undefined>;
   /** Undefined when the asset does not exist in that tenant (a 404). */
   findMediaAsset(tenantId: string, id: string): Promise<MediaAssetConfig | undefined>;
+  /** Undefined when the ring group does not exist in that tenant (a 404). */
+  findRingGroup(tenantId: string, ringGroupId: string): Promise<RingGroupConfig | undefined>;
 }
 
 export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfigClient {
@@ -204,6 +222,33 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
       }
 
       return (await response.json()) as MediaAssetConfig;
+    },
+
+    async findRingGroup(
+      tenantId: string,
+      ringGroupId: string,
+    ): Promise<RingGroupConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/ring-groups/${encodeURIComponent(ringGroupId)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the ring group lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return (await response.json()) as RingGroupConfig;
     },
   };
 }

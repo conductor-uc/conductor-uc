@@ -124,4 +124,28 @@ export interface PbxConfigServiceDb extends EventTables {
     updated_at: Date;
     version: number;
   };
+  /**
+   * A ring/hunt group (S2-08; 05 §3.3). A DID's `destination_type` can name
+   * one of these the same way it names an `extensions` row (`domain/dids.ts`'s
+   * `DESTINATION_TYPES`). `member_extension_ids` is a JSON array, in ring
+   * order — the same "ordered list as a JSON column, not a join table"
+   * choice trunk-service's own `outbound_routes.trunk_ids` already made
+   * (`repo/outbound-route.repo.ts`'s `parseTrunkIds`).
+   */
+  ring_groups: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    /** `'simultaneous' | 'sequential' | 'round_robin' | 'random'` — `domain/ring-group.ts` owns the enum. */
+    strategy: string;
+    /** JSON array of `extensions.id`, in ring order. */
+    member_extension_ids: string;
+    ring_timeout_seconds: number;
+    /** Same `DestinationType` union `dids.destination_type` uses — null means "no fallback, just stop ringing". */
+    no_answer_destination_type: string | null;
+    no_answer_destination_id: string | null;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
 }
