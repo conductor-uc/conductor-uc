@@ -106,6 +106,10 @@ Two deviations from this section's original sketch, made while implementing S2-0
 
 No business tables of its own — `outbox`/`consumed_events` only, the same `@cuc/events` schema every service carries. It exists purely to isolate one operation: transcoding a tenant's raw, untrusted media upload with `ffmpeg`, kept out of pbx-config-service's own process/image (which owns `media_assets` above and holds tenant secrets) so a hostile upload's blast radius is contained to a service with no database of its own to reach. Consumes `pbx.media_asset.finalize_requested`, fetches the raw upload and writes the two transcoded WAV variants directly via `@cuc/storage`'s `getObject`/`putObject` (§4 below), and reports back to pbx-config-service over its internal API rather than through its own outbox — see `services/media-worker/src/consumers/media-asset.consumer.ts`'s own doc comment for the full reasoning.
 
+### 3.8 call-control (S2-11)
+
+No business tables of its own either — `outbox`/`consumed_events` only. Call ownership is not relational: it lives entirely in Redis (04 §3), which is explicitly not a system of record (04 §1, §5). This service's MariaDB schema exists solely so the `outbox` relay has somewhere durable to write `call.channel.*` (§5 below) — the durable trail cdr-service (S2-18) and future queue/park/conference consumers build on, when the live-only Redis view is not enough.
+
 ## 4. Object storage layout (D-011, O-9)
 
 Default: **one bucket per tenant**, as the SAD specifies. It sits behind a `@cuc/storage` abstraction that also supports a **prefix-per-tenant** mode, because some S3-compatible providers cap the number of buckets per account.
