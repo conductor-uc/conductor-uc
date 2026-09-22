@@ -213,6 +213,22 @@ jobs:
       - name: Build and start the compose stack
         working-directory: infra/compose
         run: |
+          # Clean slate first. This compose project's name is fixed
+          # (`name: conductor-uc`), so every SIP smoke job on this
+          # self-hosted runner shares one project, one network and one set
+          # of container names. The runner serializes jobs, but only just:
+          # observed live on 2026-09-22, one job started **one second**
+          # after the previous job's `docker compose down -v` step
+          # finished, and its whole run then failed with
+          # `getaddrinfo EAI_AGAIN mariadb` — every test file, including
+          # the seed step, unable to resolve anything on the compose
+          # network, because the previous teardown was still removing that
+          # network while this `up` recreated it.
+          #
+          # `down -v` here is idempotent (a no-op when nothing is left) and
+          # synchronous, so `up` below always starts from a settled state
+          # rather than racing whatever the previous job left mid-removal.
+          docker compose down -v --remove-orphans
           docker compose build
           docker compose up -d --wait --wait-timeout 180
 
@@ -224,6 +240,24 @@ jobs:
           # job's own REQUIRE_DB_TESTS etc. above.
           REQUIRE_SIP_TESTS: '1'
         run: pnpm vitest run
+
+      # The recurring flake this suite keeps hitting (docs/decisions.md
+      # G-39) is a call whose BYE never reaches the UAS, with FreeSWITCH's
+      # own log showing neither leg ever torn down. `docker compose logs`
+      # below cannot answer the question that would actually root-cause it:
+      # what FS itself thought the state was at the moment of failure.
+      # These three do, and cost nothing on a passing run.
+      - name: Show FreeSWITCH call state on failure
+        if: failure()
+        run: |
+          fs() { docker exec conductor-uc-freeswitch-1 fs_cli -H 127.0.0.1 -P 8021 \
+            -p "${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}" -x "$1" || true; }
+          echo '--- channels still up (a stuck call shows here) ---'
+          fs 'show channels'
+          echo '--- registrations (is the UAS even registered where FS thinks?) ---'
+          fs 'sofia status profile internal reg'
+          echo '--- sofia profile state ---'
+          fs 'sofia status'
 
       - name: Show compose logs on failure
         if: failure()
