@@ -680,7 +680,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       });
 
       expect(response.statusCode).toBe(200);
-      const legs = '[leg_timeout=15]sofia/internal/101@acme.platform.test|[leg_timeout=15]sofia/internal/102@acme.platform.test';
+      const legs =
+        '[leg_timeout=15]sofia/internal/101@acme.platform.test|[leg_timeout=15]sofia/internal/102@acme.platform.test';
       expect(response.body).toContain(legs);
     });
 
@@ -757,7 +758,10 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         'Caller-Destination-Number': '+15553334444',
         'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
       });
-      const headers = { 'content-type': 'application/x-www-form-urlencoded', authorization: BASIC_AUTH };
+      const headers = {
+        'content-type': 'application/x-www-form-urlencoded',
+        authorization: BASIC_AUTH,
+      };
 
       const first = await app.inject({ method: 'POST', url: '/fs/dialplan', headers, payload });
       const second = await app.inject({ method: 'POST', url: '/fs/dialplan', headers, payload });

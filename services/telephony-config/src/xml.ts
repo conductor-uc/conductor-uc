@@ -286,8 +286,7 @@ export function buildRingGroupDialplanDocument(
   noAnswerBridgeNumber: string | null,
 ): string {
   const routeVar = `sip_route_uri=sip:${opensipsSipUri}`;
-  const legFor = (bridgeNumber: string): string =>
-    `sofia/internal/${bridgeNumber}@${tenantDomain}`;
+  const legFor = (bridgeNumber: string): string => `sofia/internal/${bridgeNumber}@${tenantDomain}`;
 
   let bridgeTarget: string;
   if (strategy === 'simultaneous') {

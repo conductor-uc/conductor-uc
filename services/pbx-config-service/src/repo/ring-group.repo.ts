@@ -202,7 +202,8 @@ export function createRingGroupRepo(db: Database<PbxConfigServiceDb>) {
         .selectAll()
         .where('id', '=', id)
         .executeTakeFirst();
-      if (existing === undefined) throw new RingGroupNotFoundError(`No ring group with id '${id}'.`);
+      if (existing === undefined)
+        throw new RingGroupNotFoundError(`No ring group with id '${id}'.`);
       const current = toRingGroup(existing);
 
       const label = input.label === undefined ? current.label : validateLabel(input.label);

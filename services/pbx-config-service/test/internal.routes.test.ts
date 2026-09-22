@@ -17,7 +17,15 @@ describe.skipIf(skipReason !== undefined)(
     beforeAll(async () => {
       h = await startHarness();
       app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-      registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, h.ringGroups, TOKEN);
+      registerInternalRoutes(
+        app,
+        h.extensions,
+        h.dids,
+        h.emergencyLocations,
+        h.mediaAssets,
+        h.ringGroups,
+        TOKEN,
+      );
       await app.ready();
     });
 
@@ -151,7 +159,15 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/di
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-    registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, h.ringGroups, TOKEN);
+    registerInternalRoutes(
+      app,
+      h.extensions,
+      h.dids,
+      h.emergencyLocations,
+      h.mediaAssets,
+      h.ringGroups,
+      TOKEN,
+    );
     await app.ready();
   });
 
@@ -286,7 +302,15 @@ describe.skipIf(skipReason !== undefined)('media asset internal routes (S2-07)',
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-    registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, h.ringGroups, TOKEN);
+    registerInternalRoutes(
+      app,
+      h.extensions,
+      h.dids,
+      h.emergencyLocations,
+      h.mediaAssets,
+      h.ringGroups,
+      TOKEN,
+    );
     await app.ready();
   });
 
@@ -414,7 +438,15 @@ describe.skipIf(skipReason !== undefined)(
     beforeAll(async () => {
       h = await startHarness();
       app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-      registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, h.ringGroups, TOKEN);
+      registerInternalRoutes(
+        app,
+        h.extensions,
+        h.dids,
+        h.emergencyLocations,
+        h.mediaAssets,
+        h.ringGroups,
+        TOKEN,
+      );
       await app.ready();
     });
 

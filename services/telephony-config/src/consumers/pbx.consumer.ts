@@ -105,10 +105,7 @@ export function createPbxConsumer(
           return;
 
         case 'pbx.ring_group.deleted':
-          await projection.removeRingGroup(
-            trx,
-            (envelope.data as RingGroupEventData).ringGroupId,
-          );
+          await projection.removeRingGroup(trx, (envelope.data as RingGroupEventData).ringGroupId);
           return;
 
         default:
