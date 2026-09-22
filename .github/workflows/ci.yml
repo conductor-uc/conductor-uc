@@ -241,6 +241,24 @@ jobs:
           REQUIRE_SIP_TESTS: '1'
         run: pnpm vitest run
 
+      # The recurring flake this suite keeps hitting (docs/decisions.md
+      # G-39) is a call whose BYE never reaches the UAS, with FreeSWITCH's
+      # own log showing neither leg ever torn down. `docker compose logs`
+      # below cannot answer the question that would actually root-cause it:
+      # what FS itself thought the state was at the moment of failure.
+      # These three do, and cost nothing on a passing run.
+      - name: Show FreeSWITCH call state on failure
+        if: failure()
+        run: |
+          fs() { docker exec conductor-uc-freeswitch-1 fs_cli -H 127.0.0.1 -P 8021 \
+            -p "${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}" -x "$1" || true; }
+          echo '--- channels still up (a stuck call shows here) ---'
+          fs 'show channels'
+          echo '--- registrations (is the UAS even registered where FS thinks?) ---'
+          fs 'sofia status profile internal reg'
+          echo '--- sofia profile state ---'
+          fs 'sofia status'
+
       - name: Show compose logs on failure
         if: failure()
         working-directory: infra/compose
