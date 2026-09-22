@@ -12,6 +12,7 @@
  * not by calling it in-process).
  */
 import { execFile } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -428,6 +429,28 @@ function buildSippCommand(opts: {
     '$(hostname -i)',
     '-m',
     '1',
+    // SIPp's default Call-ID is `%u-%p@%s` — call number, process number,
+    // local IP. Every one of those repeats across our containers: `-m 1`
+    // fixes the call number at 1, the process number inside a
+    // single-purpose container is always the same (8, observed), and
+    // Docker reuses IPs from its pool. Two consecutive scenarios landing
+    // on the same IP therefore produce the *identical* Call-ID.
+    //
+    // That is not cosmetic. Confirmed live: a run's BYE was still being
+    // retransmitted (awaiting its 200 through OpenSIPs) when the next
+    // scenario's INVITE arrived carrying the same `1-8@172.18.0.18`, and
+    // FreeSWITCH — correctly — answered the new INVITE with
+    // `481 Call is being terminated`, matching it to the dialog still
+    // tearing down. Whichever test happened to run while a previous
+    // teardown was in flight failed, which is why the failure kept moving
+    // between files (docs/decisions.md G-34/G-39) and why it reproduced
+    // only under repeated/loaded runs.
+    //
+    // `-cid_str` takes literal text alongside its `%` specifiers, so a
+    // token unique to this container makes a collision impossible
+    // regardless of IP or PID reuse.
+    '-cid_str',
+    `%u-%p-${randomUUID().slice(0, 8)}@%s`,
   ];
   if (opts.au !== undefined) parts.push('-au', opts.au);
   if (opts.ap !== undefined) parts.push('-ap', opts.ap);
