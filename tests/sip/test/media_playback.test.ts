@@ -114,14 +114,28 @@ describe.skipIf(skipReason !== undefined)('S2-07 media asset playback', () => {
     await uas.ready();
 
     const mediaUrl = `http_cache://${TELEPHONY_CONFIG_TARGET}/fs/media/${tenantId}/${asset.id}/8k`;
+    // Confirmed live (G-36): this node has only an `internal` Sofia
+    // profile (`fs_cli sofia status`) — 03 §1's "FS accepts calls only
+    // from OpenSIPs, over one internal-facing profile" — there is no
+    // `external` profile to originate through.
     await fsCli(
-      `originate {ignore_early_media=true}sofia/external/900@${UAS_CONTAINER}:5095 &playback(${mediaUrl})`,
+      `originate {ignore_early_media=true}sofia/internal/900@${UAS_CONTAINER}:5095 &playback(${mediaUrl})`,
     );
 
     // `carrier_answer.xml` answers, then waits for the BYE `playback`'s own
     // completion triggers (FS hangs up once the last app in an origination
     // finishes) — a real answered-and-held call is only possible if FS
     // actually resolved and played real audio, not an instant failure.
+    //
+    // Unlike `outbound_failover.test.ts`'s own use of this same check
+    // (which waits on `runForeground`, itself blocking until the call
+    // fully ends), `fsCli`'s `originate` only blocks until the call leg is
+    // *created* (`+OK <uuid>`), not until the call/playback/BYE actually
+    // finish. Confirmed live: checking immediately raced the real call
+    // every time. A generous wait past the fixture's own ~2s duration,
+    // same idiom as outbound_failover.test.ts's own comment on log-flush
+    // lag, covers both that and the actual call taking real time.
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
     const receivedCall = await uasReceivedCall(UAS_CONTAINER);
     expect(receivedCall).toBe(true);
   }, 60_000);

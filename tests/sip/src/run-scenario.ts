@@ -53,6 +53,7 @@ export interface SipTestEnv {
   readonly opensipsTarget: string;
   readonly sippImage: string;
   readonly freeswitchContainer: string;
+  readonly eventSocketPassword: string;
 }
 
 /** Same variable names/defaults `infra/compose/.env(.example)` itself uses. */
@@ -65,6 +66,10 @@ export function sipTestEnv(): SipTestEnv {
     opensipsTarget: envOr('SIP_TEST_OPENSIPS_TARGET', 'opensips:5060'),
     sippImage: envOr('SIP_TEST_SIPP_IMAGE', 'ctaloi/sipp'),
     freeswitchContainer: envOr('SIP_TEST_FREESWITCH_CONTAINER', 'conductor-uc-freeswitch-1'),
+    // Matches `FS_EVENT_SOCKET_PASSWORD`'s own default in
+    // infra/compose/docker-compose.yml's `freeswitch`/`call-control`
+    // service blocks.
+    eventSocketPassword: envOr('FS_EVENT_SOCKET_PASSWORD', 'dev-event-socket-password'),
   };
 }
 
@@ -267,6 +272,16 @@ export async function clearRegistration(aor: string): Promise<void> {
  * call flow (S2-10's own future job, per the plan's dependency graph), so
  * this is how its own acceptance test exercises FS's `http_cache://`
  * resolution directly instead.
+ *
+ * `fs_cli` with no `-H`/`-P`/`-p` falls back to its own compiled-in
+ * defaults (127.0.0.1:8021, password "ClueCon") when no `fs_cli.conf`
+ * exists in the image — none does here, and this stack's event socket
+ * password is `FS_EVENT_SOCKET_PASSWORD` (event_socket.conf.xml), not
+ * "ClueCon". Confirmed live: bare `fs_cli -x status` fails with
+ * `Error Connecting`; the same command with explicit `-H 127.0.0.1 -P 8021
+ * -p <the real password>` connects fine — the ACL (acl.conf.xml's
+ * `cluster` list) already allows loopback, so this was never a network/ACL
+ * problem, just fs_cli never being told the right password.
  */
 export async function fsCli(command: string): Promise<string> {
   const env = sipTestEnv();
@@ -274,6 +289,12 @@ export async function fsCli(command: string): Promise<string> {
     'exec',
     env.freeswitchContainer,
     'fs_cli',
+    '-H',
+    '127.0.0.1',
+    '-P',
+    '8021',
+    '-p',
+    env.eventSocketPassword,
     '-x',
     command,
   ]);
