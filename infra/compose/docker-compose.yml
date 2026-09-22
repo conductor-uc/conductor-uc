@@ -381,6 +381,15 @@ services:
     # S2-11. Speaks ESL to every configured FreeSWITCH node and owns the
     # Redis call/node registry (04 §3) — no object storage, no tenant
     # secrets, unlike its siblings above.
+    #
+    # Restored here: this whole block (everything past `build:`) was lost
+    # when PR #132 (S2-11) merged into main — an adjacent-service-block
+    # merge/rebase mistake, the same failure mode as the voicemail-service
+    # corruption this PR's own rebase hit and fixed below. Found live: a
+    # `docker compose build`/`up` against main as of this PR's own rebase
+    # fails outright (`docker compose config` errors on structurally
+    # malformed YAML from the same cause). Restored from S2-11's own
+    # pre-merge branch tip (commit 8f8710d) verbatim.
     build:
       context: ../..
       dockerfile: services/call-control/Dockerfile
