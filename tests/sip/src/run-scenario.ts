@@ -436,15 +436,29 @@ function buildSippCommand(opts: {
     // Docker reuses IPs from its pool. Two consecutive scenarios landing
     // on the same IP therefore produce the *identical* Call-ID.
     //
-    // That is not cosmetic. Confirmed live: a run's BYE was still being
-    // retransmitted (awaiting its 200 through OpenSIPs) when the next
-    // scenario's INVITE arrived carrying the same `1-8@172.18.0.18`, and
-    // FreeSWITCH — correctly — answered the new INVITE with
-    // `481 Call is being terminated`, matching it to the dialog still
-    // tearing down. Whichever test happened to run while a previous
-    // teardown was in flight failed, which is why the failure kept moving
-    // between files (docs/decisions.md G-34/G-39) and why it reproduced
-    // only under repeated/loaded runs.
+    // That is not cosmetic, and it is worse than the Call-ID alone: SIPp's
+    // From-tag (`tag=1`) and CSeq (`1 INVITE`) are just as deterministic,
+    // so consecutive containers emit a byte-identical *dialog identity* —
+    // exactly the triple RFC 3261 matches requests on. Both failure
+    // symptoms seen live come from that one fact:
+    //
+    //   481 Call is being terminated — a previous call's BYE was still
+    //   being retransmitted (awaiting its 200 through OpenSIPs) when the
+    //   next scenario's INVITE arrived reusing its Call-ID, so FS matched
+    //   the new INVITE to the dialog still tearing down.
+    //
+    //   482 Request merged — the same identity arriving while the earlier
+    //   INVITE transaction was still live reads as a forked duplicate:
+    //     From: <sip:101@acme.platform.test>;tag=1
+    //     Call-ID: 1-8@172.18.0.18
+    //     CSeq: 1 INVITE
+    //
+    // FreeSWITCH is right in both cases; the scenarios are the ones lying
+    // about being distinct calls. Whichever test happened to run while a
+    // previous call was still settling failed, which is why the failure
+    // kept moving between files (docs/decisions.md G-34/G-39) and why it
+    // reproduced only under repeated/loaded runs. Making the Call-ID
+    // unique breaks the match for both, since both need all three fields.
     //
     // `-cid_str` takes literal text alongside its `%` specifiers, so a
     // token unique to this container makes a collision impossible
