@@ -1,4 +1,4 @@
-import { beforeEach } from 'vitest';
+import { afterEach, beforeEach } from 'vitest';
 
 import { fsCli, sipInfraOrSkipReason } from './run-scenario.js';
 
@@ -40,4 +40,32 @@ beforeEach(async () => {
   // surface as the test's own failure a moment later, with far better
   // context than a hook error would give.
   await fsCli('hupall NORMAL_CLEARING').catch(() => undefined);
+});
+
+/**
+ * Dumps FreeSWITCH's own view of the call right when a test fails.
+ *
+ * The CI job has a failure step that does this, but it runs after the whole
+ * suite — by which point the `beforeEach` above has already hung up
+ * whatever the failing test left behind, so it only ever reports a clean
+ * node (confirmed live: `0 total` channels, `0` registrations, on a run
+ * that had just failed). The cleanup erases exactly the evidence the dump
+ * was added to capture.
+ *
+ * Here it lands in the failing test's own output, before the next test's
+ * cleanup runs: whether the call's channels were still up (the G-39
+ * signature is both legs never torn down) and whether the UAS was
+ * registered where FS expected.
+ */
+afterEach(async (ctx) => {
+  if (skipReason !== undefined) return;
+  if (ctx.task.result?.state !== 'fail') return;
+  const channels = await fsCli('show channels').catch(() => '<unavailable>');
+  const registrations = await fsCli('sofia status profile internal reg').catch(
+    () => '<unavailable>',
+  );
+  process.stderr.write(
+    `\n--- FS state at failure of "${ctx.task.name}" ---\n` +
+      `channels:\n${channels}\nregistrations:\n${registrations}\n`,
+  );
 });
