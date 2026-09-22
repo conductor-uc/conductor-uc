@@ -118,7 +118,10 @@ describe.skipIf(skipReason !== undefined)('mailbox repo', () => {
       pin: '1234',
     });
 
-    const { uploadUrl, objectKey } = await h.mailboxes.presignGreeting(ctxFor(tenantId), mailbox.id);
+    const { uploadUrl, objectKey } = await h.mailboxes.presignGreeting(
+      ctxFor(tenantId),
+      mailbox.id,
+    );
     const response = await fetch(uploadUrl, {
       method: 'PUT',
       headers: { 'content-type': 'audio/wav' },

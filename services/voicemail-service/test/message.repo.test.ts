@@ -194,11 +194,7 @@ describe.skipIf(skipReason !== undefined)('message repo', () => {
     // are always listed per-mailbox) — a direct query stands in, scoped the
     // same way `scoped(ctx)` would be.
     list: (tenantId) =>
-      h.db.kysely
-        .selectFrom('messages')
-        .select('id')
-        .where('tenant_id', '=', tenantId)
-        .execute(),
+      h.db.kysely.selectFrom('messages').select('id').where('tenant_id', '=', tenantId).execute(),
     findById: (tenantId, id) => h.messages.findById(ctxFor(tenantId), id),
     remove: (tenantId, id) =>
       h.messages

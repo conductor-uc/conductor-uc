@@ -66,7 +66,11 @@ function pinAssociatedData(tenantId: string, mailboxId: string): string {
  * flag, a mailbox appears" is a real future enhancement, flagged in
  * docs/decisions.md rather than reached into pbx-config-service for here.
  */
-export function createMailboxRepo(db: Database<VoicemailServiceDb>, storage: Storage, kek: KekProvider) {
+export function createMailboxRepo(
+  db: Database<VoicemailServiceDb>,
+  storage: Storage,
+  kek: KekProvider,
+) {
   return {
     list(ctx: DbContext): Promise<Mailbox[]> {
       return db
@@ -188,7 +192,11 @@ export function createMailboxRepo(db: Database<VoicemailServiceDb>, storage: Sto
     },
 
     async remove(ctx: DbContext, id: string): Promise<void> {
-      const result = await db.scoped(ctx).deleteFrom('mailboxes').where('id', '=', id).executeTakeFirst();
+      const result = await db
+        .scoped(ctx)
+        .deleteFrom('mailboxes')
+        .where('id', '=', id)
+        .executeTakeFirst();
       if (Number(result.numDeletedRows) === 0) {
         throw new MailboxNotFoundError(`No mailbox with id '${id}'.`);
       }
@@ -198,7 +206,10 @@ export function createMailboxRepo(db: Database<VoicemailServiceDb>, storage: Sto
     },
 
     /** Returns a presigned PUT URL for the greeting and marks it `pending` — `completeGreeting` flips it to `ready`. */
-    async presignGreeting(ctx: DbContext, id: string): Promise<{ uploadUrl: string; objectKey: string }> {
+    async presignGreeting(
+      ctx: DbContext,
+      id: string,
+    ): Promise<{ uploadUrl: string; objectKey: string }> {
       const { tenantId } = requireTenant(ctx);
       const existing = await db
         .scoped(ctx)
@@ -209,7 +220,9 @@ export function createMailboxRepo(db: Database<VoicemailServiceDb>, storage: Sto
       if (existing === undefined) throw new MailboxNotFoundError(`No mailbox with id '${id}'.`);
 
       const objectKey = greetingObjectKey(id);
-      const uploadUrl = await storage.forTenant(tenantId).presignPut(objectKey, { contentType: 'audio/wav' });
+      const uploadUrl = await storage
+        .forTenant(tenantId)
+        .presignPut(objectKey, { contentType: 'audio/wav' });
 
       await db
         .scoped(ctx)

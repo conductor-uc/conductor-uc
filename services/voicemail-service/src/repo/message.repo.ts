@@ -118,7 +118,9 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Sto
       const { tenantId } = requireTenant(ctx);
       const id = randomUUID();
       const objectKey = messageObjectKey(mailboxId, id);
-      const uploadUrl = await storage.forTenant(tenantId).presignPut(objectKey, { contentType: 'audio/wav' });
+      const uploadUrl = await storage
+        .forTenant(tenantId)
+        .presignPut(objectKey, { contentType: 'audio/wav' });
 
       const now = new Date();
       await db
@@ -158,7 +160,11 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Sto
       };
     },
 
-    async complete(ctx: DbContext, id: string, input: CompleteMessageInput): Promise<VoicemailMessage> {
+    async complete(
+      ctx: DbContext,
+      id: string,
+      input: CompleteMessageInput,
+    ): Promise<VoicemailMessage> {
       const { tenantId } = requireTenant(ctx);
       let result: VoicemailMessage | undefined;
 
@@ -210,7 +216,8 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Sto
         .set({ status: 'failed', updated_at: new Date() })
         .where('id', '=', id)
         .executeTakeFirst();
-      if (Number(result.numUpdatedRows) === 0) throw new MessageNotFoundError(`No message with id '${id}'.`);
+      if (Number(result.numUpdatedRows) === 0)
+        throw new MessageNotFoundError(`No message with id '${id}'.`);
     },
 
     async markRead(ctx: DbContext, id: string): Promise<VoicemailMessage> {

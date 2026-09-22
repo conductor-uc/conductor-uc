@@ -157,7 +157,10 @@ function fakeOrgClient(): FakeOrgClient {
 
 export interface FakeVoicemailClient extends VoicemailClient {
   mailboxes: Record<string, VoicemailMailbox & { readonly tenantId: string; pin: string }>;
-  messages: Record<string, VoicemailMessage & { readonly tenantId: string; readonly mailboxId: string }>;
+  messages: Record<
+    string,
+    VoicemailMessage & { readonly tenantId: string; readonly mailboxId: string }
+  >;
 }
 
 /**
@@ -179,19 +182,18 @@ function fakeVoicemailClient(storage: Storage): FakeVoicemailClient {
           (m) => m.tenantId === tenantId && m.extensionId === extensionId,
         ),
       ),
-    findMailbox: (_tenantId: string, mailboxId: string) => Promise.resolve(state.mailboxes[mailboxId]),
+    findMailbox: (_tenantId: string, mailboxId: string) =>
+      Promise.resolve(state.mailboxes[mailboxId]),
     findMessage: (_tenantId: string, _mailboxId: string, messageId: string) =>
       Promise.resolve(state.messages[messageId]),
     verifyPin: (_tenantId: string, mailboxId: string, pin: string) =>
       Promise.resolve(state.mailboxes[mailboxId]?.pin === pin),
-    async createMessage(
-      tenantId: string,
-      mailboxId: string,
-      input: CreateVoicemailMessageInput,
-    ) {
+    async createMessage(tenantId: string, mailboxId: string, input: CreateVoicemailMessageInput) {
       const messageId = `msg-${String((messageCounter += 1))}`;
       const objectKey = `voicemail/${mailboxId}/${messageId}.wav`;
-      const uploadUrl = await storage.forTenant(tenantId).presignPut(objectKey, { contentType: 'audio/wav' });
+      const uploadUrl = await storage
+        .forTenant(tenantId)
+        .presignPut(objectKey, { contentType: 'audio/wav' });
       state.messages[messageId] = {
         id: messageId,
         tenantId,
@@ -238,10 +240,16 @@ function fakeVoicemailClient(storage: Storage): FakeVoicemailClient {
     },
     async presignGreeting(tenantId: string, mailboxId: string) {
       const objectKey = `voicemail/${mailboxId}/greeting.wav`;
-      const uploadUrl = await storage.forTenant(tenantId).presignPut(objectKey, { contentType: 'audio/wav' });
+      const uploadUrl = await storage
+        .forTenant(tenantId)
+        .presignPut(objectKey, { contentType: 'audio/wav' });
       const mailbox = state.mailboxes[mailboxId];
       if (mailbox !== undefined) {
-        state.mailboxes[mailboxId] = { ...mailbox, greetingStatus: 'pending', greetingObjectKey: objectKey };
+        state.mailboxes[mailboxId] = {
+          ...mailbox,
+          greetingStatus: 'pending',
+          greetingObjectKey: objectKey,
+        };
       }
       return { uploadUrl, objectKey };
     },

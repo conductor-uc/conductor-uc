@@ -874,7 +874,10 @@ export function registerFsRoutes(
       try {
         bytes = await storage.forTenant(tenantId).getObject(message.objectKey);
       } catch (error) {
-        logger.error({ tenantId, mailboxId, messageId, err: error }, 'voicemail: could not read message audio');
+        logger.error(
+          { tenantId, mailboxId, messageId, err: error },
+          'voicemail: could not read message audio',
+        );
         reply.code(502);
         return '';
       }
@@ -905,7 +908,10 @@ export function registerFsRoutes(
       try {
         bytes = await storage.forTenant(tenantId).getObject(mailbox.greetingObjectKey);
       } catch (error) {
-        logger.error({ tenantId, mailboxId, err: error }, 'voicemail: could not read greeting audio');
+        logger.error(
+          { tenantId, mailboxId, err: error },
+          'voicemail: could not read greeting audio',
+        );
         reply.code(502);
         return '';
       }

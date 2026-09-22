@@ -50,9 +50,16 @@ export interface VoicemailClientOptions {
 }
 
 export interface VoicemailClient {
-  findMailboxByExtension(tenantId: string, extensionId: string): Promise<VoicemailMailbox | undefined>;
+  findMailboxByExtension(
+    tenantId: string,
+    extensionId: string,
+  ): Promise<VoicemailMailbox | undefined>;
   findMailbox(tenantId: string, mailboxId: string): Promise<VoicemailMailbox | undefined>;
-  findMessage(tenantId: string, mailboxId: string, messageId: string): Promise<VoicemailMessage | undefined>;
+  findMessage(
+    tenantId: string,
+    mailboxId: string,
+    messageId: string,
+  ): Promise<VoicemailMessage | undefined>;
   verifyPin(tenantId: string, mailboxId: string, pin: string): Promise<boolean>;
   createMessage(
     tenantId: string,
@@ -67,9 +74,16 @@ export interface VoicemailClient {
   ): Promise<VoicemailMessage>;
   failMessage(tenantId: string, mailboxId: string, messageId: string): Promise<void>;
   listMessages(tenantId: string, mailboxId: string): Promise<VoicemailMessage[]>;
-  markMessageRead(tenantId: string, mailboxId: string, messageId: string): Promise<VoicemailMessage>;
+  markMessageRead(
+    tenantId: string,
+    mailboxId: string,
+    messageId: string,
+  ): Promise<VoicemailMessage>;
   deleteMessage(tenantId: string, mailboxId: string, messageId: string): Promise<void>;
-  presignGreeting(tenantId: string, mailboxId: string): Promise<{ uploadUrl: string; objectKey: string }>;
+  presignGreeting(
+    tenantId: string,
+    mailboxId: string,
+  ): Promise<{ uploadUrl: string; objectKey: string }>;
   completeGreeting(tenantId: string, mailboxId: string): Promise<VoicemailMailbox>;
 }
 
@@ -138,7 +152,11 @@ export function createVoicemailClient(options: VoicemailClientOptions): Voicemai
     },
     async createMessage(tenantId, mailboxId, input) {
       const response = await call('POST', `${mailboxUrl(tenantId, mailboxId)}/messages`, input);
-      return (await response!.json()) as { messageId: string; uploadUrl: string; objectKey: string };
+      return (await response!.json()) as {
+        messageId: string;
+        uploadUrl: string;
+        objectKey: string;
+      };
     },
     async completeMessage(tenantId, mailboxId, messageId, input) {
       const response = await call(
@@ -149,7 +167,10 @@ export function createVoicemailClient(options: VoicemailClientOptions): Voicemai
       return (await response!.json()) as VoicemailMessage;
     },
     async failMessage(tenantId, mailboxId, messageId) {
-      await call('POST', `${mailboxUrl(tenantId, mailboxId)}/messages/${encodeURIComponent(messageId)}/fail`);
+      await call(
+        'POST',
+        `${mailboxUrl(tenantId, mailboxId)}/messages/${encodeURIComponent(messageId)}/fail`,
+      );
     },
     async listMessages(tenantId, mailboxId) {
       const response = await call('GET', `${mailboxUrl(tenantId, mailboxId)}/messages`);

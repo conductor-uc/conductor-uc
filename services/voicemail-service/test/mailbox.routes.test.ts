@@ -182,7 +182,10 @@ describe.skipIf(skipReason !== undefined)('mailbox HTTP routes', () => {
 
   it('lists ready messages and returns a playable presigned play-url, then deletes the message', async () => {
     const tenantId = crypto.randomUUID();
-    const mailbox = await h.mailboxes.create({ tenantId }, { extensionId: crypto.randomUUID(), pin: '1234' });
+    const mailbox = await h.mailboxes.create(
+      { tenantId },
+      { extensionId: crypto.randomUUID(), pin: '1234' },
+    );
     const { message, uploadUrl } = await h.messages.create({ tenantId }, mailbox.id, {
       callerIdNumber: '+15005550001',
     });
@@ -195,7 +198,9 @@ describe.skipIf(skipReason !== undefined)('mailbox HTTP routes', () => {
       headers: actorHeaders(tenantId),
     });
     expect(list.statusCode).toBe(200);
-    expect(list.json()).toMatchObject({ rows: [{ id: message.id, callerIdNumber: '+15005550001' }] });
+    expect(list.json()).toMatchObject({
+      rows: [{ id: message.id, callerIdNumber: '+15005550001' }],
+    });
 
     const playUrl = await app.inject({
       method: 'GET',

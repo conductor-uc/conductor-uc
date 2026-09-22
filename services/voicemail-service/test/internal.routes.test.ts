@@ -67,7 +67,10 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
 
   it('verifies a PIN', async () => {
     const tenantId = crypto.randomUUID();
-    const mailbox = await h.mailboxes.create({ tenantId }, { extensionId: crypto.randomUUID(), pin: '4242' });
+    const mailbox = await h.mailboxes.create(
+      { tenantId },
+      { extensionId: crypto.randomUUID(), pin: '4242' },
+    );
 
     const valid = await app.inject({
       method: 'POST',
@@ -88,7 +91,10 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
 
   it('creates, completes, lists, marks read, and deletes a message — the FS leave-message/retrieval round trip', async () => {
     const tenantId = crypto.randomUUID();
-    const mailbox = await h.mailboxes.create({ tenantId }, { extensionId: crypto.randomUUID(), pin: '1234' });
+    const mailbox = await h.mailboxes.create(
+      { tenantId },
+      { extensionId: crypto.randomUUID(), pin: '1234' },
+    );
 
     const created = await app.inject({
       method: 'POST',
@@ -148,7 +154,10 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
 
   it('fails a message', async () => {
     const tenantId = crypto.randomUUID();
-    const mailbox = await h.mailboxes.create({ tenantId }, { extensionId: crypto.randomUUID(), pin: '1234' });
+    const mailbox = await h.mailboxes.create(
+      { tenantId },
+      { extensionId: crypto.randomUUID(), pin: '1234' },
+    );
     const { message } = await h.messages.create({ tenantId }, mailbox.id, {});
 
     const response = await app.inject({
@@ -162,7 +171,10 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
 
   it('presigns and completes a greeting', async () => {
     const tenantId = crypto.randomUUID();
-    const mailbox = await h.mailboxes.create({ tenantId }, { extensionId: crypto.randomUUID(), pin: '1234' });
+    const mailbox = await h.mailboxes.create(
+      { tenantId },
+      { extensionId: crypto.randomUUID(), pin: '1234' },
+    );
 
     const presigned = await app.inject({
       method: 'POST',

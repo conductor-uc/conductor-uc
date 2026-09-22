@@ -3,7 +3,11 @@ import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 import type { Storage } from '@cuc/storage';
 
 import { InvalidExtensionIdError, InvalidPinError } from '../domain/mailbox.js';
-import { MailboxAlreadyExistsError, MailboxNotFoundError, type MailboxRepo } from '../repo/mailbox.repo.js';
+import {
+  MailboxAlreadyExistsError,
+  MailboxNotFoundError,
+  type MailboxRepo,
+} from '../repo/mailbox.repo.js';
 import { MessageNotFoundError, type MessageRepo } from '../repo/message.repo.js';
 
 const TenantParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
@@ -20,7 +24,11 @@ const MessageParamsSchema = Type.Object({
 const MailboxSchema = Type.Object({
   id: Type.String(),
   extensionId: Type.String(),
-  greetingStatus: Type.Union([Type.Literal('none'), Type.Literal('pending'), Type.Literal('ready')]),
+  greetingStatus: Type.Union([
+    Type.Literal('none'),
+    Type.Literal('pending'),
+    Type.Literal('ready'),
+  ]),
   unreadCount: Type.Number(),
 });
 type MailboxResponse = Static<typeof MailboxSchema>;
@@ -237,12 +245,19 @@ export function registerMailboxRoutes(
     '/v1/tenants/:tenantId/voicemail/mailboxes/:id/messages/:messageId/play-url',
     {
       config: { permission: 'voicemail.access', dataClass: 'private' },
-      schema: { params: MessageParamsSchema, response: { 200: Type.Object({ url: Type.String() }) } },
+      schema: {
+        params: MessageParamsSchema,
+        response: { 200: Type.Object({ url: Type.String() }) },
+      },
     },
     async (request) => {
       const ctx = ctxFor(request);
       const message = await messages.findById(ctx, request.params.messageId);
-      if (message === undefined || message.mailboxId !== request.params.id || message.status !== 'ready') {
+      if (
+        message === undefined ||
+        message.mailboxId !== request.params.id ||
+        message.status !== 'ready'
+      ) {
         throw ProblemError.notFound('No ready message with that id in that mailbox.');
       }
       const url = await storage.forTenant(request.params.tenantId).presignGet(message.objectKey);

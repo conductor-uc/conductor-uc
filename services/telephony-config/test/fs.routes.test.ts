@@ -387,7 +387,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
           'Caller-Destination-Number': '*97',
           'variable_sip_h_X-Tenant-Id': tenantId,
           'variable_sip_h_X-Call-Direction': 'internal',
-          'variable_sip_from_user': '102',
+          variable_sip_from_user: '102',
         }),
       });
 
@@ -412,7 +412,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
           'Caller-Destination-Number': '*97',
           'variable_sip_h_X-Tenant-Id': tenantId,
           'variable_sip_h_X-Call-Direction': 'internal',
-          'variable_sip_from_user': '102',
+          variable_sip_from_user: '102',
         }),
       });
 
@@ -1499,7 +1499,11 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       const { uploadUrl }: { uploadUrl: string } = presigned.json();
 
       const wav = Buffer.from('real greeting bytes');
-      await fetch(uploadUrl, { method: 'PUT', headers: { 'content-type': 'audio/wav' }, body: wav });
+      await fetch(uploadUrl, {
+        method: 'PUT',
+        headers: { 'content-type': 'audio/wav' },
+        body: wav,
+      });
 
       const completed = await app.inject({
         method: 'POST',
