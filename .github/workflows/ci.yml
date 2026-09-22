@@ -158,24 +158,24 @@ jobs:
   # UDP make this the slowest thing in the workflow).
   sip-smoke:
     name: SIP smoke (S1-14)
-    # Back to a GitHub-hosted runner (2026-09-22), reversing S2-06's own
-    # fixup commit (84f3ec4) that moved this job to self-hosted in the
-    # first place over G-34's documented resource-pressure evidence on
-    # ubuntu-latest. That risk has not gone away — Stage 2 has since added
-    # three more services to the compose stack, so hosted tenancy may
-    # struggle here again — but the self-hosted runner's own per-layer
-    # Docker overhead (~260s, see the timeout comment below) made it a
-    # worse bottleneck in practice. Revisit self-hosting again if hosted
-    # tenancy resource pressure resurfaces.
-    runs-on: ubuntu-latest
+    # Tried moving this to ubuntu-latest on 2026-09-22 to escape the
+    # self-hosted runner's slow per-layer Docker overhead (see the timeout
+    # comment below). Reverted the same day: the very first hosted run hit
+    # G-34's exact documented signature (trunk registration stuck
+    # 'unknown', a routing scenario timing out) instead of the layer-commit
+    # slowness — hosted tenancy's 2 vCPUs still can't keep up with this
+    # compose stack, which has only gotten heavier since G-34 and 84f3ec4
+    # were written. Back to self-hosted; the layer-commit overhead is the
+    # better problem to have.
+    runs-on: self-hosted
     # Was 20. Confirmed live (2026-09-22): a single `pnpm ... --prod deploy
     # --legacy` step's own work finishes in ~5s, but the Docker layer
-    # commit/export around it took ~260s on the (now-removed) self-hosted
-    # runner — not a hang, just that runner's per-layer overhead. Stage 2
-    # added several new services (call-control, callflow-service,
-    # voicemail-service) to the compose stack in one batch, each needing a
-    # from-scratch, uncached image; kept wider than the original 20 here
-    # as headroom for that heavier stack on hosted tenancy too.
+    # commit/export around it took ~260s on this runner — not a hang, just
+    # this runner's per-layer overhead. Stage 2 added several new services
+    # (call-control, callflow-service, voicemail-service) to the compose
+    # stack in one batch, each needing a from-scratch, uncached image on
+    # top of that overhead; 20 minutes was not enough headroom for the
+    # whole stack to build even once nothing is actually stuck.
     timeout-minutes: 45
 
     steps:
