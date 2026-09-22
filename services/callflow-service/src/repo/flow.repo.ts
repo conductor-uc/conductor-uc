@@ -323,10 +323,7 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
      * meaning two different graphs, and the immutability of `flow_versions`
      * is what rules that out.
      */
-    async findPublishedIrWithVersion(
-      ctx: DbContext,
-      id: string,
-    ): Promise<PublishedIr | undefined> {
+    async findPublishedIrWithVersion(ctx: DbContext, id: string): Promise<PublishedIr | undefined> {
       const flow = await this.findById(ctx, id);
       if (flow === undefined || flow.currentPublishedVersionId === null) return undefined;
 
