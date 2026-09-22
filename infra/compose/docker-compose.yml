@@ -330,17 +330,6 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
       RECONCILE_INTERVAL_MS: '900000'
-      # S2-07 wired `storage` into this service's `/fs/media/...` route but
-      # never added these — a real, previously-unnoticed gap that would have
-      # failed this service's own startup (`STORAGE_BUCKET_PREFIX`/
-      # `STORAGE_ACCESS_KEY_ID`/`STORAGE_SECRET_ACCESS_KEY` have no config
-      # defaults). Fixed here since S2-16's own `/fs/voicemail/.../audio`
-      # route depends on it working, not left as a flagged-only gap.
-      STORAGE_BUCKET_PREFIX: cuc-dev
-      STORAGE_ENDPOINT: http://minio:9000
-      STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
-      STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
-      STORAGE_FORCE_PATH_STYLE: 'true'
 
   media-worker:
     # S2-07: isolated from pbx-config-service on purpose — the one service
