@@ -159,7 +159,15 @@ jobs:
   sip-smoke:
     name: SIP smoke (S1-14)
     runs-on: self-hosted
-    timeout-minutes: 20
+    # Was 20. Confirmed live (2026-09-22): a single `pnpm ... --prod deploy
+    # --legacy` step's own work finishes in ~5s, but the Docker layer
+    # commit/export around it took ~260s on this runner — not a hang, just
+    # this runner's per-layer overhead. Stage 2 added several new services
+    # (call-control, callflow-service, voicemail-service) to the compose
+    # stack in one batch, each needing a from-scratch, uncached image on
+    # top of that overhead; 20 minutes was not enough headroom for the
+    # whole stack to build even once nothing is actually stuck.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
