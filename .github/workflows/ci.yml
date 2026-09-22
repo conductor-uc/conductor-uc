@@ -213,6 +213,22 @@ jobs:
       - name: Build and start the compose stack
         working-directory: infra/compose
         run: |
+          # Clean slate first. This compose project's name is fixed
+          # (`name: conductor-uc`), so every SIP smoke job on this
+          # self-hosted runner shares one project, one network and one set
+          # of container names. The runner serializes jobs, but only just:
+          # observed live on 2026-09-22, one job started **one second**
+          # after the previous job's `docker compose down -v` step
+          # finished, and its whole run then failed with
+          # `getaddrinfo EAI_AGAIN mariadb` — every test file, including
+          # the seed step, unable to resolve anything on the compose
+          # network, because the previous teardown was still removing that
+          # network while this `up` recreated it.
+          #
+          # `down -v` here is idempotent (a no-op when nothing is left) and
+          # synchronous, so `up` below always starts from a settled state
+          # rather than racing whatever the previous job left mid-removal.
+          docker compose down -v --remove-orphans
           docker compose build
           docker compose up -d --wait --wait-timeout 180
 
