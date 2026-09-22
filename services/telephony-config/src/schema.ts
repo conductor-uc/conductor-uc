@@ -194,4 +194,24 @@ export interface TelephonyConfigDb extends EventTables {
     created_at: Date;
     updated_at: Date;
   };
+  /**
+   * S2-08's own local mirror of pbx-config-service's `ring_groups` — what
+   * `/fs/dialplan`'s from-trunk lookup resolves against when a DID's
+   * `destination_type` is `ring_group`, the same "local read model on the
+   * call-setup hot path" story `dids` above already tells. `member_
+   * extension_ids` is a JSON array (as text), in ring order — the round-robin
+   * counter itself lives in Redis, not here (`main.ts`'s `redisClient`).
+   */
+  ring_groups: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    strategy: string;
+    member_extension_ids: string;
+    ring_timeout_seconds: number;
+    no_answer_destination_type: string | null;
+    no_answer_destination_id: string | null;
+    created_at: Date;
+    updated_at: Date;
+  };
 }

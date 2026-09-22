@@ -17,7 +17,15 @@ describe.skipIf(skipReason !== undefined)(
     beforeAll(async () => {
       h = await startHarness();
       app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-      registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, TOKEN);
+      registerInternalRoutes(
+        app,
+        h.extensions,
+        h.dids,
+        h.emergencyLocations,
+        h.mediaAssets,
+        h.ringGroups,
+        TOKEN,
+      );
       await app.ready();
     });
 
@@ -151,7 +159,15 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/di
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-    registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, TOKEN);
+    registerInternalRoutes(
+      app,
+      h.extensions,
+      h.dids,
+      h.emergencyLocations,
+      h.mediaAssets,
+      h.ringGroups,
+      TOKEN,
+    );
     await app.ready();
   });
 
@@ -286,7 +302,15 @@ describe.skipIf(skipReason !== undefined)('media asset internal routes (S2-07)',
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
-    registerInternalRoutes(app, h.extensions, h.dids, h.emergencyLocations, h.mediaAssets, TOKEN);
+    registerInternalRoutes(
+      app,
+      h.extensions,
+      h.dids,
+      h.emergencyLocations,
+      h.mediaAssets,
+      h.ringGroups,
+      TOKEN,
+    );
     await app.ready();
   });
 
@@ -404,3 +428,104 @@ describe.skipIf(skipReason !== undefined)('media asset internal routes (S2-07)',
     expect(response.statusCode).toBe(401);
   });
 });
+
+describe.skipIf(skipReason !== undefined)(
+  'GET /internal/v1/tenants/:tenantId/ring-groups/:id (S2-08)',
+  () => {
+    let h: Harness;
+    let app: Server;
+
+    beforeAll(async () => {
+      h = await startHarness();
+      app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
+      registerInternalRoutes(
+        app,
+        h.extensions,
+        h.dids,
+        h.emergencyLocations,
+        h.mediaAssets,
+        h.ringGroups,
+        TOKEN,
+      );
+      await app.ready();
+    });
+
+    afterAll(async () => {
+      await app?.close();
+      await h?.close();
+    });
+
+    afterEach(async () => {
+      await resetSchema(h.db);
+      h.domains.realms = {};
+    });
+
+    async function createExtension(tenantId: string, number: string): Promise<string> {
+      h.domains.realms[tenantId] ??= `${tenantId}.platform.test`;
+      const location = await h.emergencyLocations.create(
+        { tenantId },
+        {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        },
+      );
+      const extension = await h.extensions.create(
+        { tenantId },
+        { number, displayName: `Extension ${number}`, emergencyLocationId: location.id },
+      );
+      return extension.id;
+    }
+
+    it('returns a ring group for a valid token', async () => {
+      const tenantId = crypto.randomUUID();
+      const ext1 = await createExtension(tenantId, '101');
+      const created = await h.ringGroups.create(
+        { tenantId },
+        {
+          label: 'Sales',
+          strategy: 'round_robin',
+          memberExtensionIds: [ext1],
+          ringTimeoutSeconds: 25,
+        },
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${tenantId}/ring-groups/${created.id}`,
+        headers: { authorization: `Bearer ${TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        id: created.id,
+        label: 'Sales',
+        strategy: 'round_robin',
+        memberExtensionIds: [ext1],
+        ringTimeoutSeconds: 25,
+        noAnswerDestinationType: null,
+        noAnswerDestinationId: null,
+      });
+    });
+
+    it('401s with no token', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${crypto.randomUUID()}/ring-groups/${crypto.randomUUID()}`,
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('404s an unknown ring group', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/tenants/${crypto.randomUUID()}/ring-groups/${crypto.randomUUID()}`,
+        headers: { authorization: `Bearer ${TOKEN}` },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+  },
+);

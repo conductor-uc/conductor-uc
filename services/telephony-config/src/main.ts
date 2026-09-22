@@ -4,6 +4,7 @@ import { connectBus, createRelay } from '@cuc/events';
 import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { storageFromConfig } from '@cuc/storage';
+import { Redis } from 'ioredis';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
@@ -151,6 +152,9 @@ app.addReadinessCheck('opensips_db', async () => ({
   status: (await opensipsDb.ping()) ? 'pass' : 'fail',
 }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
+app.addReadinessCheck('redis', async () => ({
+  status: (await redisClient.ping()) === 'PONG' ? 'pass' : 'fail',
+}));
 app.addReadinessCheck('outbox', async () => {
   const lag = await relay.lag();
   return { status: 'pass', detail: `${String(lag)} pending` };
@@ -203,6 +207,7 @@ async function shutdown(signal: string): Promise<void> {
   await bus.close();
   await db.destroy();
   await opensipsDb.destroy();
+  redisClient.disconnect();
   logger.info('shutdown complete');
   process.exit(0);
 }

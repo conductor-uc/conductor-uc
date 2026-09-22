@@ -91,6 +91,16 @@ export const configSchema = Type.Object({
    * calls this service makes *as a client* to org-service/pbx-config-service.
    */
   FS_XML_CURL_TOKEN: Env.secret(),
+
+  /**
+   * `redis://host:port` (S2-08) — backs the round-robin ring-group counter,
+   * the same `ioredis` client api-gateway's own rate limiter already uses
+   * (`services/api-gateway/src/rate-limit/redis-client.ts`), the first time a
+   * *domain* service (rather than a gateway middleware) needs Redis for
+   * business logic. 05 §data-architecture already scopes Redis to "short-
+   * lived caches" — a per-tenant-ring-group dial counter fits that.
+   */
+  REDIS_URL: Env.url(),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

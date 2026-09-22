@@ -41,6 +41,29 @@ const EXTENSION_COLUMNS = [
   'emergency_location_id as emergencyLocationId',
 ] as const;
 
+/** S2-08's own local mirror row — `member_extension_ids` stays a JSON string here, the same "JSON as text" choice `outbound_routes.trunk_ids` already made; `xml.ts`'s `buildRingGroupDialplanDocument` is what actually parses it. */
+export interface RingGroupRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly label: string;
+  readonly strategy: string;
+  readonly memberExtensionIds: string;
+  readonly ringTimeoutSeconds: number;
+  readonly noAnswerDestinationType: string | null;
+  readonly noAnswerDestinationId: string | null;
+}
+
+const RING_GROUP_COLUMNS = [
+  'id',
+  'tenant_id as tenantId',
+  'label',
+  'strategy',
+  'member_extension_ids as memberExtensionIds',
+  'ring_timeout_seconds as ringTimeoutSeconds',
+  'no_answer_destination_type as noAnswerDestinationType',
+  'no_answer_destination_id as noAnswerDestinationId',
+] as const;
+
 export interface DidRow {
   readonly id: string;
   readonly tenantId: string;
@@ -516,6 +539,48 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .where('tenant_id', '=', tenantId)
         .where('destination_type', '=', 'extension')
         .where('destination_id', '=', destinationId)
+        .executeTakeFirst();
+    },
+
+    /** Upserts a ring group's current state (S2-08), keyed by id (pbx-config-service's own primary key) — the same shape `upsertDid` already establishes. */
+    async upsertRingGroup(trx: Executor, ringGroup: RingGroupRow): Promise<void> {
+      const now = new Date();
+      await trx
+        .insertInto('ring_groups')
+        .values({
+          id: ringGroup.id,
+          tenant_id: ringGroup.tenantId,
+          label: ringGroup.label,
+          strategy: ringGroup.strategy,
+          member_extension_ids: ringGroup.memberExtensionIds,
+          ring_timeout_seconds: ringGroup.ringTimeoutSeconds,
+          no_answer_destination_type: ringGroup.noAnswerDestinationType,
+          no_answer_destination_id: ringGroup.noAnswerDestinationId,
+          created_at: now,
+          updated_at: now,
+        })
+        .onDuplicateKeyUpdate({
+          label: ringGroup.label,
+          strategy: ringGroup.strategy,
+          member_extension_ids: ringGroup.memberExtensionIds,
+          ring_timeout_seconds: ringGroup.ringTimeoutSeconds,
+          no_answer_destination_type: ringGroup.noAnswerDestinationType,
+          no_answer_destination_id: ringGroup.noAnswerDestinationId,
+          updated_at: now,
+        })
+        .execute();
+    },
+
+    async deleteRingGroup(trx: Executor, id: string): Promise<void> {
+      await trx.deleteFrom('ring_groups').where('id', '=', id).execute();
+    },
+
+    /** `/fs/dialplan`'s from-trunk lookup, once a DID's destination resolves to a ring group (S2-08). */
+    findRingGroupById(id: string): Promise<RingGroupRow | undefined> {
+      return db.kysely
+        .selectFrom('ring_groups')
+        .select(RING_GROUP_COLUMNS)
+        .where('id', '=', id)
         .executeTakeFirst();
     },
 

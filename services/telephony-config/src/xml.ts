@@ -301,6 +301,82 @@ export function buildOutboundDialplanDocument(
   );
 }
 
+/**
+ * S2-08's own from-trunk branch: a DID resolving to a `ring_group`. Members
+ * are handed over already in *ring order* (`fs.routes.ts`'s job: the plan
+ * order for `sequential`, a Redis-rotated order for `round_robin`, a
+ * shuffled order for `random`, or a plain list for `simultaneous` — this
+ * builder itself stays a pure, deterministic string builder, the same
+ * "no randomness inside `xml.ts`" discipline every other builder here
+ * already keeps).
+ *
+ * `simultaneous` rings every member at once (`,`-joined bridge legs,
+ * standard FreeSWITCH dial-string syntax — `switch_ivr_originate.c`'s own
+ * comma-separated-leg behavior) under one `{call_timeout=N}` covering the
+ * whole attempt. Every other strategy hunts members one at a time
+ * (`|`-joined — "try the next leg if this one fails"), each with its own
+ * `[leg_timeout=N]` prefix, so a no-answer on member 1 does not eat into
+ * member 2's own ring time.
+ *
+ * The no-answer destination (`noAnswerBridgeNumber`, an extension's own
+ * dialable number — `domain/ring-group.ts`'s "only `extension` resolves to a
+ * real fallback today" scope) is a second `<action application="bridge">` in
+ * the *same* `<condition>` block, right after the ring group's own bridge —
+ * well-documented FreeSWITCH dialplan behavior (not this task's own
+ * invention): a `bridge` action that fails to connect falls through to the
+ * next action in the same extension, rather than hanging up on its own.
+ *
+ * None of this has been exercised against a real FreeSWITCH node yet in this
+ * task (S2-08 defers SIPp-level proof to S2-20/#44 per the plan) — flagged
+ * as G-38 in docs/decisions.md, the same "unverified live" honesty G-35/G-36
+ * already gave S2-07's own FS-module assumptions.
+ */
+export function buildRingGroupDialplanDocument(
+  callerContext: string,
+  destinationNumber: string,
+  tenantDomain: string,
+  opensipsSipUri: string,
+  memberNumbersInRingOrder: readonly string[],
+  strategy: 'simultaneous' | 'sequential' | 'round_robin' | 'random',
+  ringTimeoutSeconds: number,
+  noAnswerBridgeNumber: string | null,
+): string {
+  const routeVar = `sip_route_uri=sip:${opensipsSipUri}`;
+  const legFor = (bridgeNumber: string): string => `sofia/internal/${bridgeNumber}@${tenantDomain}`;
+
+  let bridgeTarget: string;
+  if (strategy === 'simultaneous') {
+    const legs = memberNumbersInRingOrder.map((number) => legFor(number)).join(',');
+    bridgeTarget = `{${routeVar},call_timeout=${String(ringTimeoutSeconds)}}${legs}`;
+  } else {
+    const legs = memberNumbersInRingOrder
+      .map((number) => `[leg_timeout=${String(ringTimeoutSeconds)}]${legFor(number)}`)
+      .join('|');
+    bridgeTarget = `{${routeVar}}${legs}`;
+  }
+
+  const noAnswerAction =
+    noAnswerBridgeNumber === null
+      ? ''
+      : `          <action application="bridge" data="${escapeXml(`{${routeVar}}${legFor(noAnswerBridgeNumber)}`)}"/>\n`;
+
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="ring-group-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          <action application="bridge" data="${escapeXml(bridgeTarget)}"/>\n` +
+    noAnswerAction +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
 /** A dispatchable civic address, formatted for the `X-Emergency-Location` header `buildEmergencyDialplanDocument` sets. */
 export interface EmergencyLocationDetail {
   readonly addressLine1: string;

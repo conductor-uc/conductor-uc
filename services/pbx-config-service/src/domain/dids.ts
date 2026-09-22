@@ -11,13 +11,13 @@ const E164_PATTERN = /^\+[1-9]\d{1,14}$/;
 
 /**
  * 03 §3.2's own dialplan node-type list (MVP): everything a DID can point
- * at. Through S2-03, only `extension` has an owning subsystem
- * (pbx-config-service's own `extensions` table) — `ring_group` (S2-08),
+ * at. As of S2-08, `extension` and `ring_group` both have an owning
+ * subsystem (pbx-config-service's own `extensions`/`ring_groups` tables) —
  * `queue` (S2-13), `conference_room` (S2-15), `flow` (S2-09/10), and
- * `voicemail` (S2-16) do not exist yet. A DID can still be *created* against
- * any of these (the data model in 05 §3.3 names all of them), but only
- * `extension` resolves to a real call today — everything else is an honest
- * miss at dial time, not a rejected write (docs/decisions.md G-25).
+ * `voicemail` (S2-16) still do not exist. A DID can still be *created*
+ * against any of these (the data model in 05 §3.3 names all of them), but
+ * only `extension`/`ring_group` resolve to a real call today — everything
+ * else is an honest miss at dial time, not a rejected write (docs/decisions.md G-25).
  */
 export const DESTINATION_TYPES = [
   'extension',
@@ -43,6 +43,11 @@ export class TrunkNotFoundError extends Error {
 
 export class ExtensionDestinationNotFoundError extends Error {
   override readonly name = 'ExtensionDestinationNotFoundError';
+}
+
+/** S2-08: a DID's `ring_group` destination that does not name a real `ring_groups` row in this tenant. */
+export class RingGroupDestinationNotFoundError extends Error {
+  override readonly name = 'RingGroupDestinationNotFoundError';
 }
 
 /** Validates a DID's shape: E.164, e.g. `+15551234567`. */

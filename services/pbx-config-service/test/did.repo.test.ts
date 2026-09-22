@@ -117,7 +117,10 @@ describe.skipIf(skipReason !== undefined)('DID repo', () => {
     ).rejects.toThrow(ExtensionDestinationNotFoundError);
   });
 
-  it('allows a non-extension destination with no referential check yet (docs/decisions.md G-25)', async () => {
+  it('allows a non-extension, non-ring_group destination with no referential check yet (docs/decisions.md G-25)', async () => {
+    // S2-08 gave `ring_group` a real referential check (`assertReferencesExist`
+    // below) — `queue` (S2-13) still has no owning subsystem, so it remains
+    // this test's own example of an honest miss at dial time.
     const tenantId = crypto.randomUUID();
     const trunkId = crypto.randomUUID();
     h.trunks.known.add(`${tenantId}:${trunkId}`);
@@ -125,10 +128,10 @@ describe.skipIf(skipReason !== undefined)('DID repo', () => {
     const created = await h.dids.create(ctxFor(tenantId), {
       e164: '+15551234567',
       trunkId,
-      destinationType: 'ring_group',
+      destinationType: 'queue',
       destinationId: crypto.randomUUID(),
     });
-    expect(created.destinationType).toBe('ring_group');
+    expect(created.destinationType).toBe('queue');
   });
 
   it('409s a globally duplicate E.164 number, even across tenants', async () => {

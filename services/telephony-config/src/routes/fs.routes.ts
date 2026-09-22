@@ -3,6 +3,7 @@ import { secretEquals } from '@cuc/crypto';
 import { Type, type Server } from '@cuc/http';
 import type { Logger } from '@cuc/logger';
 import type { Storage } from '@cuc/storage';
+import type { Redis } from 'ioredis';
 
 import { enqueueEvent } from '@cuc/events';
 
@@ -14,6 +15,7 @@ import { telephonyEvents } from '../events.js';
 import type { OrgClient } from '../org-client.js';
 import type { PbxConfigClient } from '../pbx-config-client.js';
 import type { OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
+import { nextRoundRobinStart } from '../ring-group-counter.js';
 import type { TelephonyConfigDb } from '../schema.js';
 import type { VoicemailClient } from '../voicemail-client.js';
 import {
@@ -122,6 +124,12 @@ function findBestOutboundRoute(
  * with a hand-built string (`../xml.ts`), never Fastify's schema-driven JSON
  * serializer.
  */
+
+/** `ring_groups.member_extension_ids` is stored as JSON text in this service's own mirror (`schema.ts`'s own comment) — same driver-quirk parsing every other JSON-as-text column in this codebase already handles. */
+function parseMemberExtensionIds(value: string): string[] {
+  return JSON.parse(value) as string[];
+}
+
 export function registerFsRoutes(
   app: Server,
   db: Database<TelephonyConfigDb>,
@@ -595,27 +603,90 @@ export function registerFsRoutes(
         return NOT_FOUND_DOCUMENT;
       }
 
-      const extension = await readModel.findExtensionById(did.destinationId);
-      if (extension === undefined) {
-        logger.warn(
-          { didId: did.id, destinationId: did.destinationId },
-          'dialplan: DID’s destination extension no longer exists',
-        );
-        return NOT_FOUND_DOCUMENT;
-      }
-
       const domain = await readModel.findDomain(db.kysely, trunk.tenantId);
       if (domain === undefined) {
         logger.warn({ tenantId: trunk.tenantId }, 'dialplan: tenant has no projected domain');
         return NOT_FOUND_DOCUMENT;
       }
 
-      return buildDialplanDocument(
+      if (did.destinationType === 'extension') {
+        const extension = await readModel.findExtensionById(did.destinationId);
+        if (extension === undefined) {
+          logger.warn(
+            { didId: did.id, destinationId: did.destinationId },
+            'dialplan: DID’s destination extension no longer exists',
+          );
+          return NOT_FOUND_DOCUMENT;
+        }
+
+        return buildDialplanDocument(
+          callerContext,
+          destinationNumber,
+          domain.fqdn,
+          opensipsSipUri,
+          extension.number,
+        );
+      }
+
+      // did.destinationType === 'ring_group' (S2-08).
+      const ringGroup = await readModel.findRingGroupById(did.destinationId);
+      if (ringGroup === undefined) {
+        logger.warn(
+          { didId: did.id, destinationId: did.destinationId },
+          'dialplan: DID’s destination ring group no longer exists',
+        );
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      const memberIds = parseMemberExtensionIds(ringGroup.memberExtensionIds);
+      const members = (
+        await Promise.all(memberIds.map((id) => readModel.findExtensionById(id)))
+      ).filter((extension): extension is NonNullable<typeof extension> => extension !== undefined);
+      if (members.length === 0) {
+        logger.warn(
+          { didId: did.id, ringGroupId: ringGroup.id },
+          'dialplan: ring group has no resolvable members',
+        );
+        return NOT_FOUND_DOCUMENT;
+      }
+
+      let orderedMembers = members;
+      if (ringGroup.strategy === 'round_robin') {
+        const start =
+          redis === null
+            ? 0
+            : await nextRoundRobinStart(redis, trunk.tenantId, ringGroup.id, members.length);
+        orderedMembers = [...members.slice(start), ...members.slice(0, start)];
+      } else if (ringGroup.strategy === 'random') {
+        orderedMembers = [...members];
+        for (let i = orderedMembers.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          const atI = orderedMembers[i];
+          const atJ = orderedMembers[j];
+          if (atI === undefined || atJ === undefined) continue;
+          orderedMembers[i] = atJ;
+          orderedMembers[j] = atI;
+        }
+      }
+
+      let noAnswerBridgeNumber: string | null = null;
+      if (
+        ringGroup.noAnswerDestinationType === 'extension' &&
+        ringGroup.noAnswerDestinationId !== null
+      ) {
+        const fallback = await readModel.findExtensionById(ringGroup.noAnswerDestinationId);
+        noAnswerBridgeNumber = fallback?.number ?? null;
+      }
+
+      return buildRingGroupDialplanDocument(
         callerContext,
         destinationNumber,
         domain.fqdn,
         opensipsSipUri,
-        extension.number,
+        orderedMembers.map((extension) => extension.number),
+        ringGroup.strategy as 'simultaneous' | 'sequential' | 'round_robin' | 'random',
+        ringGroup.ringTimeoutSeconds,
+        noAnswerBridgeNumber,
       );
     }
 
