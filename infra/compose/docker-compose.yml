@@ -362,10 +362,6 @@ services:
     build:
       context: ../..
       dockerfile: services/call-control/Dockerfile
-  callflow-service:
-    build:
-      context: ../..
-      dockerfile: services/callflow-service/Dockerfile
     restart: unless-stopped
     depends_on:
       mariadb:
@@ -396,6 +392,16 @@ services:
       # for auth to succeed; there is one shared value in dev, same as
       # `FS_XML_CURL_TOKEN`'s pattern elsewhere in this file.
       FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}
+  callflow-service:
+    build:
+      context: ../..
+      dockerfile: services/callflow-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
     environment:
       SERVICE_NAME: callflow-service
       DB_HOST: mariadb
