@@ -23,6 +23,7 @@ services:
       TELEPHONY_CONFIG_SERVICE_DB_PASSWORD: ${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD:-dev-telephony-config-password}
       TRUNK_SERVICE_DB_PASSWORD: ${TRUNK_SERVICE_DB_PASSWORD:-dev-trunk-service-password}
       MEDIA_WORKER_DB_PASSWORD: ${MEDIA_WORKER_DB_PASSWORD:-dev-media-worker-password}
+      CALL_CONTROL_DB_PASSWORD: ${CALL_CONTROL_DB_PASSWORD:-dev-call-control-password}
       CALLFLOW_SERVICE_DB_PASSWORD: ${CALLFLOW_SERVICE_DB_PASSWORD:-dev-callflow-service-password}
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     ports:
@@ -354,6 +355,13 @@ services:
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
 
+  call-control:
+    # S2-11. Speaks ESL to every configured FreeSWITCH node and owns the
+    # Redis call/node registry (04 §3) — no object storage, no tenant
+    # secrets, unlike its siblings above.
+    build:
+      context: ../..
+      dockerfile: services/call-control/Dockerfile
   callflow-service:
     build:
       context: ../..
@@ -364,6 +372,30 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+      freeswitch:
+        condition: service_started
+    environment:
+      SERVICE_NAME: call-control
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: call_control
+      DB_PASSWORD: ${CALL_CONTROL_DB_PASSWORD:-dev-call-control-password}
+      DB_NAME: call_control
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      REDIS_URL: redis://redis:6379
+      REDIS_KEY_PREFIX: 'cuc:dev:'
+      # One node in this stage (S1-10's `freeswitch` service); S2-19 adds a
+      # second and widens this to a comma-separated pair.
+      FS_NODES: freeswitch:freeswitch:8021
+      # Matches the `freeswitch` service's own FS_EVENT_SOCKET_PASSWORD
+      # default above (telephony/freeswitch/conf/vars.xml) — both must agree
+      # for auth to succeed; there is one shared value in dev, same as
+      # `FS_XML_CURL_TOKEN`'s pattern elsewhere in this file.
+      FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}
     environment:
       SERVICE_NAME: callflow-service
       DB_HOST: mariadb

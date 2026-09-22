@@ -1,0 +1,83 @@
+import { Type, defineEvents } from '@cuc/api-contracts';
+
+/**
+ * This service's event contracts, domain `call` (`packages/api-contracts/src/subjects.ts`'s
+ * `EVENT_DOMAINS`, already reserved for it).
+ *
+ * Unlike pbx-config-service's "thin event, re-fetch current state" pattern
+ * (`pbx.media_asset.finalize_requested`), these carry the actual channel
+ * data rather than just an id. There is no queryable "current state" API to
+ * re-fetch from here — the Redis registry (04 §3.2) is explicitly ephemeral
+ * and not a service boundary other services are meant to call through, and
+ * these events ARE cdr-service's (S2-18) primary source for building a CDR,
+ * not a pointer to one.
+ *
+ * Verb names and the event set itself (`created|answered|bridged|held|hungup`)
+ * match 06-services.md's own "Emits" line for call-control and 04 §3.2's
+ * writer list (`CHANNEL_CREATE`, `CHANNEL_ANSWER`, `CHANNEL_BRIDGE`,
+ * `CHANNEL_HOLD`, `CHANNEL_HANGUP_COMPLETE`) exactly — those docs already
+ * committed to this shape before this task existed, so this is not a naming
+ * choice being made here, just matching what was already decided.
+ *
+ * Every event beyond `created` carries only `callUuid` + `nodeId` (plus
+ * whatever the transition itself adds, e.g. `bridgedTo`), on purpose: a
+ * consumer building a CDR timeline keys everything off `callUuid` and reads
+ * `occurredAt` off the envelope itself for the state-transition time, rather
+ * than this service repeating `tenantId`/`from`/`to` on every event.
+ */
+export const callEvents = defineEvents({
+  'call.channel.created': {
+    schemaVersion: 1,
+    description: 'A new channel appeared on a FreeSWITCH node (ESL CHANNEL_CREATE).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+      tenantId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      direction: Type.Union([Type.Literal('inbound'), Type.Literal('outbound')]),
+      from: Type.String(),
+      to: Type.String(),
+    }),
+  },
+  'call.channel.answered': {
+    schemaVersion: 1,
+    description: 'A channel was answered (ESL CHANNEL_ANSWER).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.bridged': {
+    schemaVersion: 1,
+    description: 'A channel was bridged to another leg (ESL CHANNEL_BRIDGE).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+      bridgedTo: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.held': {
+    schemaVersion: 1,
+    description: 'A channel was placed on hold (ESL CHANNEL_HOLD).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.hungup': {
+    schemaVersion: 1,
+    description: 'A channel hung up (ESL CHANNEL_HANGUP_COMPLETE).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+      hangupCause: Type.String(),
+    }),
+  },
+  // `call.lost` (04 §4's failure sequence: a node's calls, abandoned on
+  // heartbeat expiry) is deliberately NOT defined here — the plan's own
+  // dependency table lists it as S4-04's deliverable ("Failover handling:
+  // dialog teardown, call.lost, synthetic CDRs, lease release, Redis
+  // rebuild"), which depends on S2-11 existing, not the other way around.
+  // This service's heartbeat keys (`redis/registry.ts`) are the primitive
+  // S4-04 builds node-death detection on; this task does not add the
+  // detection loop itself.
+});
