@@ -13,14 +13,18 @@ FROM safarov/freeswitch:1.10.12
 # demo config — not layered on top of it.
 COPY conf/ /etc/freeswitch/
 
-# S2-16: the voicemail Lua app. `lua.conf.xml` points mod_lua's own
-# script-path at this exact directory.
+# S2-16's voicemail Lua app and S2-10's flow runner (plus the `json.lua` the
+# runner loads). `lua.conf.xml` points mod_lua's own script-path at this exact
+# directory.
 COPY scripts/ /etc/freeswitch/scripts/
 
-# 06's recording pipeline spool. Created here so `docker run` without an
-# explicit volume still has somewhere to write; compose mounts this as tmpfs
-# (CLAUDE.md rule 5 — nothing durable lives on the node).
-RUN mkdir -p /var/spool/cuc/rec
+# 06's recording pipeline spool, and S2-10's flow-IR cache. Created here so
+# `docker run` without an explicit volume still has somewhere to write;
+# compose mounts these as tmpfs (CLAUDE.md rule 5 — nothing durable lives on
+# the node, and a cache is by definition safe to lose on restart: the runner
+# re-fetches, which is S2-07's "a node restart simply re-caches" applied to
+# call flows).
+RUN mkdir -p /var/spool/cuc/rec /var/cache/cuc/flow
 
 EXPOSE 5060/udp 5060/tcp
 EXPOSE 16384-32768/udp

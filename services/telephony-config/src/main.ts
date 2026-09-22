@@ -6,6 +6,7 @@ import { createLogger } from '@cuc/logger';
 import { storageFromConfig } from '@cuc/storage';
 import { Redis } from 'ioredis';
 
+import { createCallflowClient } from './callflow-client.js';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
 import { createPbxConsumer } from './consumers/pbx.consumer.js';
@@ -107,6 +108,11 @@ const voicemailClient = createVoicemailClient({
   baseUrl: config.VOICEMAIL_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
+// S2-10: `/fs/flow/...`'s own proxy into callflow-service's internal IR API.
+const callflowClient = createCallflowClient({
+  baseUrl: config.CALLFLOW_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
 // S2-08: the round-robin ring-group counter (`ring-group-counter.ts`) —
 // same `lazyConnect: false`/`maxRetriesPerRequest` shape api-gateway's own
 // rate-limiter client uses, so this fails fast at startup rather than
@@ -177,6 +183,7 @@ registerFsRoutes(
   storage,
   voicemailClient,
   redisClient,
+  callflowClient,
 );
 registerInternalRoutes(
   app,

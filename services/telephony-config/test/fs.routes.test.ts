@@ -35,6 +35,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       h.storage,
       h.voicemail,
       h.redis,
+      h.callflow,
     );
     await app.ready();
   });
@@ -1772,6 +1773,334 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/greeting/audio`,
         headers: { authorization: BASIC_AUTH },
       });
+      expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('/fs/flow and /fs/dialplan (S2-10: flow runner)', () => {
+    async function seedTenant(tenantId: string): Promise<void> {
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        fqdn: 'acme.platform.test',
+      });
+    }
+
+    async function seedTrunk(tenantId: string, trunkId: string): Promise<void> {
+      await h.readModel.upsertTrunk(h.db.kysely, {
+        id: trunkId,
+        tenantId,
+        name: 'Carrier',
+        authMode: 'ip',
+        host: 'carrier.test',
+        port: 5060,
+        transport: 'udp',
+        username: null,
+        secret: null,
+        fromDomain: null,
+        status: 'active',
+        callerIdName: null,
+        callerIdNumber: null,
+      });
+    }
+
+    async function seedExtension(tenantId: string, number: string): Promise<string> {
+      const id = crypto.randomUUID();
+      await h.readModel.upsertExtension(h.db.kysely, {
+        id,
+        tenantId,
+        number,
+        username: number,
+        ha1: 'a'.repeat(32),
+        realm: 'acme.platform.test',
+        callerIdName: null,
+        callerIdNumber: null,
+        emergencyLocationId: crypto.randomUUID(),
+      });
+      return id;
+    }
+
+    /** A minimal two-node published flow: a `play` that hangs up after. */
+    function publishFlow(tenantId: string, flowId: string, entryPoints: Record<string, string>) {
+      h.callflow.flows[`${tenantId}/${flowId}`] = {
+        flowId,
+        versionId: crypto.randomUUID(),
+        versionNumber: 3,
+        ir: {
+          entryPoints,
+          nodes: {
+            greeting: {
+              id: 'greeting',
+              type: 'play',
+              config: { mediaAssetId: crypto.randomUUID() },
+              ports: { next: 'done' },
+            },
+            done: { id: 'done', type: 'hangup', config: {}, ports: {} },
+          },
+        },
+      };
+    }
+
+    it('hands a flow DID off to flow_runner.lua with the tenant context set', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      const flowId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedTrunk(tenantId, trunkId);
+      publishFlow(tenantId, flowId, { main: 'greeting' });
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15557654321',
+        trunkId,
+        destinationType: 'flow',
+        destinationId: flowId,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'variable_sip_h_X-Call-Direction': 'inbound',
+          'Caller-Destination-Number': '+15557654321',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(`data="flow_runner.lua ${tenantId} ${flowId} main"`);
+      // The runner bridges extension/ring_group nodes itself, so it needs the
+      // domain and edge URI without a lookup of its own.
+      expect(response.body).toContain('data="cuc_tenant_domain=acme.platform.test"');
+      expect(response.body).toContain('data="cuc_opensips_sip_uri=opensips:5060"');
+      expect(response.body).toContain('<action application="answer"/>');
+    });
+
+    it('misses a flow DID whose flow has never published', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedTrunk(tenantId, trunkId);
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15550000001',
+        trunkId,
+        destinationType: 'flow',
+        destinationId: crypto.randomUUID(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'variable_sip_h_X-Call-Direction': 'inbound',
+          'Caller-Destination-Number': '+15550000001',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toContain('flow_runner.lua');
+    });
+
+    it('misses a flow DID whose flow has no "main" entry point', async () => {
+      const tenantId = crypto.randomUUID();
+      const trunkId = crypto.randomUUID();
+      const flowId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedTrunk(tenantId, trunkId);
+      publishFlow(tenantId, flowId, { after_hours: 'greeting' });
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15550000002',
+        trunkId,
+        destinationType: 'flow',
+        destinationId: flowId,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'variable_sip_h_X-Call-Direction': 'inbound',
+          'Caller-Destination-Number': '+15550000002',
+          'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+        }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).not.toContain('flow_runner.lua');
+    });
+
+    it('serves the published IR with its version so the runner can cache by it', async () => {
+      const tenantId = crypto.randomUUID();
+      const flowId = crypto.randomUUID();
+      publishFlow(tenantId, flowId, { main: 'greeting' });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${tenantId}/${flowId}/ir`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json<{ versionNumber: number; ir: { entryPoints: unknown } }>();
+      expect(body.versionNumber).toBe(3);
+      expect(body.ir.entryPoints).toEqual({ main: 'greeting' });
+    });
+
+    it('404s the IR for a flow with no published version', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${crypto.randomUUID()}/${crypto.randomUUID()}/ir`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('rejects an unauthenticated IR fetch', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${crypto.randomUUID()}/${crypto.randomUUID()}/ir`,
+      });
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('resolves an extension node id to its dialable number', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const extensionId = await seedExtension(tenantId, '201');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${tenantId}/extension/${extensionId}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ number: '201' });
+    });
+
+    it('refuses to resolve an extension belonging to another tenant', async () => {
+      const tenantId = crypto.randomUUID();
+      const otherTenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const extensionId = await seedExtension(tenantId, '202');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${otherTenantId}/extension/${extensionId}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('resolves a ring group node to its members in strategy order', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const ext1 = await seedExtension(tenantId, '301');
+      const ext2 = await seedExtension(tenantId, '302');
+      const ringGroupId = crypto.randomUUID();
+      await h.readModel.upsertRingGroup(h.db.kysely, {
+        id: ringGroupId,
+        tenantId,
+        label: 'Support',
+        strategy: 'sequential',
+        memberExtensionIds: JSON.stringify([ext1, ext2]),
+        ringTimeoutSeconds: 25,
+        noAnswerDestinationType: null,
+        noAnswerDestinationId: null,
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${tenantId}/ring-group/${ringGroupId}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        numbers: ['301', '302'],
+        strategy: 'sequential',
+        ringTimeoutSeconds: 25,
+      });
+    });
+
+    it('rotates a round-robin ring group for the flow runner too, via the same Redis counter', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const ext1 = await seedExtension(tenantId, '401');
+      const ext2 = await seedExtension(tenantId, '402');
+      const ringGroupId = crypto.randomUUID();
+      await h.readModel.upsertRingGroup(h.db.kysely, {
+        id: ringGroupId,
+        tenantId,
+        label: 'Rotating',
+        strategy: 'round_robin',
+        memberExtensionIds: JSON.stringify([ext1, ext2]),
+        ringTimeoutSeconds: 15,
+        noAnswerDestinationType: null,
+        noAnswerDestinationId: null,
+      });
+
+      async function firstMember(): Promise<string> {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/fs/flow/${tenantId}/ring-group/${ringGroupId}`,
+          headers: { authorization: BASIC_AUTH },
+        });
+        return response.json<{ numbers: string[] }>().numbers[0]!;
+      }
+
+      // The whole point of sharing `resolveRingGroup` with the DID path: a
+      // group reached through a flow advances the same counter, so it cannot
+      // start every flow-routed call at the same member.
+      expect(await firstMember()).not.toBe(await firstMember());
+    });
+
+    it('404s a ring group with no resolvable members', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const ringGroupId = crypto.randomUUID();
+      await h.readModel.upsertRingGroup(h.db.kysely, {
+        id: ringGroupId,
+        tenantId,
+        label: 'Empty',
+        strategy: 'simultaneous',
+        memberExtensionIds: JSON.stringify([crypto.randomUUID()]),
+        ringTimeoutSeconds: 20,
+        noAnswerDestinationType: null,
+        noAnswerDestinationId: null,
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${tenantId}/ring-group/${ringGroupId}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
       expect(response.statusCode).toBe(404);
     });
   });

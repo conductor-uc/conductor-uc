@@ -27,6 +27,18 @@ export interface FlowVersionSummary {
   readonly publishedAt: Date;
 }
 
+/**
+ * A flow's currently published IR together with the identity of the version
+ * it came from — the exact payload the internal IR endpoint returns, and what
+ * S2-10's `flow_runner.lua` keys its on-disk cache on.
+ */
+export interface PublishedIr {
+  readonly flowId: string;
+  readonly versionId: string;
+  readonly versionNumber: number;
+  readonly ir: FlowIR;
+}
+
 export class FlowNotFoundError extends Error {
   override readonly name = 'FlowNotFoundError';
 }
@@ -289,16 +301,45 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
 
     /** The internal IR endpoint's own lookup: the current published version's compiled IR, or `undefined` if the flow has never published. */
     async findPublishedIr(ctx: DbContext, id: string): Promise<FlowIR | undefined> {
+      const published = await this.findPublishedIrWithVersion(ctx, id);
+      return published === undefined ? undefined : published.ir;
+    },
+
+    /**
+     * The same lookup, plus the version identity S2-10's `flow_runner.lua`
+     * caches the IR on disk by.
+     *
+     * The runner cannot cache on the flow id alone — it would then never
+     * notice a `:publish`, and "a published new version takes effect on the
+     * next call" (S2-10's own "Done when") would be false until the node
+     * restarted.
+     *
+     * `versionNumber` is safe as a cache key because a version's `ir` is
+     * immutable once written: version N of a flow always means exactly one
+     * graph. Note that a rollback *repoints* at an existing version row
+     * rather than publishing a new one, so the number can go backwards — that
+     * is still correct here, because the cache file for version N holds
+     * version N's IR either way. What must never happen is the same number
+     * meaning two different graphs, and the immutability of `flow_versions`
+     * is what rules that out.
+     */
+    async findPublishedIrWithVersion(ctx: DbContext, id: string): Promise<PublishedIr | undefined> {
       const flow = await this.findById(ctx, id);
       if (flow === undefined || flow.currentPublishedVersionId === null) return undefined;
 
       const row = await db
         .scoped(ctx)
         .selectFrom('flow_versions')
-        .select(['ir'])
+        .select(['id', 'version_number as versionNumber', 'ir'])
         .where('id', '=', flow.currentPublishedVersionId)
         .executeTakeFirst();
-      return row === undefined ? undefined : parseJson<FlowIR>(row.ir);
+      if (row === undefined) return undefined;
+      return {
+        flowId: id,
+        versionId: row.id,
+        versionNumber: row.versionNumber,
+        ir: parseJson<FlowIR>(row.ir),
+      };
     },
   };
 }

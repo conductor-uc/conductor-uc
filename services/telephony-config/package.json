@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@cuc/api-contracts": "workspace:*",
+    "@cuc/callflow-ir": "workspace:*",
     "@cuc/config": "workspace:*",
     "@cuc/crypto": "workspace:*",
     "@cuc/db": "workspace:*",

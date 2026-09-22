@@ -15,6 +15,7 @@ import { telephonyEvents } from '../events.js';
 import type { OrgClient } from '../org-client.js';
 import type { PbxConfigClient } from '../pbx-config-client.js';
 import type { OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
+import type { CallflowClient } from '../callflow-client.js';
 import { nextRoundRobinStart } from '../ring-group-counter.js';
 import type { TelephonyConfigDb } from '../schema.js';
 import type { VoicemailClient } from '../voicemail-client.js';
@@ -22,6 +23,7 @@ import {
   buildDialplanDocument,
   buildDirectoryDocument,
   buildEmergencyDialplanDocument,
+  buildFlowDialplanDocument,
   buildOutboundDialplanDocument,
   buildRingGroupDialplanDocument,
   buildVoicemailDialplanDocument,
@@ -36,6 +38,36 @@ import {
  * nothing more.
  */
 const VOICEMAIL_RETRIEVAL_FEATURE_CODE = '*97';
+
+/**
+ * S2-10: which of a flow's named entry points a `flow` DID starts at.
+ *
+ * The `dids` table carries only `destination_type`/`destination_id` (05 §3.3)
+ * — there is no column naming an entry point, while S2-09's IR deliberately
+ * supports several per flow so one flow can serve e.g. both a "main" and an
+ * "after_hours" DID. Until a DID can name one, every `flow` DID starts at
+ * this conventional name; a flow whose graph has no such entry point is an
+ * honest dialplan miss, logged, not a guess at which other entry to use.
+ */
+const DEFAULT_FLOW_ENTRY_POINT = 'main';
+
+/** `/fs/flow/:tenantId/:flowId/ir` (S2-10) — `flow_runner.lua`'s own IR fetch. */
+const FlowIrParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  flowId: Type.String({ minLength: 1 }),
+});
+
+/** `/fs/flow/:tenantId/extension/:extensionId` (S2-10) — the `extension` node's id-to-number lookup. */
+const FlowExtensionParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  extensionId: Type.String({ minLength: 1 }),
+});
+
+/** `/fs/flow/:tenantId/ring-group/:ringGroupId` (S2-10) — the `ring_group` node's member lookup. */
+const FlowRingGroupParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  ringGroupId: Type.String({ minLength: 1 }),
+});
 
 /** `/fs/media/:tenantId/:assetId/:rate` (S2-07) — `rate` names which transcoded variant, not a raw Hz value FS would need to parse. */
 const MediaParamsSchema = Type.Object({
@@ -149,6 +181,8 @@ export function registerFsRoutes(
   voicemailClient: VoicemailClient,
   /** S2-08: `ring-group-counter.ts`'s own `round_robin` counter — `null` when `REDIS_URL` is not configured (tests that never exercise a ring-group DID). */
   redis: Redis | null,
+  /** S2-10: `/fs/flow/:tenantId/:flowId/ir`'s own client into callflow-service's internal IR API. */
+  callflowClient: CallflowClient,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -166,6 +200,61 @@ export function registerFsRoutes(
       }
     },
   );
+
+  /**
+   * Resolves a ring group to its members in the order they should be rung
+   * (S2-08).
+   *
+   * Shared by the `ring_group` DID branch and `/fs/flow/.../ring-group/:id`
+   * (S2-10's `ring_group` node) precisely because the ordering *is* the
+   * strategy: `round_robin`'s rotation counter lives in Redis so every node
+   * in a cluster agrees on whose turn it is, and `random`'s shuffle belongs
+   * next to it. Duplicating this for the flow runner would give a call two
+   * different notions of "next member" depending on how it arrived.
+   *
+   * Returns `undefined` when the group is gone or has no resolvable members
+   * — an honest miss for the caller to turn into a 404 or a dialplan miss.
+   */
+  async function resolveRingGroup(
+    tenantId: string,
+    ringGroupId: string,
+  ): Promise<
+    | {
+        ringGroup: NonNullable<Awaited<ReturnType<typeof readModel.findRingGroupById>>>;
+        orderedMembers: NonNullable<Awaited<ReturnType<typeof readModel.findExtensionById>>>[];
+      }
+    | undefined
+  > {
+    const ringGroup = await readModel.findRingGroupById(ringGroupId);
+    if (ringGroup === undefined) return undefined;
+
+    const memberIds = parseMemberExtensionIds(ringGroup.memberExtensionIds);
+    const members = (
+      await Promise.all(memberIds.map((id) => readModel.findExtensionById(id)))
+    ).filter((extension): extension is NonNullable<typeof extension> => extension !== undefined);
+    if (members.length === 0) return undefined;
+
+    let orderedMembers = members;
+    if (ringGroup.strategy === 'round_robin') {
+      const start =
+        redis === null
+          ? 0
+          : await nextRoundRobinStart(redis, tenantId, ringGroup.id, members.length);
+      orderedMembers = [...members.slice(start), ...members.slice(0, start)];
+    } else if (ringGroup.strategy === 'random') {
+      orderedMembers = [...members];
+      for (let i = orderedMembers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const atI = orderedMembers[i];
+        const atJ = orderedMembers[j];
+        if (atI === undefined || atJ === undefined) continue;
+        orderedMembers[i] = atJ;
+        orderedMembers[j] = atI;
+      }
+    }
+
+    return { ringGroup, orderedMembers };
+  }
 
   function authorized(authorization: string | undefined): boolean {
     if (authorization === undefined) return false;
@@ -594,17 +683,21 @@ export function registerFsRoutes(
         );
       }
 
-      // `extension` (S2-03), `ring_group` (S2-08) and `voicemail` (S2-16,
-      // returned above) resolve to a real call — every other destination
-      // type still has no owning subsystem (docs/decisions.md G-25), so
-      // this is an honest miss, not a guess at behavior only a later stage
-      // can define.
+      // `extension` (S2-03), `ring_group` (S2-08), `voicemail` (S2-16,
+      // returned above) and `flow` (S2-10, returned below) resolve to a real
+      // call — every other destination type still has no owning subsystem
+      // (docs/decisions.md G-25), so this is an honest miss, not a guess at
+      // behavior only a later stage can define.
       //
       // `ring_group` must stay in this list: the whole ring-group branch
       // below is unreachable without it, which is exactly what broke when
       // #133's merge dropped it — the branch survived, its guard did not,
       // so every ring-group DID silently 404'd.
-      if (did.destinationType !== 'extension' && did.destinationType !== 'ring_group') {
+      if (
+        did.destinationType !== 'extension' &&
+        did.destinationType !== 'ring_group' &&
+        did.destinationType !== 'flow'
+      ) {
         logger.info(
           { didId: did.id, destinationType: did.destinationType },
           'dialplan: DID destination type has no owning subsystem yet',
@@ -637,46 +730,66 @@ export function registerFsRoutes(
         );
       }
 
+      if (did.destinationType === 'flow') {
+        // Unlike every other destination type here, a flow has no local
+        // mirror in this service to check against — `projection.ts` does not
+        // project flows, because the IR is large, versioned, and already
+        // served by callflow-service's own internal endpoint. So resolve it
+        // over HTTP, the same way the emergency and toll-fraud paths already
+        // accept a live lookup on call setup when no mirror exists.
+        //
+        // Checking here (rather than handing off and letting the runner
+        // discover the problem) is what keeps a misconfigured DID an honest,
+        // logged dialplan miss instead of dead air on an answered call. The
+        // runner re-fetches the IR itself, but normally from its own on-disk
+        // cache, so this is one request, not two, on the warm path.
+        let published;
+        try {
+          published = await callflowClient.findPublishedIr(trunk.tenantId, did.destinationId);
+        } catch (error) {
+          logger.error(
+            { err: error, didId: did.id, flowId: did.destinationId },
+            'dialplan: could not reach callflow-service to resolve a flow DID',
+          );
+          return NOT_FOUND_DOCUMENT;
+        }
+
+        if (published === undefined) {
+          logger.warn(
+            { didId: did.id, flowId: did.destinationId },
+            'dialplan: DID’s destination flow has no published version',
+          );
+          return NOT_FOUND_DOCUMENT;
+        }
+        if (published.ir.entryPoints[DEFAULT_FLOW_ENTRY_POINT] === undefined) {
+          logger.warn(
+            { didId: did.id, flowId: did.destinationId, entryPoint: DEFAULT_FLOW_ENTRY_POINT },
+            'dialplan: DID’s destination flow has no such entry point',
+          );
+          return NOT_FOUND_DOCUMENT;
+        }
+
+        return buildFlowDialplanDocument(
+          callerContext,
+          destinationNumber,
+          trunk.tenantId,
+          did.destinationId,
+          DEFAULT_FLOW_ENTRY_POINT,
+          domain.fqdn,
+          opensipsSipUri,
+        );
+      }
+
       // did.destinationType === 'ring_group' (S2-08).
-      const ringGroup = await readModel.findRingGroupById(did.destinationId);
-      if (ringGroup === undefined) {
+      const resolved = await resolveRingGroup(trunk.tenantId, did.destinationId);
+      if (resolved === undefined) {
         logger.warn(
           { didId: did.id, destinationId: did.destinationId },
-          'dialplan: DID’s destination ring group no longer exists',
+          'dialplan: DID’s destination ring group did not resolve',
         );
         return NOT_FOUND_DOCUMENT;
       }
-
-      const memberIds = parseMemberExtensionIds(ringGroup.memberExtensionIds);
-      const members = (
-        await Promise.all(memberIds.map((id) => readModel.findExtensionById(id)))
-      ).filter((extension): extension is NonNullable<typeof extension> => extension !== undefined);
-      if (members.length === 0) {
-        logger.warn(
-          { didId: did.id, ringGroupId: ringGroup.id },
-          'dialplan: ring group has no resolvable members',
-        );
-        return NOT_FOUND_DOCUMENT;
-      }
-
-      let orderedMembers = members;
-      if (ringGroup.strategy === 'round_robin') {
-        const start =
-          redis === null
-            ? 0
-            : await nextRoundRobinStart(redis, trunk.tenantId, ringGroup.id, members.length);
-        orderedMembers = [...members.slice(start), ...members.slice(0, start)];
-      } else if (ringGroup.strategy === 'random') {
-        orderedMembers = [...members];
-        for (let i = orderedMembers.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          const atI = orderedMembers[i];
-          const atJ = orderedMembers[j];
-          if (atI === undefined || atJ === undefined) continue;
-          orderedMembers[i] = atJ;
-          orderedMembers[j] = atI;
-        }
-      }
+      const { ringGroup, orderedMembers } = resolved;
 
       let noAnswerBridgeNumber: string | null = null;
       if (
@@ -771,6 +884,109 @@ export function registerFsRoutes(
 
       reply.type('audio/wav');
       return bytes;
+    },
+  );
+
+  /**
+   * `GET /fs/flow/:tenantId/:flowId/ir` (S2-10) — how `flow_runner.lua`
+   * fetches a flow's currently published IR over `mod_curl`, gated by the
+   * same shared `fs-node` token as every other `/fs/...` route.
+   *
+   * A thin proxy over `callflowClient` rather than a direct call from the
+   * node into callflow-service: CLAUDE.md rule 4's symmetry — only
+   * telephony-config talks to FS nodes, and only telephony-config is what FS
+   * is configured to call — which also means the node never holds
+   * `INTERNAL_SERVICE_TOKEN`.
+   *
+   * The response is passed through unchanged, version wrapper and all: the
+   * runner keys its on-disk cache on `versionNumber`, so stripping it here
+   * would break "a published new version takes effect on the next call".
+   */
+  app.get(
+    '/fs/flow/:tenantId/:flowId/ir',
+    { config: { public: true }, schema: { params: FlowIrParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+
+      const { tenantId, flowId } = request.params;
+      let published;
+      try {
+        published = await callflowClient.findPublishedIr(tenantId, flowId);
+      } catch (error) {
+        logger.error({ err: error, tenantId, flowId }, 'flow: could not reach callflow-service');
+        reply.code(502);
+        return '';
+      }
+
+      if (published === undefined) {
+        logger.info({ tenantId, flowId }, 'flow: no published version');
+        reply.code(404);
+        return '';
+      }
+      return published;
+    },
+  );
+
+  /**
+   * `GET /fs/flow/:tenantId/extension/:extensionId` (S2-10) — the
+   * `extension` node's own lookup.
+   *
+   * The IR names an extension by id (a stable reference that survives a
+   * renumber), but a bridge needs the dialable number. The runner resolves
+   * it here rather than the IR carrying the number, so a flow published
+   * before a renumber still rings the right phone afterwards.
+   */
+  app.get(
+    '/fs/flow/:tenantId/extension/:extensionId',
+    { config: { public: true }, schema: { params: FlowExtensionParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+
+      const { tenantId, extensionId } = request.params;
+      const extension = await readModel.findExtensionById(extensionId);
+      if (extension === undefined || extension.tenantId !== tenantId) {
+        logger.info({ tenantId, extensionId }, 'flow: extension not found in that tenant');
+        reply.code(404);
+        return '';
+      }
+      return { number: extension.number };
+    },
+  );
+
+  /**
+   * `GET /fs/flow/:tenantId/ring-group/:ringGroupId` (S2-10) — the
+   * `ring_group` node's own lookup, over the same `resolveRingGroup` the
+   * `ring_group` DID branch uses, so a group reached through a flow rings in
+   * the same order as one reached directly.
+   */
+  app.get(
+    '/fs/flow/:tenantId/ring-group/:ringGroupId',
+    { config: { public: true }, schema: { params: FlowRingGroupParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+
+      const { tenantId, ringGroupId } = request.params;
+      const resolved = await resolveRingGroup(tenantId, ringGroupId);
+      if (resolved === undefined) {
+        logger.info({ tenantId, ringGroupId }, 'flow: ring group did not resolve');
+        reply.code(404);
+        return '';
+      }
+
+      return {
+        numbers: resolved.orderedMembers.map((extension) => extension.number),
+        strategy: resolved.ringGroup.strategy,
+        ringTimeoutSeconds: resolved.ringGroup.ringTimeoutSeconds,
+      };
     },
   );
 

@@ -19,6 +19,13 @@ const ParamsSchema = Type.Object({
  *
  * Returns 404 when the flow has never published — flow_runner's own job to
  * decide what "no flow to run" means for a call, not this service's.
+ *
+ * The response wraps the IR in its version identity (`versionId`,
+ * `versionNumber`) rather than returning the bare IR: the runner caches the
+ * IR on local disk and needs something to key that cache on that changes on
+ * every `:publish`, or a newly published version would not take effect until
+ * the node restarted (S2-10's own "Done when" requires it take effect on the
+ * *next call*).
  */
 export function registerInternalRoutes(
   app: Server,
@@ -35,11 +42,11 @@ export function registerInternalRoutes(
       }
 
       const { tenantId, id } = request.params;
-      const ir = await flows.findPublishedIr({ tenantId }, id);
-      if (ir === undefined) {
+      const published = await flows.findPublishedIrWithVersion({ tenantId }, id);
+      if (published === undefined) {
         throw ProblemError.notFound('No published version for that flow in that tenant.');
       }
-      return ir;
+      return published;
     },
   );
 }
