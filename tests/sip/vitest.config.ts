@@ -26,6 +26,26 @@ export default mergeConfig(
       // cut off by this file's own limit first.
       testTimeout: 120_000,
       hookTimeout: 120_000,
+      // G-34/G-39's flakiness, at a level no harness timeout can reach:
+      // across four consecutive CI runs on the self-hosted runner, 11-13 of
+      // these 13 tests passed every time but a *different* one failed each
+      // run (emergency_calling on one, scenarios + toll_fraud on the next,
+      // trunk_did_routing on another) — and the whole suite passes 13/13
+      // locally against a real compose stack. The failures are real SIP
+      // transactions not completing inside the SIPp scenarios' *own*
+      // internal timers (a UAS waiting out its full 60s call timeout for a
+      // BYE that never arrives), so widening this file's or
+      // run-scenario.ts's timeouts cannot help: the deadline being missed
+      // lives inside the scenario XML, not in the harness around it. Same
+      // run also showed trunk_did_routing taking 53s where it takes ~24s
+      // elsewhere — the runner's own load, not any one test.
+      //
+      // Retrying is safe here by construction: `startUas`/
+      // `startBackgroundUas` force-remove any same-named container from a
+      // prior attempt before starting (their own doc comments call this out
+      // for exactly this "crashed prior run" case), and every test clears
+      // the registrations it depends on before dialing.
+      retry: 2,
     },
   }),
 );
