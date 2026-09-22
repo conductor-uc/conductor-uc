@@ -23,6 +23,7 @@ import {
   buildDirectoryDocument,
   buildEmergencyDialplanDocument,
   buildOutboundDialplanDocument,
+  buildRingGroupDialplanDocument,
   buildVoicemailDialplanDocument,
   NOT_FOUND_DOCUMENT,
   type EmergencyLocationDetail,
@@ -146,6 +147,8 @@ export function registerFsRoutes(
   storage: Storage,
   /** S2-16: `/fs/voicemail/...`'s own client into voicemail-service's internal API. */
   voicemailClient: VoicemailClient,
+  /** S2-08: `ring-group-counter.ts`'s own `round_robin` counter — `null` when `REDIS_URL` is not configured (tests that never exercise a ring-group DID). */
+  redis: Redis | null,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the

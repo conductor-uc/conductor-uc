@@ -34,6 +34,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       h.pbxConfig,
       h.storage,
       h.voicemail,
+      h.redis,
     );
     await app.ready();
   });
