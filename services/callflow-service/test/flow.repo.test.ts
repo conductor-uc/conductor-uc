@@ -236,6 +236,65 @@ describe.skipIf(skipReason !== undefined)('flow repo', () => {
     expect(await repo.findPublishedIr({ tenantId }, created.id)).toBeUndefined();
   });
 
+  it('findPublishedIrWithVersion carries the version identity the flow runner caches on', async () => {
+    const tenantId = randomUUID();
+    const created = await repo.create({ tenantId }, 'Versioned IR');
+    await repo.updateDraft({ tenantId }, created.id, validGraph());
+    const v1 = await repo.publish({ tenantId }, created.id);
+
+    const published = await repo.findPublishedIrWithVersion({ tenantId }, created.id);
+    expect(published).toMatchObject({
+      flowId: created.id,
+      versionId: v1.id,
+      versionNumber: v1.versionNumber,
+    });
+    expect(published?.ir).toEqual(await repo.findPublishedIr({ tenantId }, created.id));
+  });
+
+  it('findPublishedIrWithVersion reports a new version number after a re-publish', async () => {
+    const tenantId = randomUUID();
+    const created = await repo.create({ tenantId }, 'Republished');
+    await repo.updateDraft({ tenantId }, created.id, validGraph());
+    await repo.publish({ tenantId }, created.id);
+    const before = await repo.findPublishedIrWithVersion({ tenantId }, created.id);
+
+    await repo.updateDraft({ tenantId }, created.id, {
+      entryPoints: { main: 'hu2' },
+      nodes: [{ id: 'hu2', type: 'hangup', config: {} }],
+      edges: [],
+    });
+    await repo.publish({ tenantId }, created.id);
+    const after = await repo.findPublishedIrWithVersion({ tenantId }, created.id);
+
+    // This is what makes "a published new version takes effect on the next
+    // call" true: the runner keys its on-disk cache on this number, so it
+    // must move even though the flow id has not.
+    expect(after?.versionNumber).toBe(before!.versionNumber + 1);
+    expect(after?.ir).not.toEqual(before?.ir);
+  });
+
+  it('findPublishedIrWithVersion reports the rolled-back-to version, not a new one', async () => {
+    const tenantId = randomUUID();
+    const created = await repo.create({ tenantId }, 'Rolled Back IR');
+    await repo.updateDraft({ tenantId }, created.id, validGraph());
+    const v1 = await repo.publish({ tenantId }, created.id);
+    await repo.updateDraft({ tenantId }, created.id, {
+      entryPoints: { main: 'hu2' },
+      nodes: [{ id: 'hu2', type: 'hangup', config: {} }],
+      edges: [],
+    });
+    await repo.publish({ tenantId }, created.id);
+
+    await repo.rollback({ tenantId }, created.id, v1.versionNumber);
+    const published = await repo.findPublishedIrWithVersion({ tenantId }, created.id);
+
+    // A rollback repoints at the *original* version row, so the runner sees
+    // v1's number again. That is safe precisely because the cache file for
+    // v1 holds v1's IR — the content and the key moved together.
+    expect(published?.versionNumber).toBe(v1.versionNumber);
+    expect(published?.versionId).toBe(v1.id);
+  });
+
   // 05 §2.4: every repository test suite includes a cross-tenant probe.
   crossTenantProbe({
     name: 'flows',

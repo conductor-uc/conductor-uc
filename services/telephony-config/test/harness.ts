@@ -39,6 +39,7 @@ import type {
   TrunkConfig,
   TrunkConfigClient,
 } from '../src/trunk-config-client.js';
+import type { CallflowClient, PublishedFlowIr } from '../src/callflow-client.js';
 import type {
   CompleteVoicemailMessageInput,
   CreateVoicemailMessageInput,
@@ -62,6 +63,7 @@ export interface Harness {
   readonly trunkConfig: FakeTrunkConfigClient;
   readonly orgClient: FakeOrgClient;
   readonly voicemail: FakeVoicemailClient;
+  readonly callflow: FakeCallflowClient;
   readonly storage: Storage;
   readonly redis: Redis;
   readonly logger: Logger;
@@ -92,6 +94,20 @@ function fakeMiClient(): FakeMiClient {
       }
       return Promise.resolve(undefined as T);
     },
+  };
+  return state;
+}
+
+/** Published flow IRs keyed `<tenantId>/<flowId>`, set per test — no live callflow-service needed (S2-10). */
+export interface FakeCallflowClient extends CallflowClient {
+  flows: Record<string, PublishedFlowIr>;
+}
+
+function fakeCallflowClient(): FakeCallflowClient {
+  const state: FakeCallflowClient = {
+    flows: {},
+    findPublishedIr: (tenantId: string, flowId: string) =>
+      Promise.resolve(state.flows[`${tenantId}/${flowId}`]),
   };
   return state;
 }
@@ -428,6 +444,7 @@ export async function startHarness(): Promise<Harness> {
     logger,
   });
   const voicemail = fakeVoicemailClient(storage);
+  const callflow = fakeCallflowClient();
   const projection = createProjection(
     readModel,
     opensipsProjection,
@@ -449,6 +466,7 @@ export async function startHarness(): Promise<Harness> {
     trunkConfig,
     orgClient,
     voicemail,
+    callflow,
     storage,
     redis,
     logger,

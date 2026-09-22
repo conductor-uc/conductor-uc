@@ -137,6 +137,10 @@ services:
       # 06's recording pipeline spool. Never a named volume — nothing
       # durable lives on a FreeSWITCH node (CLAUDE.md rule 5).
       - /var/spool/cuc/rec
+      # S2-10's flow-IR cache. tmpfs for the same reason, and losing it costs
+      # nothing: the runner fetches the IR on every call anyway, and only
+      # falls back to this cache when callflow-service is unreachable.
+      - /var/cache/cuc/flow
 
   opensips:
     # S1-11. telephony/opensips's own Dockerfile builds this from the
@@ -303,6 +307,8 @@ services:
         condition: service_started
       voicemail-service:
         condition: service_started
+      callflow-service:
+        condition: service_started
     environment:
       SERVICE_NAME: telephony-config
       DB_HOST: mariadb
@@ -329,6 +335,7 @@ services:
       STORAGE_FORCE_PATH_STYLE: 'true'
       ORG_SERVICE_URL: http://org-service:8080
       VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
+      CALLFLOW_SERVICE_URL: http://callflow-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
       RECONCILE_INTERVAL_MS: '900000'

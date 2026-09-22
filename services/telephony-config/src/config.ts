@@ -62,6 +62,8 @@ export const configSchema = Type.Object({
   ORG_SERVICE_URL: Env.url(),
   /** Base URL for voicemail-service's internal API, e.g. http://voicemail-service:8080 (S2-16). */
   VOICEMAIL_SERVICE_URL: Env.url(),
+  /** Base URL for callflow-service's internal API, e.g. http://callflow-service:8080 (S2-09/S2-10). */
+  CALLFLOW_SERVICE_URL: Env.url(),
   /**
    * Shared bearer token pbx-config-service's and trunk-service's
    * `/internal/v1` routes expect (07 §1's precedent, same variable name

@@ -206,6 +206,66 @@ export function buildVoicemailDialplanDocument(
 }
 
 /**
+ * S2-10: hands a call off to `flow_runner.lua`, the auto-attendant/call-flow
+ * interpreter. Reached two ways, both of which land here:
+ *
+ *   - a DID whose `destination_type` is `flow` (G-25's "each later stage
+ *     teaches `/fs/dialplan` to resolve its own destination type" — this is
+ *     that stage for `flow`), and
+ *   - a tenant-internal entry point dialed from `from-ext`.
+ *
+ * The runner needs the tenant's own SIP domain and the OpenSIPs route URI to
+ * bridge `extension`/`ring_group` nodes back out through the edge, exactly
+ * the way `buildDialplanDocument` does. Rather than teach the Lua script to
+ * look those up over HTTP on every call, they are set here as channel
+ * variables — the script reads them with `session:getVariable`. That keeps
+ * the runner's per-call HTTP traffic down to the one IR fetch it genuinely
+ * needs, and keeps "what domain does this tenant use" a projection concern in
+ * this service, where it already lives.
+ *
+ * `answer` runs before the script: every MVP node either plays audio or
+ * collects DTMF, both of which need early media established, and answering
+ * once here is simpler to reason about than making each node answer lazily.
+ */
+export function buildFlowDialplanDocument(
+  callerContext: string,
+  destinationNumber: string,
+  tenantId: string,
+  flowId: string,
+  entryPoint: string,
+  tenantDomain: string,
+  opensipsSipUri: string,
+): string {
+  const vars: readonly (readonly [string, string])[] = [
+    ['cuc_tenant_id', tenantId],
+    ['cuc_tenant_domain', tenantDomain],
+    ['cuc_opensips_sip_uri', opensipsSipUri],
+  ];
+
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="flow-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    vars
+      .map(
+        ([name, value]) =>
+          `          <action application="set" data="${escapeXml(`${name}=${value}`)}"/>\n`,
+      )
+      .join('') +
+    '          <action application="answer"/>\n' +
+    `          <action application="lua" data="flow_runner.lua ${escapeXml(tenantId)} ${escapeXml(flowId)} ${escapeXml(entryPoint)}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/**
  * A `from-ext` outbound-to-PSTN match (S2-04; 03 §2.1's "request from FS:
  * ... else -> do_routing(group = tenant's dr group)"). The condition matches
  * `destinationNumber` exactly as the extension dialed it (whatever
