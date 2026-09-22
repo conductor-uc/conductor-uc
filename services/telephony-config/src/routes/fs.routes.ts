@@ -594,11 +594,17 @@ export function registerFsRoutes(
         );
       }
 
-      // `extension` and `voicemail` resolve to a real call through S2-03/
-      // S2-16 — every other destination type still has no owning subsystem
-      // (docs/decisions.md G-25), so this is an honest miss, not a guess at
-      // behavior only a later stage can define.
-      if (did.destinationType !== 'extension') {
+      // `extension` (S2-03), `ring_group` (S2-08) and `voicemail` (S2-16,
+      // returned above) resolve to a real call — every other destination
+      // type still has no owning subsystem (docs/decisions.md G-25), so
+      // this is an honest miss, not a guess at behavior only a later stage
+      // can define.
+      //
+      // `ring_group` must stay in this list: the whole ring-group branch
+      // below is unreachable without it, which is exactly what broke when
+      // #133's merge dropped it — the branch survived, its guard did not,
+      // so every ring-group DID silently 404'd.
+      if (did.destinationType !== 'extension' && did.destinationType !== 'ring_group') {
         logger.info(
           { didId: did.id, destinationType: did.destinationType },
           'dialplan: DID destination type has no owning subsystem yet',
