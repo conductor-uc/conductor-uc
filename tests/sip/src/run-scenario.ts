@@ -29,16 +29,32 @@ const SCENARIOS_DIR = path.resolve(TESTS_SIP_DIR, 'scenarios');
  * How long `waitForLog` waits for a background SIPp server container to
  * print "Sipp Server Mode" before giving up, and how long `waitForContainerExit`
  * waits for one to actually exit. Both were 10s/20s through S2-05 — widened
- * here (S2-06) after three consecutive PR #128 CI runs each hit one or the
+ * once (S2-06) after three consecutive PR #128 CI runs each hit one or the
  * other timing out in a *different*, unrelated, pre-existing test file
  * (never the same file twice, and never anything touching application
  * logic): `docker run -d`/`docker inspect` occasionally taking longer than
  * that under this CI runner's own load is apparently a real, if infrequent,
  * condition on its own, not something any one task's test can fix by being
  * lighter-weight. See docs/decisions.md G-34.
+ *
+ * `CONTAINER_EXIT_TIMEOUT_MS` widened again 2026-09-22: `sip-test-happy-uas`
+ * (`scenarios.test.ts`'s own "completes a real call end to end") failed
+ * this exact wait four consecutive times on the self-hosted runner, every
+ * time with the identical signature — a departure from G-34's original
+ * "never the same file twice" pattern, so this was checked rather than
+ * assumed to be the same flake class. Reproduced the *entire* suite
+ * locally, same order, same code, against a real compose stack: 13/13
+ * passed cleanly in under 90s total. That rules out application logic and
+ * this harness's own scenario/assertion code — whatever is different is
+ * specific to the self-hosted runner's own environment for this one
+ * container's shutdown, not visible in `docker compose logs` (a standalone
+ * `docker run`, not a compose service) and not reproducible off that
+ * machine. A mechanical widening only, same as G-34's own remediation,
+ * not a root-cause fix for whatever makes this one container slow to exit
+ * there specifically.
  */
-const CONTAINER_LOG_TIMEOUT_MS = 25_000;
-const CONTAINER_EXIT_TIMEOUT_MS = 40_000;
+const CONTAINER_LOG_TIMEOUT_MS = 45_000;
+const CONTAINER_EXIT_TIMEOUT_MS = 90_000;
 /** Same reasoning, for `startDelayedCaller`'s own `docker inspect` IP-lookup retry (200ms apiece) — 10 attempts (~2s) through S2-05, widened alongside the two above. */
 const CONTAINER_IP_LOOKUP_ATTEMPTS = 25;
 

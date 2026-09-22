@@ -158,8 +158,25 @@ jobs:
   # UDP make this the slowest thing in the workflow).
   sip-smoke:
     name: SIP smoke (S1-14)
+    # Tried moving this to ubuntu-latest on 2026-09-22 to escape the
+    # self-hosted runner's slow per-layer Docker overhead (see the timeout
+    # comment below). Reverted the same day: the very first hosted run hit
+    # G-34's exact documented signature (trunk registration stuck
+    # 'unknown', a routing scenario timing out) instead of the layer-commit
+    # slowness — hosted tenancy's 2 vCPUs still can't keep up with this
+    # compose stack, which has only gotten heavier since G-34 and 84f3ec4
+    # were written. Back to self-hosted; the layer-commit overhead is the
+    # better problem to have.
     runs-on: self-hosted
-    timeout-minutes: 20
+    # Was 20. Confirmed live (2026-09-22): a single `pnpm ... --prod deploy
+    # --legacy` step's own work finishes in ~5s, but the Docker layer
+    # commit/export around it took ~260s on this runner — not a hang, just
+    # this runner's per-layer overhead. Stage 2 added several new services
+    # (call-control, callflow-service, voicemail-service) to the compose
+    # stack in one batch, each needing a from-scratch, uncached image on
+    # top of that overhead; 20 minutes was not enough headroom for the
+    # whole stack to build even once nothing is actually stuck.
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4

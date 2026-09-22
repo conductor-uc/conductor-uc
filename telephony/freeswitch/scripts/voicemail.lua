@@ -13,7 +13,7 @@ telephony-config). `telephony_config_url`/`telephony_config_token` are the
 same FreeSWITCH global variables `xml_curl.conf.xml` already uses for the
 directory/dialplan/configuration bindings (`vars.xml`).
 
-UNVERIFIED LIVE (docs/decisions.md G-38/G-39, same discipline as G-19/G-20/
+UNVERIFIED LIVE (docs/decisions.md G-38/G-41, same discipline as G-19/G-20/
 G-24/G-35/G-36 for prior tasks' own FS-side code): this codebase's own
 "no live FS node to test against in this task" constraint means the exact
 `mod_curl` API call shape below, the DTMF digit choices, and the recording
