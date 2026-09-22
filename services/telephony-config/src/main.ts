@@ -21,6 +21,7 @@ import { registerFsRoutes } from './routes/fs.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import type { TelephonyConfigDb } from './schema.js';
 import { createTrunkConfigClient } from './trunk-config-client.js';
+import { createVoicemailClient } from './voicemail-client.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -101,6 +102,10 @@ const orgClient = createOrgClient({
 });
 const miClient = createOpenSipsMiClient({ url: config.OPENSIPS_MI_URL });
 const storage = storageFromConfig(config, logger);
+const voicemailClient = createVoicemailClient({
+  baseUrl: config.VOICEMAIL_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
 
 const readModel = createReadModelRepo(db);
 const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
@@ -161,6 +166,7 @@ registerFsRoutes(
   orgClient,
   pbxConfigClient,
   storage,
+  voicemailClient,
 );
 registerInternalRoutes(
   app,

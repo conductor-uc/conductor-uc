@@ -15,14 +15,24 @@ import type { OrgClient } from '../org-client.js';
 import type { PbxConfigClient } from '../pbx-config-client.js';
 import type { OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../schema.js';
+import type { VoicemailClient } from '../voicemail-client.js';
 import {
   buildDialplanDocument,
   buildDirectoryDocument,
   buildEmergencyDialplanDocument,
   buildOutboundDialplanDocument,
+  buildVoicemailDialplanDocument,
   NOT_FOUND_DOCUMENT,
   type EmergencyLocationDetail,
 } from '../xml.js';
+
+/**
+ * S2-16: dials the calling extension's own mailbox retrieval menu. An
+ * arbitrary choice, not sourced from any spec (docs/decisions.md G-38) —
+ * `*97` is a common convention in real-world PBXes, picked for familiarity,
+ * nothing more.
+ */
+const VOICEMAIL_RETRIEVAL_FEATURE_CODE = '*97';
 
 /** `/fs/media/:tenantId/:assetId/:rate` (S2-07) — `rate` names which transcoded variant, not a raw Hz value FS would need to parse. */
 const MediaParamsSchema = Type.Object({
@@ -30,6 +40,30 @@ const MediaParamsSchema = Type.Object({
   assetId: Type.String({ minLength: 1 }),
   rate: Type.Union([Type.Literal('8k'), Type.Literal('16k')]),
 });
+
+/** `/fs/voicemail/...` (S2-16) — the Lua voicemail app's own params shapes. */
+const VoicemailExtensionParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  extensionId: Type.String({ minLength: 1 }),
+});
+const VoicemailMailboxParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  mailboxId: Type.String({ minLength: 1 }),
+});
+const VoicemailMessageParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  mailboxId: Type.String({ minLength: 1 }),
+  messageId: Type.String({ minLength: 1 }),
+});
+const VoicemailCreateMessageBodySchema = Type.Object({
+  callerIdName: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  callerIdNumber: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+});
+const VoicemailCompleteMessageBodySchema = Type.Object({
+  durationMs: Type.Number({ minimum: 0 }),
+  sizeBytes: Type.Number({ minimum: 0 }),
+});
+const VoicemailPinBodySchema = Type.Object({ pin: Type.String({ minLength: 1 }) });
 
 /**
  * The most specific outbound route matching `normalizedNumber` (S2-04):
@@ -102,6 +136,8 @@ export function registerFsRoutes(
   pbxConfigClient: PbxConfigClient,
   /** S2-07: `/fs/media/:tenantId/:assetId/:rate`'s own byte proxy — see that route's own doc comment for why this fetches bytes directly rather than redirecting. */
   storage: Storage,
+  /** S2-16: `/fs/voicemail/...`'s own client into voicemail-service's internal API. */
+  voicemailClient: VoicemailClient,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -381,6 +417,31 @@ export function registerFsRoutes(
     },
   );
 
+  /**
+   * `/fs/dialplan`'s retrieval-feature-code branch (S2-16) — dials the
+   * *calling* extension's own mailbox, not any destination number. Checked
+   * before the ordinary extension lookup, the same "special case first"
+   * pattern `handleEmergencyDial`'s own placement already establishes.
+   */
+  async function handleVoicemailRetrieval(
+    tenantId: string,
+    callerContext: string,
+    callingNumber: string | undefined,
+  ): Promise<string> {
+    if (callingNumber === undefined || callingNumber === '') return NOT_FOUND_DOCUMENT;
+    const callingExtension = await readModel.findExtensionByNumber(tenantId, callingNumber);
+    if (callingExtension === undefined) return NOT_FOUND_DOCUMENT;
+    const mailbox = await voicemailClient.findMailboxByExtension(tenantId, callingExtension.id);
+    if (mailbox === undefined) return NOT_FOUND_DOCUMENT;
+    return buildVoicemailDialplanDocument(
+      callerContext,
+      VOICEMAIL_RETRIEVAL_FEATURE_CODE,
+      'retrieve',
+      tenantId,
+      mailbox.id,
+    );
+  }
+
   app.post('/fs/dialplan', { config: { public: true } }, async (request, reply) => {
     if (!authorized(request.headers.authorization)) {
       reply.code(401);
@@ -424,6 +485,13 @@ export function registerFsRoutes(
         );
       }
 
+      // S2-16: checked before the ordinary extension lookup — see the
+      // handler's own doc comment for why, same placement discipline as G-1's
+      // emergency check above.
+      if (destinationNumber === VOICEMAIL_RETRIEVAL_FEATURE_CODE) {
+        return handleVoicemailRetrieval(tenantId, callerContext, body['variable_sip_from_user']);
+      }
+
       const extension = await readModel.findExtensionByNumber(tenantId, destinationNumber);
       if (extension === undefined) {
         // Not a known extension — S2-04: this may still be a real call, just
@@ -443,7 +511,19 @@ export function registerFsRoutes(
         return NOT_FOUND_DOCUMENT;
       }
 
-      return buildDialplanDocument(callerContext, destinationNumber, domain.fqdn, opensipsSipUri);
+      // S2-16: a mailbox, if the extension has one, becomes a no-answer/
+      // busy fallback rather than a plain hangup — fetched live (the same
+      // "not cached, correction takes effect on the next call" reasoning as
+      // S2-05's fraud limits and S2-06's emergency location).
+      const mailbox = await voicemailClient.findMailboxByExtension(tenantId, extension.id);
+      return buildDialplanDocument(
+        callerContext,
+        destinationNumber,
+        domain.fqdn,
+        opensipsSipUri,
+        destinationNumber,
+        mailbox === undefined ? undefined : { tenantId, mailboxId: mailbox.id },
+      );
     }
 
     if (callDirection === 'inbound') {
@@ -487,10 +567,26 @@ export function registerFsRoutes(
         return NOT_FOUND_DOCUMENT;
       }
 
-      // Only `extension` resolves to a real call through S2-03 — every other
-      // destination type has no owning subsystem yet (docs/decisions.md
-      // G-25), so this is an honest miss, not a guess at behavior only a
-      // later stage can define.
+      // S2-16 (G-25: "each later stage teaches /fs/dialplan to resolve its
+      // own destination type") — a DID dialed straight into a mailbox.
+      // `destinationId` names the mailbox directly for this destination
+      // type (no owning-table referential check exists for it yet, per
+      // G-25's own note — same as every other non-extension destination
+      // type today).
+      if (did.destinationType === 'voicemail') {
+        return buildVoicemailDialplanDocument(
+          callerContext,
+          destinationNumber,
+          'leave',
+          trunk.tenantId,
+          did.destinationId,
+        );
+      }
+
+      // `extension` and `voicemail` resolve to a real call through S2-03/
+      // S2-16 — every other destination type still has no owning subsystem
+      // (docs/decisions.md G-25), so this is an honest miss, not a guess at
+      // behavior only a later stage can define.
       if (did.destinationType !== 'extension') {
         logger.info(
           { didId: did.id, destinationType: did.destinationType },
@@ -593,6 +689,232 @@ export function registerFsRoutes(
         return '';
       }
 
+      reply.type('audio/wav');
+      return bytes;
+    },
+  );
+
+  /**
+   * `/fs/voicemail/...` (S2-16) — everything the Lua voicemail app
+   * (`telephony/freeswitch/scripts/voicemail.lua`) reaches over `mod_curl`,
+   * gated by the same shared `fs-node` token as every other `/fs/...` route.
+   * Each handler is a thin proxy over `voicemailClient` into
+   * voicemail-service's own internal API — this service never touches
+   * voicemail-service's database (05 §1.1).
+   */
+  app.get(
+    '/fs/voicemail/:tenantId/mailbox/by-extension/:extensionId',
+    { config: { public: true }, schema: { params: VoicemailExtensionParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, extensionId } = request.params;
+      const mailbox = await voicemailClient.findMailboxByExtension(tenantId, extensionId);
+      if (mailbox === undefined) {
+        reply.code(404);
+        return '';
+      }
+      return mailbox;
+    },
+  );
+
+  app.post(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/verify-pin',
+    {
+      config: { public: true },
+      schema: { params: VoicemailMailboxParamsSchema, body: VoicemailPinBodySchema },
+    },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId } = request.params;
+      const valid = await voicemailClient.verifyPin(tenantId, mailboxId, request.body.pin);
+      return { valid };
+    },
+  );
+
+  app.post(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages',
+    {
+      config: { public: true },
+      schema: { params: VoicemailMailboxParamsSchema, body: VoicemailCreateMessageBodySchema },
+    },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId } = request.params;
+      const result = await voicemailClient.createMessage(tenantId, mailboxId, request.body);
+      return reply.status(201).send(result);
+    },
+  );
+
+  app.post(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/complete',
+    {
+      config: { public: true },
+      schema: { params: VoicemailMessageParamsSchema, body: VoicemailCompleteMessageBodySchema },
+    },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId, messageId } = request.params;
+      return voicemailClient.completeMessage(tenantId, mailboxId, messageId, request.body);
+    },
+  );
+
+  app.post(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/fail',
+    { config: { public: true }, schema: { params: VoicemailMessageParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId, messageId } = request.params;
+      await voicemailClient.failMessage(tenantId, mailboxId, messageId);
+      return reply.status(204).send();
+    },
+  );
+
+  app.get(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages',
+    { config: { public: true }, schema: { params: VoicemailMailboxParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId } = request.params;
+      return { rows: await voicemailClient.listMessages(tenantId, mailboxId) };
+    },
+  );
+
+  app.post(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/mark-read',
+    { config: { public: true }, schema: { params: VoicemailMessageParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId, messageId } = request.params;
+      return voicemailClient.markMessageRead(tenantId, mailboxId, messageId);
+    },
+  );
+
+  app.post(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/delete',
+    { config: { public: true }, schema: { params: VoicemailMessageParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId, messageId } = request.params;
+      await voicemailClient.deleteMessage(tenantId, mailboxId, messageId);
+      return reply.status(204).send();
+    },
+  );
+
+  app.post(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/greeting/presign',
+    { config: { public: true }, schema: { params: VoicemailMailboxParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId } = request.params;
+      const result = await voicemailClient.presignGreeting(tenantId, mailboxId);
+      return reply.status(201).send(result);
+    },
+  );
+
+  app.post(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/greeting/complete',
+    { config: { public: true }, schema: { params: VoicemailMailboxParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId } = request.params;
+      return voicemailClient.completeGreeting(tenantId, mailboxId);
+    },
+  );
+
+  /**
+   * The playback byte-proxy for a message or the greeting — the exact same
+   * "fetch and return bytes directly, don't redirect" reasoning as
+   * `/fs/media/...` (S2-07's own doc comment above, unchanged here).
+   */
+  app.get(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/audio',
+    { config: { public: true }, schema: { params: VoicemailMessageParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId, messageId } = request.params;
+      const message = await voicemailClient.findMessage(tenantId, mailboxId, messageId);
+      if (message === undefined || message.status !== 'ready') {
+        reply.code(404);
+        return '';
+      }
+      let bytes: Buffer;
+      try {
+        bytes = await storage.forTenant(tenantId).getObject(message.objectKey);
+      } catch (error) {
+        logger.error(
+          { tenantId, mailboxId, messageId, err: error },
+          'voicemail: could not read message audio',
+        );
+        reply.code(502);
+        return '';
+      }
+      reply.type('audio/wav');
+      return bytes;
+    },
+  );
+
+  app.get(
+    '/fs/voicemail/:tenantId/mailbox/:mailboxId/greeting/audio',
+    { config: { public: true }, schema: { params: VoicemailMailboxParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, mailboxId } = request.params;
+      const mailbox = await voicemailClient.findMailbox(tenantId, mailboxId);
+      if (
+        mailbox === undefined ||
+        mailbox.greetingStatus !== 'ready' ||
+        mailbox.greetingObjectKey === null
+      ) {
+        reply.code(404);
+        return '';
+      }
+      let bytes: Buffer;
+      try {
+        bytes = await storage.forTenant(tenantId).getObject(mailbox.greetingObjectKey);
+      } catch (error) {
+        logger.error(
+          { tenantId, mailboxId, err: error },
+          'voicemail: could not read greeting audio',
+        );
+        reply.code(502);
+        return '';
+      }
       reply.type('audio/wav');
       return bytes;
     },
