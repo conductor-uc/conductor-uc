@@ -13,6 +13,10 @@ FROM safarov/freeswitch:1.10.12
 # demo config — not layered on top of it.
 COPY conf/ /etc/freeswitch/
 
+# S2-16: the voicemail Lua app. `lua.conf.xml` points mod_lua's own
+# script-path at this exact directory.
+COPY scripts/ /etc/freeswitch/scripts/
+
 # 06's recording pipeline spool. Created here so `docker run` without an
 # explicit volume still has somewhere to write; compose mounts this as tmpfs
 # (CLAUDE.md rule 5 — nothing durable lives on the node).

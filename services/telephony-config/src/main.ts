@@ -22,6 +22,7 @@ import { registerFsRoutes } from './routes/fs.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import type { TelephonyConfigDb } from './schema.js';
 import { createTrunkConfigClient } from './trunk-config-client.js';
+import { createVoicemailClient } from './voicemail-client.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -102,11 +103,10 @@ const orgClient = createOrgClient({
 });
 const miClient = createOpenSipsMiClient({ url: config.OPENSIPS_MI_URL });
 const storage = storageFromConfig(config, logger);
-// S2-08: the round-robin ring-group counter (`ring-group-counter.ts`) —
-// same `lazyConnect: false`/`maxRetriesPerRequest` shape api-gateway's own
-// rate-limiter client uses, so this fails fast at startup rather than
-// retrying forever silently.
-const redisClient = new Redis(config.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: 2 });
+const voicemailClient = createVoicemailClient({
+  baseUrl: config.VOICEMAIL_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
 
 const readModel = createReadModelRepo(db);
 const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
@@ -170,7 +170,7 @@ registerFsRoutes(
   orgClient,
   pbxConfigClient,
   storage,
-  redisClient,
+  voicemailClient,
 );
 registerInternalRoutes(
   app,

@@ -39,6 +39,13 @@ import type {
   TrunkConfig,
   TrunkConfigClient,
 } from '../src/trunk-config-client.js';
+import type {
+  CompleteVoicemailMessageInput,
+  CreateVoicemailMessageInput,
+  VoicemailClient,
+  VoicemailMailbox,
+  VoicemailMessage,
+} from '../src/voicemail-client.js';
 import { migrations } from '../migrations/index.js';
 
 /** OpenSIPs' own SIP URI, as `config.ts`'s `OPENSIPS_SIP_URI` would carry it. */
@@ -54,6 +61,7 @@ export interface Harness {
   readonly pbxConfig: FakePbxConfigClient;
   readonly trunkConfig: FakeTrunkConfigClient;
   readonly orgClient: FakeOrgClient;
+  readonly voicemail: FakeVoicemailClient;
   readonly storage: Storage;
   readonly redis: Redis;
   readonly logger: Logger;
@@ -152,6 +160,114 @@ function fakeOrgClient(): FakeOrgClient {
     limits: {},
     findCountry: (tenantId: string) => Promise.resolve(state.countries[tenantId]),
     findLimits: (tenantId: string) => Promise.resolve(state.limits[tenantId]),
+  };
+  return state;
+}
+
+export interface FakeVoicemailClient extends VoicemailClient {
+  mailboxes: Record<string, VoicemailMailbox & { readonly tenantId: string; pin: string }>;
+  messages: Record<
+    string,
+    VoicemailMessage & { readonly tenantId: string; readonly mailboxId: string }
+  >;
+}
+
+/**
+ * A real-storage-backed stand-in for voicemail-service's own internal API —
+ * no live voicemail-service needed. Real presigned URLs (via `storage`, the
+ * same real MinIO the harness already runs) so `/fs/voicemail/...`'s own
+ * byte-proxy routes are exercised against real bytes, not a mock — the same
+ * discipline `fakePbxConfigClient`'s media-asset test coverage already
+ * established for `/fs/media/...` in S2-07.
+ */
+function fakeVoicemailClient(storage: Storage): FakeVoicemailClient {
+  let messageCounter = 0;
+  const state: FakeVoicemailClient = {
+    mailboxes: {},
+    messages: {},
+    findMailboxByExtension: (tenantId: string, extensionId: string) =>
+      Promise.resolve(
+        Object.values(state.mailboxes).find(
+          (m) => m.tenantId === tenantId && m.extensionId === extensionId,
+        ),
+      ),
+    findMailbox: (_tenantId: string, mailboxId: string) =>
+      Promise.resolve(state.mailboxes[mailboxId]),
+    findMessage: (_tenantId: string, _mailboxId: string, messageId: string) =>
+      Promise.resolve(state.messages[messageId]),
+    verifyPin: (_tenantId: string, mailboxId: string, pin: string) =>
+      Promise.resolve(state.mailboxes[mailboxId]?.pin === pin),
+    async createMessage(tenantId: string, mailboxId: string, input: CreateVoicemailMessageInput) {
+      const messageId = `msg-${String((messageCounter += 1))}`;
+      const objectKey = `voicemail/${mailboxId}/${messageId}.wav`;
+      const uploadUrl = await storage
+        .forTenant(tenantId)
+        .presignPut(objectKey, { contentType: 'audio/wav' });
+      state.messages[messageId] = {
+        id: messageId,
+        tenantId,
+        mailboxId,
+        status: 'pending',
+        objectKey,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+      };
+      void input;
+      return { messageId, uploadUrl, objectKey };
+    },
+    completeMessage: (
+      _tenantId: string,
+      _mailboxId: string,
+      messageId: string,
+      _input: CompleteVoicemailMessageInput,
+    ) => {
+      const message = state.messages[messageId];
+      if (message === undefined) throw new Error(`No fake message '${messageId}'.`);
+      state.messages[messageId] = { ...message, status: 'ready' };
+      return Promise.resolve(state.messages[messageId]);
+    },
+    failMessage: (_tenantId: string, _mailboxId: string, messageId: string) => {
+      const message = state.messages[messageId];
+      if (message !== undefined) state.messages[messageId] = { ...message, status: 'failed' };
+      return Promise.resolve();
+    },
+    listMessages: (tenantId: string, mailboxId: string) =>
+      Promise.resolve(
+        Object.values(state.messages).filter(
+          (m) => m.tenantId === tenantId && m.mailboxId === mailboxId && m.status === 'ready',
+        ),
+      ),
+    markMessageRead: (_tenantId: string, _mailboxId: string, messageId: string) => {
+      const message = state.messages[messageId];
+      if (message === undefined) throw new Error(`No fake message '${messageId}'.`);
+      state.messages[messageId] = { ...message, isRead: true };
+      return Promise.resolve(state.messages[messageId]);
+    },
+    deleteMessage: (_tenantId: string, _mailboxId: string, messageId: string) => {
+      delete state.messages[messageId];
+      return Promise.resolve();
+    },
+    async presignGreeting(tenantId: string, mailboxId: string) {
+      const objectKey = `voicemail/${mailboxId}/greeting.wav`;
+      const uploadUrl = await storage
+        .forTenant(tenantId)
+        .presignPut(objectKey, { contentType: 'audio/wav' });
+      const mailbox = state.mailboxes[mailboxId];
+      if (mailbox !== undefined) {
+        state.mailboxes[mailboxId] = {
+          ...mailbox,
+          greetingStatus: 'pending',
+          greetingObjectKey: objectKey,
+        };
+      }
+      return { uploadUrl, objectKey };
+    },
+    completeGreeting: (_tenantId: string, mailboxId: string) => {
+      const mailbox = state.mailboxes[mailboxId];
+      if (mailbox === undefined) throw new Error(`No fake mailbox '${mailboxId}'.`);
+      state.mailboxes[mailboxId] = { ...mailbox, greetingStatus: 'ready' };
+      return Promise.resolve(state.mailboxes[mailboxId]);
+    },
   };
   return state;
 }
@@ -311,6 +427,7 @@ export async function startHarness(): Promise<Harness> {
     forcePathStyle: s3Handle.forcePathStyle,
     logger,
   });
+  const voicemail = fakeVoicemailClient(storage);
   const projection = createProjection(
     readModel,
     opensipsProjection,
@@ -331,6 +448,7 @@ export async function startHarness(): Promise<Harness> {
     pbxConfig,
     trunkConfig,
     orgClient,
+    voicemail,
     storage,
     redis,
     logger,
