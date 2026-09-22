@@ -107,6 +107,11 @@ const voicemailClient = createVoicemailClient({
   baseUrl: config.VOICEMAIL_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
+// S2-08: the round-robin ring-group counter (`ring-group-counter.ts`) —
+// same `lazyConnect: false`/`maxRetriesPerRequest` shape api-gateway's own
+// rate-limiter client uses, so this fails fast at startup rather than
+// retrying forever silently.
+const redisClient = new Redis(config.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: 2 });
 
 const readModel = createReadModelRepo(db);
 const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
@@ -171,6 +176,7 @@ registerFsRoutes(
   pbxConfigClient,
   storage,
   voicemailClient,
+  redisClient,
 );
 registerInternalRoutes(
   app,
