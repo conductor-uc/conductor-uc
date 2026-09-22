@@ -290,6 +290,8 @@ services:
         condition: service_healthy
       nats:
         condition: service_healthy
+      minio:
+        condition: service_healthy
       org-service:
         condition: service_started
       pbx-config-service:
@@ -315,6 +317,11 @@ services:
       OPENSIPS_SIP_URI: opensips:${OPENSIPS_SIP_PORT:-5060}
       PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
       TRUNK_SERVICE_URL: http://trunk-service:8080
+      STORAGE_BUCKET_PREFIX: cuc-dev
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
+      STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
+      STORAGE_FORCE_PATH_STYLE: 'true'
       ORG_SERVICE_URL: http://org-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
