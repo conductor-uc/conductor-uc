@@ -45,7 +45,13 @@ export default mergeConfig(
       // prior attempt before starting (their own doc comments call this out
       // for exactly this "crashed prior run" case), and every test clears
       // the registrations it depends on before dialing.
+      //
+      // `src/setup.ts` is what makes a retry a real second chance rather
+      // than a replay: it clears any FS channels a failed attempt left
+      // behind, which is why the first cut of this `retry` alone did not
+      // help (all three attempts failed identically — see that file).
       retry: 2,
+      setupFiles: ['./src/setup.ts'],
     },
   }),
 );
