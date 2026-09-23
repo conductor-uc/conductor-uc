@@ -22,8 +22,8 @@ export const configSchema = Type.Object({
   SMTP_PORT: Env.int({ minimum: 1, maximum: 65_535, default: 587 }),
   /** Implicit TLS (port 465). Leave off for STARTTLS or a plain local relay. */
   SMTP_SECURE: Env.bool({ default: false }),
-  SMTP_USER: Env.string({ optional: true }),
-  SMTP_PASSWORD: Env.secret({ optional: true }),
+  SMTP_USER: Env.optional(Env.string()),
+  SMTP_PASSWORD: Env.optional(Env.secret()),
 
   /**
    * The sender address of every email (S3-03). A reseller's own address is not
@@ -40,7 +40,7 @@ export const configSchema = Type.Object({
    * Full base URL to use for links instead of any derived one (for example a
    * local console at `http://localhost:8099`). Development only.
    */
-  CONSOLE_URL_OVERRIDE: Env.string({ optional: true }),
+  CONSOLE_URL_OVERRIDE: Env.optional(Env.string()),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;
