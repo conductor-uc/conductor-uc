@@ -143,11 +143,11 @@ class ResourceView extends ConsumerWidget {
     WidgetRef ref, [
     Json? row,
   ]) async {
-    final saved = await showDialog<bool>(
+    final saved = await showDialog<Json>(
       context: context,
       builder: (_) => ResourceFormDialog(def: def, row: row),
     );
-    if (saved == true) ref.invalidate(rowsProvider(def.key));
+    if (saved != null) ref.invalidate(rowsProvider(def.key));
   }
 
   Future<void> _confirmDelete(

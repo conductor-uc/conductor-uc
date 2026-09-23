@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/acting.dart';
 import '../../core/session.dart';
 import '../pbx/pbx_api.dart';
+import '../pbx/resource_form.dart';
+import 'org_defs.dart';
 import 'orgs_api.dart';
 
 /// Read-only browsing of the org tree, with "Act as" on each tenant. Creating
@@ -47,6 +49,15 @@ class OrgsPage extends ConsumerWidget {
                   style: textTheme.headlineSmall,
                 ),
               ),
+              FilledButton.icon(
+                onPressed: () => _create(
+                  context,
+                  ref,
+                  showingResellers ? null : resellerId ?? session.orgId,
+                ),
+                icon: const Icon(Icons.add),
+                label: Text(showingResellers ? 'New reseller' : 'New tenant'),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -77,6 +88,37 @@ class OrgsPage extends ConsumerWidget {
       ),
     );
   }
+
+  /// Creates a reseller (`parentReseller` null) or a tenant under one.
+  Future<void> _create(
+    BuildContext context,
+    WidgetRef ref,
+    String? parentReseller,
+  ) async {
+    final api = ref.read(orgsApiProvider);
+    if (api == null) return;
+    final created = await showDialog<Json>(
+      context: context,
+      builder: (_) => ResourceFormDialog(
+        def: parentReseller == null ? resellerDef : tenantDef,
+        save: (_, body) => api.create(resellerId: parentReseller, body: body),
+      ),
+    );
+    if (created == null) return;
+    ref.invalidate(resellersProvider);
+    if (parentReseller != null) ref.invalidate(tenantsProvider(parentReseller));
+    final admin = (created['adminUser'] as Map?)?['email'];
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Created ${created['name']}.'
+            '${admin == null ? '' : ' Its administrator signs in as $admin.'}',
+          ),
+        ),
+      );
+    }
+  }
 }
 
 class _OrgTile extends ConsumerWidget {
@@ -96,9 +138,11 @@ class _OrgTile extends ConsumerWidget {
       subtitle: Text(
         suspended ? '${org['slug']} · ${org['status']}' : '${org['slug']}',
       ),
-      trailing: isReseller
-          ? const Icon(Icons.chevron_right)
-          : FilledButton.tonal(
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (!isReseller)
+            FilledButton.tonal(
               onPressed: suspended
                   ? null
                   : () {
@@ -114,7 +158,78 @@ class _OrgTile extends ConsumerWidget {
                     },
               child: const Text('Act as'),
             ),
+          PopupMenuButton<String>(
+            tooltip: 'More',
+            onSelected: (choice) => _menu(context, ref, choice),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Text('Edit')),
+              PopupMenuItem(
+                value: 'suspend',
+                child: Text(suspended ? 'Resume' : 'Suspend'),
+              ),
+            ],
+          ),
+          if (isReseller) const Icon(Icons.chevron_right),
+        ],
+      ),
       onTap: isReseller ? () => context.go('/resellers/${org['id']}') : null,
     );
+  }
+}
+
+extension on _OrgTile {
+  Future<void> _menu(BuildContext context, WidgetRef ref, String choice) async {
+    final api = ref.read(orgsApiProvider);
+    if (api == null) return;
+    final id = '${org['id']}';
+    void refresh() {
+      ref.invalidate(resellersProvider);
+      ref.invalidate(tenantsProvider);
+    }
+
+    if (choice == 'edit') {
+      final saved = await showDialog<Json>(
+        context: context,
+        builder: (_) => ResourceFormDialog(
+          def: isReseller ? resellerDef : tenantDef,
+          row: org,
+          save: (_, body) =>
+              api.update(reseller: isReseller, id: id, body: body),
+        ),
+      );
+      if (saved != null) refresh();
+      return;
+    }
+
+    final suspend = org['status'] == 'active';
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('${suspend ? 'Suspend' : 'Resume'} ${org['name']}?'),
+        content: Text(
+          suspend
+              ? 'Their users are signed out and calls stop routing until it is resumed.'
+              : 'Service is restored.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(suspend ? 'Suspend' : 'Resume'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await api.setSuspended(reseller: isReseller, id: id, suspended: suspend);
+      refresh();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
+    }
   }
 }

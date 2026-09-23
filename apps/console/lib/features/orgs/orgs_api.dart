@@ -21,10 +21,81 @@ class OrgsApi {
     return [for (final r in rows) (r as Map).cast<String, dynamic>()];
   }
 
+  Options get _options => Options(headers: {'Authorization': 'Bearer $_token'});
+
+  Future<Json> _body(Future<Response<Object?>> call) async =>
+      ((await call).data as Map).cast<String, dynamic>();
+
   Future<List<Json>> resellers() => _rows('/v1/resellers');
 
   Future<List<Json>> tenantsOf(String resellerId) =>
       _rows('/v1/resellers/$resellerId/tenants');
+
+  /// A reseller (under the master), or a tenant under [resellerId].
+  Future<Json> create({String? resellerId, required Json body}) => _body(
+    _dio.post<Object?>(
+      resellerId == null
+          ? '/v1/resellers'
+          : '/v1/resellers/$resellerId/tenants',
+      data: body,
+      options: _options,
+    ),
+  );
+
+  Future<Json> update({
+    required bool reseller,
+    required String id,
+    required Json body,
+  }) => _body(
+    _dio.patch<Object?>(
+      reseller ? '/v1/resellers/$id' : '/v1/tenants/$id',
+      data: body,
+      options: _options,
+    ),
+  );
+
+  Future<void> setSuspended({
+    required bool reseller,
+    required String id,
+    required bool suspended,
+  }) async {
+    final base = reseller ? '/v1/resellers' : '/v1/tenants';
+    await _dio.post<Object?>(
+      '$base/$id/${suspended ? 'suspend' : 'resume'}',
+      options: _options,
+    );
+  }
+
+  /// The reseller's brand, or null when none has been saved yet.
+  Future<Json?> brand(String resellerId) async {
+    try {
+      return await _body(
+        _dio.get<Object?>('/v1/resellers/$resellerId/brand', options: _options),
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  Future<Json> saveBrand(String resellerId, Json body) => _body(
+    _dio.put<Object?>(
+      '/v1/resellers/$resellerId/brand',
+      data: body,
+      options: _options,
+    ),
+  );
+
+  Future<List<Json>> consoleHostnames(String resellerId) =>
+      _rows('/v1/resellers/$resellerId/console-hostnames');
+
+  Future<Json> addConsoleHostname(String resellerId, String fqdn) => _body(
+    _dio.post<Object?>(
+      '/v1/resellers/$resellerId/console-hostnames',
+      data: {'fqdn': fqdn},
+      options: _options,
+    ),
+  );
 }
 
 final orgsApiProvider = Provider<OrgsApi?>((ref) {
@@ -43,4 +114,19 @@ final tenantsProvider = FutureProvider.family<List<Json>, String>((
   resellerId,
 ) async {
   return await ref.watch(orgsApiProvider)?.tenantsOf(resellerId) ?? const [];
+});
+
+final brandProviderFor = FutureProvider.family<Json?, String>((
+  ref,
+  resellerId,
+) {
+  return ref.watch(orgsApiProvider)?.brand(resellerId) ?? Future.value();
+});
+
+final consoleHostnamesProvider = FutureProvider.family<List<Json>, String>((
+  ref,
+  resellerId,
+) async {
+  return await ref.watch(orgsApiProvider)?.consoleHostnames(resellerId) ??
+      const [];
 });

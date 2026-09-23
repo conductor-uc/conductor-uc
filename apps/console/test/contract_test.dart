@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:console/features/orgs/brand_page.dart';
+import 'package:console/features/orgs/org_defs.dart';
 import 'package:console/features/pbx/resource.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -103,5 +105,64 @@ void main() {
         reason: path,
       );
     }
+  });
+
+  group('org forms', () {
+    Set<String> props(String path, String method) =>
+        (_schema(
+                  (paths[path] as Map)[method] as Map<String, dynamic>,
+                )['properties']
+                as Map)
+            .keys
+            .cast<String>()
+            .toSet();
+
+    for (final (def, createPath, editPath) in [
+      (resellerDef, '/v1/resellers', '/v1/resellers/{id}'),
+      (tenantDef, '/v1/resellers/{id}/tenants', '/v1/tenants/{id}'),
+    ]) {
+      test('${def.key}: create fields are exactly the create body', () {
+        expect({
+          for (final f in def.fields.where((f) => f.inScope(editing: false)))
+            f.key,
+        }, props(createPath, 'post'));
+      });
+
+      test('${def.key}: edit fields are accepted by the update route', () {
+        expect(
+          props(editPath, 'patch'),
+          containsAll([
+            for (final f in def.fields.where((f) => f.inScope(editing: true)))
+              f.key,
+          ]),
+        );
+      });
+    }
+
+    test(
+      'brand editor sends every field the service takes but the uploads',
+      () {
+        expect(
+          {for (final f in brandFields) f.$1},
+          props(
+            '/v1/resellers/{id}/brand',
+            'put',
+          ).difference({'logoLightKey', 'logoDarkKey', 'faviconKey'}),
+        );
+      },
+    );
+
+    test('console hostname rows carry what the brand page reads', () {
+      final list = _schema(
+        ((paths['/v1/resellers/{id}/console-hostnames'] as Map)['get'])
+            as Map<String, dynamic>,
+        response: '200',
+      );
+      final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll(['fqdn', 'tlsStatus']),
+      );
+    });
   });
 }

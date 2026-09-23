@@ -167,57 +167,150 @@ class DemoPbx {
     r'^/v1/tenants/[^/]+/([^/]+)(?:/([^/]+))?(?:/([^/]+))?$',
   );
 
-  static const _resellers = [
-    {'id': 'rs-1', 'name': 'Northwind Telecom', 'slug': 'northwind'},
-    {'id': 'rs-2', 'name': 'Harbor Voice', 'slug': 'harbor'},
+  final _resellers = <Map<String, dynamic>>[
+    _org('rs-1', 'Northwind Telecom', 'northwind'),
+    _org('rs-2', 'Harbor Voice', 'harbor'),
   ];
 
-  static const _tenants = {
+  final _tenants = <String, List<Map<String, dynamic>>>{
     'rs-1': [
-      {
-        'id': 't-1',
-        'name': 'Acme Dental',
-        'slug': 'acme-dental',
-        'status': 'active',
-      },
-      {
-        'id': 't-2',
-        'name': 'Blue Bottle Cafe',
-        'slug': 'blue-bottle',
-        'status': 'active',
-      },
-      {
-        'id': 't-3',
-        'name': 'Old Company',
-        'slug': 'old-co',
-        'status': 'suspended',
-      },
+      _org('t-1', 'Acme Dental', 'acme-dental'),
+      _org('t-2', 'Blue Bottle Cafe', 'blue-bottle'),
+      _org('t-3', 'Old Company', 'old-co', status: 'suspended'),
     ],
-    'rs-2': [
-      {
-        'id': 't-4',
-        'name': 'Lakeside Realty',
-        'slug': 'lakeside',
-        'status': 'active',
-      },
-    ],
+    'rs-2': [_org('t-4', 'Lakeside Realty', 'lakeside')],
   };
 
-  /// The org tree: the master's resellers and each reseller's tenants. A
-  /// reseller signed in through the demo has an id of its own, so any id not
-  /// listed gets the first reseller's tenants.
-  ResponseBody? _orgs(RequestOptions options) {
-    if (options.path == '/v1/resellers') {
-      return _json({
-        'rows': [
-          for (final r in _resellers) {...r, 'status': 'active'},
-        ],
-      });
+  final _brands = <String, Map<String, dynamic>>{};
+  final _hostnames = <String, List<Map<String, dynamic>>>{};
+
+  static Map<String, dynamic> _org(
+    String id,
+    String name,
+    String slug, {
+    String status = 'active',
+  }) => {
+    'id': id,
+    'name': name,
+    'slug': slug,
+    'status': status,
+    'timezone': 'UTC',
+    'country': 'US',
+  };
+
+  Map<String, dynamic>? _findOrg(String id) {
+    for (final r in _resellers) {
+      if (r['id'] == id) return r;
     }
-    final match = RegExp(r'^/v1/resellers/([^/]+)/tenants$')
-        .firstMatch(options.path);
-    if (match == null) return null;
-    return _json({'rows': _tenants[match.group(1)] ?? _tenants['rs-1']!});
+    for (final list in _tenants.values) {
+      for (final t in list) {
+        if (t['id'] == id) return t;
+      }
+    }
+    return null;
+  }
+
+  /// The org tree and a reseller's brand and hostnames. A reseller signed in
+  /// through the demo has an id of its own, so an id not listed is treated as
+  /// the first reseller's.
+  ResponseBody? _orgs(RequestOptions options) {
+    final path = options.path;
+    final method = options.method.toUpperCase();
+    if (path == '/v1/resellers') {
+      if (method == 'GET') {
+        return _json({'rows': _resellers});
+      }
+      return _createOrg(_resellers, _body(options));
+    }
+    final tenants = RegExp(r'^/v1/resellers/([^/]+)/tenants$').firstMatch(path);
+    if (tenants != null) {
+      final list = _tenants.putIfAbsent(
+        tenants.group(1)!,
+        () => [...?_tenants['rs-1']],
+      );
+      return method == 'GET'
+          ? _json({'rows': list})
+          : _createOrg(list, _body(options));
+    }
+    final org = RegExp(
+      r'^/v1/(?:resellers|tenants)/([^/]+)(?:/(suspend|resume))?$',
+    ).firstMatch(path);
+    if (org != null) {
+      final row = _findOrg(org.group(1)!);
+      if (row == null) return _problem(404, 'Not found.');
+      if (org.group(2) != null) {
+        row['status'] = org.group(2) == 'suspend' ? 'suspended' : 'active';
+        return _json(row);
+      }
+      if (method == 'PATCH') {
+        final body = _body(options);
+        for (final k in const ['name', 'timezone', 'country']) {
+          if (body[k] != null) row[k] = body[k];
+        }
+      }
+      return _json(row);
+    }
+    final brand = RegExp(r'^/v1/resellers/([^/]+)/brand$').firstMatch(path);
+    if (brand != null) {
+      final id = brand.group(1)!;
+      if (method == 'PUT') {
+        final body = _body(options);
+        for (final k in const ['primaryColor', 'accentColor']) {
+          final v = body[k];
+          if (v != null && !RegExp(r'^#[0-9a-fA-F]{6}$').hasMatch('$v')) {
+            return _problem(400, '$k must be a #rrggbb color.');
+          }
+        }
+        return _json(_brands[id] = {'resellerId': id, ...body});
+      }
+      final saved = _brands[id];
+      return saved == null ? _problem(404, 'No brand yet.') : _json(saved);
+    }
+    final hosts = RegExp(r'^/v1/resellers/([^/]+)/console-hostnames$')
+        .firstMatch(path);
+    if (hosts != null) {
+      final id = hosts.group(1)!;
+      final list = _hostnames.putIfAbsent(id, () => []);
+      if (method == 'GET') return _json({'rows': list});
+      final fqdn = _body(options)['fqdn'];
+      if (list.any((h) => h['fqdn'] == fqdn)) {
+        return _problem(409, '$fqdn is already a console hostname.');
+      }
+      final row = {'fqdn': fqdn, 'resellerId': id, 'tlsStatus': 'pending'};
+      list.add(row);
+      return _json(row, 201);
+    }
+    return null;
+  }
+
+  ResponseBody _createOrg(
+    List<Map<String, dynamic>> into,
+    Map<String, dynamic> body,
+  ) {
+    for (final k in const [
+      'slug',
+      'name',
+      'adminEmail',
+      'adminDisplayName',
+      'adminPassword',
+    ]) {
+      if ('${body[k] ?? ''}'.trim().isEmpty) {
+        return _problem(400, '$k is required.');
+      }
+    }
+    if (into.any((o) => o['slug'] == body['slug'])) {
+      return _problem(409, 'The short name ${body['slug']} is taken.');
+    }
+    final created = _org(
+      'org-${_next++}',
+      '${body['name']}',
+      '${body['slug']}',
+    );
+    into.add(created);
+    return _json({
+      ...created,
+      'adminUser': {'id': 'user-${_next++}', 'email': body['adminEmail']},
+    }, 201);
   }
 
   /// Null when [options] is not a tenant route.
