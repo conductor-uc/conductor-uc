@@ -167,8 +167,63 @@ class DemoPbx {
     r'^/v1/tenants/[^/]+/([^/]+)(?:/([^/]+))?(?:/([^/]+))?$',
   );
 
+  static const _resellers = [
+    {'id': 'rs-1', 'name': 'Northwind Telecom', 'slug': 'northwind'},
+    {'id': 'rs-2', 'name': 'Harbor Voice', 'slug': 'harbor'},
+  ];
+
+  static const _tenants = {
+    'rs-1': [
+      {
+        'id': 't-1',
+        'name': 'Acme Dental',
+        'slug': 'acme-dental',
+        'status': 'active',
+      },
+      {
+        'id': 't-2',
+        'name': 'Blue Bottle Cafe',
+        'slug': 'blue-bottle',
+        'status': 'active',
+      },
+      {
+        'id': 't-3',
+        'name': 'Old Company',
+        'slug': 'old-co',
+        'status': 'suspended',
+      },
+    ],
+    'rs-2': [
+      {
+        'id': 't-4',
+        'name': 'Lakeside Realty',
+        'slug': 'lakeside',
+        'status': 'active',
+      },
+    ],
+  };
+
+  /// The org tree: the master's resellers and each reseller's tenants. A
+  /// reseller signed in through the demo has an id of its own, so any id not
+  /// listed gets the first reseller's tenants.
+  ResponseBody? _orgs(RequestOptions options) {
+    if (options.path == '/v1/resellers') {
+      return _json({
+        'rows': [
+          for (final r in _resellers) {...r, 'status': 'active'},
+        ],
+      });
+    }
+    final match = RegExp(r'^/v1/resellers/([^/]+)/tenants$')
+        .firstMatch(options.path);
+    if (match == null) return null;
+    return _json({'rows': _tenants[match.group(1)] ?? _tenants['rs-1']!});
+  }
+
   /// Null when [options] is not a tenant route.
   ResponseBody? handle(RequestOptions options) {
+    final orgs = _orgs(options);
+    if (orgs != null) return orgs;
     final match = _route.firstMatch(options.path);
     if (match == null) return null;
     final resource = match.group(1)!;

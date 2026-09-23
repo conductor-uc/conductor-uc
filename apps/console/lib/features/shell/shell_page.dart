@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/brand.dart';
+import '../../core/acting.dart';
 import '../../core/session.dart';
 import '../../widgets/brand_header.dart';
 import 'sections.dart';
@@ -18,7 +19,10 @@ class ShellPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     final brand = ref.watch(brandProvider);
-    final sections = sectionsByOrgType[session?.orgType ?? OrgType.tenant]!;
+    final acting = ref.watch(actingProvider);
+    final sections = session == null
+        ? const <Section>[]
+        : visibleSections(session, acting);
     final location = GoRouterState.of(context).uri.path;
     final selected = sections.indexWhere((s) => location.startsWith(s.path));
 
@@ -47,7 +51,22 @@ class ShellPage extends ConsumerWidget {
             ],
           ),
           const VerticalDivider(width: 1),
-          Expanded(child: child),
+          Expanded(
+            child: Column(
+              children: [
+                if (acting != null)
+                  _ActingBanner(
+                    tenant: acting,
+                    onExit: () {
+                      ref.read(actingProvider.notifier).exit();
+                      final own = sectionsByOrgType[session!.orgType]!.first;
+                      context.go(own.path);
+                    },
+                  ),
+                Expanded(child: child),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -68,6 +87,38 @@ class SectionPage extends StatelessWidget {
         child: Text(
           section.label,
           style: Theme.of(context).textTheme.headlineSmall,
+        ),
+      ),
+    );
+  }
+}
+
+/// Shown on every page while a master or reseller user is inside a tenant.
+class _ActingBanner extends StatelessWidget {
+  const _ActingBanner({required this.tenant, required this.onExit});
+
+  final ActingTenant tenant;
+  final VoidCallback onExit;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        child: Row(
+          children: [
+            Icon(Icons.swap_horiz, color: scheme.onSecondaryContainer),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Acting as ${tenant.name}',
+                style: TextStyle(color: scheme.onSecondaryContainer),
+              ),
+            ),
+            TextButton(onPressed: onExit, child: const Text('Exit')),
+          ],
         ),
       ),
     );

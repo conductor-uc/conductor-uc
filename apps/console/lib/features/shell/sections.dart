@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 
+import '../../core/acting.dart';
 import '../../core/session.dart';
 
 class Section {
-  const Section(this.path, this.label, this.icon);
+  const Section(this.path, this.label, this.icon, {this.privateData = false});
 
   final String path;
   final String label;
   final IconData icon;
+
+  /// Shows tenant `private` data, which a reseller can never read (rule H1).
+  final bool privateData;
 }
 
 const _audit = Section('/audit', 'Audit', Icons.fact_check_outlined);
@@ -47,9 +51,35 @@ const sectionsByOrgType = <OrgType, List<Section>>{
     Section('/schedules', 'Schedules', Icons.schedule_outlined),
     Section('/media', 'Media', Icons.library_music_outlined),
     Section('/monitoring', 'Monitoring', Icons.visibility_outlined),
-    Section('/recordings', 'Recordings', Icons.mic_none_outlined),
-    Section('/voicemail', 'Voicemail', Icons.voicemail_outlined),
+    Section(
+      '/recordings',
+      'Recordings',
+      Icons.mic_none_outlined,
+      privateData: true,
+    ),
+    Section(
+      '/voicemail',
+      'Voicemail',
+      Icons.voicemail_outlined,
+      privateData: true,
+    ),
     Section('/reports', 'Reports', Icons.bar_chart_outlined),
     Section('/settings', 'Settings', Icons.settings_outlined),
   ],
 };
+
+/// The sections the signed-in user sees. While acting as a tenant that is the
+/// tenant's own navigation, without the private-data sections when the user is
+/// a reseller (rule H1; the server enforces it independently).
+List<Section> visibleSections(Session session, ActingTenant? acting) {
+  if (acting == null || session.orgType == OrgType.tenant) {
+    return sectionsByOrgType[session.orgType]!;
+  }
+  final tenant = sectionsByOrgType[OrgType.tenant]!;
+  return session.orgType == OrgType.reseller
+      ? [
+          for (final s in tenant)
+            if (!s.privateData) s,
+        ]
+      : tenant;
+}
