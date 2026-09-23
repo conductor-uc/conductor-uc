@@ -196,4 +196,24 @@ export interface PbxConfigServiceDb extends EventTables {
     position: number;
     created_at: Date;
   };
+  /**
+   * A parking lot (S2-14; `mod_valet_parking`). `slot_start`/`slot_end` is
+   * the inclusive numeric range a caller dials to park or retrieve — see
+   * `007_add_parking_lots.ts`'s own comment on why park/retrieve share one
+   * dialplan action and need no separate table.
+   */
+  parking_lots: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    slot_start: number;
+    slot_end: number;
+    timeout_seconds: number;
+    /** Same `DestinationType` union as `queues.no_agent_destination_type` — null means `mod_valet_parking`'s own default (ring back whoever parked it). */
+    return_destination_type: string | null;
+    return_destination_id: string | null;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
 }

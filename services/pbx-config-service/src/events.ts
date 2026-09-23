@@ -139,6 +139,21 @@ export const pbxEvents = defineEvents({
       agentId: Type.String({ minLength: 1 }),
     }),
   },
+  'pbx.parking_lot.created': {
+    schemaVersion: 1,
+    description: 'A parking lot was created.',
+    data: Type.Object({ parkingLotId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.parking_lot.updated': {
+    schemaVersion: 1,
+    description: "A parking lot's slot range, timeout, or return destination changed.",
+    data: Type.Object({ parkingLotId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.parking_lot.deleted': {
+    schemaVersion: 1,
+    description: 'A parking lot was deleted.',
+    data: Type.Object({ parkingLotId: Type.String({ minLength: 1 }) }),
+  },
   'org.domain.added': {
     schemaVersion: 1,
     description:

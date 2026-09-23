@@ -9,6 +9,7 @@ import type { RingGroupRepo } from '../repo/ring-group.repo.js';
 import type { QueueRepo } from '../repo/queue.repo.js';
 import type { AgentRepo } from '../repo/agent.repo.js';
 import type { QueueTierRepo } from '../repo/queue-tier.repo.js';
+import type { ParkingLotRepo } from '../repo/parking-lot.repo.js';
 
 const ParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
@@ -107,6 +108,15 @@ const QueueTierParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
   queueId: Type.String({ minLength: 1 }),
 });
+const ParkingLotResponseSchema = Type.Object({
+  id: Type.String(),
+  label: Type.String(),
+  slotStart: Type.Number(),
+  slotEnd: Type.Number(),
+  timeoutSeconds: Type.Number(),
+  returnDestinationType: Type.Union([Type.String(), Type.Null()]),
+  returnDestinationId: Type.Union([Type.String(), Type.Null()]),
+});
 
 /**
  * `GET /internal/v1/tenants/:tenantId/extensions/:id` (S1-12). What
@@ -133,6 +143,7 @@ export function registerInternalRoutes(
   queues: QueueRepo,
   agents: AgentRepo,
   queueTiers: QueueTierRepo,
+  parkingLots: ParkingLotRepo,
   internalServiceToken: string,
 ): void {
   app.get(
@@ -474,6 +485,41 @@ export function registerInternalRoutes(
             }) satisfies Static<typeof QueueTierResponseSchema>,
         ),
       };
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/parking-lots/:id` (S2-14) — how
+   * telephony-config's `pbx.parking_lot.*` consumer re-fetches a parking
+   * lot's current state, the same "thin event" pattern `queues` above
+   * establishes.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/parking-lots/:id',
+    {
+      config: { public: true },
+      schema: { params: ParamsSchema, response: { 200: ParkingLotResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      const lot = await parkingLots.findById({ tenantId }, id);
+      if (lot === undefined) {
+        throw ProblemError.notFound('No parking lot with that id in that tenant.');
+      }
+      return {
+        id: lot.id,
+        label: lot.label,
+        slotStart: lot.slotStart,
+        slotEnd: lot.slotEnd,
+        timeoutSeconds: lot.timeoutSeconds,
+        returnDestinationType: lot.returnDestinationType,
+        returnDestinationId: lot.returnDestinationId,
+      } satisfies Static<typeof ParkingLotResponseSchema>;
     },
   );
 }
