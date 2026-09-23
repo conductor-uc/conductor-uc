@@ -197,6 +197,7 @@ registerFsRoutes(
   callflowClient,
   affinityRegistry,
   callControlClient,
+  config.SELF_URL,
 );
 registerInternalRoutes(
   app,

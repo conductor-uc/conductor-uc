@@ -533,6 +533,8 @@ export interface CallcenterQueueEntry {
   readonly strategy: string;
   /** 0 = unlimited (`mod_callcenter`'s own `max-wait-time` convention, `domain/queue.ts` mirrors it). */
   readonly maxWaitSeconds: number;
+  /** A credentialed `http_cache://` URL (`fs.routes.ts` builds it) for the queue's own uploaded MOH asset, or `null` for FS's built-in `local_stream://moh`. */
+  readonly mohUrl: string | null;
   readonly tiers: readonly {
     readonly agentName: string;
     readonly level: number;
@@ -556,15 +558,13 @@ export interface CallcenterAgentEntry {
  * `strategy`/`moh-sound`/`max-wait-time`/`contact`/`status`/`max-no-answer`/
  * `wrap-up-time`/`reject-delay-time`/`level`/`position` param names below
  * are `mod_callcenter`'s own documented config surface, not invented — but
- * not run against a real FreeSWITCH process either. Two things are
- * deliberately left out rather than guessed at: `moh-sound` always points at
- * FS's own built-in `local_stream://moh` (a tenant's uploaded MOH media
- * asset, `queues.moh_media_asset_id`, is stored but not wired in — doing so
- * needs this service's own externally-reachable base URL, which no config
- * value holds today, the same credentialed-URL shape `flow_runner.lua`'s
- * `mediaUrl()` already builds for playback), and `announce-position`/
- * `announce-frequency-seconds` are stored but never emitted here (whether
- * `mod_callcenter` even has a literal config-time param for position
+ * not run against a real FreeSWITCH process either, including whether
+ * `mod_http_cache`'s underlying client honours a credentialed `moh-sound`
+ * URL the same way it does for `playback` (G-43's own open question, not
+ * newly introduced here). One thing is deliberately left out rather than
+ * guessed at: `announce-position`/`announce-frequency-seconds` are stored
+ * but never emitted here (whether `mod_callcenter` even has a literal
+ * config-time param for position
  * announcements, versus requiring app-level scripting via `cc-queue-count`-
  * style channel variables, is not confirmed). Every agent's `status` starts
  * `Logged Out` — `buildAgentStatusDialplanDocument`'s own feature codes are
@@ -581,7 +581,7 @@ export function buildCallcenterConfigurationDocument(
       (queue) =>
         `      <queue name="${escapeXml(queue.name)}">\n` +
         `        <param name="strategy" value="${escapeXml(queue.strategy)}"/>\n` +
-        '        <param name="moh-sound" value="local_stream://moh"/>\n' +
+        `        <param name="moh-sound" value="${escapeXml(queue.mohUrl ?? 'local_stream://moh')}"/>\n` +
         `        <param name="max-wait-time" value="${String(queue.maxWaitSeconds)}"/>\n` +
         '        <param name="tier-rules-apply" value="true"/>\n' +
         '      </queue>\n',

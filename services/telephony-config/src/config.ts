@@ -54,6 +54,18 @@ export const configSchema = Type.Object({
    */
   OPENSIPS_SIP_URI: Env.string(),
 
+  /**
+   * This service's own externally-reachable base URL, e.g.
+   * http://telephony-config:8080 — the same value as `vars.xml`'s
+   * `telephony_config_url` (FS's own env var for it), just known here as
+   * this service's own address rather than something to reach out to.
+   * S2-13's own use: a queue's `moh-sound` embeds a credentialed
+   * `http_cache://` URL pointing at `/fs/media/...`, the same shape
+   * `flow_runner.lua`'s own `mediaUrl()` already builds for playback —
+   * `mod_http_cache` fetches it directly, so it needs to be absolute.
+   */
+  SELF_URL: Env.url(),
+
   /** Base URL for pbx-config-service's internal API, e.g. http://pbx-config-service:8080. */
   PBX_CONFIG_SERVICE_URL: Env.url(),
   /** Base URL for trunk-service's internal API, e.g. http://trunk-service:8080 (S2-02). */

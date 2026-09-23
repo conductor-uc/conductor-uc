@@ -38,6 +38,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       h.callflow,
       h.affinity,
       h.callControl,
+      'http://telephony-config-test:8080',
     );
     await app.ready();
   });
@@ -2408,8 +2409,31 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         expect(response.body).toContain(
           `<tier agent="101@acme.platform.test" queue="${leasedQueueId}@acme.platform.test" level="2" position="1"/>`,
         );
+        expect(response.body).toContain('<param name="moh-sound" value="local_stream://moh"/>');
         expect(response.body).not.toContain(`${unleasedQueueId}@`);
         expect(response.body).not.toContain(`${otherNodeQueueId}@`);
+      });
+
+      it('embeds a credentialed http_cache URL for moh-sound when the queue has an uploaded MOH asset', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        const mediaAssetId = crypto.randomUUID();
+        const queueId = await seedQueue(tenantId, { mohMediaAssetId: mediaAssetId });
+        await h.affinity.acquire({ tenantId, kind: 'queue', resourceId: queueId }, 'fs-1', 30_000);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/configuration?nodeId=fs-1',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: configPayload({ key_value: 'callcenter.conf' }),
+        });
+
+        expect(response.body).toContain(
+          `<param name="moh-sound" value="http_cache://http://fs-node:${TOKEN}@telephony-config-test:8080/fs/media/${tenantId}/${mediaAssetId}/8k"/>`,
+        );
       });
 
       it('returns the not-found document for a module other than callcenter.conf', async () => {

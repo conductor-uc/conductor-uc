@@ -223,6 +223,8 @@ export function registerFsRoutes(
   affinity: AffinityRegistry | null,
   /** S2-13: `handleQueueDial`'s own synchronous affinity-acquire call — the *write* path only call-control can serve (see `affinity`'s own doc comment above on why reads and writes take different routes). */
   callControlClient: CallControlClient,
+  /** S2-13: this service's own externally-reachable base URL (`config.ts`'s own doc comment) — used only to build a queue's credentialed `moh-sound` URL. */
+  selfUrl: string,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -306,6 +308,18 @@ export function registerFsRoutes(
     const username = decoded.slice(0, separator);
     const password = decoded.slice(separator + 1);
     return username === 'fs-node' && secretEquals(fsXmlCurlToken, password);
+  }
+
+  /**
+   * A queue's own credentialed MOH URL (S2-13) — the same `http_cache://`-
+   * wrapping-a-Basic-auth-URL shape `flow_runner.lua`'s own `mediaUrl()`
+   * builds for playback, just in TS since `callcenter.conf` is static XML
+   * this service serves directly, not something the Lua runner constructs
+   * per call. `mod_http_cache` fetches it directly, so it must be absolute.
+   */
+  function mohUrlFor(tenantId: string, mediaAssetId: string): string {
+    const base = selfUrl.replace(/^(https?:\/\/)/, `$1fs-node:${fsXmlCurlToken}@`);
+    return `http_cache://${base}/fs/media/${tenantId}/${mediaAssetId}/8k`;
   }
 
   /**
@@ -1536,6 +1550,8 @@ export function registerFsRoutes(
         name: callcenterName(queue.id, domainFqdn),
         strategy: queue.strategy,
         maxWaitSeconds: queue.maxWaitSeconds,
+        mohUrl:
+          queue.mohMediaAssetId === null ? null : mohUrlFor(queue.tenantId, queue.mohMediaAssetId),
         tiers: tierEntries,
       });
     }
