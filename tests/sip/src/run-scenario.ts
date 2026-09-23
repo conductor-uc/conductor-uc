@@ -70,11 +70,21 @@ export interface SipTestEnv {
   readonly opensipsTarget: string;
   readonly sippImage: string;
   readonly freeswitchContainer: string;
+  /**
+   * S2-19: every FS node in the dev stack, not just the first —
+   * `fsCliAll`'s own list. `media_playback.test.ts`'s direct ESL
+   * `originate` still deliberately targets one specific node
+   * (`freeswitchContainer` above), since it bypasses the dispatcher
+   * entirely; this list is for the setup hooks that must not miss
+   * whichever node a round-robin-dispatched call actually landed on.
+   */
+  readonly freeswitchContainers: readonly string[];
   readonly eventSocketPassword: string;
 }
 
 /** Same variable names/defaults `infra/compose/.env(.example)` itself uses. */
 export function sipTestEnv(): SipTestEnv {
+  const freeswitchContainer = envOr('SIP_TEST_FREESWITCH_CONTAINER', 'conductor-uc-freeswitch-1');
   return {
     network: envOr('SIP_TEST_NETWORK', 'conductor-uc_default'),
     opensipsContainer: envOr('SIP_TEST_OPENSIPS_CONTAINER', 'conductor-uc-opensips-1'),
@@ -82,7 +92,14 @@ export function sipTestEnv(): SipTestEnv {
     // any container on the network regardless of compose project prefix.
     opensipsTarget: envOr('SIP_TEST_OPENSIPS_TARGET', 'opensips:5060'),
     sippImage: envOr('SIP_TEST_SIPP_IMAGE', 'ctaloi/sipp'),
-    freeswitchContainer: envOr('SIP_TEST_FREESWITCH_CONTAINER', 'conductor-uc-freeswitch-1'),
+    freeswitchContainer,
+    freeswitchContainers: envOr(
+      'SIP_TEST_FREESWITCH_CONTAINERS',
+      `${freeswitchContainer},conductor-uc-freeswitch-2-1`,
+    )
+      .split(',')
+      .map((name) => name.trim())
+      .filter((name) => name !== ''),
     // Matches `FS_EVENT_SOCKET_PASSWORD`'s own default in
     // infra/compose/docker-compose.yml's `freeswitch`/`call-control`
     // service blocks.
@@ -300,11 +317,11 @@ export async function clearRegistration(aor: string): Promise<void> {
  * `cluster` list) already allows loopback, so this was never a network/ACL
  * problem, just fs_cli never being told the right password.
  */
-export async function fsCli(command: string): Promise<string> {
+async function fsCliOn(container: string, command: string): Promise<string> {
   const env = sipTestEnv();
   const { stdout } = await execFileAsync('docker', [
     'exec',
-    env.freeswitchContainer,
+    container,
     'fs_cli',
     '-H',
     '127.0.0.1',
@@ -316,6 +333,32 @@ export async function fsCli(command: string): Promise<string> {
     command,
   ]);
   return stdout;
+}
+
+export async function fsCli(command: string): Promise<string> {
+  return fsCliOn(sipTestEnv().freeswitchContainer, command);
+}
+
+/**
+ * S2-19: runs `command` on every FS node in the dev stack
+ * (`freeswitchContainers`), not just the first — what `setup.ts`'s
+ * `beforeEach`/`afterEach` hooks need now that round-robin dispatch means a
+ * test's own channels could be on either node, not always
+ * `freeswitchContainer`. Returns one labelled block per node so a failure
+ * dump reads unambiguously.
+ */
+export async function fsCliAll(command: string): Promise<string> {
+  const env = sipTestEnv();
+  const results = await Promise.all(
+    env.freeswitchContainers.map(async (container) => {
+      try {
+        return `[${container}]\n${await fsCliOn(container, command)}`;
+      } catch (error) {
+        return `[${container}] <unavailable: ${error instanceof Error ? error.message : String(error)}>`;
+      }
+    }),
+  );
+  return results.join('\n');
 }
 
 export interface SippStats {
