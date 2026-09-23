@@ -42,6 +42,8 @@ const sectionsByOrgType = <OrgType, List<Section>>{
     Section('/call-flows', 'Call flows', Icons.account_tree_outlined),
     Section('/ring-groups', 'Ring groups', Icons.groups_outlined),
     Section('/queues', 'Queues', Icons.queue_outlined),
+    Section('/conference-rooms', 'Conference rooms', Icons.video_call_outlined),
+    Section('/parking-lots', 'Parking lots', Icons.local_parking_outlined),
     Section('/schedules', 'Schedules', Icons.schedule_outlined),
     Section('/media', 'Media', Icons.library_music_outlined),
     Section('/monitoring', 'Monitoring', Icons.visibility_outlined),

@@ -1,9 +1,12 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/session.dart';
 import '../features/auth/login_page.dart';
+import '../features/callflow/flows_page.dart';
+import '../features/pbx/resource.dart';
+import '../features/pbx/resource_page.dart';
 import '../features/shell/sections.dart';
 import '../features/shell/shell_page.dart';
 
@@ -39,13 +42,35 @@ final routerProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         builder: (context, state, child) => ShellPage(child: child),
         routes: [
+          GoRoute(
+            path: '/call-flows/:id',
+            builder: (context, state) =>
+                FlowEditorPage(flowId: state.pathParameters['id']!),
+          ),
           for (final s in everySection)
-            GoRoute(
-              path: s.path,
-              builder: (context, state) => SectionPage(section: s),
-            ),
+            GoRoute(path: s.path, builder: (context, state) => _pageFor(s)),
         ],
       ),
     ],
   );
 });
+
+/// The screen behind a section: a PBX resource page where one exists, and a
+/// placeholder for the sections whose backend or screens are still to come.
+Widget _pageFor(Section section) {
+  final defs = _pbxPages[section.path];
+  if (defs != null) return ResourcePage(defs: defs);
+  if (section.path == '/call-flows') return const FlowsPage();
+  return SectionPage(section: section);
+}
+
+const _pbxPages = <String, List<ResourceDef>>{
+  '/extensions': [extensionsDef],
+  '/phone-numbers': [didsDef],
+  '/ring-groups': [ringGroupsDef],
+  '/queues': [queuesDef, agentsDef],
+  '/conference-rooms': [conferenceRoomsDef],
+  '/parking-lots': [parkingLotsDef],
+  '/media': [mediaAssetsDef],
+  '/settings': [emergencyLocationsDef],
+};

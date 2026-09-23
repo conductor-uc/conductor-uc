@@ -1,0 +1,6315 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Console API",
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "/"
+    }
+  ],
+  "paths": {
+    "/v1/auth/login": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orgId",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "orgId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "email": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "accessToken",
+                        "refreshToken",
+                        "expiresIn"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ok"
+                          ]
+                        },
+                        "accessToken": {
+                          "type": "string"
+                        },
+                        "refreshToken": {
+                          "type": "string"
+                        },
+                        "expiresIn": {
+                          "type": "integer"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "enrollmentTicket",
+                        "totp"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "mfa_enrollment_required"
+                          ]
+                        },
+                        "enrollmentTicket": {
+                          "type": "string"
+                        },
+                        "totp": {
+                          "type": "object",
+                          "required": [
+                            "secret",
+                            "otpauthUri"
+                          ],
+                          "properties": {
+                            "secret": {
+                              "type": "string"
+                            },
+                            "otpauthUri": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "status",
+                        "verificationTicket"
+                      ],
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "mfa_verification_required"
+                          ]
+                        },
+                        "verificationTicket": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "operationId": "login",
+        "tags": [
+          "Login"
+        ]
+      }
+    },
+    "/v1/auth/mfa/enroll/confirm": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "enrollmentTicket",
+                  "code"
+                ],
+                "properties": {
+                  "enrollmentTicket": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accessToken",
+                    "refreshToken",
+                    "expiresIn"
+                  ],
+                  "properties": {
+                    "accessToken": {
+                      "type": "string"
+                    },
+                    "refreshToken": {
+                      "type": "string"
+                    },
+                    "expiresIn": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "confirmMfaEnrollment",
+        "tags": [
+          "Mfa"
+        ]
+      }
+    },
+    "/v1/auth/mfa/verify": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "verificationTicket",
+                  "code"
+                ],
+                "properties": {
+                  "verificationTicket": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accessToken",
+                    "refreshToken",
+                    "expiresIn"
+                  ],
+                  "properties": {
+                    "accessToken": {
+                      "type": "string"
+                    },
+                    "refreshToken": {
+                      "type": "string"
+                    },
+                    "expiresIn": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "verifyMfa",
+        "tags": [
+          "Mfa"
+        ]
+      }
+    },
+    "/v1/auth/refresh": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "refreshToken"
+                ],
+                "properties": {
+                  "refreshToken": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "accessToken",
+                    "refreshToken",
+                    "expiresIn"
+                  ],
+                  "properties": {
+                    "accessToken": {
+                      "type": "string"
+                    },
+                    "refreshToken": {
+                      "type": "string"
+                    },
+                    "expiresIn": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "refreshTokens",
+        "tags": [
+          "Refresh"
+        ]
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "refreshToken"
+                ],
+                "properties": {
+                  "refreshToken": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "logout",
+        "tags": [
+          "Logout"
+        ]
+      }
+    },
+    "/v1/resellers/{id}/brand": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "displayName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 255
+                  },
+                  "primaryColor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "accentColor": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^#[0-9a-fA-F]{6}$"
+                  },
+                  "logoLightKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "logoDarkKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "faviconKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "supportEmail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "supportUrl": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "supportPhone": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "emailFromName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "emailFromAddress": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "sipUserAgent": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "legalFooter": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "resellerId",
+                    "displayName",
+                    "primaryColor",
+                    "accentColor",
+                    "logoLightKey",
+                    "logoDarkKey",
+                    "faviconKey",
+                    "supportEmail",
+                    "supportUrl",
+                    "supportPhone",
+                    "emailFromName",
+                    "emailFromAddress",
+                    "sipUserAgent",
+                    "legalFooter"
+                  ],
+                  "properties": {
+                    "resellerId": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "primaryColor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "accentColor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "logoLightKey": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "logoDarkKey": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "faviconKey": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "supportEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "supportUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "supportPhone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "emailFromName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "emailFromAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sipUserAgent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "legalFooter": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveBrand",
+        "tags": [
+          "Brand"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "resellerId",
+                    "displayName",
+                    "primaryColor",
+                    "accentColor",
+                    "logoLightKey",
+                    "logoDarkKey",
+                    "faviconKey",
+                    "supportEmail",
+                    "supportUrl",
+                    "supportPhone",
+                    "emailFromName",
+                    "emailFromAddress",
+                    "sipUserAgent",
+                    "legalFooter"
+                  ],
+                  "properties": {
+                    "resellerId": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "primaryColor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "accentColor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "logoLightKey": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "logoDarkKey": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "faviconKey": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "supportEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "supportUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "supportPhone": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "emailFromName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "emailFromAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sipUserAgent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "legalFooter": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getBrand",
+        "tags": [
+          "Brand"
+        ]
+      }
+    },
+    "/v1/resellers/{id}/brand/assets": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "contentType"
+                ],
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "logoLight"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "logoDark"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "favicon"
+                        ]
+                      }
+                    ]
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "uploadUrl",
+                    "key"
+                  ],
+                  "properties": {
+                    "uploadUrl": {
+                      "type": "string"
+                    },
+                    "key": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "uploadBrandAsset",
+        "tags": [
+          "Brand"
+        ]
+      }
+    },
+    "/v1/resellers/{id}/console-hostnames": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "fqdn"
+                ],
+                "properties": {
+                  "fqdn": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "fqdn",
+                    "resellerId",
+                    "tlsStatus"
+                  ],
+                  "properties": {
+                    "fqdn": {
+                      "type": "string"
+                    },
+                    "resellerId": {
+                      "type": "string"
+                    },
+                    "tlsStatus": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createConsoleHostname",
+        "tags": [
+          "ConsoleHostnames"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "fqdn",
+                          "resellerId",
+                          "tlsStatus"
+                        ],
+                        "properties": {
+                          "fqdn": {
+                            "type": "string"
+                          },
+                          "resellerId": {
+                            "type": "string"
+                          },
+                          "tlsStatus": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listConsoleHostnames",
+        "tags": [
+          "ConsoleHostnames"
+        ]
+      }
+    },
+    "/v1/public/brand": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "host",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "neutral"
+                      ],
+                      "properties": {
+                        "neutral": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "neutral",
+                        "displayName",
+                        "primaryColor",
+                        "accentColor",
+                        "logoLightUrl",
+                        "logoDarkUrl",
+                        "faviconUrl",
+                        "supportEmail",
+                        "supportUrl",
+                        "supportPhone",
+                        "legalFooter"
+                      ],
+                      "properties": {
+                        "neutral": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "displayName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "primaryColor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "accentColor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "logoLightUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "logoDarkUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "faviconUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "supportEmail": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "supportUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "supportPhone": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "legalFooter": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getPublicBrand",
+        "tags": [
+          "Brand"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/extensions": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "number",
+                          "userId",
+                          "displayName",
+                          "callerIdName",
+                          "callerIdNumber",
+                          "voicemailEnabled",
+                          "emergencyLocationId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "number": {
+                            "type": "string"
+                          },
+                          "userId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "callerIdName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "callerIdNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "voicemailEnabled": {
+                            "type": "boolean"
+                          },
+                          "emergencyLocationId": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listExtensions",
+        "tags": [
+          "Extensions"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "number",
+                  "displayName",
+                  "emergencyLocationId"
+                ],
+                "properties": {
+                  "number": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "userId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "callerIdName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "callerIdNumber": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "voicemailEnabled": {
+                    "type": "boolean"
+                  },
+                  "emergencyLocationId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "number",
+                    "userId",
+                    "displayName",
+                    "callerIdName",
+                    "callerIdNumber",
+                    "voicemailEnabled",
+                    "emergencyLocationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "string"
+                    },
+                    "userId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "callerIdName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "callerIdNumber": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voicemailEnabled": {
+                      "type": "boolean"
+                    },
+                    "emergencyLocationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createExtension",
+        "tags": [
+          "Extensions"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/extensions/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "number",
+                    "userId",
+                    "displayName",
+                    "callerIdName",
+                    "callerIdNumber",
+                    "voicemailEnabled",
+                    "emergencyLocationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "string"
+                    },
+                    "userId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "callerIdName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "callerIdNumber": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voicemailEnabled": {
+                      "type": "boolean"
+                    },
+                    "emergencyLocationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getExtension",
+        "tags": [
+          "Extensions"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "number": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "userId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "callerIdName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "callerIdNumber": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  },
+                  "voicemailEnabled": {
+                    "type": "boolean"
+                  },
+                  "emergencyLocationId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "number",
+                    "userId",
+                    "displayName",
+                    "callerIdName",
+                    "callerIdNumber",
+                    "voicemailEnabled",
+                    "emergencyLocationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "string"
+                    },
+                    "userId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "callerIdName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "callerIdNumber": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "voicemailEnabled": {
+                      "type": "boolean"
+                    },
+                    "emergencyLocationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateExtension",
+        "tags": [
+          "Extensions"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteExtension",
+        "tags": [
+          "Extensions"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/extensions/{id}/reveal": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "username",
+                    "password",
+                    "realm"
+                  ],
+                  "properties": {
+                    "username": {
+                      "type": "string"
+                    },
+                    "password": {
+                      "type": "string"
+                    },
+                    "realm": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "revealExtension",
+        "tags": [
+          "Extensions"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/dids": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "e164",
+                          "trunkId",
+                          "destinationType",
+                          "destinationId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "e164": {
+                            "type": "string"
+                          },
+                          "trunkId": {
+                            "type": "string"
+                          },
+                          "destinationType": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "extension"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ring_group"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "flow"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "queue"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "conference"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "voicemail"
+                                ]
+                              }
+                            ]
+                          },
+                          "destinationId": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listDids",
+        "tags": [
+          "Dids"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "e164",
+                  "trunkId",
+                  "destinationType",
+                  "destinationId"
+                ],
+                "properties": {
+                  "e164": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "trunkId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "destinationType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "extension"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "ring_group"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "flow"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "queue"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "conference"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "voicemail"
+                        ]
+                      }
+                    ]
+                  },
+                  "destinationId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "e164",
+                    "trunkId",
+                    "destinationType",
+                    "destinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "e164": {
+                      "type": "string"
+                    },
+                    "trunkId": {
+                      "type": "string"
+                    },
+                    "destinationType": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "extension"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ring_group"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "flow"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "queue"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "conference"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "voicemail"
+                          ]
+                        }
+                      ]
+                    },
+                    "destinationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createDid",
+        "tags": [
+          "Dids"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/dids/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "e164",
+                    "trunkId",
+                    "destinationType",
+                    "destinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "e164": {
+                      "type": "string"
+                    },
+                    "trunkId": {
+                      "type": "string"
+                    },
+                    "destinationType": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "extension"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ring_group"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "flow"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "queue"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "conference"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "voicemail"
+                          ]
+                        }
+                      ]
+                    },
+                    "destinationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getDid",
+        "tags": [
+          "Dids"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "trunkId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "destinationType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "extension"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "ring_group"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "flow"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "queue"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "conference"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "voicemail"
+                        ]
+                      }
+                    ]
+                  },
+                  "destinationId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "e164",
+                    "trunkId",
+                    "destinationType",
+                    "destinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "e164": {
+                      "type": "string"
+                    },
+                    "trunkId": {
+                      "type": "string"
+                    },
+                    "destinationType": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "extension"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ring_group"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "flow"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "queue"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "conference"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "voicemail"
+                          ]
+                        }
+                      ]
+                    },
+                    "destinationId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateDid",
+        "tags": [
+          "Dids"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteDid",
+        "tags": [
+          "Dids"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/emergency-locations": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "label",
+                          "addressLine1",
+                          "addressLine2",
+                          "city",
+                          "state",
+                          "postalCode",
+                          "country"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "addressLine1": {
+                            "type": "string"
+                          },
+                          "addressLine2": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "city": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "postalCode": {
+                            "type": "string"
+                          },
+                          "country": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listEmergencyLocations",
+        "tags": [
+          "EmergencyLocations"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "addressLine1",
+                  "city",
+                  "state",
+                  "postalCode",
+                  "country"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "addressLine1": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "addressLine2": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "country": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "addressLine1",
+                    "addressLine2",
+                    "city",
+                    "state",
+                    "postalCode",
+                    "country"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "addressLine1": {
+                      "type": "string"
+                    },
+                    "addressLine2": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "city": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "postalCode": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createEmergencyLocation",
+        "tags": [
+          "EmergencyLocations"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/emergency-locations/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "addressLine1",
+                    "addressLine2",
+                    "city",
+                    "state",
+                    "postalCode",
+                    "country"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "addressLine1": {
+                      "type": "string"
+                    },
+                    "addressLine2": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "city": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "postalCode": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getEmergencyLocation",
+        "tags": [
+          "EmergencyLocations"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "addressLine1": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "addressLine2": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "city": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "postalCode": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "country": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "addressLine1",
+                    "addressLine2",
+                    "city",
+                    "state",
+                    "postalCode",
+                    "country"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "addressLine1": {
+                      "type": "string"
+                    },
+                    "addressLine2": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "city": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string"
+                    },
+                    "postalCode": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateEmergencyLocation",
+        "tags": [
+          "EmergencyLocations"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteEmergencyLocation",
+        "tags": [
+          "EmergencyLocations"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/media-assets": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "kind",
+                          "label",
+                          "status",
+                          "contentType",
+                          "durationMs",
+                          "sha256",
+                          "sizeBytes",
+                          "errorMessage"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "prompt"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "moh"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "greeting"
+                                ]
+                              }
+                            ]
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pending"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "processing"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ready"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "failed"
+                                ]
+                              }
+                            ]
+                          },
+                          "contentType": {
+                            "type": "string"
+                          },
+                          "durationMs": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "sha256": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "sizeBytes": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "errorMessage": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listMediaAssets",
+        "tags": [
+          "MediaAssets"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "label",
+                  "contentType"
+                ],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "contentType": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "asset",
+                    "uploadUrl"
+                  ],
+                  "properties": {
+                    "asset": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "kind",
+                        "label",
+                        "status",
+                        "contentType",
+                        "durationMs",
+                        "sha256",
+                        "sizeBytes",
+                        "errorMessage"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "kind": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "prompt"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "moh"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "greeting"
+                              ]
+                            }
+                          ]
+                        },
+                        "label": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "pending"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "processing"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "ready"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "enum": [
+                                "failed"
+                              ]
+                            }
+                          ]
+                        },
+                        "contentType": {
+                          "type": "string"
+                        },
+                        "durationMs": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "sha256": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "sizeBytes": {
+                          "type": [
+                            "number",
+                            "null"
+                          ]
+                        },
+                        "errorMessage": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    },
+                    "uploadUrl": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createMediaAsset",
+        "tags": [
+          "MediaAssets"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/media-assets/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "kind",
+                    "label",
+                    "status",
+                    "contentType",
+                    "durationMs",
+                    "sha256",
+                    "sizeBytes",
+                    "errorMessage"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "prompt"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "moh"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "greeting"
+                          ]
+                        }
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "processing"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "failed"
+                          ]
+                        }
+                      ]
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "durationMs": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "sha256": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sizeBytes": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "errorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getMediaAsset",
+        "tags": [
+          "MediaAssets"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteMediaAsset",
+        "tags": [
+          "MediaAssets"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/media-assets/{id}/finalize": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "kind",
+                    "label",
+                    "status",
+                    "contentType",
+                    "durationMs",
+                    "sha256",
+                    "sizeBytes",
+                    "errorMessage"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "kind": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "prompt"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "moh"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "greeting"
+                          ]
+                        }
+                      ]
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "processing"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "failed"
+                          ]
+                        }
+                      ]
+                    },
+                    "contentType": {
+                      "type": "string"
+                    },
+                    "durationMs": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "sha256": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "sizeBytes": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "errorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "finalizeMediaAsset",
+        "tags": [
+          "MediaAssets"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/ring-groups": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "label",
+                          "strategy",
+                          "memberExtensionIds",
+                          "ringTimeoutSeconds",
+                          "noAnswerDestinationType",
+                          "noAnswerDestinationId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "strategy": {
+                            "type": "string"
+                          },
+                          "memberExtensionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "ringTimeoutSeconds": {
+                            "type": "number"
+                          },
+                          "noAnswerDestinationType": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "noAnswerDestinationId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listRingGroups",
+        "tags": [
+          "RingGroups"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "strategy",
+                  "memberExtensionIds",
+                  "ringTimeoutSeconds"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "strategy": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "memberExtensionIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  },
+                  "ringTimeoutSeconds": {
+                    "type": "number"
+                  },
+                  "noAnswerDestinationType": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "noAnswerDestinationId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "strategy",
+                    "memberExtensionIds",
+                    "ringTimeoutSeconds",
+                    "noAnswerDestinationType",
+                    "noAnswerDestinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "strategy": {
+                      "type": "string"
+                    },
+                    "memberExtensionIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "ringTimeoutSeconds": {
+                      "type": "number"
+                    },
+                    "noAnswerDestinationType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "noAnswerDestinationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createRingGroup",
+        "tags": [
+          "RingGroups"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/ring-groups/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "strategy",
+                    "memberExtensionIds",
+                    "ringTimeoutSeconds",
+                    "noAnswerDestinationType",
+                    "noAnswerDestinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "strategy": {
+                      "type": "string"
+                    },
+                    "memberExtensionIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "ringTimeoutSeconds": {
+                      "type": "number"
+                    },
+                    "noAnswerDestinationType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "noAnswerDestinationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRingGroup",
+        "tags": [
+          "RingGroups"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "strategy": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "memberExtensionIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  },
+                  "ringTimeoutSeconds": {
+                    "type": "number"
+                  },
+                  "noAnswerDestinationType": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "noAnswerDestinationId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "strategy",
+                    "memberExtensionIds",
+                    "ringTimeoutSeconds",
+                    "noAnswerDestinationType",
+                    "noAnswerDestinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "strategy": {
+                      "type": "string"
+                    },
+                    "memberExtensionIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "ringTimeoutSeconds": {
+                      "type": "number"
+                    },
+                    "noAnswerDestinationType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "noAnswerDestinationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateRingGroup",
+        "tags": [
+          "RingGroups"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteRingGroup",
+        "tags": [
+          "RingGroups"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/queues": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "label",
+                          "strategy",
+                          "mohMediaAssetId",
+                          "maxWaitSeconds",
+                          "announcePosition",
+                          "announceFrequencySeconds",
+                          "noAgentDestinationType",
+                          "noAgentDestinationId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "strategy": {
+                            "type": "string"
+                          },
+                          "mohMediaAssetId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "maxWaitSeconds": {
+                            "type": "number"
+                          },
+                          "announcePosition": {
+                            "type": "boolean"
+                          },
+                          "announceFrequencySeconds": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "noAgentDestinationType": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "noAgentDestinationId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listQueues",
+        "tags": [
+          "Queues"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "strategy",
+                  "maxWaitSeconds",
+                  "announcePosition"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "strategy": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "mohMediaAssetId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "maxWaitSeconds": {
+                    "type": "number"
+                  },
+                  "announcePosition": {
+                    "type": "boolean"
+                  },
+                  "announceFrequencySeconds": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "noAgentDestinationType": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "noAgentDestinationId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "strategy",
+                    "mohMediaAssetId",
+                    "maxWaitSeconds",
+                    "announcePosition",
+                    "announceFrequencySeconds",
+                    "noAgentDestinationType",
+                    "noAgentDestinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "strategy": {
+                      "type": "string"
+                    },
+                    "mohMediaAssetId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "maxWaitSeconds": {
+                      "type": "number"
+                    },
+                    "announcePosition": {
+                      "type": "boolean"
+                    },
+                    "announceFrequencySeconds": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "noAgentDestinationType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "noAgentDestinationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createQueue",
+        "tags": [
+          "Queues"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/queues/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "strategy",
+                    "mohMediaAssetId",
+                    "maxWaitSeconds",
+                    "announcePosition",
+                    "announceFrequencySeconds",
+                    "noAgentDestinationType",
+                    "noAgentDestinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "strategy": {
+                      "type": "string"
+                    },
+                    "mohMediaAssetId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "maxWaitSeconds": {
+                      "type": "number"
+                    },
+                    "announcePosition": {
+                      "type": "boolean"
+                    },
+                    "announceFrequencySeconds": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "noAgentDestinationType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "noAgentDestinationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getQueue",
+        "tags": [
+          "Queues"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "strategy": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "mohMediaAssetId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "maxWaitSeconds": {
+                    "type": "number"
+                  },
+                  "announcePosition": {
+                    "type": "boolean"
+                  },
+                  "announceFrequencySeconds": {
+                    "type": [
+                      "number",
+                      "null"
+                    ]
+                  },
+                  "noAgentDestinationType": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "noAgentDestinationId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "strategy",
+                    "mohMediaAssetId",
+                    "maxWaitSeconds",
+                    "announcePosition",
+                    "announceFrequencySeconds",
+                    "noAgentDestinationType",
+                    "noAgentDestinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "strategy": {
+                      "type": "string"
+                    },
+                    "mohMediaAssetId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "maxWaitSeconds": {
+                      "type": "number"
+                    },
+                    "announcePosition": {
+                      "type": "boolean"
+                    },
+                    "announceFrequencySeconds": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "noAgentDestinationType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "noAgentDestinationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateQueue",
+        "tags": [
+          "Queues"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteQueue",
+        "tags": [
+          "Queues"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/queues/{queueId}/tiers": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "queueId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "queueId",
+                          "agentId",
+                          "level",
+                          "position"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "queueId": {
+                            "type": "string"
+                          },
+                          "agentId": {
+                            "type": "string"
+                          },
+                          "level": {
+                            "type": "number"
+                          },
+                          "position": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listTiers",
+        "tags": [
+          "Queues"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "agentId"
+                ],
+                "properties": {
+                  "agentId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "level": {
+                    "type": "number"
+                  },
+                  "position": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "queueId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "queueId",
+                    "agentId",
+                    "level",
+                    "position"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "queueId": {
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "number"
+                    },
+                    "position": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createTier",
+        "tags": [
+          "Queues"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/queues/{queueId}/tiers/{id}": {
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "level": {
+                    "type": "number"
+                  },
+                  "position": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "queueId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "queueId",
+                    "agentId",
+                    "level",
+                    "position"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "queueId": {
+                      "type": "string"
+                    },
+                    "agentId": {
+                      "type": "string"
+                    },
+                    "level": {
+                      "type": "number"
+                    },
+                    "position": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateTier",
+        "tags": [
+          "Queues"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "queueId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteTier",
+        "tags": [
+          "Queues"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/agents": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "extensionId",
+                          "maxNoAnswer",
+                          "wrapUpSeconds",
+                          "rejectDelaySeconds"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "extensionId": {
+                            "type": "string"
+                          },
+                          "maxNoAnswer": {
+                            "type": "number"
+                          },
+                          "wrapUpSeconds": {
+                            "type": "number"
+                          },
+                          "rejectDelaySeconds": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listAgents",
+        "tags": [
+          "Agents"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "extensionId"
+                ],
+                "properties": {
+                  "extensionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "maxNoAnswer": {
+                    "type": "number"
+                  },
+                  "wrapUpSeconds": {
+                    "type": "number"
+                  },
+                  "rejectDelaySeconds": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "maxNoAnswer",
+                    "wrapUpSeconds",
+                    "rejectDelaySeconds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "maxNoAnswer": {
+                      "type": "number"
+                    },
+                    "wrapUpSeconds": {
+                      "type": "number"
+                    },
+                    "rejectDelaySeconds": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createAgent",
+        "tags": [
+          "Agents"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/agents/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "maxNoAnswer",
+                    "wrapUpSeconds",
+                    "rejectDelaySeconds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "maxNoAnswer": {
+                      "type": "number"
+                    },
+                    "wrapUpSeconds": {
+                      "type": "number"
+                    },
+                    "rejectDelaySeconds": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getAgent",
+        "tags": [
+          "Agents"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "maxNoAnswer": {
+                    "type": "number"
+                  },
+                  "wrapUpSeconds": {
+                    "type": "number"
+                  },
+                  "rejectDelaySeconds": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "maxNoAnswer",
+                    "wrapUpSeconds",
+                    "rejectDelaySeconds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "maxNoAnswer": {
+                      "type": "number"
+                    },
+                    "wrapUpSeconds": {
+                      "type": "number"
+                    },
+                    "rejectDelaySeconds": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateAgent",
+        "tags": [
+          "Agents"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteAgent",
+        "tags": [
+          "Agents"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/parking-lots": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "label",
+                          "slotStart",
+                          "slotEnd",
+                          "timeoutSeconds",
+                          "returnDestinationType",
+                          "returnDestinationId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "slotStart": {
+                            "type": "number"
+                          },
+                          "slotEnd": {
+                            "type": "number"
+                          },
+                          "timeoutSeconds": {
+                            "type": "number"
+                          },
+                          "returnDestinationType": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "returnDestinationId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listParkingLots",
+        "tags": [
+          "ParkingLots"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "slotStart",
+                  "slotEnd",
+                  "timeoutSeconds"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "slotStart": {
+                    "type": "number"
+                  },
+                  "slotEnd": {
+                    "type": "number"
+                  },
+                  "timeoutSeconds": {
+                    "type": "number"
+                  },
+                  "returnDestinationType": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "returnDestinationId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "slotStart",
+                    "slotEnd",
+                    "timeoutSeconds",
+                    "returnDestinationType",
+                    "returnDestinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "slotStart": {
+                      "type": "number"
+                    },
+                    "slotEnd": {
+                      "type": "number"
+                    },
+                    "timeoutSeconds": {
+                      "type": "number"
+                    },
+                    "returnDestinationType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "returnDestinationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createParkingLot",
+        "tags": [
+          "ParkingLots"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/parking-lots/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "slotStart",
+                    "slotEnd",
+                    "timeoutSeconds",
+                    "returnDestinationType",
+                    "returnDestinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "slotStart": {
+                      "type": "number"
+                    },
+                    "slotEnd": {
+                      "type": "number"
+                    },
+                    "timeoutSeconds": {
+                      "type": "number"
+                    },
+                    "returnDestinationType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "returnDestinationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getParkingLot",
+        "tags": [
+          "ParkingLots"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "slotStart": {
+                    "type": "number"
+                  },
+                  "slotEnd": {
+                    "type": "number"
+                  },
+                  "timeoutSeconds": {
+                    "type": "number"
+                  },
+                  "returnDestinationType": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "returnDestinationId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "slotStart",
+                    "slotEnd",
+                    "timeoutSeconds",
+                    "returnDestinationType",
+                    "returnDestinationId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "slotStart": {
+                      "type": "number"
+                    },
+                    "slotEnd": {
+                      "type": "number"
+                    },
+                    "timeoutSeconds": {
+                      "type": "number"
+                    },
+                    "returnDestinationType": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "returnDestinationId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateParkingLot",
+        "tags": [
+          "ParkingLots"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteParkingLot",
+        "tags": [
+          "ParkingLots"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/conference-rooms": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "label",
+                          "number",
+                          "pinRequired",
+                          "video",
+                          "layout",
+                          "maxMembers"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "number": {
+                            "type": "string"
+                          },
+                          "pinRequired": {
+                            "type": "boolean"
+                          },
+                          "video": {
+                            "type": "boolean"
+                          },
+                          "layout": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "maxMembers": {
+                            "type": "number"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listConferenceRooms",
+        "tags": [
+          "ConferenceRooms"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "number",
+                  "maxMembers"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "number": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "pin": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "video": {
+                    "type": "boolean"
+                  },
+                  "layout": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "maxMembers": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "number",
+                    "pinRequired",
+                    "video",
+                    "layout",
+                    "maxMembers"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "string"
+                    },
+                    "pinRequired": {
+                      "type": "boolean"
+                    },
+                    "video": {
+                      "type": "boolean"
+                    },
+                    "layout": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "maxMembers": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createConferenceRoom",
+        "tags": [
+          "ConferenceRooms"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/conference-rooms/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "number",
+                    "pinRequired",
+                    "video",
+                    "layout",
+                    "maxMembers"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "string"
+                    },
+                    "pinRequired": {
+                      "type": "boolean"
+                    },
+                    "video": {
+                      "type": "boolean"
+                    },
+                    "layout": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "maxMembers": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getConferenceRoom",
+        "tags": [
+          "ConferenceRooms"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "number": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "pin": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "video": {
+                    "type": "boolean"
+                  },
+                  "layout": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "maxMembers": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "label",
+                    "number",
+                    "pinRequired",
+                    "video",
+                    "layout",
+                    "maxMembers"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "number": {
+                      "type": "string"
+                    },
+                    "pinRequired": {
+                      "type": "boolean"
+                    },
+                    "video": {
+                      "type": "boolean"
+                    },
+                    "layout": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "maxMembers": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateConferenceRoom",
+        "tags": [
+          "ConferenceRooms"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteConferenceRoom",
+        "tags": [
+          "ConferenceRooms"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/flows": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "name",
+                          "currentPublishedVersionId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "currentPublishedVersionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listFlows",
+        "tags": [
+          "Flows"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "currentPublishedVersionId",
+                    "draftGraph",
+                    "draftUpdatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "currentPublishedVersionId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "draftGraph": {
+                      "type": "object",
+                      "required": [
+                        "entryPoints",
+                        "nodes",
+                        "edges"
+                      ],
+                      "properties": {
+                        "entryPoints": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "nodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "type",
+                              "config"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "type": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "config": {}
+                            }
+                          }
+                        },
+                        "edges": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "from",
+                              "port",
+                              "to"
+                            ],
+                            "properties": {
+                              "from": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "port": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "to": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "draftUpdatedAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createFlow",
+        "tags": [
+          "Flows"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/flows/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "currentPublishedVersionId",
+                    "draftGraph",
+                    "draftUpdatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "currentPublishedVersionId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "draftGraph": {
+                      "type": "object",
+                      "required": [
+                        "entryPoints",
+                        "nodes",
+                        "edges"
+                      ],
+                      "properties": {
+                        "entryPoints": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "nodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "type",
+                              "config"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "type": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "config": {}
+                            }
+                          }
+                        },
+                        "edges": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "from",
+                              "port",
+                              "to"
+                            ],
+                            "properties": {
+                              "from": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "port": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "to": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "draftUpdatedAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getFlow",
+        "tags": [
+          "Flows"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/flows/{id}/versions": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "versionNumber",
+                          "publishedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "versionNumber": {
+                            "type": "number"
+                          },
+                          "publishedAt": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listFlowVersions",
+        "tags": [
+          "Flows"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/flows/{id}/draft": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "entryPoints",
+                  "nodes",
+                  "edges"
+                ],
+                "properties": {
+                  "entryPoints": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "type",
+                        "config"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "type": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "config": {}
+                      }
+                    }
+                  },
+                  "edges": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": [
+                        "from",
+                        "port",
+                        "to"
+                      ],
+                      "properties": {
+                        "from": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "port": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "to": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "currentPublishedVersionId",
+                    "draftGraph",
+                    "draftUpdatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "currentPublishedVersionId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "draftGraph": {
+                      "type": "object",
+                      "required": [
+                        "entryPoints",
+                        "nodes",
+                        "edges"
+                      ],
+                      "properties": {
+                        "entryPoints": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "nodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "type",
+                              "config"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "type": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "config": {}
+                            }
+                          }
+                        },
+                        "edges": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "from",
+                              "port",
+                              "to"
+                            ],
+                            "properties": {
+                              "from": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "port": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "to": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "draftUpdatedAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveFlowDraft",
+        "tags": [
+          "Flows"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/flows/{id}/validate": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "valid",
+                    "issues"
+                  ],
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    },
+                    "issues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "kind",
+                          "message"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "nodeId": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "validateFlow",
+        "tags": [
+          "Flows"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/flows/{id}/publish": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "versionNumber",
+                    "publishedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "versionNumber": {
+                      "type": "number"
+                    },
+                    "publishedAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "publishFlow",
+        "tags": [
+          "Flows"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/flows/{id}/rollback": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "versionNumber"
+                ],
+                "properties": {
+                  "versionNumber": {
+                    "type": "number",
+                    "minimum": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "versionNumber",
+                    "publishedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "versionNumber": {
+                      "type": "number"
+                    },
+                    "publishedAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "rollbackFlow",
+        "tags": [
+          "Flows"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
