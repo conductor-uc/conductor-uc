@@ -7,10 +7,13 @@ import { DESTINATION_TYPES, type DestinationType } from './dids.js';
 
 /**
  * `mod_callcenter`'s own `strategy` param values (developer.signalwire.com/
- * freeswitch's mod_callcenter docs) — not this codebase's invention, but
- * also not verified against a real FreeSWITCH process. Flagged as G-47 in
- * docs/decisions.md, same "no live FS process reachable" caveat G-35/G-36/
- * G-41/G-43 already established for other FS-facing surfaces.
+ * freeswitch's mod_callcenter docs) — not this codebase's invention.
+ * `ring-all` specifically is confirmed live against a real FreeSWITCH
+ * process (S2-20, G-47 in docs/decisions.md): the module loads it without
+ * error and reflects it back through `callcenter_config queue list`
+ * unchanged. The other seven values are still unverified — same "no live
+ * FS process reachable while building this" caveat, just narrowed to the
+ * ones this task's own queue scenario never exercised.
  */
 export const QUEUE_STRATEGIES = [
   'ring-all',

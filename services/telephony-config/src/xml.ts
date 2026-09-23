@@ -211,7 +211,8 @@ export function buildDialplanDocument(
   ];
   if (voicemail !== undefined) {
     actions.unshift(
-      '<action application="set" data="continue_on_fail=NORMAL_CLEARING,USER_BUSY,NO_ANSWER,ORIGINATOR_CANCEL,UNALLOCATED_NUMBER"/>',
+      '<action application="set" data="hangup_after_bridge=false"/>',
+      '<action application="set" data="continue_on_fail=true"/>',
     );
     actions.push(
       `<action application="lua" data="voicemail.lua leave ${escapeXml(voicemail.tenantId)} ${escapeXml(voicemail.mailboxId)}"/>`,
@@ -622,25 +623,32 @@ export interface CallcenterAgentEntry {
 /**
  * `/fs/configuration`'s `callcenter.conf` response (S2-13; `mod_callcenter`).
  *
- * UNVERIFIED LIVE (docs/decisions.md G-47, same discipline G-43/G-45/G-46
- * already established for other FS-facing surfaces this codebase has
- * built): the `<queues>`/`<agents>`/`<tiers>` element shapes and the
- * `strategy`/`moh-sound`/`max-wait-time`/`contact`/`status`/`max-no-answer`/
- * `wrap-up-time`/`reject-delay-time`/`level`/`position` param names below
- * are `mod_callcenter`'s own documented config surface, not invented — but
- * not run against a real FreeSWITCH process either, including whether
- * `mod_http_cache`'s underlying client honours a credentialed `moh-sound`
- * URL the same way it does for `playback` (G-43's own open question, not
- * newly introduced here). One thing is deliberately left out rather than
+ * CONFIRMED LIVE (docs/decisions.md G-47, S2-20): the `<queues>`/`<agents>`/
+ * `<tiers>` element shapes and the `strategy`/`moh-sound`/`max-wait-time`/
+ * `contact`/`status`/`max-no-answer`/`wrap-up-time`/`reject-delay-time`/
+ * `level`/`position` param names below are correct — `mod_callcenter` loads
+ * them without error and reflects them back through `callcenter_config
+ * agent list`/`tier list` exactly as sent, once `autoload_configs/
+ * callcenter.conf.xml` exists at all (a real, separate bug this same
+ * S2-20 pass found and fixed — see that file's own comment). Still
+ * unconfirmed: whether `mod_http_cache`'s underlying client honours a
+ * credentialed `moh-sound` URL the same way it does for `playback` (G-43's
+ * own open question — this task's own queue never had an uploaded MOH
+ * asset to exercise it, and separately, `mod_http_cache` itself was found
+ * to have the identical missing-config load failure as `mod_callcenter`,
+ * not fixed by this task). One thing is deliberately left out rather than
  * guessed at: `announce-position`/`announce-frequency-seconds` are stored
  * but never emitted here (whether `mod_callcenter` even has a literal
- * config-time param for position
- * announcements, versus requiring app-level scripting via `cc-queue-count`-
- * style channel variables, is not confirmed). Every agent's `status` starts
- * `Logged Out` — `buildAgentStatusDialplanDocument`'s own feature codes are
- * the only way to become `Available`, and whether a `callcenter_config
- * reload` (triggered by every fresh affinity acquire) resets an already-
- * logged-in agent back to this config-time default is also unconfirmed.
+ * config-time param for position announcements, versus requiring
+ * app-level scripting via `cc-queue-count`-style channel variables, is not
+ * confirmed). Every agent's `status` starts `Logged Out` —
+ * `buildAgentStatusDialplanDocument`'s own feature codes (fixed in this
+ * same pass, see their own doc comment) are the only way to become
+ * `Available`, confirmed live. What is NOT confirmed, and looks like a
+ * genuine FreeSWITCH-internals issue rather than anything fixable here: an
+ * `Available`/correctly-tiered agent is never actually offered a call by
+ * `mod_callcenter`'s own dispatch mechanism — `tests/sip/test/
+ * queue.test.ts`'s own top comment has the full detail.
  */
 export function buildCallcenterConfigurationDocument(
   queues: readonly CallcenterQueueEntry[],
@@ -735,12 +743,22 @@ export function buildQueueDialplanDocument(
  * undocumented choice, the same "picked for familiarity, nothing more"
  * precedent `VOICEMAIL_RETRIEVAL_FEATURE_CODE` already sets (`fs.routes.ts`).
  *
- * Runs `callcenter_config agent set status` directly as a local FS `api`
- * action rather than round-tripping to any backend service: an agent's live
- * status is `mod_callcenter`'s own in-memory state, not something this
- * platform's own DB tracks (`006_add_queues.ts`'s own comment, pbx-config-
- * service, on why `agents` has no `status` column) — so there is nothing to
- * write back here, only FS's own module to tell.
+ * Runs `callcenter_config agent set status` via `agent_status.lua` rather
+ * than round-tripping to any backend service: an agent's live status is
+ * `mod_callcenter`'s own in-memory state, not something this platform's
+ * own DB tracks (`006_add_queues.ts`'s own comment, pbx-config-service, on
+ * why `agents` has no `status` column) — so there is nothing to write back
+ * here, only FS's own module to tell.
+ *
+ * CONFIRMED LIVE (S2-20, G-47): the original action here was
+ * `<action application="api" data="callcenter_config ...">` — there is no
+ * dialplan application named `api` in this image's module set at all
+ * (confirmed directly: `mod_dptools`'s own `show application` listing has
+ * no such entry), so every login/logout attempt failed outright
+ * (`Invalid Application api`, channel hung up
+ * `DESTINATION_OUT_OF_ORDER`) before ever reaching `mod_callcenter`. Fixed
+ * by routing through a tiny Lua script instead — see its own doc comment
+ * for why `status` travels as `0`/`1`, not the literal string.
  */
 export const AGENT_LOGIN_FEATURE_CODE = '*45';
 export const AGENT_LOGOUT_FEATURE_CODE = '*46';
@@ -761,7 +779,7 @@ export function buildAgentStatusDialplanDocument(
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(featureCode)}$`)}">\n` +
     `          ${tenantIdAction(tenantId)}\n` +
     '          <action application="answer"/>\n' +
-    `          <action application="api" data="${escapeXml(`callcenter_config agent set status '${agentName}' '${status}'`)}"/>\n` +
+    `          <action application="lua" data="agent_status.lua ${escapeXml(agentName)} ${status === 'Available' ? '1' : '0'}"/>\n` +
     '          <action application="hangup"/>\n' +
     '        </condition>\n' +
     '      </extension>\n' +
@@ -772,20 +790,17 @@ export function buildAgentStatusDialplanDocument(
 }
 
 /**
- * `/fs/dialplan`'s park/retrieve branch (S2-14; `mod_valet_parking`).
- * `valet_park(lotname/ext)` is the one call shape this is confident about
- * (developer.signalwire.com's own documented usage) — both parking (a
- * transfer into an empty slot) and retrieval (dialing a slot someone is
- * already parked in) run the exact same action, since the module's own
- * state machine decides which one it is, not this document.
+ * `/fs/dialplan`'s park/retrieve branch (S2-14; `mod_valet_parking`). Both
+ * parking (a transfer into an empty slot) and retrieval (dialing a slot
+ * someone is already parked in) run the exact same action, since the
+ * module's own state machine decides which one it is, not this document.
  *
- * UNVERIFIED LIVE — G-48 (docs/decisions.md), same discipline as G-43/G-47:
- * `mod_valet_parking` also documents a longer `lotname/ext/timeout/return-
- * ext` argument form for return-on-timeout, but the exact separator and
- * argument order were not confident enough to include here, so a lot's own
- * `timeoutSeconds`/`returnDestination*` (stored, real, CRUD-tested) are not
- * yet wired into this action — "return-on-timeout" from the plan's own
- * bullet is the one piece of S2-14 this does not implement.
+ * `valet_park <lotname> <extension>` — confirmed live (S2-20, G-48): a
+ * real FreeSWITCH process rejected the originally-shipped `lotname/ext`
+ * (one slash-joined string) with `mod_valet_parking.c:757 Usage: <lotname>
+ * <extension>|[ask ...]` — the module wants two space-separated arguments,
+ * not one. Fixed here; G-48 still covers the longer `lotname/ext/timeout/
+ * return-ext` return-on-timeout form, not attempted.
  */
 export function buildParkDialplanDocument(
   callerContext: string,
@@ -803,7 +818,16 @@ export function buildParkDialplanDocument(
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
     `          ${tenantIdAction(tenantId)}\n` +
     '          <action application="answer"/>\n' +
-    `          <action application="valet_park" data="${escapeXml(`${lotName}/${String(slotNumber)}`)}"/>\n` +
+    // Confirmed live (S2-20, G-48): `valet_hold_music` falls back to the
+    // channel's own hold-music setting when unset, and this platform sets
+    // none — leaving it unset made `valet_park`'s own playback loop error
+    // out and return within ~2s instead of holding, misreadable as "the
+    // call parked, then immediately hung up." `silence` is the module's
+    // own documented sentinel for a synthetic, always-resolvable stream
+    // (no real audio file dependency, matching this platform's existing
+    // caution about unconfirmed sound-file paths elsewhere, e.g. G-50).
+    '          <action application="set" data="valet_hold_music=silence"/>\n' +
+    `          <action application="valet_park" data="${escapeXml(`${lotName} ${String(slotNumber)}`)}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +
     '    </context>\n' +
@@ -824,8 +848,13 @@ export function buildParkDialplanDocument(
  * from the local mirror.
  *
  * No `conference.conf` xml_curl binding is built to back `roomName`
- * (`docs/decisions.md` G-50) — `mod_conference`'s own unconfigured default
- * profile is what a bare room name resolves against.
+ * (`docs/decisions.md` G-50) — a bare room name resolves against the
+ * `default` profile defined statically in
+ * `telephony/freeswitch/conf/autoload_configs/conference.conf.xml`, not a
+ * per-room xml_curl lookup. Confirmed live in S2-20: `mod_conference`
+ * requires that file to exist at all (a missing file, not just a missing
+ * profile, fails the call), so "no binding" only works because that static
+ * file is present — see the file's own comment.
  */
 export function buildConferenceDialplanDocument(
   callerContext: string,
