@@ -13,10 +13,19 @@ FROM safarov/freeswitch:1.10.12
 # demo config — not layered on top of it.
 COPY conf/ /etc/freeswitch/
 
-# S2-16's voicemail Lua app and S2-10's flow runner (plus the `json.lua` the
-# runner loads). `lua.conf.xml` points mod_lua's own script-path at this exact
-# directory.
-COPY scripts/ /etc/freeswitch/scripts/
+# S2-16's voicemail Lua app, S2-10's flow runner, S2-15's conference app
+# (plus the `json.lua` the flow runner loads). Copied to mod_lua's own
+# compiled-in default script directory, not a custom one — confirmed live
+# (S2-20): `lua.conf.xml`'s own `script-directory` param (the correct name;
+# an earlier `script-path` was simply wrong) is a long-documented FreeSWITCH
+# bug (signalwire/freeswitch#1483 — the param parses and logs as accepted,
+# but is never actually applied to the runtime search path), so every
+# `lua <script>.lua ...` dialplan action failed with "cannot open
+# /usr/share/freeswitch/scripts/<script>.lua: No such file or directory"
+# despite `/etc/freeswitch/scripts/` being correctly populated and
+# correctly (if uselessly) configured. Copying here instead sidesteps the
+# module bug entirely rather than depending on a fix that may never land.
+COPY scripts/ /usr/share/freeswitch/scripts/
 
 # 06's recording pipeline spool, and S2-10's flow-IR cache. Created here so
 # `docker run` without an explicit volume still has somewhere to write;
@@ -24,7 +33,16 @@ COPY scripts/ /etc/freeswitch/scripts/
 # the node, and a cache is by definition safe to lose on restart: the runner
 # re-fetches, which is S2-07's "a node restart simply re-caches" applied to
 # call flows).
-RUN mkdir -p /var/spool/cuc/rec /var/cache/cuc/flow
+#
+# `sounds/moh`: `local_stream.conf.xml`'s own MOH directory (G-47) — has to
+# exist for `mod_local_stream` to load at all, empty is fine (confirmed
+# live: an empty directory degrades to silence/comfort noise, not a load
+# failure), and there is no sound package to populate it with regardless.
+#
+# `cache/cuc/http`: `http_cache.conf.xml`'s own `location` (G-47, same bug
+# class — `mod_http_cache` also fails to *load* without a config file
+# naming a cache directory, confirmed live).
+RUN mkdir -p /var/spool/cuc/rec /var/cache/cuc/flow /usr/share/freeswitch/sounds/moh /var/cache/cuc/http
 
 EXPOSE 5060/udp 5060/tcp
 EXPOSE 16384-32768/udp

@@ -1,0 +1,19 @@
+<configuration name="http_cache.conf" description="HTTP Cache Configuration">
+  <!--
+      S2-20 (G-47, docs/decisions.md): same bug class already found and
+      fixed for `mod_conference`/`mod_callcenter`/`mod_local_stream` —
+      confirmed live, `mod_http_cache` fails to *load at all* without this
+      file (`mod_http_cache.c:1597 open of http_cache.conf failed`, then
+      `Error Loading module .../mod_http_cache.so`). Without the module
+      loaded, `http_cache://` URLs (G-43's own `playback`/`moh-sound`
+      credentialed-URL question — `fs.routes.ts`'s `mohUrlFor`) can never
+      even be tried, let alone confirmed. `location` points at a tmpfs
+      mount (`infra/compose/docker-compose.yml`'s own `/var/cache/cuc/http`,
+      created by the Dockerfile) — same "nothing durable on a node"
+      reasoning CLAUDE.md rule 5 already establishes for the recording
+      spool and flow-IR cache: a cache miss just re-fetches over HTTP.
+  -->
+  <settings>
+    <param name="location" value="/var/cache/cuc/http"/>
+  </settings>
+</configuration>
