@@ -1,0 +1,37 @@
+{
+  "name": "@cuc/notification-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/main.js",
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json && node scripts/copy-templates.mjs",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "dev": "node --watch dist/src/main.js",
+    "lint": "eslint .",
+    "migrate": "cuc-db latest --dir dist/migrations",
+    "start": "node dist/src/main.js",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cuc/api-contracts": "workspace:*",
+    "@cuc/config": "workspace:*",
+    "@cuc/db": "workspace:*",
+    "@cuc/events": "workspace:*",
+    "@cuc/http": "workspace:*",
+    "@cuc/logger": "workspace:*",
+    "handlebars": "^4.7.9",
+    "kysely": "^0.29.5",
+    "mjml": "^5.4.1",
+    "nodemailer": "^10.0.10"
+  },
+  "devDependencies": {
+    "@cuc/testing": "workspace:*",
+    "@types/mjml": "^5.0.0",
+    "@types/nodemailer": "^8.0.2",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

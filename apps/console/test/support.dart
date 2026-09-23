@@ -46,8 +46,8 @@ String fakeJwt(Map<String, Object?> claims) {
 
 const sampleBrand = Brand(
   displayName: 'Sample Reseller',
-  primary: Color(0xFF6A1B9A),
-  accent: Color(0xFF00695C),
+  primary: Color(0xFF4A148C),
+  accent: Color(0xFFFFE082),
   legalFooter: 'Sample Reseller Ltd.',
 );
 

@@ -1,0 +1,14 @@
+{{#if supportLine}}
+<mj-section padding="8px 24px 0 24px">
+  <mj-column>
+    <mj-text font-size="13px" color="#616161">{{ supportLine }}</mj-text>
+  </mj-column>
+</mj-section>
+{{/if}}
+{{#if legalFooter}}
+<mj-section padding="8px 24px 24px 24px">
+  <mj-column>
+    <mj-text font-size="12px" color="#757575">{{ legalFooter }}</mj-text>
+  </mj-column>
+</mj-section>
+{{/if}}

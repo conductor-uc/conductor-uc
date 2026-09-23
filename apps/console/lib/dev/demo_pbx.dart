@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:dio/dio.dart';
 
@@ -261,6 +262,19 @@ class DemoPbx {
             return _problem(400, '$k must be a #rrggbb color.');
           }
         }
+        final primary = body['primaryColor'];
+        final accent = body['accentColor'];
+        if (primary != null && accent != null) {
+          // The service checks the two colors against each other (02 §5.3).
+          final ratio = _contrast('$primary', '$accent');
+          if (ratio < 4.5) {
+            return _problem(
+              400,
+              'primaryColor/accentColor contrast is ${ratio.toStringAsFixed(2)}:1; '
+              'WCAG AA requires at least 4.5:1.',
+            );
+          }
+        }
         return _json(_brands[id] = {'resellerId': id, ...body});
       }
       final saved = _brands[id];
@@ -281,6 +295,23 @@ class DemoPbx {
       return _json(row, 201);
     }
     return null;
+  }
+
+  static double _luminance(String hex) {
+    double channel(int i) {
+      final c = int.parse(hex.substring(i, i + 2), radix: 16) / 255;
+      return c <= 0.03928
+          ? c / 12.92
+          : math.pow((c + 0.055) / 1.055, 2.4).toDouble();
+    }
+
+    return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  }
+
+  static double _contrast(String a, String b) {
+    final la = _luminance(a);
+    final lb = _luminance(b);
+    return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
   }
 
   ResponseBody _createOrg(

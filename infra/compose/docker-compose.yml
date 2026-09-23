@@ -27,6 +27,7 @@ services:
       CALLFLOW_SERVICE_DB_PASSWORD: ${CALLFLOW_SERVICE_DB_PASSWORD:-dev-callflow-service-password}
       VOICEMAIL_SERVICE_DB_PASSWORD: ${VOICEMAIL_SERVICE_DB_PASSWORD:-dev-voicemail-service-password}
       CDR_SERVICE_DB_PASSWORD: ${CDR_SERVICE_DB_PASSWORD:-dev-cdr-service-password}
+      NOTIFICATION_SERVICE_DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD:-dev-notification-service-password}
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     ports:
       - '${MARIADB_PORT:-3306}:3306'
@@ -569,6 +570,41 @@ services:
       STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
+
+  # S3-03. Consumes identity's reset and invitation events and sends the email
+  # through Mailpit. Links point at the console at CONSOLE_URL_OVERRIDE when set
+  # (a local `flutter run` or a served build), otherwise at
+  # https://console.$PLATFORM_BASE_DOMAIN.
+  notification-service:
+    build:
+      context: ../..
+      dockerfile: services/notification-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    environment:
+      SERVICE_NAME: notification-service
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: notification_service
+      DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD:-dev-notification-service-password}
+      DB_NAME: notification_service
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      ORG_SERVICE_URL: ${ORG_SERVICE_URL:-http://org-service:8080}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      PLATFORM_NOREPLY_ADDRESS: ${PLATFORM_NOREPLY_ADDRESS:-noreply@local.test}
+      PLATFORM_BASE_DOMAIN: ${PLATFORM_BASE_DOMAIN:-local.test}
+      CONSOLE_LINK_SCHEME: ${CONSOLE_LINK_SCHEME:-http}
+      CONSOLE_URL_OVERRIDE: ${CONSOLE_URL_OVERRIDE:-}
 
 volumes:
   mariadb-data:

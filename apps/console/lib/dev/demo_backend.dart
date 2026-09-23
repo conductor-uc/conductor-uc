@@ -44,8 +44,8 @@ class _DemoAdapter implements HttpClientAdapter {
               ? {
                   'neutral': false,
                   'displayName': 'Sample Reseller',
-                  'primaryColor': '#6a1b9a',
-                  'accentColor': '#00695c',
+                  'primaryColor': '#4a148c',
+                  'accentColor': '#ffe082',
                   'legalFooter': 'Sample Reseller Ltd.',
                 }
               : {'neutral': true},

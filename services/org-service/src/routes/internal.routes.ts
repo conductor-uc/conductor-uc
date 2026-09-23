@@ -1,6 +1,7 @@
 import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
+import type { BrandRepo } from '../repo/brand.repo.js';
 import type { DomainRepo } from '../repo/domain.repo.js';
 import type { OrgRepo } from '../repo/org.repo.js';
 
@@ -8,6 +9,22 @@ const TenantParamsSchema = Type.Object({ id: Type.String({ minLength: 1 }) });
 const DomainResponseSchema = Type.Object({ fqdn: Type.String() });
 const ResellerResponseSchema = Type.Object({ resellerId: Type.String() });
 const CountryResponseSchema = Type.Object({ country: Type.String() });
+const nullableString = Type.Union([Type.String(), Type.Null()]);
+const MailBrandResponseSchema = Type.Object({
+  /** True when there is no reseller brand: master, or a reseller with none saved. */
+  neutral: Type.Boolean(),
+  displayName: nullableString,
+  primaryColor: nullableString,
+  accentColor: nullableString,
+  supportEmail: nullableString,
+  supportUrl: nullableString,
+  supportPhone: nullableString,
+  emailFromName: nullableString,
+  emailFromAddress: nullableString,
+  legalFooter: nullableString,
+  /** The reseller's first console hostname, where links in an email should point. */
+  consoleHostname: nullableString,
+});
 const LimitsResponseSchema = Type.Object({ limits: Type.Record(Type.String(), Type.Unknown()) });
 
 /**
@@ -28,6 +45,7 @@ export function registerInternalRoutes(
   domains: DomainRepo,
   internalServiceToken: string,
   orgs: OrgRepo,
+  brands: BrandRepo,
 ): void {
   app.get(
     '/internal/v1/tenants/:id/domain',
@@ -97,6 +115,51 @@ export function registerInternalRoutes(
         throw ProblemError.notFound('No such tenant.');
       }
       return { country: org.country } satisfies Static<typeof CountryResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/orgs/:id/mail-brand` (S3-03): the brand an email to a
+   * user of this org carries (02 §5.2). A tenant sees its reseller's brand, a
+   * reseller its own, and the master sees none. notification-service renders
+   * with whatever comes back, or the neutral presentation when `neutral` is
+   * true, and points links at `consoleHostname`.
+   */
+  app.get(
+    '/internal/v1/orgs/:id/mail-brand',
+    {
+      config: { public: true },
+      schema: { params: TenantParamsSchema, response: { 200: MailBrandResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const org = await orgs.findById(request.params.id);
+      if (org === undefined) throw ProblemError.notFound('No such org.');
+
+      const resellerId =
+        org.type === 'reseller' ? org.id : org.type === 'tenant' ? org.resellerId : null;
+      const brand = resellerId === null ? undefined : await brands.findBrand(resellerId);
+      const consoleHostname =
+        resellerId === null
+          ? null
+          : ((await brands.listConsoleHostnames(resellerId))[0]?.fqdn ?? null);
+
+      return {
+        neutral: brand === undefined,
+        displayName: brand?.displayName ?? null,
+        primaryColor: brand?.primaryColor ?? null,
+        accentColor: brand?.accentColor ?? null,
+        supportEmail: brand?.supportEmail ?? null,
+        supportUrl: brand?.supportUrl ?? null,
+        supportPhone: brand?.supportPhone ?? null,
+        emailFromName: brand?.emailFromName ?? null,
+        emailFromAddress: brand?.emailFromAddress ?? null,
+        legalFooter: brand?.legalFooter ?? null,
+        consoleHostname,
+      } satisfies Static<typeof MailBrandResponseSchema>;
     },
   );
 

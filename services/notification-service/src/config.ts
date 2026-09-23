@@ -1,0 +1,50 @@
+import { Env, Type, baseEnvSchema, loadConfig } from '@cuc/config';
+import { dbEnvSchema } from '@cuc/db';
+import { eventsEnvSchema } from '@cuc/events';
+import { httpEnvSchema } from '@cuc/http';
+
+/**
+ * Everything this service reads from the environment. Validated once at
+ * startup; the process refuses to start on anything invalid (09 §1).
+ */
+export const configSchema = Type.Object({
+  ...baseEnvSchema.properties,
+  ...dbEnvSchema.properties,
+  ...eventsEnvSchema.properties,
+  ...httpEnvSchema.properties,
+
+  /** org-service, which resolves the brand an org's emails carry (`org-client.ts`). */
+  ORG_SERVICE_URL: Env.url(),
+  INTERNAL_SERVICE_TOKEN: Env.secret(),
+
+  /** The SMTP relay every email goes out through. */
+  SMTP_HOST: Env.string(),
+  SMTP_PORT: Env.int({ minimum: 1, maximum: 65_535, default: 587 }),
+  /** Implicit TLS (port 465). Leave off for STARTTLS or a plain local relay. */
+  SMTP_SECURE: Env.bool({ default: false }),
+  SMTP_USER: Env.string({ optional: true }),
+  SMTP_PASSWORD: Env.secret({ optional: true }),
+
+  /**
+   * The sender address of every email (S3-03). A reseller's own address is not
+   * used yet: nothing records whether its domain passes SPF and DKIM (G-57), so
+   * a brand only sets the display name.
+   */
+  PLATFORM_NOREPLY_ADDRESS: Env.string(),
+
+  /** Where links point when the org has no reseller console hostname: `https://console.{this}`. */
+  PLATFORM_BASE_DOMAIN: Env.string(),
+  /** `https` in any real deployment; `http` for a local console. */
+  CONSOLE_LINK_SCHEME: Env.string({ default: 'https' }),
+  /**
+   * Full base URL to use for links instead of any derived one (for example a
+   * local console at `http://localhost:8099`). Development only.
+   */
+  CONSOLE_URL_OVERRIDE: Env.string({ optional: true }),
+});
+
+export type ServiceConfig = ReturnType<typeof loadServiceConfig>;
+
+export function loadServiceConfig(env?: Record<string, string | undefined>) {
+  return loadConfig(configSchema, env === undefined ? {} : { env });
+}
