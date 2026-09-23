@@ -182,7 +182,7 @@ void main() {
               as YamlMap?)?[r'$ref'];
       return ref == null
           ? null
-          : seedSchemas['${ref}'.split('/').last] as YamlMap;
+          : seedSchemas['$ref'.split('/').last] as YamlMap;
     }
 
     for (final path in seedPaths.keys.cast<String>()) {
