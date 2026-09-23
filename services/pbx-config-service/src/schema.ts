@@ -148,4 +148,52 @@ export interface PbxConfigServiceDb extends EventTables {
     updated_at: Date;
     version: number;
   };
+  /**
+   * A queue's config (S2-13; `mod_callcenter`) — `domain/queue.ts` owns the
+   * `strategy` enum. `moh_media_asset_id` names a `media_assets.id` in this
+   * tenant; null means FS's own default hold music, not "no MOH".
+   */
+  queues: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    strategy: string;
+    moh_media_asset_id: string | null;
+    /** 0 = unlimited (mod_callcenter's own convention). */
+    max_wait_seconds: number;
+    announce_position: boolean;
+    announce_frequency_seconds: number | null;
+    /** Same `DestinationType` union as `ring_groups.no_answer_destination_type` — where an abandoned/overflowed caller goes. */
+    no_agent_destination_type: string | null;
+    no_agent_destination_id: string | null;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
+  /**
+   * An agent identity (S2-13) — one row per extension acting as an agent,
+   * `extension_id` unique per tenant (`006_add_queues.ts`'s own comment on
+   * why live status is deliberately not a column here).
+   */
+  agents: {
+    id: string;
+    tenant_id: string;
+    extension_id: string;
+    max_no_answer: number;
+    wrap_up_seconds: number;
+    reject_delay_seconds: number;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
+  /** The queue<->agent many-to-many join (S2-13), one row per tier assignment — `(queue_id, agent_id)` unique. */
+  queue_tiers: {
+    id: string;
+    tenant_id: string;
+    queue_id: string;
+    agent_id: string;
+    level: number;
+    position: number;
+    created_at: Date;
+  };
 }

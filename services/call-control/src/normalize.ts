@@ -38,7 +38,37 @@ export type ChannelAction =
       readonly hangupCause: string;
     }
   | { readonly kind: 'heartbeat'; readonly nodeId: string }
+  | {
+      readonly kind: 'queueAgentStateChanged';
+      readonly nodeId: string;
+      readonly agentName: string;
+      readonly status: string;
+    }
   | { readonly kind: 'ignored' };
+
+/**
+ * `mod_callcenter`'s own ESL event (S2-13; `Event-Subclass: callcenter::
+ * info`) — checked before the `Unique-ID` gate below, the same reason
+ * `HEARTBEAT` is: an agent-state-change is not tied to any one channel, so
+ * it may carry no `Unique-ID` at all, and gating on one first would drop
+ * every callcenter event silently. Only `CC-Action: agent-state-change` is
+ * handled (`events.ts`'s own doc comment on `call.queue.agent_status_changed`
+ * for why queue-member add/del are not) — any other `CC-Action` value, or a
+ * malformed one missing `CC-Agent`/`CC-Agent-Status`, normalizes to
+ * `ignored` rather than guessed at.
+ */
+function normalizeCallcenterEvent(
+  nodeId: string,
+  raw: Readonly<Record<string, string>>,
+): ChannelAction {
+  if (raw['CC-Action'] !== 'agent-state-change') return { kind: 'ignored' };
+  const agentName = raw['CC-Agent'];
+  const status = raw['CC-Agent-Status'];
+  if (agentName === undefined || agentName === '' || status === undefined || status === '') {
+    return { kind: 'ignored' };
+  }
+  return { kind: 'queueAgentStateChanged', nodeId, agentName, status };
+}
 
 export function normalizeEslEvent(
   nodeId: string,
@@ -47,6 +77,9 @@ export function normalizeEslEvent(
   const eventName = raw['Event-Name'];
 
   if (eventName === 'HEARTBEAT') return { kind: 'heartbeat', nodeId };
+  if (eventName === 'CUSTOM' && raw['Event-Subclass'] === 'callcenter::info') {
+    return normalizeCallcenterEvent(nodeId, raw);
+  }
 
   const callUuid = raw['Unique-ID'];
   if (callUuid === undefined || callUuid === '') return { kind: 'ignored' };

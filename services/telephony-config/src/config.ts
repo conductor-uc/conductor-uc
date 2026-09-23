@@ -54,6 +54,18 @@ export const configSchema = Type.Object({
    */
   OPENSIPS_SIP_URI: Env.string(),
 
+  /**
+   * This service's own externally-reachable base URL, e.g.
+   * http://telephony-config:8080 — the same value as `vars.xml`'s
+   * `telephony_config_url` (FS's own env var for it), just known here as
+   * this service's own address rather than something to reach out to.
+   * S2-13's own use: a queue's `moh-sound` embeds a credentialed
+   * `http_cache://` URL pointing at `/fs/media/...`, the same shape
+   * `flow_runner.lua`'s own `mediaUrl()` already builds for playback —
+   * `mod_http_cache` fetches it directly, so it needs to be absolute.
+   */
+  SELF_URL: Env.url(),
+
   /** Base URL for pbx-config-service's internal API, e.g. http://pbx-config-service:8080. */
   PBX_CONFIG_SERVICE_URL: Env.url(),
   /** Base URL for trunk-service's internal API, e.g. http://trunk-service:8080 (S2-02). */
@@ -64,6 +76,13 @@ export const configSchema = Type.Object({
   VOICEMAIL_SERVICE_URL: Env.url(),
   /** Base URL for callflow-service's internal API, e.g. http://callflow-service:8080 (S2-09/S2-10). */
   CALLFLOW_SERVICE_URL: Env.url(),
+  /**
+   * Base URL for call-control's `/internal/v1/affinity/...` (S2-12/S2-13),
+   * e.g. http://call-control:8080 — a DID whose `destination_type` is
+   * `queue` needs to acquire the affinity lease synchronously before it can
+   * hand the call to `mod_callcenter` (`fs.routes.ts`'s `handleQueueDial`).
+   */
+  CALL_CONTROL_URL: Env.url(),
   /**
    * Shared bearer token pbx-config-service's and trunk-service's
    * `/internal/v1` routes expect (07 §1's precedent, same variable name

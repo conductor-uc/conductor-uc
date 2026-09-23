@@ -8,6 +8,7 @@ import { storageFromConfig } from '@cuc/storage';
 import { Redis } from 'ioredis';
 
 import { createCallflowClient } from './callflow-client.js';
+import { createCallControlClient } from './call-control-client.js';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
 import { createPbxConsumer } from './consumers/pbx.consumer.js';
@@ -114,6 +115,11 @@ const callflowClient = createCallflowClient({
   baseUrl: config.CALLFLOW_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
+// S2-13: `handleQueueDial`'s own synchronous affinity-acquire call into call-control.
+const callControlClient = createCallControlClient({
+  baseUrl: config.CALL_CONTROL_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
 // S2-08: the round-robin ring-group counter (`ring-group-counter.ts`) —
 // same `lazyConnect: false`/`maxRetriesPerRequest` shape api-gateway's own
 // rate-limiter client uses, so this fails fast at startup rather than
@@ -190,6 +196,8 @@ registerFsRoutes(
   redisClient,
   callflowClient,
   affinityRegistry,
+  callControlClient,
+  config.SELF_URL,
 );
 registerInternalRoutes(
   app,

@@ -214,5 +214,35 @@ describe.skipIf(skipReason !== undefined)(
         .executeTakeFirst();
       expect(Number(outboxCount?.n)).toBe(0);
     });
+
+    it('a callcenter agent-state-change enqueues call.queue.agent_status_changed (S2-13)', async () => {
+      const handler = createChannelHandler({
+        db: h.db.kysely,
+        registry: h.registry,
+        logger: h.logger,
+        callSafetyTtlMs: 6 * 60 * 60 * 1000,
+        heartbeatTtlMs: 10_000,
+      });
+
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CUSTOM',
+        'Event-Subclass': 'callcenter::info',
+        'CC-Action': 'agent-state-change',
+        'CC-Agent': '101@acme.platform.test',
+        'CC-Agent-Status': 'Available',
+      });
+
+      const outboxRow = await h.db.kysely
+        .selectFrom('outbox')
+        .selectAll()
+        .where('type', '=', 'call.queue.agent_status_changed')
+        .executeTakeFirst();
+      expect(outboxRow).toBeDefined();
+      expect(parsePayload(outboxRow?.payload)).toMatchObject({
+        nodeId: 'fs-1',
+        agentName: '101@acme.platform.test',
+        status: 'Available',
+      });
+    });
   },
 );

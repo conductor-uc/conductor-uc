@@ -359,9 +359,14 @@ not this helper's: it only answers the question). Returns `false` plus the
 actual holder's node id when leased elsewhere, for `hairpinTransfer` below.
 
 A failed or unparseable affinity check degrades to "local" rather than
-hairpinning on a guess — the same "an honest local attempt beats a blind
-transfer" bias `handlers.queue`'s own G-43 stub already takes for a missing
-subsystem, applied here to a missing *answer*.
+hairpinning on a guess — "an honest local attempt beats a blind transfer".
+
+Not currently called by any handler: `handlers.queue` below uses its own
+dedicated `/fs/flow/.../queue/:queueId` endpoint instead, which resolves
+*and* acquires in one round trip rather than the read-only check this
+function does — but a future resource kind whose own resolution doesn't
+need to acquire anything (or that wants the acquire/check split into two
+steps) can use this directly.
 --]]
 local function resolveAffinity(kind, resourceId)
   local body, err = httpGet("/fs/affinity/" .. tenantId .. "/" .. kind .. "/" .. resourceId)
@@ -382,16 +387,16 @@ end
 The "hairpin" (04 §3.3): sends the call back out through OpenSIPs carrying
 an `X-Affinity-Node` hint naming the node that actually holds the lease.
 
-UNVERIFIED LIVE and presently inert (docs/decisions.md G-46, same discipline
-as G-43/G-45 above): `opensips.cfg.template`'s own `route{}` does not yet
-read this header at all (its own comment on the `cachedb_redis` load: "read
-by call-control (S2+), not by anything in this script") — teaching OpenSIPs
-to dispatch on it is S4-05's job ("Affinity routing at OpenSIPs + multi-node
-lease tests"), not this one's. This function exists so S2-13/14/15 have a
-single, correct place to call once they have a real pinned resource to
-hairpin *to* — today, with exactly one FS node in the dev stack (S2-19 adds
-the second), there is nowhere for a hairpin to actually go, so nothing in
-this file calls it yet.
+UNVERIFIED LIVE and, despite having a real caller as of S2-13 (`handlers.
+queue` below), still practically unreachable (docs/decisions.md G-46, same
+discipline as G-43/G-45/G-47 above): `opensips.cfg.template`'s own `route{}`
+does not yet read this header at all (its own comment on the `cachedb_redis`
+load: "read by call-control (S2+), not by anything in this script") —
+teaching OpenSIPs to dispatch on it is S4-05's job ("Affinity routing at
+OpenSIPs + multi-node lease tests"), not this one's. With exactly one FS
+node in the dev stack (S2-19 adds the second), a queue's lease can only
+ever resolve to that same node, so `handlers.queue`'s hairpin branch can
+never actually run yet — reachable in code, not in practice.
 --]]
 local function hairpinTransfer(targetNodeId)
   local domain = session:getVariable("cuc_tenant_domain")
@@ -439,19 +444,44 @@ function handlers.ring_group(node)
 end
 
 --[[
-Queues are S2-13's subsystem and do not exist yet — `resolveAffinity`/
-`hairpinTransfer` above are ready for S2-13 to call once `node.config.queueId`
-names a real, leaseable queue, but there is nothing real to check affinity
-against today, so this stays the same G-43 stub.
+Queues (S2-13; `mod_callcenter`). Resolves the queue through telephony-
+config's own `/fs/flow/.../queue/:queueId?nodeId=...` — unlike `resolveAffinity`
+above (a plain read), this endpoint also *acquires* the lease, preferring
+this node when the queue is not yet leased to anyone (04 §3.3: "otherwise
+the runner acquires the lease locally" — a call already running here is the
+natural owner of an unleased queue, not a candidate for load-balancing
+elsewhere). If it comes back leased to a different node, this hairpins
+there instead of handing the call to a `callcenter` config this node has
+never loaded.
 
-The node takes its `next` port rather than hanging up: a flow that routes to
-a queue almost always has something after it (voicemail, an overflow menu),
-so falling through keeps the caller moving instead of dropping them. Logged
-at ERR because a silently skipped queue is a real routing surprise, not a
-benign no-op. Flagged as G-43.
+The node takes its `next` port rather than hanging up on a resolve failure:
+a flow that routes to a queue almost always has something after it
+(voicemail, an overflow menu), so falling through keeps the caller moving
+instead of dropping them — the same reasoning this handler's own previous
+G-43 stub already established.
+
+UNVERIFIED LIVE — G-47 (docs/decisions.md), same discipline as this file's
+own G-43: the `callcenter` application's argument shape (a bare queue name)
+is `mod_callcenter`'s documented dialplan API, not invented, but not run
+against a real FreeSWITCH process.
 --]]
 function handlers.queue(node)
-  log("ERR", "queue node '" .. node.id .. "' skipped: queues arrive in S2-13 (G-43)")
+  local resolved = httpGet(
+    "/fs/flow/" .. tenantId .. "/queue/" .. node.config.queueId .. "?nodeId=" .. ownNodeId()
+  )
+  local decoded = resolved ~= nil and json.decode(resolved) or nil
+  if decoded == nil or decoded.queueName == nil then
+    log("ERR", "queue node '" .. node.id .. "' could not resolve its queue")
+    return node.ports.next
+  end
+
+  if decoded.isLocal == false then
+    hairpinTransfer(decoded.nodeId)
+    return nil
+  end
+
+  session:execute("callcenter", decoded.queueName)
+  if not session:ready() then return nil end
   return node.ports.next
 end
 

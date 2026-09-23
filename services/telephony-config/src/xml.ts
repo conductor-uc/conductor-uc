@@ -12,6 +12,11 @@
 
 import { drTag, stripLeadingPlus } from './repo/opensips-projection.repo.js';
 
+/** `mod_callcenter`'s own `<queue name="…">`/`<agent name="…">`/`<tier agent="…" queue="…">` identity convention — `id@domain`, unique within this node the same way a SIP AOR is. Exported for `fs.routes.ts`'s `/fs/configuration` handler, which assembles these across possibly several tenants at once. */
+export function callcenterName(id: string, domain: string): string {
+  return `${id}@${domain}`;
+}
+
 export function escapeXml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -514,6 +519,176 @@ export function buildEmergencyDialplanDocument(
     `      <extension name="emergency-${escapeXml(dialedNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(dialedNumber)}$`)}">\n` +
     `          <action application="bridge" data="${escapeXml(target)}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/** One queue's own view of `callcenter.conf` — already filtered to its tenant's domain and its current tier list (`fs.routes.ts`'s `/fs/configuration` handler assembles this). */
+export interface CallcenterQueueEntry {
+  readonly name: string;
+  readonly strategy: string;
+  /** 0 = unlimited (`mod_callcenter`'s own `max-wait-time` convention, `domain/queue.ts` mirrors it). */
+  readonly maxWaitSeconds: number;
+  /** A credentialed `http_cache://` URL (`fs.routes.ts` builds it) for the queue's own uploaded MOH asset, or `null` for FS's built-in `local_stream://moh`. */
+  readonly mohUrl: string | null;
+  readonly tiers: readonly {
+    readonly agentName: string;
+    readonly level: number;
+    readonly position: number;
+  }[];
+}
+
+export interface CallcenterAgentEntry {
+  readonly name: string;
+  readonly maxNoAnswer: number;
+  readonly wrapUpSeconds: number;
+  readonly rejectDelaySeconds: number;
+}
+
+/**
+ * `/fs/configuration`'s `callcenter.conf` response (S2-13; `mod_callcenter`).
+ *
+ * UNVERIFIED LIVE (docs/decisions.md G-47, same discipline G-43/G-45/G-46
+ * already established for other FS-facing surfaces this codebase has
+ * built): the `<queues>`/`<agents>`/`<tiers>` element shapes and the
+ * `strategy`/`moh-sound`/`max-wait-time`/`contact`/`status`/`max-no-answer`/
+ * `wrap-up-time`/`reject-delay-time`/`level`/`position` param names below
+ * are `mod_callcenter`'s own documented config surface, not invented — but
+ * not run against a real FreeSWITCH process either, including whether
+ * `mod_http_cache`'s underlying client honours a credentialed `moh-sound`
+ * URL the same way it does for `playback` (G-43's own open question, not
+ * newly introduced here). One thing is deliberately left out rather than
+ * guessed at: `announce-position`/`announce-frequency-seconds` are stored
+ * but never emitted here (whether `mod_callcenter` even has a literal
+ * config-time param for position
+ * announcements, versus requiring app-level scripting via `cc-queue-count`-
+ * style channel variables, is not confirmed). Every agent's `status` starts
+ * `Logged Out` — `buildAgentStatusDialplanDocument`'s own feature codes are
+ * the only way to become `Available`, and whether a `callcenter_config
+ * reload` (triggered by every fresh affinity acquire) resets an already-
+ * logged-in agent back to this config-time default is also unconfirmed.
+ */
+export function buildCallcenterConfigurationDocument(
+  queues: readonly CallcenterQueueEntry[],
+  agents: readonly CallcenterAgentEntry[],
+): string {
+  const queueXml = queues
+    .map(
+      (queue) =>
+        `      <queue name="${escapeXml(queue.name)}">\n` +
+        `        <param name="strategy" value="${escapeXml(queue.strategy)}"/>\n` +
+        `        <param name="moh-sound" value="${escapeXml(queue.mohUrl ?? 'local_stream://moh')}"/>\n` +
+        `        <param name="max-wait-time" value="${String(queue.maxWaitSeconds)}"/>\n` +
+        '        <param name="tier-rules-apply" value="true"/>\n' +
+        '      </queue>\n',
+    )
+    .join('');
+
+  const agentXml = agents
+    .map(
+      (agent) =>
+        `      <agent name="${escapeXml(agent.name)}" type="callback" contact="user/${escapeXml(agent.name)}" status="Logged Out" ` +
+        `max-no-answer="${String(agent.maxNoAnswer)}" wrap-up-time="${String(agent.wrapUpSeconds)}" reject-delay-time="${String(agent.rejectDelaySeconds)}"/>\n`,
+    )
+    .join('');
+
+  const tierXml = queues
+    .flatMap((queue) =>
+      queue.tiers.map(
+        (tier) =>
+          `      <tier agent="${escapeXml(tier.agentName)}" queue="${escapeXml(queue.name)}" level="${String(tier.level)}" position="${String(tier.position)}"/>\n`,
+      ),
+    )
+    .join('');
+
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="configuration">\n' +
+    '    <configuration name="callcenter.conf" description="CallCenter">\n' +
+    '      <queues>\n' +
+    queueXml +
+    '      </queues>\n' +
+    '      <agents>\n' +
+    agentXml +
+    '      </agents>\n' +
+    '      <tiers>\n' +
+    tierXml +
+    '      </tiers>\n' +
+    '    </configuration>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/**
+ * `/fs/dialplan`'s from-trunk `queue` branch (S2-13; G-25's "each later
+ * stage teaches `/fs/dialplan` to resolve its own destination type" — this
+ * is that stage for `queue`). Reached only once the caller's handler has
+ * already synchronously acquired the queue's affinity lease onto the
+ * requesting node (`fs.routes.ts`'s `handleQueueDial`) — by the time this
+ * document is returned, the node is guaranteed (well, "acquired" — 04 §3.3's
+ * usual lease-lag caveat still applies) to have the queue loaded via its own
+ * `/fs/configuration` re-fetch.
+ */
+export function buildQueueDialplanDocument(
+  callerContext: string,
+  destinationNumber: string,
+  queueName: string,
+): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="queue-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    '          <action application="answer"/>\n' +
+    `          <action application="callcenter" data="${escapeXml(queueName)}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/**
+ * The agent login/logout feature codes (S2-13; plan: "agent login and
+ * logout feature codes"). `*45`/`*46` are this task's own arbitrary,
+ * undocumented choice, the same "picked for familiarity, nothing more"
+ * precedent `VOICEMAIL_RETRIEVAL_FEATURE_CODE` already sets (`fs.routes.ts`).
+ *
+ * Runs `callcenter_config agent set status` directly as a local FS `api`
+ * action rather than round-tripping to any backend service: an agent's live
+ * status is `mod_callcenter`'s own in-memory state, not something this
+ * platform's own DB tracks (`006_add_queues.ts`'s own comment, pbx-config-
+ * service, on why `agents` has no `status` column) — so there is nothing to
+ * write back here, only FS's own module to tell.
+ */
+export const AGENT_LOGIN_FEATURE_CODE = '*45';
+export const AGENT_LOGOUT_FEATURE_CODE = '*46';
+
+export function buildAgentStatusDialplanDocument(
+  callerContext: string,
+  featureCode: string,
+  agentName: string,
+  status: 'Available' | 'Logged Out',
+): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="agent-status-${escapeXml(featureCode)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(featureCode)}$`)}">\n` +
+    '          <action application="answer"/>\n' +
+    `          <action application="api" data="${escapeXml(`callcenter_config agent set status '${agentName}' '${status}'`)}"/>\n` +
+    '          <action application="hangup"/>\n' +
     '        </condition>\n' +
     '      </extension>\n' +
     '    </context>\n' +

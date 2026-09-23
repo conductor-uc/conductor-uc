@@ -18,6 +18,19 @@ interface RingGroupEventData {
   readonly ringGroupId: string;
 }
 
+interface QueueEventData {
+  readonly queueId: string;
+}
+
+interface AgentEventData {
+  readonly agentId: string;
+}
+
+interface QueueTierEventData {
+  readonly queueId: string;
+  readonly agentId: string;
+}
+
 export interface PbxConsumerOptions {
   /** How long one pull waits for a message (`@cuc/events`' default: 1s). Longer in tests. */
   readonly pullTimeoutMs?: number;
@@ -63,6 +76,15 @@ export function createPbxConsumer(
       'pbx.ring_group.created',
       'pbx.ring_group.updated',
       'pbx.ring_group.deleted',
+      'pbx.queue.created',
+      'pbx.queue.updated',
+      'pbx.queue.deleted',
+      'pbx.agent.created',
+      'pbx.agent.updated',
+      'pbx.agent.deleted',
+      'pbx.queue_tier.added',
+      'pbx.queue_tier.updated',
+      'pbx.queue_tier.removed',
     ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
     handler: async (envelope, trx) => {
@@ -106,6 +128,34 @@ export function createPbxConsumer(
 
         case 'pbx.ring_group.deleted':
           await projection.removeRingGroup(trx, (envelope.data as RingGroupEventData).ringGroupId);
+          return;
+
+        case 'pbx.queue.created':
+        case 'pbx.queue.updated':
+          await projection.projectQueue(trx, tenantId, (envelope.data as QueueEventData).queueId);
+          return;
+
+        case 'pbx.queue.deleted':
+          await projection.removeQueue(trx, (envelope.data as QueueEventData).queueId);
+          return;
+
+        case 'pbx.agent.created':
+        case 'pbx.agent.updated':
+          await projection.projectAgent(trx, tenantId, (envelope.data as AgentEventData).agentId);
+          return;
+
+        case 'pbx.agent.deleted':
+          await projection.removeAgent(trx, (envelope.data as AgentEventData).agentId);
+          return;
+
+        case 'pbx.queue_tier.added':
+        case 'pbx.queue_tier.updated':
+        case 'pbx.queue_tier.removed':
+          await projection.projectQueueTiers(
+            trx,
+            tenantId,
+            (envelope.data as QueueTierEventData).queueId,
+          );
           return;
 
         default:

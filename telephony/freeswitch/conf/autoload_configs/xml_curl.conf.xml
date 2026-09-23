@@ -17,13 +17,19 @@
       <param name="gateway-credentials" value="fs-node:$${telephony_config_token}"/>
       <param name="auth-scheme" value="basic"/>
     </binding>
+    <!-- S2-12/S2-13 (G-45): `nodeId` names this node's own `cuc_node_id`
+         (vars.xml) — the `queue` destination-type branch (S2-13) needs it to
+         acquire an affinity lease onto the node actually asking, and
+         `/fs/configuration` needs it to filter `callcenter.conf` to
+         resources leased to this node. `directory` has no such need, so it
+         carries no query param. -->
     <binding name="dialplan">
-      <param name="gateway-url" value="$${telephony_config_url}/fs/dialplan" bindings="dialplan"/>
+      <param name="gateway-url" value="$${telephony_config_url}/fs/dialplan?nodeId=$${cuc_node_id}" bindings="dialplan"/>
       <param name="gateway-credentials" value="fs-node:$${telephony_config_token}"/>
       <param name="auth-scheme" value="basic"/>
     </binding>
     <binding name="configuration">
-      <param name="gateway-url" value="$${telephony_config_url}/fs/configuration" bindings="configuration"/>
+      <param name="gateway-url" value="$${telephony_config_url}/fs/configuration?nodeId=$${cuc_node_id}" bindings="configuration"/>
       <param name="gateway-credentials" value="fs-node:$${telephony_config_token}"/>
       <param name="auth-scheme" value="basic"/>
     </binding>

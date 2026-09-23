@@ -72,6 +72,34 @@ export const callEvents = defineEvents({
       hangupCause: Type.String(),
     }),
   },
+  /**
+   * S2-13: an agent's live status changed in `mod_callcenter` (ESL `CUSTOM
+   * callcenter::info`, `CC-Action: agent-state-change`) — the only
+   * `call.queue.*` event this task wires up. `agentName` is the
+   * `mod_callcenter` identity (`extension_number@tenant_domain`,
+   * `callcenterName()` in telephony-config's `xml.ts`), not this
+   * platform's own agent id: this event has no tenant/agent-id context to
+   * carry (ESL reports FS's own config-time identity, nothing else), so a
+   * consumer that needs the platform id has to resolve it itself.
+   *
+   * UNVERIFIED LIVE (docs/decisions.md G-47, same discipline as this
+   * codebase's other FS-facing surfaces): `CC-Action`/`CC-Agent`/
+   * `CC-Agent-Status` are `mod_callcenter`'s own documented ESL event
+   * headers, not invented, but not run against a real FreeSWITCH process.
+   * `call.queue.caller_joined`/`call.queue.caller_left` (queue-member add/del) are not
+   * implemented — their own header names are less confidently known, and
+   * guessing wrong here would silently corrupt event data rather than
+   * fail loudly, worse than not emitting them at all.
+   */
+  'call.queue.agent_status_changed': {
+    schemaVersion: 1,
+    description: "An agent's live mod_callcenter status changed.",
+    data: Type.Object({
+      nodeId: Type.String({ minLength: 1 }),
+      agentName: Type.String({ minLength: 1 }),
+      status: Type.String({ minLength: 1 }),
+    }),
+  },
   // `call.lost` (04 §4's failure sequence: a node's calls, abandoned on
   // heartbeat expiry) is deliberately NOT defined here — the plan's own
   // dependency table lists it as S4-04's deliverable ("Failover handling:

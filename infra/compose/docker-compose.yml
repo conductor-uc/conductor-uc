@@ -312,6 +312,8 @@ services:
         condition: service_started
       callflow-service:
         condition: service_started
+      call-control:
+        condition: service_started
     environment:
       SERVICE_NAME: telephony-config
       DB_HOST: mariadb
@@ -339,6 +341,11 @@ services:
       ORG_SERVICE_URL: http://org-service:8080
       VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
       CALLFLOW_SERVICE_URL: http://callflow-service:8080
+      # S2-13: `handleQueueDial`'s own synchronous affinity-acquire call.
+      CALL_CONTROL_URL: http://call-control:8080
+      # S2-13: must match the freeswitch service's own TELEPHONY_CONFIG_URL
+      # default above — this service's own address, from FS's perspective.
+      SELF_URL: http://telephony-config:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
       RECONCILE_INTERVAL_MS: '900000'

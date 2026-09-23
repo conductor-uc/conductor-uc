@@ -37,6 +37,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       h.redis,
       h.callflow,
       h.affinity,
+      h.callControl,
+      'http://telephony-config-test:8080',
     );
     await app.ready();
   });
@@ -2153,6 +2155,464 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       });
 
       expect(response.statusCode).toBe(401);
+    });
+  });
+
+  describe('queues, agents, and mod_callcenter (S2-13)', () => {
+    async function seedTenant(tenantId: string, fqdn = 'acme.platform.test'): Promise<void> {
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, { id: crypto.randomUUID(), tenantId, fqdn });
+    }
+
+    async function seedExtension(tenantId: string, number: string): Promise<string> {
+      const id = crypto.randomUUID();
+      await h.readModel.upsertExtension(h.db.kysely, {
+        id,
+        tenantId,
+        number,
+        username: number,
+        ha1: 'a'.repeat(32),
+        realm: 'acme.platform.test',
+        callerIdName: null,
+        callerIdNumber: null,
+        emergencyLocationId: crypto.randomUUID(),
+      });
+      return id;
+    }
+
+    async function seedQueue(
+      tenantId: string,
+      overrides: Partial<Parameters<typeof h.readModel.upsertQueue>[1]> = {},
+    ): Promise<string> {
+      const id = crypto.randomUUID();
+      await h.readModel.upsertQueue(h.db.kysely, {
+        id,
+        tenantId,
+        label: 'Support',
+        strategy: 'round-robin',
+        mohMediaAssetId: null,
+        maxWaitSeconds: 0,
+        announcePosition: false,
+        announceFrequencySeconds: null,
+        noAgentDestinationType: null,
+        noAgentDestinationId: null,
+        ...overrides,
+      });
+      return id;
+    }
+
+    async function seedAgent(tenantId: string, extensionId: string): Promise<string> {
+      const id = crypto.randomUUID();
+      await h.readModel.upsertAgent(h.db.kysely, {
+        id,
+        tenantId,
+        extensionId,
+        maxNoAnswer: 3,
+        wrapUpSeconds: 0,
+        rejectDelaySeconds: 0,
+      });
+      return id;
+    }
+
+    async function seedTier(
+      tenantId: string,
+      queueId: string,
+      agentId: string,
+      level = 1,
+      position = 1,
+    ): Promise<void> {
+      await h.readModel.replaceQueueTiersForQueue(h.db.kysely, tenantId, queueId, [
+        { id: crypto.randomUUID(), tenantId, queueId, agentId, level, position },
+      ]);
+    }
+
+    describe('/fs/dialplan (from-trunk DID -> queue)', () => {
+      async function seedTrunk(tenantId: string, trunkId: string): Promise<void> {
+        await h.readModel.upsertTrunk(h.db.kysely, {
+          id: trunkId,
+          tenantId,
+          name: 'Carrier',
+          authMode: 'ip',
+          host: 'carrier.test',
+          port: 5060,
+          transport: 'udp',
+          username: null,
+          secret: null,
+          fromDomain: null,
+          status: 'active',
+          callerIdName: null,
+          callerIdNumber: null,
+        });
+      }
+
+      function inboundPayload(fields: Record<string, string>) {
+        return form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'variable_sip_h_X-Call-Direction': 'inbound',
+          ...fields,
+        });
+      }
+
+      it('acquires the affinity lease onto the requesting node and hands off to callcenter', async () => {
+        const tenantId = crypto.randomUUID();
+        const trunkId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        await seedTrunk(tenantId, trunkId);
+        const queueId = await seedQueue(tenantId);
+        await h.readModel.upsertDid(h.db.kysely, {
+          id: crypto.randomUUID(),
+          tenantId,
+          e164: '+15551234567',
+          trunkId,
+          destinationType: 'queue',
+          destinationId: queueId,
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/dialplan?nodeId=fs-1',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: inboundPayload({
+            'Caller-Destination-Number': '+15551234567',
+            'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+          }),
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toContain(
+          `<action application="callcenter" data="${queueId}@acme.platform.test"/>`,
+        );
+        expect(h.callControl.acquireCalls).toContainEqual({
+          tenantId,
+          kind: 'queue',
+          resourceId: queueId,
+          preferredNodeId: 'fs-1',
+        });
+      });
+
+      it('404s when the queue is leased to a different node', async () => {
+        const tenantId = crypto.randomUUID();
+        const trunkId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        await seedTrunk(tenantId, trunkId);
+        const queueId = await seedQueue(tenantId);
+        await h.readModel.upsertDid(h.db.kysely, {
+          id: crypto.randomUUID(),
+          tenantId,
+          e164: '+15551234567',
+          trunkId,
+          destinationType: 'queue',
+          destinationId: queueId,
+        });
+        h.callControl.acquireResults[`${tenantId}:queue:${queueId}`] = {
+          nodeId: 'fs-2',
+          acquired: false,
+        };
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/dialplan?nodeId=fs-1',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: inboundPayload({
+            'Caller-Destination-Number': '+15551234567',
+            'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+          }),
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toContain('<result status="not found"/>');
+      });
+
+      it('404s when the queue no longer exists in the local mirror', async () => {
+        const tenantId = crypto.randomUUID();
+        const trunkId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        await seedTrunk(tenantId, trunkId);
+        await h.readModel.upsertDid(h.db.kysely, {
+          id: crypto.randomUUID(),
+          tenantId,
+          e164: '+15551234567',
+          trunkId,
+          destinationType: 'queue',
+          destinationId: crypto.randomUUID(),
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/dialplan?nodeId=fs-1',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: inboundPayload({
+            'Caller-Destination-Number': '+15551234567',
+            'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+          }),
+        });
+
+        expect(response.body).toContain('<result status="not found"/>');
+      });
+    });
+
+    describe('/fs/configuration (callcenter.conf)', () => {
+      function configPayload(fields: Record<string, string>) {
+        return form({ section: 'configuration', ...fields });
+      }
+
+      it('builds callcenter.conf filtered to queues leased to the requesting node', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        const extensionId = await seedExtension(tenantId, '101');
+        const agentId = await seedAgent(tenantId, extensionId);
+
+        const leasedQueueId = await seedQueue(tenantId, { label: 'Leased' });
+        await seedTier(tenantId, leasedQueueId, agentId, 2, 1);
+        await h.affinity.acquire(
+          { tenantId, kind: 'queue', resourceId: leasedQueueId },
+          'fs-1',
+          30_000,
+        );
+
+        const unleasedQueueId = await seedQueue(tenantId, { label: 'Unleased' });
+        void unleasedQueueId;
+
+        const otherNodeQueueId = await seedQueue(tenantId, { label: 'OtherNode' });
+        await h.affinity.acquire(
+          { tenantId, kind: 'queue', resourceId: otherNodeQueueId },
+          'fs-2',
+          30_000,
+        );
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/configuration?nodeId=fs-1',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: configPayload({ key_value: 'callcenter.conf' }),
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toContain(`<queue name="${leasedQueueId}@acme.platform.test">`);
+        expect(response.body).toContain('<param name="strategy" value="round-robin"/>');
+        expect(response.body).toContain(
+          `<agent name="101@acme.platform.test" type="callback" contact="user/101@acme.platform.test" status="Logged Out" max-no-answer="3" wrap-up-time="0" reject-delay-time="0"/>`,
+        );
+        expect(response.body).toContain(
+          `<tier agent="101@acme.platform.test" queue="${leasedQueueId}@acme.platform.test" level="2" position="1"/>`,
+        );
+        expect(response.body).toContain('<param name="moh-sound" value="local_stream://moh"/>');
+        expect(response.body).not.toContain(`${unleasedQueueId}@`);
+        expect(response.body).not.toContain(`${otherNodeQueueId}@`);
+      });
+
+      it('embeds a credentialed http_cache URL for moh-sound when the queue has an uploaded MOH asset', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        const mediaAssetId = crypto.randomUUID();
+        const queueId = await seedQueue(tenantId, { mohMediaAssetId: mediaAssetId });
+        await h.affinity.acquire({ tenantId, kind: 'queue', resourceId: queueId }, 'fs-1', 30_000);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/configuration?nodeId=fs-1',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: configPayload({ key_value: 'callcenter.conf' }),
+        });
+
+        expect(response.body).toContain(
+          `<param name="moh-sound" value="http_cache://http://fs-node:${TOKEN}@telephony-config-test:8080/fs/media/${tenantId}/${mediaAssetId}/8k"/>`,
+        );
+      });
+
+      it('returns the not-found document for a module other than callcenter.conf', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/configuration?nodeId=fs-1',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: configPayload({ key_value: 'conference.conf' }),
+        });
+
+        expect(response.body).toContain('<result status="not found"/>');
+      });
+
+      it('returns the not-found document when no nodeId is given', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        const queueId = await seedQueue(tenantId);
+        await h.affinity.acquire({ tenantId, kind: 'queue', resourceId: queueId }, 'fs-1', 30_000);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/configuration',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: configPayload({ key_value: 'callcenter.conf' }),
+        });
+
+        expect(response.body).toContain('<result status="not found"/>');
+      });
+    });
+
+    describe('/fs/dialplan (agent login/logout feature codes)', () => {
+      function internalPayload(tenantId: string, fields: Record<string, string>) {
+        return form({
+          section: 'dialplan',
+          'Caller-Context': 'internal',
+          'variable_sip_h_X-Call-Direction': 'internal',
+          'variable_sip_h_X-Tenant-Id': tenantId,
+          ...fields,
+        });
+      }
+
+      it('*45 sets the calling agent to Available', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        const extensionId = await seedExtension(tenantId, '101');
+        await seedAgent(tenantId, extensionId);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/dialplan',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: internalPayload(tenantId, {
+            'Caller-Destination-Number': '*45',
+            variable_sip_from_user: '101',
+          }),
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toContain(
+          `callcenter_config agent set status &apos;101@acme.platform.test&apos; &apos;Available&apos;`,
+        );
+      });
+
+      it('*46 sets the calling agent to Logged Out', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        const extensionId = await seedExtension(tenantId, '101');
+        await seedAgent(tenantId, extensionId);
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/dialplan',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: internalPayload(tenantId, {
+            'Caller-Destination-Number': '*46',
+            variable_sip_from_user: '101',
+          }),
+        });
+
+        expect(response.body).toContain(
+          `callcenter_config agent set status &apos;101@acme.platform.test&apos; &apos;Logged Out&apos;`,
+        );
+      });
+
+      it('404s for a calling extension with no agent identity', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        await seedExtension(tenantId, '102');
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/dialplan',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: internalPayload(tenantId, {
+            'Caller-Destination-Number': '*45',
+            variable_sip_from_user: '102',
+          }),
+        });
+
+        expect(response.body).toContain('<result status="not found"/>');
+      });
+    });
+
+    describe('/fs/flow/:tenantId/queue/:queueId (S2-13 flow node)', () => {
+      it('acquires the lease preferring the calling node and reports isLocal', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        const queueId = await seedQueue(tenantId);
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/fs/flow/${tenantId}/queue/${queueId}?nodeId=fs-1`,
+          headers: { authorization: BASIC_AUTH },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body: { queueName: string; nodeId: string; isLocal: boolean } = response.json();
+        expect(body).toEqual({
+          queueName: `${queueId}@acme.platform.test`,
+          nodeId: 'fs-1',
+          isLocal: true,
+        });
+        expect(h.callControl.acquireCalls).toContainEqual({
+          tenantId,
+          kind: 'queue',
+          resourceId: queueId,
+          preferredNodeId: 'fs-1',
+        });
+      });
+
+      it('reports isLocal: false when leased to another node (hairpin case)', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        const queueId = await seedQueue(tenantId);
+        h.callControl.acquireResults[`${tenantId}:queue:${queueId}`] = {
+          nodeId: 'fs-2',
+          acquired: false,
+        };
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/fs/flow/${tenantId}/queue/${queueId}?nodeId=fs-1`,
+          headers: { authorization: BASIC_AUTH },
+        });
+
+        const body: { isLocal: boolean; nodeId: string } = response.json();
+        expect(body).toMatchObject({ isLocal: false, nodeId: 'fs-2' });
+      });
+
+      it('404s for a queue in a different tenant', async () => {
+        const tenantId = crypto.randomUUID();
+        const otherTenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        await seedTenant(otherTenantId);
+        const queueId = await seedQueue(tenantId);
+
+        const response = await app.inject({
+          method: 'GET',
+          url: `/fs/flow/${otherTenantId}/queue/${queueId}?nodeId=fs-1`,
+          headers: { authorization: BASIC_AUTH },
+        });
+
+        expect(response.statusCode).toBe(404);
+      });
     });
   });
 });

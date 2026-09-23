@@ -120,4 +120,64 @@ describe('normalizeEslEvent', () => {
       kind: 'ignored',
     });
   });
+
+  it('maps a CUSTOM callcenter::info agent-state-change to queueAgentStateChanged (S2-13)', () => {
+    const action = normalizeEslEvent('fs-1', {
+      'Event-Name': 'CUSTOM',
+      'Event-Subclass': 'callcenter::info',
+      'CC-Action': 'agent-state-change',
+      'CC-Agent': '101@acme.platform.test',
+      'CC-Agent-Status': 'Available',
+    });
+
+    expect(action).toEqual({
+      kind: 'queueAgentStateChanged',
+      nodeId: 'fs-1',
+      agentName: '101@acme.platform.test',
+      status: 'Available',
+    });
+  });
+
+  it('normalizes a callcenter event with no Unique-ID rather than dropping it (S2-13)', () => {
+    // The whole point: unlike every other event type, this must not be
+    // gated on Unique-ID being present.
+    const action = normalizeEslEvent('fs-1', {
+      'Event-Name': 'CUSTOM',
+      'Event-Subclass': 'callcenter::info',
+      'CC-Action': 'agent-state-change',
+      'CC-Agent': '101@acme.platform.test',
+      'CC-Agent-Status': 'Logged Out',
+    });
+
+    expect(action.kind).toBe('queueAgentStateChanged');
+  });
+
+  it('ignores a callcenter event with an unhandled CC-Action', () => {
+    expect(
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'CUSTOM',
+        'Event-Subclass': 'callcenter::info',
+        'CC-Action': 'queue-member-add',
+      }),
+    ).toEqual({ kind: 'ignored' });
+  });
+
+  it('ignores a malformed agent-state-change missing CC-Agent/CC-Agent-Status', () => {
+    expect(
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'CUSTOM',
+        'Event-Subclass': 'callcenter::info',
+        'CC-Action': 'agent-state-change',
+      }),
+    ).toEqual({ kind: 'ignored' });
+  });
+
+  it('ignores a CUSTOM event from an unrelated subclass', () => {
+    expect(
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'CUSTOM',
+        'Event-Subclass': 'conference::maintenance',
+      }),
+    ).toEqual({ kind: 'ignored' });
+  });
 });

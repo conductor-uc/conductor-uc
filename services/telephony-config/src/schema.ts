@@ -214,4 +214,39 @@ export interface TelephonyConfigDb extends EventTables {
     created_at: Date;
     updated_at: Date;
   };
+  /** S2-13's own local mirror of pbx-config-service's `queues` — what `/fs/configuration`'s `callcenter.conf` builder and `/fs/dialplan`'s from-trunk `queue` branch both resolve against. */
+  queues: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    strategy: string;
+    moh_media_asset_id: string | null;
+    max_wait_seconds: number;
+    announce_position: boolean;
+    announce_frequency_seconds: number | null;
+    no_agent_destination_type: string | null;
+    no_agent_destination_id: string | null;
+    created_at: Date;
+    updated_at: Date;
+  };
+  /** S2-13's own local mirror of pbx-config-service's `agents`. */
+  agents: {
+    id: string;
+    tenant_id: string;
+    extension_id: string;
+    max_no_answer: number;
+    wrap_up_seconds: number;
+    reject_delay_seconds: number;
+    created_at: Date;
+    updated_at: Date;
+  };
+  /** S2-13's own local mirror of pbx-config-service's `queue_tiers`. */
+  queue_tiers: {
+    id: string;
+    tenant_id: string;
+    queue_id: string;
+    agent_id: string;
+    level: number;
+    position: number;
+  };
 }

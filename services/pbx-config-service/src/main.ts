@@ -14,12 +14,17 @@ import { createEmergencyLocationRepo } from './repo/emergency-location.repo.js';
 import { createExtensionRepo } from './repo/extension.repo.js';
 import { createMediaAssetRepo } from './repo/media-asset.repo.js';
 import { createRingGroupRepo } from './repo/ring-group.repo.js';
+import { createQueueRepo } from './repo/queue.repo.js';
+import { createAgentRepo } from './repo/agent.repo.js';
+import { createQueueTierRepo } from './repo/queue-tier.repo.js';
 import { registerDidRoutes } from './routes/did.routes.js';
 import { registerEmergencyLocationRoutes } from './routes/emergency-location.routes.js';
 import { registerExtensionRoutes } from './routes/extension.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerMediaAssetRoutes } from './routes/media-asset.routes.js';
 import { registerRingGroupRoutes } from './routes/ring-group.routes.js';
+import { registerQueueRoutes } from './routes/queue.routes.js';
+import { registerAgentRoutes } from './routes/agent.routes.js';
 import type { PbxConfigServiceDb } from './schema.js';
 import { createTrunkClient } from './trunk-client.js';
 
@@ -85,6 +90,9 @@ const emergencyLocationRepo = createEmergencyLocationRepo(db);
 const storage = storageFromConfig(config, logger);
 const mediaAssetRepo = createMediaAssetRepo(db, storage);
 const ringGroupRepo = createRingGroupRepo(db);
+const queueRepo = createQueueRepo(db);
+const agentRepo = createAgentRepo(db);
+const queueTierRepo = createQueueTierRepo(db);
 
 const domainConsumer = createDomainConsumer(db, bus, logger, extensionRepo);
 await domainConsumer.ensure();
@@ -114,6 +122,8 @@ registerDidRoutes(app, didRepo);
 registerEmergencyLocationRoutes(app, emergencyLocationRepo);
 registerMediaAssetRoutes(app, mediaAssetRepo);
 registerRingGroupRoutes(app, ringGroupRepo);
+registerQueueRoutes(app, queueRepo, queueTierRepo);
+registerAgentRoutes(app, agentRepo);
 registerInternalRoutes(
   app,
   extensionRepo,
@@ -121,6 +131,9 @@ registerInternalRoutes(
   emergencyLocationRepo,
   mediaAssetRepo,
   ringGroupRepo,
+  queueRepo,
+  agentRepo,
+  queueTierRepo,
   config.INTERNAL_SERVICE_TOKEN,
 );
 

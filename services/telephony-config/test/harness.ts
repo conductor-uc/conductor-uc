@@ -16,13 +16,21 @@ import {
 } from '@cuc/testing';
 import { Redis } from 'ioredis';
 
+import type {
+  AcquireAffinityResult,
+  AffinityKind,
+  CallControlClient,
+} from '../src/call-control-client.js';
 import type { OrgClient } from '../src/org-client.js';
 import type {
+  AgentConfig,
   DidConfig,
   DigestCredential,
   EmergencyLocationConfig,
   MediaAssetConfig,
   PbxConfigClient,
+  QueueConfig,
+  QueueTierConfig,
   RingGroupConfig,
 } from '../src/pbx-config-client.js';
 import type { OpenSipsMiClient } from '../src/opensips-mi-client.js';
@@ -61,6 +69,7 @@ export interface Harness {
   readonly projection: Projection;
   readonly mi: FakeMiClient;
   readonly pbxConfig: FakePbxConfigClient;
+  readonly callControl: FakeCallControlClient;
   readonly trunkConfig: FakeTrunkConfigClient;
   readonly orgClient: FakeOrgClient;
   readonly voicemail: FakeVoicemailClient;
@@ -120,9 +129,13 @@ export interface FakePbxConfigClient extends PbxConfigClient {
   emergencyLocations: Record<string, EmergencyLocationConfig>;
   mediaAssets: Record<string, MediaAssetConfig>;
   ringGroups: Record<string, RingGroupConfig>;
+  queues: Record<string, QueueConfig>;
+  agents: Record<string, AgentConfig>;
+  /** Keyed by `queueId` — the whole tier list for that queue, same shape `findQueueTiers` returns. */
+  queueTiers: Record<string, QueueTierConfig[]>;
 }
 
-/** A digest-credential/DID/emergency-location/media-asset/ring-group lookup whose answers are set per test — no live pbx-config-service needed. */
+/** A digest-credential/DID/emergency-location/media-asset/ring-group/queue/agent/tier lookup whose answers are set per test — no live pbx-config-service needed. */
 function fakePbxConfigClient(): FakePbxConfigClient {
   const state: FakePbxConfigClient = {
     credentials: {},
@@ -130,6 +143,9 @@ function fakePbxConfigClient(): FakePbxConfigClient {
     emergencyLocations: {},
     mediaAssets: {},
     ringGroups: {},
+    queues: {},
+    agents: {},
+    queueTiers: {},
     findCredential: (_tenantId: string, extensionId: string) =>
       Promise.resolve(state.credentials[extensionId]),
     findDid: (_tenantId: string, didId: string) => Promise.resolve(state.dids[didId]),
@@ -138,6 +154,46 @@ function fakePbxConfigClient(): FakePbxConfigClient {
     findMediaAsset: (_tenantId: string, id: string) => Promise.resolve(state.mediaAssets[id]),
     findRingGroup: (_tenantId: string, ringGroupId: string) =>
       Promise.resolve(state.ringGroups[ringGroupId]),
+    findQueue: (_tenantId: string, queueId: string) => Promise.resolve(state.queues[queueId]),
+    findAgent: (_tenantId: string, agentId: string) => Promise.resolve(state.agents[agentId]),
+    findQueueTiers: (_tenantId: string, queueId: string) =>
+      Promise.resolve(state.queueTiers[queueId] ?? []),
+  };
+  return state;
+}
+
+export interface FakeCallControlClient extends CallControlClient {
+  /** Keyed by `${tenantId}:${kind}:${resourceId}` — overrides the default `{ nodeId: preferredNodeId ?? 'fs-node-under-test', acquired: true }` answer per test. */
+  acquireResults: Record<string, AcquireAffinityResult>;
+  /** Every `acquireAffinity` call this fake has received, for assertions on what a route actually requested. */
+  acquireCalls: {
+    tenantId: string;
+    kind: AffinityKind;
+    resourceId: string;
+    preferredNodeId: string | undefined;
+  }[];
+}
+
+/** An affinity-acquire stand-in — no live call-control needed. Defaults to "acquired locally on whatever node asked". */
+function fakeCallControlClient(): FakeCallControlClient {
+  const state: FakeCallControlClient = {
+    acquireResults: {},
+    acquireCalls: [],
+    acquireAffinity(tenantId, kind, resourceId, options) {
+      state.acquireCalls.push({
+        tenantId,
+        kind,
+        resourceId,
+        preferredNodeId: options.preferredNodeId,
+      });
+      const key = `${tenantId}:${kind}:${resourceId}`;
+      return Promise.resolve(
+        state.acquireResults[key] ?? {
+          nodeId: options.preferredNodeId ?? 'fs-node-under-test',
+          acquired: true,
+        },
+      );
+    },
   };
   return state;
 }
@@ -438,6 +494,7 @@ export async function startHarness(): Promise<Harness> {
   const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
   const mi = fakeMiClient();
   const pbxConfig = fakePbxConfigClient();
+  const callControl = fakeCallControlClient();
   const trunkConfig = fakeTrunkConfigClient();
   const orgClient = fakeOrgClient();
   const storage = createStorage({
@@ -470,6 +527,7 @@ export async function startHarness(): Promise<Harness> {
     projection,
     mi,
     pbxConfig,
+    callControl,
     trunkConfig,
     orgClient,
     voicemail,
@@ -517,6 +575,9 @@ export async function startBusHarness(): Promise<BusHarness> {
 }
 
 export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void> {
+  await db.kysely.deleteFrom('queue_tiers').execute();
+  await db.kysely.deleteFrom('queues').execute();
+  await db.kysely.deleteFrom('agents').execute();
   await db.kysely.deleteFrom('dids').execute();
   await db.kysely.deleteFrom('outbound_routes').execute();
   await db.kysely.deleteFrom('emergency_routes').execute();
