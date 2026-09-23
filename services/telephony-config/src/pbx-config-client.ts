@@ -124,6 +124,22 @@ export interface QueueTierConfig {
   readonly position: number;
 }
 
+/**
+ * A parking lot's current state (S2-14) — what `pbx.parking_lot.*`'s "thin
+ * event, re-fetch current state" projection (`projection.ts`'s
+ * `projectParkingLot`) fetches to keep telephony-config's own local
+ * `parking_lots` mirror current.
+ */
+export interface ParkingLotConfig {
+  readonly id: string;
+  readonly label: string;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  readonly timeoutSeconds: number;
+  readonly returnDestinationType: string | null;
+  readonly returnDestinationId: string | null;
+}
+
 export class PbxConfigClientError extends Error {
   override readonly name = 'PbxConfigClientError';
 }
@@ -156,6 +172,8 @@ export interface PbxConfigClient {
   findAgent(tenantId: string, agentId: string): Promise<AgentConfig | undefined>;
   /** A queue's full current tier list. */
   findQueueTiers(tenantId: string, queueId: string): Promise<QueueTierConfig[]>;
+  /** Undefined when the parking lot does not exist in that tenant (a 404). */
+  findParkingLot(tenantId: string, parkingLotId: string): Promise<ParkingLotConfig | undefined>;
 }
 
 export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfigClient {
@@ -362,6 +380,33 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
 
       const body = (await response.json()) as { rows: QueueTierConfig[] };
       return body.rows;
+    },
+
+    async findParkingLot(
+      tenantId: string,
+      parkingLotId: string,
+    ): Promise<ParkingLotConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/parking-lots/${encodeURIComponent(parkingLotId)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the parking lot lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return (await response.json()) as ParkingLotConfig;
     },
   };
 }

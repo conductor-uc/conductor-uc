@@ -129,6 +129,29 @@ const QUEUE_TIER_COLUMNS = [
   'position',
 ] as const;
 
+/** S2-14's own local mirror row of a parking lot (`pbx-config-client.ts`'s `ParkingLotConfig`). */
+export interface ParkingLotRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly label: string;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+  readonly timeoutSeconds: number;
+  readonly returnDestinationType: string | null;
+  readonly returnDestinationId: string | null;
+}
+
+const PARKING_LOT_COLUMNS = [
+  'id',
+  'tenant_id as tenantId',
+  'label',
+  'slot_start as slotStart',
+  'slot_end as slotEnd',
+  'timeout_seconds as timeoutSeconds',
+  'return_destination_type as returnDestinationType',
+  'return_destination_id as returnDestinationId',
+] as const;
+
 export interface DidRow {
   readonly id: string;
   readonly tenantId: string;
@@ -805,6 +828,76 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .orderBy('level', 'asc')
         .orderBy('position', 'asc')
         .execute();
+    },
+
+    /** Upserts a parking lot's current state (S2-14), keyed by id — the same shape `upsertQueue` already establishes. */
+    async upsertParkingLot(trx: Executor, lot: ParkingLotRow): Promise<void> {
+      const now = new Date();
+      await trx
+        .insertInto('parking_lots')
+        .values({
+          id: lot.id,
+          tenant_id: lot.tenantId,
+          label: lot.label,
+          slot_start: lot.slotStart,
+          slot_end: lot.slotEnd,
+          timeout_seconds: lot.timeoutSeconds,
+          return_destination_type: lot.returnDestinationType,
+          return_destination_id: lot.returnDestinationId,
+          created_at: now,
+          updated_at: now,
+        })
+        .onDuplicateKeyUpdate({
+          label: lot.label,
+          slot_start: lot.slotStart,
+          slot_end: lot.slotEnd,
+          timeout_seconds: lot.timeoutSeconds,
+          return_destination_type: lot.returnDestinationType,
+          return_destination_id: lot.returnDestinationId,
+          updated_at: now,
+        })
+        .execute();
+    },
+
+    async deleteParkingLot(trx: Executor, id: string): Promise<void> {
+      await trx.deleteFrom('parking_lots').where('id', '=', id).execute();
+    },
+
+    findParkingLotById(id: string): Promise<ParkingLotRow | undefined> {
+      return db.kysely
+        .selectFrom('parking_lots')
+        .select(PARKING_LOT_COLUMNS)
+        .where('id', '=', id)
+        .executeTakeFirst();
+    },
+
+    /**
+     * Every parking lot across every tenant — `/fs/configuration`'s
+     * `valet_parking.conf` builder walks all of them, then filters to the
+     * ones leased to the requesting node (S2-14), the same cross-tenant
+     * reasoning `findAllQueues` already gives.
+     */
+    findAllParkingLots(): Promise<ParkingLotRow[]> {
+      return db.kysely.selectFrom('parking_lots').select(PARKING_LOT_COLUMNS).execute();
+    },
+
+    /**
+     * The lot whose slot range contains `slotNumber`, if any (S2-14;
+     * `/fs/dialplan`'s park/retrieve branch) — a numeric range check done
+     * here in TS rather than as an FS-side dialplan regex, since this
+     * service already resolves the destination number before building any
+     * response.
+     */
+    async findParkingLotBySlot(
+      tenantId: string,
+      slotNumber: number,
+    ): Promise<ParkingLotRow | undefined> {
+      const lots = await db.kysely
+        .selectFrom('parking_lots')
+        .select(PARKING_LOT_COLUMNS)
+        .where('tenant_id', '=', tenantId)
+        .execute();
+      return lots.find((lot) => slotNumber >= lot.slotStart && slotNumber <= lot.slotEnd);
     },
 
     /** ISO 3166-1 alpha-2, or `undefined` if not yet known (`org-client.ts`'s own comment on when that happens). */
