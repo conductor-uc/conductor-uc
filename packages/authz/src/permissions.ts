@@ -18,6 +18,11 @@ import type { DataClass, Permission } from './types.js';
  * base-domain registration and verification, and 02 §3 describes domains as
  * reseller/org configuration, so it is added here the same shape as every
  * other `*.manage` permission rather than left ungated.
+ *
+ * `parking_lot.manage` is not in 07 §3.3 either, same story — S2-14 needed
+ * one for parking-lot config and none of the catalog's existing resource
+ * permissions (`queue.manage` et al.) name it, so it is added here rather
+ * than overloaded onto a semantically different resource's permission.
  */
 export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'reseller.create': 'config',
@@ -36,6 +41,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'emergency_route.manage': 'config',
   'group.manage': 'config',
   'queue.manage': 'config',
+  'parking_lot.manage': 'config',
   'schedule.manage': 'config',
   'media.manage': 'config',
   'trunk.manage': 'config',

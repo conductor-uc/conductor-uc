@@ -31,6 +31,7 @@ import {
   buildEmergencyDialplanDocument,
   buildFlowDialplanDocument,
   buildOutboundDialplanDocument,
+  buildParkDialplanDocument,
   buildQueueDialplanDocument,
   buildRingGroupDialplanDocument,
   buildVoicemailDialplanDocument,
@@ -690,6 +691,62 @@ export function registerFsRoutes(
     );
   }
 
+  /**
+   * `/fs/dialplan`'s park/retrieve branch (S2-14) — same "acquire the
+   * lease onto the requesting node, then hand off" shape `handleQueueDial`
+   * already establishes, over `kind: 'park'` instead of `'queue'`. Unlike a
+   * queue, this has no known reload command to send (`valet_parking.conf`'s
+   * exact shape is not confidently known, G-48) — `xml_flush_cache` alone
+   * (`AffinityManager`'s own default) is what runs.
+   */
+  async function handleParkDial(
+    tenantId: string,
+    lot: NonNullable<Awaited<ReturnType<typeof readModel.findParkingLotBySlot>>>,
+    slotNumber: number,
+    callerContext: string,
+    destinationNumber: string,
+    nodeId: string | undefined,
+  ): Promise<string> {
+    if (nodeId === undefined || nodeId === '') {
+      logger.warn({ tenantId, lotId: lot.id }, 'dialplan: park dial with no requesting nodeId');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    const domain = await readModel.findDomain(db.kysely, tenantId);
+    if (domain === undefined) {
+      logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    let acquired;
+    try {
+      acquired = await callControlClient.acquireAffinity(tenantId, 'park', lot.id, {
+        preferredNodeId: nodeId,
+      });
+    } catch (error) {
+      logger.error(
+        { err: error, tenantId, lotId: lot.id },
+        'dialplan: could not reach call-control to acquire the parking lot’s affinity lease',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    if (acquired.nodeId !== nodeId) {
+      logger.warn(
+        { tenantId, lotId: lot.id, nodeId, leasedTo: acquired.nodeId },
+        'dialplan: parking lot is leased to a different node; cross-node routing is S4-05’s concern, not this one’s',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    return buildParkDialplanDocument(
+      callerContext,
+      destinationNumber,
+      callcenterName(lot.id, domain.fqdn),
+      slotNumber,
+    );
+  }
+
   app.post('/fs/dialplan', { config: { public: true } }, async (request, reply) => {
     if (!authorized(request.headers.authorization)) {
       reply.code(401);
@@ -768,11 +825,32 @@ export function registerFsRoutes(
 
       const extension = await readModel.findExtensionByNumber(tenantId, destinationNumber);
       if (extension === undefined) {
-        // Not a known extension — S2-04: this may still be a real call, just
-        // an outbound one to the PSTN, not a rejection. `route{}`'s "request
-        // from FS" branch already falls through to `do_routing()` on the
-        // exact same signal (a `lookup("location")` miss on this same
-        // R-URI) once this response bridges the call back to it.
+        // S2-14: a known extension always wins a coincidental collision
+        // with a parking slot — checked here, after the extension lookup,
+        // not before, unlike the feature codes above (which are fixed,
+        // well-known short codes; a slot range is admin-configured and can
+        // collide with real extension numbers if misconfigured).
+        const slotNumber = Number(destinationNumber);
+        if (Number.isInteger(slotNumber)) {
+          const lot = await readModel.findParkingLotBySlot(tenantId, slotNumber);
+          if (lot !== undefined) {
+            return handleParkDial(
+              tenantId,
+              lot,
+              slotNumber,
+              callerContext,
+              destinationNumber,
+              nodeId,
+            );
+          }
+        }
+
+        // Not a known extension or parking slot — S2-04: this may still be
+        // a real call, just an outbound one to the PSTN, not a rejection.
+        // `route{}`'s "request from FS" branch already falls through to
+        // `do_routing()` on the exact same signal (a `lookup("location")`
+        // miss on this same R-URI) once this response bridges the call
+        // back to it.
         return handleOutboundDial(body, tenantId, destinationNumber, callerContext);
       }
 
@@ -1470,8 +1548,14 @@ export function registerFsRoutes(
    * `configuration` binding now carries `?nodeId=$${cuc_node_id}` on its
    * `gateway-url`, so this can finally answer "which node is asking" and
    * filter `callcenter.conf` to the queues actually leased to it (04 §3.3).
-   * `conference.conf`/`valet_parking.conf` (S2-14/15) still fall through to
-   * the not-found document — nothing owns those resource kinds yet.
+   * `conference.conf` (S2-15) still falls through to the not-found document
+   * — nothing owns that resource kind yet. `valet_parking.conf` (S2-14)
+   * also still falls through, but deliberately, not for lack of an owner:
+   * a parking lot's own behavior travels inline in the `valet_park(...)`
+   * dialplan action itself (`handleParkDial`/`buildParkDialplanDocument`),
+   * and this binding's exact XML shape was not confident enough to guess at
+   * (G-48) — the affinity mechanics this route exists for are already fully
+   * exercised by `callcenter.conf` below.
    *
    * One FS node's `callcenter.conf` can span several tenants at once (each
    * queue's own affinity lease is independent of every other), so this

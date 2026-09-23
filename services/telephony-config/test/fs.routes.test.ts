@@ -2615,4 +2615,139 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       });
     });
   });
+
+  describe('parking lots (S2-14)', () => {
+    async function seedTenant(tenantId: string, fqdn = 'acme.platform.test'): Promise<void> {
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, { id: crypto.randomUUID(), tenantId, fqdn });
+    }
+
+    async function seedLot(
+      tenantId: string,
+      overrides: Partial<Parameters<typeof h.readModel.upsertParkingLot>[1]> = {},
+    ): Promise<string> {
+      const id = crypto.randomUUID();
+      await h.readModel.upsertParkingLot(h.db.kysely, {
+        id,
+        tenantId,
+        label: 'Main Lot',
+        slotStart: 700,
+        slotEnd: 719,
+        timeoutSeconds: 120,
+        returnDestinationType: null,
+        returnDestinationId: null,
+        ...overrides,
+      });
+      return id;
+    }
+
+    function internalPayload(tenantId: string, fields: Record<string, string>) {
+      return form({
+        section: 'dialplan',
+        'Caller-Context': 'internal',
+        'variable_sip_h_X-Call-Direction': 'internal',
+        'variable_sip_h_X-Tenant-Id': tenantId,
+        ...fields,
+      });
+    }
+
+    it('dialing a number inside a lot’s slot range runs valet_park after acquiring the lease', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const lotId = await seedLot(tenantId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-1',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: internalPayload(tenantId, { 'Caller-Destination-Number': '705' }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(
+        `<action application="valet_park" data="${lotId}@acme.platform.test/705"/>`,
+      );
+      expect(h.callControl.acquireCalls).toContainEqual({
+        tenantId,
+        kind: 'park',
+        resourceId: lotId,
+        preferredNodeId: 'fs-1',
+      });
+    });
+
+    it('a real extension wins over a coincidentally-numbered slot', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedLot(tenantId, { slotStart: 100, slotEnd: 199 });
+      await h.readModel.upsertExtension(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        number: '150',
+        username: '150',
+        ha1: 'a'.repeat(32),
+        realm: 'acme.platform.test',
+        callerIdName: null,
+        callerIdNumber: null,
+        emergencyLocationId: crypto.randomUUID(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-1',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: internalPayload(tenantId, { 'Caller-Destination-Number': '150' }),
+      });
+
+      expect(response.body).not.toContain('valet_park');
+      expect(response.body).toContain('sofia/internal/150@acme.platform.test');
+    });
+
+    it('404s when the slot is leased to a different node', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const lotId = await seedLot(tenantId);
+      h.callControl.acquireResults[`${tenantId}:park:${lotId}`] = {
+        nodeId: 'fs-2',
+        acquired: false,
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-1',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: internalPayload(tenantId, { 'Caller-Destination-Number': '705' }),
+      });
+
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+
+    it('falls through to outbound dialing for a number outside every lot', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedLot(tenantId, { slotStart: 700, slotEnd: 719 });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-1',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: internalPayload(tenantId, { 'Caller-Destination-Number': '9995551234' }),
+      });
+
+      // No tenant country configured in this test, so outbound dial itself
+      // 404s too — the point here is only that it did *not* try valet_park.
+      expect(response.body).not.toContain('valet_park');
+    });
+  });
 });

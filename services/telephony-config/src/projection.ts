@@ -324,6 +324,45 @@ export function createProjection(
     },
 
     /**
+     * Fetches a parking lot's current state and mirrors it locally (S2-14)
+     * — shared by `pbx.parking_lot.created` and `.updated`, the same "thin
+     * event, re-fetch current state" story `projectQueue` tells. No
+     * `opensips` counterpart: a lot's config is entirely FS's own
+     * `mod_valet_parking` concern, reached through `/fs/configuration`'s
+     * `valet_parking.conf` builder.
+     */
+    async projectParkingLot(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      parkingLotId: string,
+    ): Promise<void> {
+      const lot = await pbxConfig.findParkingLot(tenantId, parkingLotId);
+      if (lot === undefined) {
+        logger.warn({ tenantId, parkingLotId }, 'parking lot not found in pbx-config-service');
+        return;
+      }
+
+      await readModel.upsertParkingLot(trx, {
+        id: lot.id,
+        tenantId,
+        label: lot.label,
+        slotStart: lot.slotStart,
+        slotEnd: lot.slotEnd,
+        timeoutSeconds: lot.timeoutSeconds,
+        returnDestinationType: lot.returnDestinationType,
+        returnDestinationId: lot.returnDestinationId,
+      });
+    },
+
+    /** `pbx.parking_lot.deleted`: remove the local mirror. */
+    async removeParkingLot(
+      trx: Transaction<TelephonyConfigDb>,
+      parkingLotId: string,
+    ): Promise<void> {
+      await readModel.deleteParkingLot(trx, parkingLotId);
+    },
+
+    /**
      * Fetches a trunk's current full config (including its decrypted
      * secret and IPs) and projects it into `registrant` (register/both),
      * `address` (ip/both), and `dr_gateways` (always — 03 §1's LCR needs a

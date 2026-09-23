@@ -17,6 +17,7 @@ import { createRingGroupRepo } from './repo/ring-group.repo.js';
 import { createQueueRepo } from './repo/queue.repo.js';
 import { createAgentRepo } from './repo/agent.repo.js';
 import { createQueueTierRepo } from './repo/queue-tier.repo.js';
+import { createParkingLotRepo } from './repo/parking-lot.repo.js';
 import { registerDidRoutes } from './routes/did.routes.js';
 import { registerEmergencyLocationRoutes } from './routes/emergency-location.routes.js';
 import { registerExtensionRoutes } from './routes/extension.routes.js';
@@ -25,6 +26,7 @@ import { registerMediaAssetRoutes } from './routes/media-asset.routes.js';
 import { registerRingGroupRoutes } from './routes/ring-group.routes.js';
 import { registerQueueRoutes } from './routes/queue.routes.js';
 import { registerAgentRoutes } from './routes/agent.routes.js';
+import { registerParkingLotRoutes } from './routes/parking-lot.routes.js';
 import type { PbxConfigServiceDb } from './schema.js';
 import { createTrunkClient } from './trunk-client.js';
 
@@ -93,6 +95,7 @@ const ringGroupRepo = createRingGroupRepo(db);
 const queueRepo = createQueueRepo(db);
 const agentRepo = createAgentRepo(db);
 const queueTierRepo = createQueueTierRepo(db);
+const parkingLotRepo = createParkingLotRepo(db);
 
 const domainConsumer = createDomainConsumer(db, bus, logger, extensionRepo);
 await domainConsumer.ensure();
@@ -124,6 +127,7 @@ registerMediaAssetRoutes(app, mediaAssetRepo);
 registerRingGroupRoutes(app, ringGroupRepo);
 registerQueueRoutes(app, queueRepo, queueTierRepo);
 registerAgentRoutes(app, agentRepo);
+registerParkingLotRoutes(app, parkingLotRepo);
 registerInternalRoutes(
   app,
   extensionRepo,
@@ -134,6 +138,7 @@ registerInternalRoutes(
   queueRepo,
   agentRepo,
   queueTierRepo,
+  parkingLotRepo,
   config.INTERNAL_SERVICE_TOKEN,
 );
 

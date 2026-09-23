@@ -696,3 +696,42 @@ export function buildAgentStatusDialplanDocument(
     '</document>\n'
   );
 }
+
+/**
+ * `/fs/dialplan`'s park/retrieve branch (S2-14; `mod_valet_parking`).
+ * `valet_park(lotname/ext)` is the one call shape this is confident about
+ * (developer.signalwire.com's own documented usage) — both parking (a
+ * transfer into an empty slot) and retrieval (dialing a slot someone is
+ * already parked in) run the exact same action, since the module's own
+ * state machine decides which one it is, not this document.
+ *
+ * UNVERIFIED LIVE — G-48 (docs/decisions.md), same discipline as G-43/G-47:
+ * `mod_valet_parking` also documents a longer `lotname/ext/timeout/return-
+ * ext` argument form for return-on-timeout, but the exact separator and
+ * argument order were not confident enough to include here, so a lot's own
+ * `timeoutSeconds`/`returnDestination*` (stored, real, CRUD-tested) are not
+ * yet wired into this action — "return-on-timeout" from the plan's own
+ * bullet is the one piece of S2-14 this does not implement.
+ */
+export function buildParkDialplanDocument(
+  callerContext: string,
+  destinationNumber: string,
+  lotName: string,
+  slotNumber: number,
+): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="park-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    '          <action application="answer"/>\n' +
+    `          <action application="valet_park" data="${escapeXml(`${lotName}/${String(slotNumber)}`)}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}

@@ -249,4 +249,17 @@ export interface TelephonyConfigDb extends EventTables {
     level: number;
     position: number;
   };
+  /** S2-14's own local mirror of pbx-config-service's `parking_lots`. */
+  parking_lots: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    slot_start: number;
+    slot_end: number;
+    timeout_seconds: number;
+    return_destination_type: string | null;
+    return_destination_id: string | null;
+    created_at: Date;
+    updated_at: Date;
+  };
 }

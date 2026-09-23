@@ -46,6 +46,11 @@ describe('BUILT_IN_ROLES', () => {
     expect(BUILT_IN_ROLES.get('tenant_admin')?.permissions.has('domain.manage')).toBe(false);
   });
 
+  it('reseller_admin and tenant_admin both hold parking_lot.manage — same tier as queue.manage', () => {
+    expect(BUILT_IN_ROLES.get('reseller_admin')?.permissions.has('parking_lot.manage')).toBe(true);
+    expect(BUILT_IN_ROLES.get('tenant_admin')?.permissions.has('parking_lot.manage')).toBe(true);
+  });
+
   it('tenant_admin holds secret.reveal — audited, but a real tenant-admin capability', () => {
     expect(BUILT_IN_ROLES.get('tenant_admin')?.permissions.has('secret.reveal')).toBe(true);
   });

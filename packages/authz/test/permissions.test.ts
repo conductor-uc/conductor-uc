@@ -77,6 +77,11 @@ describe('PERMISSION_CATALOG', () => {
     expect(isKnownPermission('domain.manage')).toBe(true);
     expect(dataClassOf('domain.manage')).toBe('config');
   });
+
+  it('includes parking_lot.manage — S2-14, not in 07 §3.3, added for parking-lot config routes', () => {
+    expect(isKnownPermission('parking_lot.manage')).toBe(true);
+    expect(dataClassOf('parking_lot.manage')).toBe('config');
+  });
 });
 
 describe('dataClassOf', () => {

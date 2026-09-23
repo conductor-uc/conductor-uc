@@ -31,6 +31,10 @@ interface QueueTierEventData {
   readonly agentId: string;
 }
 
+interface ParkingLotEventData {
+  readonly parkingLotId: string;
+}
+
 export interface PbxConsumerOptions {
   /** How long one pull waits for a message (`@cuc/events`' default: 1s). Longer in tests. */
   readonly pullTimeoutMs?: number;
@@ -85,6 +89,9 @@ export function createPbxConsumer(
       'pbx.queue_tier.added',
       'pbx.queue_tier.updated',
       'pbx.queue_tier.removed',
+      'pbx.parking_lot.created',
+      'pbx.parking_lot.updated',
+      'pbx.parking_lot.deleted',
     ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
     handler: async (envelope, trx) => {
@@ -155,6 +162,22 @@ export function createPbxConsumer(
             trx,
             tenantId,
             (envelope.data as QueueTierEventData).queueId,
+          );
+          return;
+
+        case 'pbx.parking_lot.created':
+        case 'pbx.parking_lot.updated':
+          await projection.projectParkingLot(
+            trx,
+            tenantId,
+            (envelope.data as ParkingLotEventData).parkingLotId,
+          );
+          return;
+
+        case 'pbx.parking_lot.deleted':
+          await projection.removeParkingLot(
+            trx,
+            (envelope.data as ParkingLotEventData).parkingLotId,
           );
           return;
 

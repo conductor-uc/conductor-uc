@@ -28,6 +28,7 @@ import type {
   DigestCredential,
   EmergencyLocationConfig,
   MediaAssetConfig,
+  ParkingLotConfig,
   PbxConfigClient,
   QueueConfig,
   QueueTierConfig,
@@ -133,9 +134,10 @@ export interface FakePbxConfigClient extends PbxConfigClient {
   agents: Record<string, AgentConfig>;
   /** Keyed by `queueId` — the whole tier list for that queue, same shape `findQueueTiers` returns. */
   queueTiers: Record<string, QueueTierConfig[]>;
+  parkingLots: Record<string, ParkingLotConfig>;
 }
 
-/** A digest-credential/DID/emergency-location/media-asset/ring-group/queue/agent/tier lookup whose answers are set per test — no live pbx-config-service needed. */
+/** A digest-credential/DID/emergency-location/media-asset/ring-group/queue/agent/tier/parking-lot lookup whose answers are set per test — no live pbx-config-service needed. */
 function fakePbxConfigClient(): FakePbxConfigClient {
   const state: FakePbxConfigClient = {
     credentials: {},
@@ -146,6 +148,7 @@ function fakePbxConfigClient(): FakePbxConfigClient {
     queues: {},
     agents: {},
     queueTiers: {},
+    parkingLots: {},
     findCredential: (_tenantId: string, extensionId: string) =>
       Promise.resolve(state.credentials[extensionId]),
     findDid: (_tenantId: string, didId: string) => Promise.resolve(state.dids[didId]),
@@ -158,6 +161,8 @@ function fakePbxConfigClient(): FakePbxConfigClient {
     findAgent: (_tenantId: string, agentId: string) => Promise.resolve(state.agents[agentId]),
     findQueueTiers: (_tenantId: string, queueId: string) =>
       Promise.resolve(state.queueTiers[queueId] ?? []),
+    findParkingLot: (_tenantId: string, parkingLotId: string) =>
+      Promise.resolve(state.parkingLots[parkingLotId]),
   };
   return state;
 }
@@ -578,6 +583,7 @@ export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void
   await db.kysely.deleteFrom('queue_tiers').execute();
   await db.kysely.deleteFrom('queues').execute();
   await db.kysely.deleteFrom('agents').execute();
+  await db.kysely.deleteFrom('parking_lots').execute();
   await db.kysely.deleteFrom('dids').execute();
   await db.kysely.deleteFrom('outbound_routes').execute();
   await db.kysely.deleteFrom('emergency_routes').execute();
