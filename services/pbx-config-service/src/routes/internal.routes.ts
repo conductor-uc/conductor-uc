@@ -6,6 +6,9 @@ import type { EmergencyLocationRepo } from '../repo/emergency-location.repo.js';
 import type { ExtensionRepo } from '../repo/extension.repo.js';
 import { MediaAssetNotFoundError, type MediaAssetRepo } from '../repo/media-asset.repo.js';
 import type { RingGroupRepo } from '../repo/ring-group.repo.js';
+import type { QueueRepo } from '../repo/queue.repo.js';
+import type { AgentRepo } from '../repo/agent.repo.js';
+import type { QueueTierRepo } from '../repo/queue-tier.repo.js';
 
 const ParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
@@ -75,6 +78,35 @@ const RingGroupResponseSchema = Type.Object({
   noAnswerDestinationType: Type.Union([Type.String(), Type.Null()]),
   noAnswerDestinationId: Type.Union([Type.String(), Type.Null()]),
 });
+const QueueResponseSchema = Type.Object({
+  id: Type.String(),
+  label: Type.String(),
+  strategy: Type.String(),
+  mohMediaAssetId: Type.Union([Type.String(), Type.Null()]),
+  maxWaitSeconds: Type.Number(),
+  announcePosition: Type.Boolean(),
+  announceFrequencySeconds: Type.Union([Type.Number(), Type.Null()]),
+  noAgentDestinationType: Type.Union([Type.String(), Type.Null()]),
+  noAgentDestinationId: Type.Union([Type.String(), Type.Null()]),
+});
+const AgentResponseSchema = Type.Object({
+  id: Type.String(),
+  extensionId: Type.String(),
+  maxNoAnswer: Type.Number(),
+  wrapUpSeconds: Type.Number(),
+  rejectDelaySeconds: Type.Number(),
+});
+const QueueTierResponseSchema = Type.Object({
+  id: Type.String(),
+  queueId: Type.String(),
+  agentId: Type.String(),
+  level: Type.Number(),
+  position: Type.Number(),
+});
+const QueueTierParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  queueId: Type.String({ minLength: 1 }),
+});
 
 /**
  * `GET /internal/v1/tenants/:tenantId/extensions/:id` (S1-12). What
@@ -98,6 +130,9 @@ export function registerInternalRoutes(
   emergencyLocations: EmergencyLocationRepo,
   mediaAssets: MediaAssetRepo,
   ringGroups: RingGroupRepo,
+  queues: QueueRepo,
+  agents: AgentRepo,
+  queueTiers: QueueTierRepo,
   internalServiceToken: string,
 ): void {
   app.get(
@@ -334,6 +369,111 @@ export function registerInternalRoutes(
         noAnswerDestinationType: ringGroup.noAnswerDestinationType,
         noAnswerDestinationId: ringGroup.noAnswerDestinationId,
       } satisfies Static<typeof RingGroupResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/queues/:id` (S2-13) — how
+   * telephony-config's `pbx.queue.*` consumer re-fetches a queue's current
+   * state, the same "thin event" pattern `ring-groups` above establishes.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/queues/:id',
+    {
+      config: { public: true },
+      schema: { params: ParamsSchema, response: { 200: QueueResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      const queue = await queues.findById({ tenantId }, id);
+      if (queue === undefined) {
+        throw ProblemError.notFound('No queue with that id in that tenant.');
+      }
+      return {
+        id: queue.id,
+        label: queue.label,
+        strategy: queue.strategy,
+        mohMediaAssetId: queue.mohMediaAssetId,
+        maxWaitSeconds: queue.maxWaitSeconds,
+        announcePosition: queue.announcePosition,
+        announceFrequencySeconds: queue.announceFrequencySeconds,
+        noAgentDestinationType: queue.noAgentDestinationType,
+        noAgentDestinationId: queue.noAgentDestinationId,
+      } satisfies Static<typeof QueueResponseSchema>;
+    },
+  );
+
+  /** `GET /internal/v1/tenants/:tenantId/agents/:id` (S2-13) — how telephony-config's `pbx.agent.*` consumer re-fetches an agent's current state. */
+  app.get(
+    '/internal/v1/tenants/:tenantId/agents/:id',
+    {
+      config: { public: true },
+      schema: { params: ParamsSchema, response: { 200: AgentResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      const agent = await agents.findById({ tenantId }, id);
+      if (agent === undefined) {
+        throw ProblemError.notFound('No agent with that id in that tenant.');
+      }
+      return {
+        id: agent.id,
+        extensionId: agent.extensionId,
+        maxNoAnswer: agent.maxNoAnswer,
+        wrapUpSeconds: agent.wrapUpSeconds,
+        rejectDelaySeconds: agent.rejectDelaySeconds,
+      } satisfies Static<typeof AgentResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/queues/:queueId/tiers` (S2-13) — how
+   * telephony-config's `pbx.queue_tier.*` consumer re-fetches a queue's
+   * current tier list after any single tier change (`projection.ts`'s
+   * `projectQueueTier` — the whole list, not just the one that changed, the
+   * same "re-fetch current state rather than trust the event" discipline,
+   * applied at list granularity since a tier has no stable id an event alone
+   * identifies it by other than the (queue, agent) pair).
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/queues/:queueId/tiers',
+    {
+      config: { public: true },
+      schema: {
+        params: QueueTierParamsSchema,
+        response: { 200: Type.Object({ rows: Type.Array(QueueTierResponseSchema) }) },
+      },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, queueId } = request.params;
+      const rows = await queueTiers.listForQueue({ tenantId }, queueId);
+      return {
+        rows: rows.map(
+          (tier) =>
+            ({
+              id: tier.id,
+              queueId: tier.queueId,
+              agentId: tier.agentId,
+              level: tier.level,
+              position: tier.position,
+            }) satisfies Static<typeof QueueTierResponseSchema>,
+        ),
+      };
     },
   );
 }

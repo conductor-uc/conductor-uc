@@ -24,6 +24,9 @@ describe.skipIf(skipReason !== undefined)(
         h.emergencyLocations,
         h.mediaAssets,
         h.ringGroups,
+        h.queues,
+        h.agents,
+        h.queueTiers,
         TOKEN,
       );
       await app.ready();
@@ -166,6 +169,9 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/di
       h.emergencyLocations,
       h.mediaAssets,
       h.ringGroups,
+      h.queues,
+      h.agents,
+      h.queueTiers,
       TOKEN,
     );
     await app.ready();
@@ -309,6 +315,9 @@ describe.skipIf(skipReason !== undefined)('media asset internal routes (S2-07)',
       h.emergencyLocations,
       h.mediaAssets,
       h.ringGroups,
+      h.queues,
+      h.agents,
+      h.queueTiers,
       TOKEN,
     );
     await app.ready();
@@ -445,6 +454,9 @@ describe.skipIf(skipReason !== undefined)(
         h.emergencyLocations,
         h.mediaAssets,
         h.ringGroups,
+        h.queues,
+        h.agents,
+        h.queueTiers,
         TOKEN,
       );
       await app.ready();

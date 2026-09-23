@@ -13,6 +13,8 @@ const ParamsSchema = Type.Object({
 
 const AcquireBodySchema = Type.Object({
   reloadCommands: Type.Optional(Type.Array(Type.String({ minLength: 1 }))),
+  /** S2-13: `AffinityManager.acquire`'s own `preferredNodeId` — see its doc comment for when a caller should set this. */
+  preferredNodeId: Type.Optional(Type.String({ minLength: 1 })),
 });
 
 const OwnerResponseSchema = Type.Object({
@@ -73,12 +75,12 @@ export function registerInternalRoutes(
         throw ProblemError.unauthorized('A valid internal service token is required.');
       }
       const { tenantId, kind, resourceId } = request.params;
-      const result = await affinity.acquire(
-        tenantId,
-        kind,
-        resourceId,
-        request.body.reloadCommands ?? [],
-      );
+      const result = await affinity.acquire(tenantId, kind, resourceId, {
+        reloadCommands: request.body.reloadCommands ?? [],
+        ...(request.body.preferredNodeId === undefined
+          ? {}
+          : { preferredNodeId: request.body.preferredNodeId }),
+      });
       return result;
     },
   );

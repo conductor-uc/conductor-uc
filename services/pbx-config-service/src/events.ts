@@ -76,6 +76,69 @@ export const pbxEvents = defineEvents({
     description: 'A ring group was deleted.',
     data: Type.Object({ ringGroupId: Type.String({ minLength: 1 }) }),
   },
+  'pbx.queue.created': {
+    schemaVersion: 1,
+    description: 'A call queue was created.',
+    data: Type.Object({ queueId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.queue.updated': {
+    schemaVersion: 1,
+    description:
+      "A queue's strategy, MOH, wait limits, announcements, or overflow destination changed.",
+    data: Type.Object({ queueId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.queue.deleted': {
+    schemaVersion: 1,
+    description: 'A queue was deleted.',
+    data: Type.Object({ queueId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.agent.created': {
+    schemaVersion: 1,
+    description: 'An extension was made into an agent.',
+    data: Type.Object({ agentId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.agent.updated': {
+    schemaVersion: 1,
+    description: "An agent's max-no-answer, wrap-up, or reject-delay setting changed.",
+    data: Type.Object({ agentId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.agent.deleted': {
+    schemaVersion: 1,
+    description: 'An agent was removed (its extension is no longer an agent).',
+    data: Type.Object({ agentId: Type.String({ minLength: 1 }) }),
+  },
+  /**
+   * A tier assignment (agent<->queue) changed. Thin like every other event
+   * here, but names both ids rather than just a tier row id: the projection
+   * needs to know *which queue's* callcenter.conf just went stale, and
+   * `queueId` alone (without `agentId`) would still leave it re-fetching
+   * every one of that queue's tiers anyway — carrying both costs nothing
+   * extra and saves a lookup.
+   */
+  'pbx.queue_tier.added': {
+    schemaVersion: 1,
+    description: 'An agent was tiered into a queue.',
+    data: Type.Object({
+      queueId: Type.String({ minLength: 1 }),
+      agentId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'pbx.queue_tier.updated': {
+    schemaVersion: 1,
+    description: "A tier assignment's level or position changed.",
+    data: Type.Object({
+      queueId: Type.String({ minLength: 1 }),
+      agentId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'pbx.queue_tier.removed': {
+    schemaVersion: 1,
+    description: 'An agent was removed from a queue.',
+    data: Type.Object({
+      queueId: Type.String({ minLength: 1 }),
+      agentId: Type.String({ minLength: 1 }),
+    }),
+  },
   'org.domain.added': {
     schemaVersion: 1,
     description:

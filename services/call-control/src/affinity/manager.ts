@@ -25,20 +25,38 @@ export interface AffinityManagerOptions {
   readonly renewIntervalMs: number;
 }
 
+export interface AcquireOptions {
+  /** Sent as `api <command>` to the chosen node, after `xml_flush_cache`, only on a fresh acquire — e.g. a queue's own `callcenter_config reload` (S2-13's concern, not this one's). */
+  readonly reloadCommands?: readonly string[];
+  /**
+   * S2-13: when a call is already anchored on a specific node (a DID's own
+   * `from-trunk` dialplan, or a flow already running there) and the
+   * resource is not yet leased to anyone, 04 §3.3's "otherwise the runner
+   * acquires the lease locally" means *that* node, not whichever one this
+   * manager would otherwise load-balance to — transferring an in-progress
+   * call to a different node for a resource nothing else has claimed yet
+   * would be a pointless hairpin. Ignored if the resource is already leased
+   * (existing holder wins regardless) or if this node is not currently live
+   * (falls back to the least-loaded live node instead, since granting a
+   * lease to a dead node would just strand it until the 30 s TTL lapses).
+   */
+  readonly preferredNodeId?: string;
+}
+
 export interface AffinityManager {
   /**
-   * Returns the resource's current lease holder, acquiring it on the
-   * least-loaded live node first if nothing holds it yet (04 §3.3's own
-   * "Acquisition" paragraph). Idempotent: calling this again for a lease
-   * this manager already won just returns the same node, without repeating
-   * the FS reload commands.
+   * Returns the resource's current lease holder, acquiring it if nothing
+   * holds it yet (04 §3.3's own "Acquisition" paragraph) — on
+   * `preferredNodeId` when given and live, otherwise the least-loaded live
+   * node. Idempotent: calling this again for a lease this manager already
+   * won just returns the same node, without repeating the FS reload
+   * commands.
    */
   acquire(
     tenantId: string,
     kind: AffinityKind,
     resourceId: string,
-    /** Sent as `api <command>` to the chosen node, after `xml_flush_cache`, only on a fresh acquire — e.g. a queue's own `callcenter_config reload` (S2-13's concern, not this one's). */
-    reloadCommands?: readonly string[],
+    options?: AcquireOptions,
   ): Promise<AcquireResult>;
   /**
    * Releases the lease and stops renewing it — "When a resource goes idle
@@ -67,10 +85,13 @@ export function createAffinityManager(options: AffinityManagerOptions): Affinity
   // is what that requires, not every replica renewing every lease.
   const renewals = new Map<string, { nodeId: string; timer: ReturnType<typeof setInterval> }>();
 
-  async function pickLeastLoadedLiveNode(): Promise<string> {
+  async function chooseNode(preferredNodeId: string | undefined): Promise<string> {
     const liveNodeIds = await callRegistry.liveNodeIds();
     if (liveNodeIds.length === 0) {
       throw new Error('no live FreeSWITCH nodes available to acquire an affinity lease');
+    }
+    if (preferredNodeId !== undefined && liveNodeIds.includes(preferredNodeId)) {
+      return preferredNodeId;
     }
 
     const loads = await Promise.all(
@@ -146,7 +167,8 @@ export function createAffinityManager(options: AffinityManagerOptions): Affinity
   }
 
   return {
-    async acquire(tenantId, kind, resourceId, reloadCommands = []) {
+    async acquire(tenantId, kind, resourceId, options = {}) {
+      const { reloadCommands = [], preferredNodeId } = options;
       const lease = { tenantId, kind, resourceId };
       const trackingKey = leaseTrackingKey(tenantId, kind, resourceId);
 
@@ -156,7 +178,7 @@ export function createAffinityManager(options: AffinityManagerOptions): Affinity
       const existingOwner = await registry.getOwner(lease);
       if (existingOwner !== undefined) return { nodeId: existingOwner, acquired: false };
 
-      const chosenNodeId = await pickLeastLoadedLiveNode();
+      const chosenNodeId = await chooseNode(preferredNodeId);
       const won = await registry.acquire(lease, chosenNodeId, leaseTtlMs);
       if (!won) {
         // Lost a race against a concurrent acquire between the read above and this write.

@@ -128,9 +128,9 @@ describe.skipIf(skipReason !== undefined)('affinity manager (S2-12; 04 §3.3)', 
     const tenantId = randomUUID();
     const resourceId = randomUUID();
 
-    const result = await manager.acquire(tenantId, 'queue', resourceId, [
-      'callcenter_config reload',
-    ]);
+    const result = await manager.acquire(tenantId, 'queue', resourceId, {
+      reloadCommands: ['callcenter_config reload'],
+    });
 
     expect(result).toEqual({ nodeId: 'fs-1', acquired: true });
     await waitFor(() => (fakeServers[1]?.receivedApiCommands.length ?? 0) >= 2);
@@ -220,5 +220,34 @@ describe.skipIf(skipReason !== undefined)('affinity manager (S2-12; 04 §3.3)', 
     await expect(manager.acquire(randomUUID(), 'queue', randomUUID())).rejects.toThrow(
       'no live FreeSWITCH nodes',
     );
+  });
+
+  it('acquires on preferredNodeId rather than the least-loaded node, when it is live (S2-13)', async () => {
+    await addLiveNode('fs-0', 0);
+    await addLiveNode('fs-1', 5); // more loaded, but explicitly preferred below
+
+    const manager = newManager();
+    const tenantId = randomUUID();
+    const resourceId = randomUUID();
+
+    const result = await manager.acquire(tenantId, 'queue', resourceId, {
+      preferredNodeId: 'fs-1',
+    });
+
+    expect(result).toEqual({ nodeId: 'fs-1', acquired: true });
+  });
+
+  it('falls back to the least-loaded live node when preferredNodeId is not live', async () => {
+    await addLiveNode('fs-0', 0);
+
+    const manager = newManager();
+    const tenantId = randomUUID();
+    const resourceId = randomUUID();
+
+    const result = await manager.acquire(tenantId, 'queue', resourceId, {
+      preferredNodeId: 'fs-dead',
+    });
+
+    expect(result).toEqual({ nodeId: 'fs-0', acquired: true });
   });
 });
