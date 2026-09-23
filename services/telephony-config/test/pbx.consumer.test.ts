@@ -46,7 +46,7 @@ describe.skipIf(skipReason !== undefined)('pbx consumer', () => {
   });
 
   function consumer() {
-    return createPbxConsumer(h.db, h.bus, h.logger, h.projection, { pullTimeoutMs: 5000 });
+    return createPbxConsumer(h.db, h.bus, h.logger, h.projection, { pullTimeoutMs: 1000 });
   }
 
   /** Returns the published envelope's own id, for a dedupe check that names it exactly. */

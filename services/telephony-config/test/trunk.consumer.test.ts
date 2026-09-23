@@ -48,7 +48,7 @@ describe.skipIf(skipReason !== undefined)('trunk consumer', () => {
   });
 
   function consumer() {
-    return createTrunkConsumer(h.db, h.bus, h.logger, h.projection, { pullTimeoutMs: 5000 });
+    return createTrunkConsumer(h.db, h.bus, h.logger, h.projection, { pullTimeoutMs: 1000 });
   }
 
   async function publish(
