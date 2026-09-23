@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-20 (G-38/G-41, docs/decisions.md): dials the voicemail retrieval
+  feature code (`*97`, `VOICEMAIL_RETRIEVAL_FEATURE_CODE` in
+  `services/telephony-config/src/routes/fs.routes.ts`), enters the
+  mailbox's own *correct* PIN over real RFC 4733 DTMF, then waits for FS's
+  own unprompted BYE once `voicemail.lua`'s `retrieveMessages` finishes
+  playing back whatever messages exist and hangs up itself — the exact
+  same shape `uac_call_wrong_pin.xml` already established for a different
+  FS-initiated hangup (`conference.lua`'s own PIN loop), including why
+  DTMF here uses `play_pcap_audio` with four *distinct* digits rather than
+  `play_dtmf` or a repeated digit (see that scenario's own doc comment for
+  both: this image's `ctaloi/sipp` has no `play_dtmf` support at all, and
+  replaying the identical digit pcap back-to-back gets silently dropped as
+  an RTP duplicate).
+
+  `[field0]`=username, `[field1]`=domain — the mailbox owner dials their
+  own retrieval code, so there is no third CSV field for a destination.
+  The PIN itself ("5678#") is not templated from a CSV field, matching
+  every other scenario here that never encodes a tenant secret directly —
+  it is simply the one PIN this test's own mailbox was created with.
+-->
+<scenario name="Dial *97, enter the correct PIN, wait for FS to hang up">
+  <send retrans="500">
+    <![CDATA[
+      REGISTER sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Expires: 300
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="401" auth="true">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      REGISTER sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 2 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Expires: 300
+      [authentication]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true">
+  </recv>
+
+  <send retrans="4000">
+    <![CDATA[
+      INVITE sip:*97@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:*97@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0 101
+      a=rtpmap:0 PCMU/8000
+      a=rtpmap:101 telephone-event/8000
+      a=fmtp:101 0-16
+    ]]>
+  </send>
+
+  <recv response="100" optional="true">
+  </recv>
+
+  <recv response="180" optional="true">
+  </recv>
+
+  <recv response="200" rtd="true">
+    <action>
+      <ereg regexp="sip:[^&gt;]*" search_in="hdr" header="Contact:" assign_to="1"/>
+    </action>
+  </recv>
+
+  <send>
+    <![CDATA[
+      ACK [$1] SIP/2.0
+      [last_Via:]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <pause milliseconds="500"/>
+
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_5.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_6.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_7.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_8.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_pound.pcap"/></action></nop>
+
+  <recv request="BYE" crlf="true" timeout="20000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>
