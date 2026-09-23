@@ -937,9 +937,11 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(second.statusCode).toBe(200);
       // First call starts at member[0] (101), second at member[1] (102) —
       // the Redis-backed counter (`ring-group-counter.ts`) rotates the
-      // start position on every call to the same ring group.
-      const firstLegs = first.body.split('data="')[1] ?? '';
-      const secondLegs = second.body.split('data="')[1] ?? '';
+      // start position on every call to the same ring group. The bridge
+      // action's own `data="..."` is the second one in the document (S2-18
+      // added a leading `cuc_tenant_id` set action ahead of it).
+      const firstLegs = first.body.split('data="')[2] ?? '';
+      const secondLegs = second.body.split('data="')[2] ?? '';
       expect(firstLegs.indexOf('101@acme.platform.test')).toBeLessThan(
         firstLegs.indexOf('102@acme.platform.test'),
       );
