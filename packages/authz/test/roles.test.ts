@@ -60,6 +60,11 @@ describe('BUILT_IN_ROLES', () => {
     );
   });
 
+  it('reseller_admin holds billing.read but tenant_admin does not — C-1/D-013: the usage-class billing view is reseller-facing, a tenant already gets the full private-class CDR via cdr.read', () => {
+    expect(BUILT_IN_ROLES.get('reseller_admin')?.permissions.has('billing.read')).toBe(true);
+    expect(BUILT_IN_ROLES.get('tenant_admin')?.permissions.has('billing.read')).toBe(false);
+  });
+
   it('tenant_admin holds secret.reveal — audited, but a real tenant-admin capability', () => {
     expect(BUILT_IN_ROLES.get('tenant_admin')?.permissions.has('secret.reveal')).toBe(true);
   });

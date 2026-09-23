@@ -87,6 +87,11 @@ describe('PERMISSION_CATALOG', () => {
     expect(isKnownPermission('conference_room.manage')).toBe(true);
     expect(dataClassOf('conference_room.manage')).toBe('config');
   });
+
+  it('includes billing.read — S2-18/C-1/D-013, a usage-class reseller billing view distinct from private-class cdr.read', () => {
+    expect(isKnownPermission('billing.read')).toBe(true);
+    expect(dataClassOf('billing.read')).toBe('usage');
+  });
 });
 
 describe('dataClassOf', () => {
