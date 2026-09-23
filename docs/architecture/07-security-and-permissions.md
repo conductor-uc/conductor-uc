@@ -48,7 +48,7 @@ allowed(actor, permission, resource) =
 |---|---|---|
 | `config` | Tenant settings, extensions, DIDs, trunks, flows, queues (definitions), users (not credentials) | Yes (own tenants) |
 | `private` | CDRs, recordings, voicemail, chat messages, SMS/fax content, live call monitoring, per-call analytics, the audit trail of tenant private access | **No** (H1) |
-| `usage` | Aggregate counts and minutes per tenant | Pending D-013 |
+| `usage` | Aggregate counts and minutes per tenant | Yes, always on (D-013, issue #95) — a `billing.read`-gated view distinct from the full, tenant-private CDR |
 | `secret` | SIP passwords, trunk credentials, API key secrets | Write-only; reveal requires a specific permission and is audited |
 
 Every route declares its data class in its route schema (`config.dataClass`), and `@cuc/http` enforces H1 automatically. A CI test asserts that every route declares one.

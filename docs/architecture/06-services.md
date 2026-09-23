@@ -164,7 +164,7 @@ Resellers configure trunks for their tenants. Tenant admins can view trunks and,
 - `POST /ingest/json-cdr` from FS `mod_json_cdr` (shared-token auth; FS retries and falls back to disk; dedupe on `(call_uuid, node)`)
 - Consumes `call.lost` to create synthetic CDRs flagged `disposition=node_failure`
 
-**CDR schema v1** (proposal answering SAD §12; to be frozen in S2-11):
+**CDR schema v1** (proposal answering SAD §12; frozen in S2-18 — `services/cdr-service/src/schema.ts`):
 
 | Field | Type | Notes |
 |---|---|---|

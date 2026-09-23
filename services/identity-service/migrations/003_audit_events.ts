@@ -45,7 +45,7 @@ export async function up(db: Kysely<unknown>): Promise<void> {
   // never fails even past the generated range. Rolling the window forward
   // (adding future partitions) and dropping partitions past the retention
   // window (07 §4: "configurable, default 1 year") is operational tooling
-  // this task does not build — flagged as G-14 in docs/decisions.md.
+  // this task does not build — flagged as G-12 in docs/decisions.md.
   await sql`
     alter table audit_events
       partition by range columns (at) (
