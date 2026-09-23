@@ -19,6 +19,9 @@ enum FieldKind {
   dynamicRef,
 }
 
+/// Whether a field appears when creating, when editing, or both.
+enum FieldScope { both, create, edit }
+
 /// One property of a resource. The set of fields mirrors the service's request
 /// schema; `test/contract_test.dart` checks that against the OpenAPI snapshot.
 class Field {
@@ -37,6 +40,9 @@ class Field {
     this.min,
     this.max,
     this.initial,
+    this.scope = FieldScope.both,
+    this.secret = false,
+    this.nullable = true,
   });
 
   final String key;
@@ -59,6 +65,18 @@ class Field {
   final int? min;
   final int? max;
   final Object? initial;
+  final FieldScope scope;
+
+  /// Typed with the characters hidden (a password).
+  final bool secret;
+
+  /// Whether the service accepts null to clear it. When false, an empty value
+  /// on edit is left out of the request rather than sent as null.
+  final bool nullable;
+
+  bool inScope({required bool editing}) =>
+      scope == FieldScope.both ||
+      (editing ? scope == FieldScope.edit : scope == FieldScope.create);
 }
 
 /// A tenant-owned PBX resource: where it lives, what it is called, and the

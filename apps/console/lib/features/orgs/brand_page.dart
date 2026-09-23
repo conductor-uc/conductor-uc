@@ -1,0 +1,363 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../app/brand.dart';
+import '../../core/session.dart';
+import '../pbx/pbx_api.dart';
+import 'orgs_api.dart';
+
+/// The brand fields this editor sends, with labels and help. Logo and favicon
+/// upload arrive with the asset screens, so their keys are left out.
+const brandFields = <(String, String, String?)>[
+  (
+    'displayName',
+    'Display name',
+    'Shown in the console header and page title.',
+  ),
+  ('primaryColor', 'Primary color', 'Six-digit hex, like #6a1b9a.'),
+  ('accentColor', 'Accent color', 'Six-digit hex, like #00695c.'),
+  ('supportEmail', 'Support email', null),
+  ('supportUrl', 'Support URL', null),
+  ('supportPhone', 'Support phone', null),
+  ('emailFromName', 'Email sender name', null),
+  (
+    'emailFromAddress',
+    'Email sender address',
+    'Its domain must pass SPF and DKIM before use.',
+  ),
+  (
+    'sipUserAgent',
+    'SIP user agent',
+    'Optional override for the SIP User-Agent header.',
+  ),
+  ('legalFooter', 'Legal footer', 'Shown at the bottom of sign-in and emails.'),
+];
+
+/// A reseller's brand (02 §5.4) and its console hostnames.
+class BrandPage extends ConsumerStatefulWidget {
+  const BrandPage({super.key});
+
+  @override
+  ConsumerState<BrandPage> createState() => _BrandPageState();
+}
+
+class _BrandPageState extends ConsumerState<BrandPage> {
+  final _controllers = {
+    for (final f in brandFields) f.$1: TextEditingController(),
+  };
+  bool _loaded = false;
+  bool _busy = false;
+  String? _error;
+  String? _status;
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  String get _resellerId => ref.read(sessionProvider)!.orgId;
+
+  /// Live values as a [Brand], for the preview.
+  Brand _draft() => Brand(
+    displayName: _text('displayName'),
+    primary: parseHex(_text('primaryColor')),
+    accent: parseHex(_text('accentColor')),
+    legalFooter: _text('legalFooter'),
+  );
+
+  String? _text(String key) {
+    final t = _controllers[key]!.text.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  Future<void> _save() async {
+    final api = ref.read(orgsApiProvider);
+    if (api == null) return;
+    for (final key in const ['primaryColor', 'accentColor']) {
+      final value = _text(key);
+      if (value != null && parseHex(value) == null) {
+        setState(
+          () => _error = 'Colors are six-digit hex values, like #6a1b9a.',
+        );
+        return;
+      }
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+      _status = null;
+    });
+    try {
+      await api.saveBrand(_resellerId, {
+        for (final f in brandFields) f.$1: _text(f.$1),
+      });
+      ref.invalidate(brandProviderFor(_resellerId));
+      if (mounted) setState(() => _status = 'Brand saved.');
+    } catch (e) {
+      if (mounted) setState(() => _error = problemMessage(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _addHostname() async {
+    final api = ref.read(orgsApiProvider);
+    if (api == null) return;
+    final fqdn = await showDialog<String>(
+      context: context,
+      builder: (_) => const _HostnameDialog(),
+    );
+    if (fqdn == null) return;
+    try {
+      await api.addConsoleHostname(_resellerId, fqdn);
+      ref.invalidate(consoleHostnamesProvider(_resellerId));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(problemMessage(e))));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final session = ref.watch(sessionProvider);
+    if (session == null || session.orgType != OrgType.reseller) {
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Text('Only a reseller has a brand to edit.'),
+      );
+    }
+    final id = session.orgId;
+    final saved = ref.watch(brandProviderFor(id));
+    final hostnames = ref.watch(consoleHostnamesProvider(id));
+    final textTheme = Theme.of(context).textTheme;
+
+    // Not while it is reloading: the value then is the stale one from before
+    // the last save.
+    if (!_loaded && saved.hasValue && !saved.isLoading) {
+      _loaded = true;
+      final brand = saved.value;
+      if (brand != null) {
+        for (final f in brandFields) {
+          _controllers[f.$1]!.text = (brand[f.$1] as String?) ?? '';
+        }
+      }
+    }
+    if (saved.isLoading && !_loaded) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    final draft = _draft();
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Brand', style: textTheme.headlineSmall),
+          const SizedBox(height: 4),
+          const Text(
+            'What your customers see: the console header, sign-in page, and emails. '
+            'Leave everything blank for the neutral look.',
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 32,
+            runSpacing: 16,
+            crossAxisAlignment: WrapCrossAlignment.start,
+            children: [
+              SizedBox(
+                width: 420,
+                child: Column(
+                  children: [
+                    for (final f in brandFields)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: TextField(
+                          controller: _controllers[f.$1],
+                          decoration: InputDecoration(
+                            labelText: f.$2,
+                            helperText: f.$3,
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    if (_error != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _error!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    if (_status != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(_status!),
+                      ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: FilledButton(
+                        onPressed: _busy ? null : _save,
+                        child: const Text('Save brand'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(width: 320, child: _Preview(brand: draft)),
+            ],
+          ),
+          const SizedBox(height: 32),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Console hostnames', style: textTheme.titleMedium),
+              ),
+              OutlinedButton.icon(
+                onPressed: _addHostname,
+                icon: const Icon(Icons.add),
+                label: const Text('Add hostname'),
+              ),
+            ],
+          ),
+          const Text(
+            'Point each name at the console with a DNS record; sign-in there shows this brand.',
+          ),
+          hostnames.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (e, _) => Text(problemMessage(e)),
+            data: (rows) => rows.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Text('None yet.'),
+                  )
+                : Column(
+                    children: [
+                      for (final h in rows)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: const Icon(Icons.language),
+                          title: Text('${h['fqdn']}'),
+                          subtitle: Text('TLS: ${h['tlsStatus']}'),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// How the draft brand looks, drawn with the same theme builder the console uses.
+class _Preview extends StatelessWidget {
+  const _Preview({required this.brand});
+
+  final Brand brand;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = buildTheme(brand);
+    return Theme(
+      data: theme,
+      child: Card(
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              color: theme.colorScheme.primary,
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                brand.displayName ?? '',
+                style: TextStyle(
+                  color: theme.colorScheme.onPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Preview'),
+                  const SizedBox(height: 12),
+                  FilledButton(onPressed: () {}, child: const Text('Sign in')),
+                  const SizedBox(height: 8),
+                  Chip(
+                    label: Text(
+                      'Accent',
+                      style: TextStyle(color: theme.colorScheme.onSecondary),
+                    ),
+                    backgroundColor: theme.colorScheme.secondary,
+                  ),
+                  if (brand.legalFooter != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      brand.legalFooter!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HostnameDialog extends StatefulWidget {
+  const _HostnameDialog();
+
+  @override
+  State<_HostnameDialog> createState() => _HostnameDialogState();
+}
+
+class _HostnameDialogState extends State<_HostnameDialog> {
+  final _fqdn = TextEditingController();
+
+  @override
+  void dispose() {
+    _fqdn.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final value = _fqdn.text.trim().toLowerCase();
+    if (value.isNotEmpty) Navigator.of(context).pop(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Add hostname'),
+      content: TextField(
+        controller: _fqdn,
+        autofocus: true,
+        decoration: const InputDecoration(
+          labelText: 'Hostname',
+          helperText: 'For example portal.example.com',
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(onPressed: _submit, child: const Text('Add')),
+      ],
+    );
+  }
+}

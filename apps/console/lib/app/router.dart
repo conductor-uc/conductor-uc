@@ -6,6 +6,7 @@ import '../core/acting.dart';
 import '../core/session.dart';
 import '../features/auth/login_page.dart';
 import '../features/callflow/flows_page.dart';
+import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
 import '../features/pbx/resource.dart';
 import '../features/pbx/resource_page.dart';
@@ -69,6 +70,7 @@ Widget _pageFor(Section section) {
   final defs = _pbxPages[section.path];
   if (defs != null) return ResourcePage(defs: defs);
   if (section.path == '/call-flows') return const FlowsPage();
+  if (section.path == '/brand') return const BrandPage();
   if (section.path == '/resellers' || section.path == '/tenants') {
     return const OrgsPage();
   }
