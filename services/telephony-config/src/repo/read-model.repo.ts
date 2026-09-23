@@ -152,6 +152,25 @@ const PARKING_LOT_COLUMNS = [
   'return_destination_id as returnDestinationId',
 ] as const;
 
+/** S2-15's own local mirror row of a conference room (`pbx-config-client.ts`'s `ConferenceRoomConfig`). No PIN here — `010_add_conference_rooms.ts`'s own comment on why. */
+export interface ConferenceRoomRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly label: string;
+  readonly number: string;
+  readonly pinRequired: boolean;
+  readonly maxMembers: number;
+}
+
+const CONFERENCE_ROOM_COLUMNS = [
+  'id',
+  'tenant_id as tenantId',
+  'label',
+  'number',
+  'pin_required as pinRequired',
+  'max_members as maxMembers',
+] as const;
+
 export interface DidRow {
   readonly id: string;
   readonly tenantId: string;
@@ -898,6 +917,66 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .where('tenant_id', '=', tenantId)
         .execute();
       return lots.find((lot) => slotNumber >= lot.slotStart && slotNumber <= lot.slotEnd);
+    },
+
+    /** Upserts a conference room's current state (S2-15), keyed by id — the same shape `upsertParkingLot` already establishes. */
+    async upsertConferenceRoom(trx: Executor, room: ConferenceRoomRow): Promise<void> {
+      const now = new Date();
+      await trx
+        .insertInto('conference_rooms')
+        .values({
+          id: room.id,
+          tenant_id: room.tenantId,
+          label: room.label,
+          number: room.number,
+          pin_required: room.pinRequired,
+          max_members: room.maxMembers,
+          created_at: now,
+          updated_at: now,
+        })
+        .onDuplicateKeyUpdate({
+          label: room.label,
+          number: room.number,
+          pin_required: room.pinRequired,
+          max_members: room.maxMembers,
+          updated_at: now,
+        })
+        .execute();
+    },
+
+    async deleteConferenceRoom(trx: Executor, id: string): Promise<void> {
+      await trx.deleteFrom('conference_rooms').where('id', '=', id).execute();
+    },
+
+    findConferenceRoomById(id: string): Promise<ConferenceRoomRow | undefined> {
+      return db.kysely
+        .selectFrom('conference_rooms')
+        .select(CONFERENCE_ROOM_COLUMNS)
+        .where('id', '=', id)
+        .executeTakeFirst();
+    },
+
+    /**
+     * Every conference room across every tenant — mirrors `findAllParkingLots`'
+     * own cross-tenant reasoning, though S2-15 has no `/fs/configuration`
+     * binding to walk it with yet (`docs/decisions.md` G-50: the
+     * `conference.conf` xml_curl binding was deliberately not built).
+     */
+    findAllConferenceRooms(): Promise<ConferenceRoomRow[]> {
+      return db.kysely.selectFrom('conference_rooms').select(CONFERENCE_ROOM_COLUMNS).execute();
+    },
+
+    /** The room dialed by exact number, if any in this tenant (S2-15; `/fs/dialplan`'s conference-room branch) — unlike a parking lot's slot range, a room's number is a single value, so an exact-match query is enough. */
+    findConferenceRoomByNumber(
+      tenantId: string,
+      number: string,
+    ): Promise<ConferenceRoomRow | undefined> {
+      return db.kysely
+        .selectFrom('conference_rooms')
+        .select(CONFERENCE_ROOM_COLUMNS)
+        .where('tenant_id', '=', tenantId)
+        .where('number', '=', number)
+        .executeTakeFirst();
     },
 
     /** ISO 3166-1 alpha-2, or `undefined` if not yet known (`org-client.ts`'s own comment on when that happens). */

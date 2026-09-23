@@ -140,6 +140,21 @@ export interface ParkingLotConfig {
   readonly returnDestinationId: string | null;
 }
 
+/**
+ * A conference room's current state (S2-15) — what `pbx.conference_room.*`'s
+ * "thin event, re-fetch current state" projection (`projection.ts`'s
+ * `projectConferenceRoom`) fetches to keep telephony-config's own local
+ * `conference_rooms` mirror current. No PIN field: `pinRequired` is all the
+ * dialplan-building side needs (`read-model.repo.ts`'s own comment on why).
+ */
+export interface ConferenceRoomConfig {
+  readonly id: string;
+  readonly label: string;
+  readonly number: string;
+  readonly pinRequired: boolean;
+  readonly maxMembers: number;
+}
+
 export class PbxConfigClientError extends Error {
   override readonly name = 'PbxConfigClientError';
 }
@@ -174,6 +189,18 @@ export interface PbxConfigClient {
   findQueueTiers(tenantId: string, queueId: string): Promise<QueueTierConfig[]>;
   /** Undefined when the parking lot does not exist in that tenant (a 404). */
   findParkingLot(tenantId: string, parkingLotId: string): Promise<ParkingLotConfig | undefined>;
+  /** Undefined when the conference room does not exist in that tenant (a 404). */
+  findConferenceRoom(
+    tenantId: string,
+    conferenceRoomId: string,
+  ): Promise<ConferenceRoomConfig | undefined>;
+  /**
+   * Whether `pin` matches the room's stored PIN — what `conference.lua` calls
+   * after collecting DTMF digits (S2-15). The decrypted PIN itself never
+   * leaves pbx-config-service (`conference-room.repo.ts`'s own `verifyPin`);
+   * this only ever sees the boolean result.
+   */
+  verifyConferencePin(tenantId: string, conferenceRoomId: string, pin: string): Promise<boolean>;
 }
 
 export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfigClient {
@@ -407,6 +434,68 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
       }
 
       return (await response.json()) as ParkingLotConfig;
+    },
+
+    async findConferenceRoom(
+      tenantId: string,
+      conferenceRoomId: string,
+    ): Promise<ConferenceRoomConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/conference-rooms/${encodeURIComponent(conferenceRoomId)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the conference room lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return (await response.json()) as ConferenceRoomConfig;
+    },
+
+    async verifyConferencePin(
+      tenantId: string,
+      conferenceRoomId: string,
+      pin: string,
+    ): Promise<boolean> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/conference-rooms/${encodeURIComponent(conferenceRoomId)}/verify-pin`,
+          {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${options.internalServiceToken}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({ pin }),
+          },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the conference PIN verification (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      const body = (await response.json()) as { valid: boolean };
+      return body.valid;
     },
   };
 }

@@ -26,6 +26,7 @@ import {
   AGENT_LOGOUT_FEATURE_CODE,
   buildAgentStatusDialplanDocument,
   buildCallcenterConfigurationDocument,
+  buildConferenceDialplanDocument,
   buildDialplanDocument,
   buildDirectoryDocument,
   buildEmergencyDialplanDocument,
@@ -127,6 +128,13 @@ const VoicemailCompleteMessageBodySchema = Type.Object({
   sizeBytes: Type.Number({ minimum: 0 }),
 });
 const VoicemailPinBodySchema = Type.Object({ pin: Type.String({ minLength: 1 }) });
+
+/** `/fs/conference-rooms/...` (S2-15) — the Lua conference app's own params/body shapes. */
+const ConferenceRoomParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  roomId: Type.String({ minLength: 1 }),
+});
+const ConferencePinBodySchema = Type.Object({ pin: Type.String({ minLength: 1 }) });
 
 /**
  * The most specific outbound route matching `normalizedNumber` (S2-04):
@@ -747,6 +755,66 @@ export function registerFsRoutes(
     );
   }
 
+  /**
+   * `/fs/dialplan`'s conference-room branch (S2-15) — same "acquire the
+   * lease onto the requesting node, then hand off" shape `handleQueueDial`/
+   * `handleParkDial` already establish, over `kind: 'conf'`. No reload
+   * command: there is no `conference.conf` xml_curl binding for a reload
+   * to invalidate (`docs/decisions.md` G-50), so `AffinityManager`'s own
+   * default (`xml_flush_cache`) is what runs, the same as parking.
+   */
+  async function handleConferenceDial(
+    tenantId: string,
+    room: NonNullable<Awaited<ReturnType<typeof readModel.findConferenceRoomByNumber>>>,
+    callerContext: string,
+    destinationNumber: string,
+    nodeId: string | undefined,
+  ): Promise<string> {
+    if (nodeId === undefined || nodeId === '') {
+      logger.warn(
+        { tenantId, roomId: room.id },
+        'dialplan: conference dial with no requesting nodeId',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    const domain = await readModel.findDomain(db.kysely, tenantId);
+    if (domain === undefined) {
+      logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    let acquired;
+    try {
+      acquired = await callControlClient.acquireAffinity(tenantId, 'conf', room.id, {
+        preferredNodeId: nodeId,
+      });
+    } catch (error) {
+      logger.error(
+        { err: error, tenantId, roomId: room.id },
+        'dialplan: could not reach call-control to acquire the conference room’s affinity lease',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    if (acquired.nodeId !== nodeId) {
+      logger.warn(
+        { tenantId, roomId: room.id, nodeId, leasedTo: acquired.nodeId },
+        'dialplan: conference room is leased to a different node; cross-node routing is S4-05’s concern, not this one’s',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    return buildConferenceDialplanDocument(
+      callerContext,
+      destinationNumber,
+      tenantId,
+      room.id,
+      callcenterName(room.id, domain.fqdn),
+      room.pinRequired,
+    );
+  }
+
   app.post('/fs/dialplan', { config: { public: true } }, async (request, reply) => {
     if (!authorized(request.headers.authorization)) {
       reply.code(401);
@@ -825,6 +893,19 @@ export function registerFsRoutes(
 
       const extension = await readModel.findExtensionByNumber(tenantId, destinationNumber);
       if (extension === undefined) {
+        // S2-15: checked next, before the parking-lot slot range — same
+        // "known extension always wins" collision reasoning as the parking
+        // lot check below, and a room's own number is a single value
+        // (unlike a lot's range), so it can be checked with one exact-match
+        // query ahead of it. `docs/decisions.md` G-49: none of extension,
+        // conference room, or parking lot cross-checks the others at
+        // creation time, so this lookup order is what actually decides a
+        // collision, not a rejection at provisioning time.
+        const room = await readModel.findConferenceRoomByNumber(tenantId, destinationNumber);
+        if (room !== undefined) {
+          return handleConferenceDial(tenantId, room, callerContext, destinationNumber, nodeId);
+        }
+
         // S2-14: a known extension always wins a coincidental collision
         // with a parking slot — checked here, after the extension lookup,
         // not before, unlike the feature codes above (which are fixed,
@@ -936,11 +1017,11 @@ export function registerFsRoutes(
       }
 
       // `extension` (S2-03), `ring_group` (S2-08), `voicemail` (S2-16,
-      // returned above), `flow` (S2-10, returned below) and `queue` (S2-13,
-      // returned below) resolve to a real call — every other destination
-      // type still has no owning subsystem (docs/decisions.md G-25), so this
-      // is an honest miss, not a guess at behavior only a later stage can
-      // define.
+      // returned above), `flow` (S2-10, returned below), `queue` (S2-13,
+      // returned below), and `conference` (S2-15, returned below) resolve to
+      // a real call — every other destination type still has no owning
+      // subsystem (docs/decisions.md G-25), so this is an honest miss, not a
+      // guess at behavior only a later stage can define.
       //
       // `ring_group` must stay in this list: the whole ring-group branch
       // below is unreachable without it, which is exactly what broke when
@@ -950,7 +1031,8 @@ export function registerFsRoutes(
         did.destinationType !== 'extension' &&
         did.destinationType !== 'ring_group' &&
         did.destinationType !== 'flow' &&
-        did.destinationType !== 'queue'
+        did.destinationType !== 'queue' &&
+        did.destinationType !== 'conference'
       ) {
         logger.info(
           { didId: did.id, destinationType: did.destinationType },
@@ -1043,6 +1125,18 @@ export function registerFsRoutes(
           domain.fqdn,
           nodeId,
         );
+      }
+
+      if (did.destinationType === 'conference') {
+        const room = await readModel.findConferenceRoomById(did.destinationId);
+        if (room === undefined) {
+          logger.warn(
+            { didId: did.id, destinationId: did.destinationId },
+            'dialplan: DID’s destination conference room no longer exists',
+          );
+          return NOT_FOUND_DOCUMENT;
+        }
+        return handleConferenceDial(trunk.tenantId, room, callerContext, destinationNumber, nodeId);
       }
 
       // did.destinationType === 'ring_group' (S2-08).
@@ -1356,6 +1450,30 @@ export function registerFsRoutes(
       }
       const { tenantId, mailboxId } = request.params;
       const valid = await voicemailClient.verifyPin(tenantId, mailboxId, request.body.pin);
+      return { valid };
+    },
+  );
+
+  /**
+   * `POST /fs/conference-rooms/:tenantId/:roomId/verify-pin` (S2-15) —
+   * `conference.lua`'s own PIN check, the same thin-proxy shape as the
+   * voicemail verify-pin route above: this service never touches
+   * pbx-config-service's database, only its internal API
+   * (`pbxConfigClient.verifyConferencePin`).
+   */
+  app.post(
+    '/fs/conference-rooms/:tenantId/:roomId/verify-pin',
+    {
+      config: { public: true },
+      schema: { params: ConferenceRoomParamsSchema, body: ConferencePinBodySchema },
+    },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId, roomId } = request.params;
+      const valid = await pbxConfigClient.verifyConferencePin(tenantId, roomId, request.body.pin);
       return { valid };
     },
   );

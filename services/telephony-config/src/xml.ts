@@ -735,3 +735,42 @@ export function buildParkDialplanDocument(
     '</document>\n'
   );
 }
+
+/**
+ * `/fs/dialplan`'s conference-room branch (S2-15; `mod_conference`). Hands
+ * the call to `conference.lua` rather than an `action application="conference"`
+ * directly (the same "PIN prompt needs DTMF collection first" reasoning
+ * `voicemail.lua` already establishes for a mailbox PIN) — `roomName` is
+ * `callcenterName`'s `id@domain` convention, reused here for the same
+ * reason a queue/parking-lot name needs it: unique across tenants sharing
+ * one FS node. `pinRequired` travels as an argv rather than a second HTTP
+ * round-trip from the script, since `handleConferenceDial` already has it
+ * from the local mirror.
+ *
+ * No `conference.conf` xml_curl binding is built to back `roomName`
+ * (`docs/decisions.md` G-50) — `mod_conference`'s own unconfigured default
+ * profile is what a bare room name resolves against.
+ */
+export function buildConferenceDialplanDocument(
+  callerContext: string,
+  destinationNumber: string,
+  tenantId: string,
+  roomId: string,
+  roomName: string,
+  pinRequired: boolean,
+): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="conference-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          <action application="lua" data="conference.lua ${escapeXml(tenantId)} ${escapeXml(roomId)} ${escapeXml(roomName)} ${pinRequired ? '1' : '0'}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}

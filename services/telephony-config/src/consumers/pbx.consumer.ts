@@ -35,6 +35,10 @@ interface ParkingLotEventData {
   readonly parkingLotId: string;
 }
 
+interface ConferenceRoomEventData {
+  readonly conferenceRoomId: string;
+}
+
 export interface PbxConsumerOptions {
   /** How long one pull waits for a message (`@cuc/events`' default: 1s). Longer in tests. */
   readonly pullTimeoutMs?: number;
@@ -92,6 +96,9 @@ export function createPbxConsumer(
       'pbx.parking_lot.created',
       'pbx.parking_lot.updated',
       'pbx.parking_lot.deleted',
+      'pbx.conference_room.created',
+      'pbx.conference_room.updated',
+      'pbx.conference_room.deleted',
     ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
     handler: async (envelope, trx) => {
@@ -178,6 +185,22 @@ export function createPbxConsumer(
           await projection.removeParkingLot(
             trx,
             (envelope.data as ParkingLotEventData).parkingLotId,
+          );
+          return;
+
+        case 'pbx.conference_room.created':
+        case 'pbx.conference_room.updated':
+          await projection.projectConferenceRoom(
+            trx,
+            tenantId,
+            (envelope.data as ConferenceRoomEventData).conferenceRoomId,
+          );
+          return;
+
+        case 'pbx.conference_room.deleted':
+          await projection.removeConferenceRoom(
+            trx,
+            (envelope.data as ConferenceRoomEventData).conferenceRoomId,
           );
           return;
 

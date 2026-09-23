@@ -262,4 +262,20 @@ export interface TelephonyConfigDb extends EventTables {
     created_at: Date;
     updated_at: Date;
   };
+  /**
+   * S2-15's own local mirror of pbx-config-service's `conference_rooms` —
+   * no `pin_enc` here (`010_add_conference_rooms.ts`'s own comment on why),
+   * just the `pin_required` bit `conference.lua` needs to decide whether to
+   * prompt at all.
+   */
+  conference_rooms: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    number: string;
+    pin_required: boolean;
+    max_members: number;
+    created_at: Date;
+    updated_at: Date;
+  };
 }
