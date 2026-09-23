@@ -42,6 +42,9 @@
       "path": "./services/api-gateway/tsconfig.build.json"
     },
     {
+      "path": "./services/cdr-service/tsconfig.build.json"
+    },
+    {
       "path": "./services/example-service/tsconfig.build.json"
     },
     {
