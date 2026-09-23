@@ -41,20 +41,40 @@ export function escapeRegex(value: string): string {
 }
 
 /**
- * `<action application="set" data="cuc_tenant_id=...">` (S2-18) — every
- * dialplan document's own first action, on every branch. `sip_h_X-Tenant-Id`
- * (`opensips.cfg.template`'s own header, confirmed live) is already a
- * reliable channel variable for an internal-direction call by the time it
- * reaches FS, but an inbound (from-trunk) call carries no such header — so
- * this is the one channel variable every branch can agree to set explicitly,
- * giving cdr-service (`domain/cdr.ts`) a single, direction-independent field
- * to read off `mod_json_cdr`'s own `variables.cuc_tenant_id` rather than
- * needing direction-dependent fallback logic. `buildFlowDialplanDocument`
- * does not call this helper — it already sets the same variable itself, as
- * part of the small set flow_runner.lua reads directly.
+ * `<action application="set" data="cuc_tenant_id=...">` +
+ * `<action application="set" data="cuc_node_id=$${cuc_node_id}">` (S2-18/
+ * S2-19) — every dialplan document's own first actions, on every branch.
+ *
+ * `cuc_tenant_id`: `sip_h_X-Tenant-Id` (`opensips.cfg.template`'s own
+ * header, confirmed live) is already a reliable channel variable for an
+ * internal-direction call by the time it reaches FS, but an inbound
+ * (from-trunk) call carries no such header — so this is the one channel
+ * variable every branch can agree to set explicitly, giving cdr-service
+ * (`domain/cdr.ts`) a single, direction-independent field to read off
+ * `mod_json_cdr`'s own `variables.cuc_tenant_id` rather than needing
+ * direction-dependent fallback logic.
+ *
+ * `cuc_node_id`: confirmed live (S2-19's own two-node verification) that
+ * `vars.xml`'s `X-PRE-PROCESS cmd="set" data="cuc_node_id=..."` only
+ * defines a *global* variable (resolved by `$${cuc_node_id}` substitution
+ * at XML-parse time, and by `session:getVariable`'s own global-variable
+ * fallback in Lua) — it is never a *channel* variable unless something
+ * explicitly sets it on the channel, and `mod_json_cdr`'s own `variables`
+ * dump only ever serializes a channel's own local variable table, not the
+ * global pool. Without this action, every CDR's `variables.cuc_node_id`
+ * comes back empty and cdr-service rejects the whole payload
+ * (`InvalidCdrPayloadError`) — caught live, not theoretical.
+ *
+ * `buildFlowDialplanDocument` does not call this helper — it already sets
+ * `cuc_tenant_id` itself (part of the small set flow_runner.lua reads
+ * directly) and separately sets `cuc_node_id` the same way, for the same
+ * reason.
  */
 function tenantIdAction(tenantId: string): string {
-  return `<action application="set" data="${escapeXml(`cuc_tenant_id=${tenantId}`)}"/>`;
+  return (
+    `<action application="set" data="${escapeXml(`cuc_tenant_id=${tenantId}`)}"/>\n` +
+    '          <action application="set" data="cuc_node_id=$${cuc_node_id}"/>'
+  );
 }
 
 /**
@@ -284,6 +304,10 @@ export function buildFlowDialplanDocument(
     ['cuc_tenant_id', tenantId],
     ['cuc_tenant_domain', tenantDomain],
     ['cuc_opensips_sip_uri', opensipsSipUri],
+    // S2-19: confirmed live that this must be set explicitly as a channel
+    // variable, not just the global one `vars.xml` already defines —
+    // `tenantIdAction`'s own doc comment (this file) has the full story.
+    ['cuc_node_id', '$${cuc_node_id}'],
   ];
 
   return (
