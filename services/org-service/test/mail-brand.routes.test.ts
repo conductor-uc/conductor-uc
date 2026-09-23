@@ -12,6 +12,12 @@ import type { OrgServiceDb } from '../src/schema.js';
 
 const skipReason = await databaseOrSkipReason();
 const INTERNAL_TOKEN = 'test-internal-service-token';
+interface MailBrandBody {
+  neutral: boolean;
+  displayName: string | null;
+  consoleHostname: string | null;
+}
+
 const AUTH = { authorization: `Bearer ${INTERNAL_TOKEN}` };
 
 describe.skipIf(skipReason !== undefined)('GET /internal/v1/orgs/:id/mail-brand', () => {
@@ -92,14 +98,14 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/orgs/:id/mail-brand'
 
   it('gives the master no brand and no hostname', async () => {
     const { master } = await tree();
-    const body = (await get(master.id)).json();
+    const body = (await get(master.id)).json<MailBrandBody>();
     expect(body).toMatchObject({ neutral: true, displayName: null, consoleHostname: null });
   });
 
   it('is neutral for a reseller with no brand, but still names its console host', async () => {
     const { reseller } = await tree();
     await brands.registerConsoleHostname(reseller.id, 'portal.acme.example');
-    const body = (await get(reseller.id)).json();
+    const body = (await get(reseller.id)).json<MailBrandBody>();
     expect(body).toMatchObject({
       neutral: true,
       displayName: null,
