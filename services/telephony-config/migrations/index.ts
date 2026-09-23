@@ -7,6 +7,7 @@ import * as addDids from './004_add_dids.js';
 import * as addOutboundRouting from './005_add_outbound_routing.js';
 import * as addEmergencyCalling from './006_add_emergency_calling.js';
 import * as addRingGroups from './007_add_ring_groups.js';
+import * as addQueues from './008_add_queues.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -25,4 +26,5 @@ export const migrations: Record<string, Migration> = {
   '005_add_outbound_routing': addOutboundRouting,
   '006_add_emergency_calling': addEmergencyCalling,
   '007_add_ring_groups': addRingGroups,
+  '008_add_queues': addQueues,
 };

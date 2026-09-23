@@ -48,8 +48,11 @@ export interface EslClient {
   sendApi(command: string): Promise<EslApiResult>;
 }
 
+// `CUSTOM callcenter::info` (S2-13): a custom event class must be named by
+// its own subclass to subscribe to it — `mod_event_socket`'s documented
+// convention, not something the other (stock) event names above need.
 const SUBSCRIBE_COMMAND =
-  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_HANGUP_COMPLETE HEARTBEAT';
+  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_HANGUP_COMPLETE HEARTBEAT CUSTOM callcenter::info';
 
 type ConnectionState = 'connecting' | 'authenticating' | 'subscribing' | 'ready';
 

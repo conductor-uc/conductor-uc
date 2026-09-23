@@ -96,6 +96,17 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
           await registry.endCall(action.callUuid, action.nodeId, action.tenantId);
           return;
 
+        case 'queueAgentStateChanged':
+          await enqueueEvent(db, callEvents, {
+            type: 'call.queue.agent_status_changed',
+            data: {
+              nodeId: action.nodeId,
+              agentName: action.agentName,
+              status: action.status,
+            },
+          });
+          return;
+
         case 'ignored':
           return;
 

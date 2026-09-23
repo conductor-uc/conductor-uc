@@ -9,6 +9,7 @@ import type { Redis } from 'ioredis';
 import { enqueueEvent } from '@cuc/events';
 
 import { fromContextId } from '../context-id.js';
+import type { CallControlClient } from '../call-control-client.js';
 import { resolveOutboundCallerId, type CallerId } from '../domain/caller-id.js';
 import { destinationCountry, normalizeToE164 } from '../domain/e164.js';
 import { isOutboundCallAllowed, parseFraudLimits } from '../domain/fraud-limits.js';
@@ -21,14 +22,22 @@ import { nextRoundRobinStart } from '../ring-group-counter.js';
 import type { TelephonyConfigDb } from '../schema.js';
 import type { VoicemailClient } from '../voicemail-client.js';
 import {
+  AGENT_LOGIN_FEATURE_CODE,
+  AGENT_LOGOUT_FEATURE_CODE,
+  buildAgentStatusDialplanDocument,
+  buildCallcenterConfigurationDocument,
   buildDialplanDocument,
   buildDirectoryDocument,
   buildEmergencyDialplanDocument,
   buildFlowDialplanDocument,
   buildOutboundDialplanDocument,
+  buildQueueDialplanDocument,
   buildRingGroupDialplanDocument,
   buildVoicemailDialplanDocument,
+  callcenterName,
   NOT_FOUND_DOCUMENT,
+  type CallcenterAgentEntry,
+  type CallcenterQueueEntry,
   type EmergencyLocationDetail,
 } from '../xml.js';
 
@@ -68,6 +77,16 @@ const FlowExtensionParamsSchema = Type.Object({
 const FlowRingGroupParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
   ringGroupId: Type.String({ minLength: 1 }),
+});
+
+/** `/fs/flow/:tenantId/queue/:queueId` (S2-13) — the `queue` node's own resolve-and-acquire lookup. */
+const FlowQueueParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  queueId: Type.String({ minLength: 1 }),
+});
+const FlowQueueQuerySchema = Type.Object({
+  /** The flow runner's own `cuc_node_id` — see `handleQueueDial`'s doc comment on why an acquire needs to know who's asking. */
+  nodeId: Type.String({ minLength: 1 }),
 });
 
 /** `/fs/affinity/:tenantId/:kind/:resourceId` (S2-12) — the flow runner's own hairpin-vs-local check. */
@@ -202,6 +221,8 @@ export function registerFsRoutes(
    * convention as the `redis` parameter below.
    */
   affinity: AffinityRegistry | null,
+  /** S2-13: `handleQueueDial`'s own synchronous affinity-acquire call — the *write* path only call-control can serve (see `affinity`'s own doc comment above on why reads and writes take different routes). */
+  callControlClient: CallControlClient,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -561,6 +582,100 @@ export function registerFsRoutes(
     );
   }
 
+  /**
+   * `/fs/dialplan`'s agent login/logout feature-code branch (S2-13) — same
+   * "special case first" placement `handleVoicemailRetrieval` already
+   * establishes, and the same "resolve the *calling* extension, not the
+   * dialed number" shape. An honest miss (not a rejection) when the caller
+   * is not a known agent — dialing `*45`/`*46` from a phone with no agent
+   * identity is simply not a feature this extension has.
+   */
+  async function handleAgentStatusChange(
+    tenantId: string,
+    callerContext: string,
+    callingNumber: string | undefined,
+    featureCode: string,
+    status: 'Available' | 'Logged Out',
+  ): Promise<string> {
+    if (callingNumber === undefined || callingNumber === '') return NOT_FOUND_DOCUMENT;
+    const callingExtension = await readModel.findExtensionByNumber(tenantId, callingNumber);
+    if (callingExtension === undefined) return NOT_FOUND_DOCUMENT;
+    const agent = await readModel.findAgentByExtensionId(tenantId, callingExtension.id);
+    if (agent === undefined) return NOT_FOUND_DOCUMENT;
+    const domain = await readModel.findDomain(db.kysely, tenantId);
+    if (domain === undefined) {
+      logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
+      return NOT_FOUND_DOCUMENT;
+    }
+    return buildAgentStatusDialplanDocument(
+      callerContext,
+      featureCode,
+      callcenterName(callingExtension.number, domain.fqdn),
+      status,
+    );
+  }
+
+  /**
+   * `/fs/dialplan`'s from-trunk `queue` branch (S2-13; G-25). Unlike
+   * `extension`/`ring_group` above, a queue must be *leased* to the node
+   * handling this call before `mod_callcenter` has anything loaded for it —
+   * `nodeId` (the requesting FS node's own `cuc_node_id`, carried as a query
+   * param on the `/fs/dialplan` xml_curl binding, `xml_curl.conf.xml`) is
+   * what lets this acquire that lease synchronously, onto the same node,
+   * before handing the call to `callcenter`. If the queue turns out to be
+   * leased to a *different* node, this is an honest miss today rather than a
+   * guess: real cross-node redirection for a DID-mapped pinned resource is
+   * OpenSIPs' own `cachedb_redis` read (04 §3.3), not built until S4-05, and
+   * with one FS node in the dev stack (S2-19 adds the second) this branch
+   * should never actually observe it.
+   */
+  async function handleQueueDial(
+    tenantId: string,
+    queueId: string,
+    callerContext: string,
+    destinationNumber: string,
+    domainFqdn: string,
+    nodeId: string | undefined,
+  ): Promise<string> {
+    if (nodeId === undefined || nodeId === '') {
+      logger.warn({ tenantId, queueId }, 'dialplan: queue DID hit with no requesting nodeId');
+      return NOT_FOUND_DOCUMENT;
+    }
+    const queue = await readModel.findQueueById(queueId);
+    if (queue === undefined) {
+      logger.warn({ queueId }, 'dialplan: DID’s destination queue no longer exists');
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    let acquired;
+    try {
+      acquired = await callControlClient.acquireAffinity(tenantId, 'queue', queueId, {
+        preferredNodeId: nodeId,
+        reloadCommands: ['callcenter_config reload'],
+      });
+    } catch (error) {
+      logger.error(
+        { err: error, tenantId, queueId },
+        'dialplan: could not reach call-control to acquire the queue’s affinity lease',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    if (acquired.nodeId !== nodeId) {
+      logger.warn(
+        { tenantId, queueId, nodeId, leasedTo: acquired.nodeId },
+        'dialplan: queue is leased to a different node; cross-node routing is S4-05’s concern, not this one’s',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    return buildQueueDialplanDocument(
+      callerContext,
+      destinationNumber,
+      callcenterName(queueId, domainFqdn),
+    );
+  }
+
   app.post('/fs/dialplan', { config: { public: true } }, async (request, reply) => {
     if (!authorized(request.headers.authorization)) {
       reply.code(401);
@@ -568,6 +683,11 @@ export function registerFsRoutes(
     }
 
     const body = request.body as Record<string, string>;
+    // S2-13: the requesting FS node's own `cuc_node_id`, carried as a query
+    // param on this binding's `gateway-url` (`xml_curl.conf.xml`) — needed
+    // only by the `queue` destination-type branch below, to acquire that
+    // queue's affinity lease onto the node that is actually asking.
+    const nodeId = (request.query as Record<string, string | undefined>).nodeId;
     reply.type('text/xml');
     if (body.section !== 'dialplan') return NOT_FOUND_DOCUMENT;
 
@@ -609,6 +729,27 @@ export function registerFsRoutes(
       // emergency check above.
       if (destinationNumber === VOICEMAIL_RETRIEVAL_FEATURE_CODE) {
         return handleVoicemailRetrieval(tenantId, callerContext, body['variable_sip_from_user']);
+      }
+
+      // S2-13: same "special case first" placement as the voicemail
+      // retrieval code above.
+      if (destinationNumber === AGENT_LOGIN_FEATURE_CODE) {
+        return handleAgentStatusChange(
+          tenantId,
+          callerContext,
+          body['variable_sip_from_user'],
+          AGENT_LOGIN_FEATURE_CODE,
+          'Available',
+        );
+      }
+      if (destinationNumber === AGENT_LOGOUT_FEATURE_CODE) {
+        return handleAgentStatusChange(
+          tenantId,
+          callerContext,
+          body['variable_sip_from_user'],
+          AGENT_LOGOUT_FEATURE_CODE,
+          'Logged Out',
+        );
       }
 
       const extension = await readModel.findExtensionByNumber(tenantId, destinationNumber);
@@ -703,10 +844,11 @@ export function registerFsRoutes(
       }
 
       // `extension` (S2-03), `ring_group` (S2-08), `voicemail` (S2-16,
-      // returned above) and `flow` (S2-10, returned below) resolve to a real
-      // call — every other destination type still has no owning subsystem
-      // (docs/decisions.md G-25), so this is an honest miss, not a guess at
-      // behavior only a later stage can define.
+      // returned above), `flow` (S2-10, returned below) and `queue` (S2-13,
+      // returned below) resolve to a real call — every other destination
+      // type still has no owning subsystem (docs/decisions.md G-25), so this
+      // is an honest miss, not a guess at behavior only a later stage can
+      // define.
       //
       // `ring_group` must stay in this list: the whole ring-group branch
       // below is unreachable without it, which is exactly what broke when
@@ -715,7 +857,8 @@ export function registerFsRoutes(
       if (
         did.destinationType !== 'extension' &&
         did.destinationType !== 'ring_group' &&
-        did.destinationType !== 'flow'
+        did.destinationType !== 'flow' &&
+        did.destinationType !== 'queue'
       ) {
         logger.info(
           { didId: did.id, destinationType: did.destinationType },
@@ -796,6 +939,17 @@ export function registerFsRoutes(
           DEFAULT_FLOW_ENTRY_POINT,
           domain.fqdn,
           opensipsSipUri,
+        );
+      }
+
+      if (did.destinationType === 'queue') {
+        return handleQueueDial(
+          trunk.tenantId,
+          did.destinationId,
+          callerContext,
+          destinationNumber,
+          domain.fqdn,
+          nodeId,
         );
       }
 
@@ -1005,6 +1159,68 @@ export function registerFsRoutes(
         numbers: resolved.orderedMembers.map((extension) => extension.number),
         strategy: resolved.ringGroup.strategy,
         ringTimeoutSeconds: resolved.ringGroup.ringTimeoutSeconds,
+      };
+    },
+  );
+
+  /**
+   * `GET /fs/flow/:tenantId/queue/:queueId?nodeId=...` (S2-13) — the flow
+   * runner's `queue` node handler. Unlike `/fs/flow/.../extension/:id` and
+   * `.../ring-group/:id` (plain lookups), this one has a side effect: it
+   * synchronously acquires the queue's affinity lease, preferring the
+   * calling node (the same `handleQueueDial` reasoning — a call already
+   * running on this node should claim an unleased queue locally rather than
+   * being load-balanced elsewhere). The runner uses `isLocal` to decide
+   * whether to run `callcenter` itself or hairpin to `nodeId`.
+   */
+  app.get(
+    '/fs/flow/:tenantId/queue/:queueId',
+    {
+      config: { public: true },
+      schema: { params: FlowQueueParamsSchema, querystring: FlowQueueQuerySchema },
+    },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+
+      const { tenantId, queueId } = request.params;
+      const { nodeId } = request.query;
+
+      const queue = await readModel.findQueueById(queueId);
+      if (queue === undefined || queue.tenantId !== tenantId) {
+        logger.info({ tenantId, queueId }, 'flow: queue not found in that tenant');
+        reply.code(404);
+        return '';
+      }
+
+      const domain = await readModel.findDomain(db.kysely, tenantId);
+      if (domain === undefined) {
+        logger.warn({ tenantId }, 'flow: tenant has no projected domain');
+        reply.code(404);
+        return '';
+      }
+
+      let acquired;
+      try {
+        acquired = await callControlClient.acquireAffinity(tenantId, 'queue', queueId, {
+          preferredNodeId: nodeId,
+          reloadCommands: ['callcenter_config reload'],
+        });
+      } catch (error) {
+        logger.error(
+          { err: error, tenantId, queueId },
+          'flow: could not reach call-control to acquire the queue’s affinity lease',
+        );
+        reply.code(502);
+        return '';
+      }
+
+      return {
+        queueName: callcenterName(queueId, domain.fqdn),
+        nodeId: acquired.nodeId,
+        isLocal: acquired.nodeId === nodeId,
       };
     },
   );
@@ -1236,20 +1452,18 @@ export function registerFsRoutes(
   );
 
   /**
-   * S2-12 (04 §3.3) still returns the not-found document unconditionally:
-   * "serves only the resources leased to the requesting node" needs to know
-   * *which node* is asking, and FS's stock `section=configuration` xml_curl
-   * request carries no node-identity field to check that against (unlike
-   * `/fs/dialplan`'s trusted `variable_sip_h_X-*` headers, which OpenSIPs
-   * sets — nothing sets an equivalent here). Real `callcenter.conf`/
-   * `conference.conf`/`valet_parking.conf` content also does not exist yet
-   * (S2-13/14/15). Flagged as G-45 in docs/decisions.md: whichever of those
-   * tasks first needs to serve real config here also has to teach the
-   * `xml_curl.conf.xml` binding profile to pass the node's own
-   * `cuc_node_id` (S2-12's own `vars.xml` addition) as a request param, so
-   * this handler can finally check it against `affinity.getOwner(...)`
-   * below — the lease-read half of the abstraction is ready; the missing
-   * half is FS-side, not here.
+   * S2-13 resolves G-45's own "missing half": `xml_curl.conf.xml`'s
+   * `configuration` binding now carries `?nodeId=$${cuc_node_id}` on its
+   * `gateway-url`, so this can finally answer "which node is asking" and
+   * filter `callcenter.conf` to the queues actually leased to it (04 §3.3).
+   * `conference.conf`/`valet_parking.conf` (S2-14/15) still fall through to
+   * the not-found document — nothing owns those resource kinds yet.
+   *
+   * One FS node's `callcenter.conf` can span several tenants at once (each
+   * queue's own affinity lease is independent of every other), so this
+   * walks `readModel.findAllQueues()` — the one place in this file that
+   * deliberately has no single tenant to scope to — rather than a single
+   * tenant's queues.
    */
   app.post('/fs/configuration', { config: { public: true } }, async (request, reply) => {
     if (!authorized(request.headers.authorization)) {
@@ -1257,7 +1471,76 @@ export function registerFsRoutes(
       return '';
     }
     reply.type('text/xml');
-    return NOT_FOUND_DOCUMENT;
+
+    const body = request.body as Record<string, string>;
+    const nodeId = (request.query as Record<string, string | undefined>).nodeId;
+    if (body.section !== 'configuration' || body.key_value !== 'callcenter.conf') {
+      return NOT_FOUND_DOCUMENT;
+    }
+    if (nodeId === undefined || nodeId === '' || affinity === null) {
+      return NOT_FOUND_DOCUMENT;
+    }
+
+    const allQueues = await readModel.findAllQueues();
+    const leasedQueues = [];
+    for (const queue of allQueues) {
+      const owner = await affinity.getOwner({
+        tenantId: queue.tenantId,
+        kind: 'queue',
+        resourceId: queue.id,
+      });
+      if (owner === nodeId) leasedQueues.push(queue);
+    }
+    if (leasedQueues.length === 0) return NOT_FOUND_DOCUMENT;
+
+    const domainCache = new Map<string, string | undefined>();
+    async function domainFor(tenantId: string): Promise<string | undefined> {
+      if (!domainCache.has(tenantId)) {
+        const domain = await readModel.findDomain(db.kysely, tenantId);
+        domainCache.set(tenantId, domain?.fqdn);
+      }
+      return domainCache.get(tenantId);
+    }
+
+    const queueEntries: CallcenterQueueEntry[] = [];
+    const agentEntries = new Map<string, CallcenterAgentEntry>();
+    for (const queue of leasedQueues) {
+      const domainFqdn = await domainFor(queue.tenantId);
+      if (domainFqdn === undefined) {
+        logger.warn(
+          { tenantId: queue.tenantId, queueId: queue.id },
+          'configuration: tenant has no projected domain',
+        );
+        continue;
+      }
+
+      const tiers = await readModel.findQueueTiersForQueue(queue.id);
+      const tierEntries: CallcenterQueueEntry['tiers'][number][] = [];
+      for (const tier of tiers) {
+        const agent = await readModel.findAgentById(tier.agentId);
+        if (agent === undefined) continue;
+        const extension = await readModel.findExtensionById(agent.extensionId);
+        if (extension === undefined) continue;
+
+        const agentName = callcenterName(extension.number, domainFqdn);
+        tierEntries.push({ agentName, level: tier.level, position: tier.position });
+        agentEntries.set(agentName, {
+          name: agentName,
+          maxNoAnswer: agent.maxNoAnswer,
+          wrapUpSeconds: agent.wrapUpSeconds,
+          rejectDelaySeconds: agent.rejectDelaySeconds,
+        });
+      }
+
+      queueEntries.push({
+        name: callcenterName(queue.id, domainFqdn),
+        strategy: queue.strategy,
+        maxWaitSeconds: queue.maxWaitSeconds,
+        tiers: tierEntries,
+      });
+    }
+
+    return buildCallcenterConfigurationDocument(queueEntries, [...agentEntries.values()]);
   });
 
   /**

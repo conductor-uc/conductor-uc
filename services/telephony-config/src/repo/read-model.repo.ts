@@ -64,6 +64,71 @@ const RING_GROUP_COLUMNS = [
   'no_answer_destination_id as noAnswerDestinationId',
 ] as const;
 
+/** S2-13's own local mirror row of a queue (`pbx-config-client.ts`'s `QueueConfig`). */
+export interface QueueRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly label: string;
+  readonly strategy: string;
+  readonly mohMediaAssetId: string | null;
+  readonly maxWaitSeconds: number;
+  readonly announcePosition: boolean;
+  readonly announceFrequencySeconds: number | null;
+  readonly noAgentDestinationType: string | null;
+  readonly noAgentDestinationId: string | null;
+}
+
+const QUEUE_COLUMNS = [
+  'id',
+  'tenant_id as tenantId',
+  'label',
+  'strategy',
+  'moh_media_asset_id as mohMediaAssetId',
+  'max_wait_seconds as maxWaitSeconds',
+  'announce_position as announcePosition',
+  'announce_frequency_seconds as announceFrequencySeconds',
+  'no_agent_destination_type as noAgentDestinationType',
+  'no_agent_destination_id as noAgentDestinationId',
+] as const;
+
+/** S2-13's own local mirror row of an agent (`pbx-config-client.ts`'s `AgentConfig`). */
+export interface AgentRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly extensionId: string;
+  readonly maxNoAnswer: number;
+  readonly wrapUpSeconds: number;
+  readonly rejectDelaySeconds: number;
+}
+
+const AGENT_COLUMNS = [
+  'id',
+  'tenant_id as tenantId',
+  'extension_id as extensionId',
+  'max_no_answer as maxNoAnswer',
+  'wrap_up_seconds as wrapUpSeconds',
+  'reject_delay_seconds as rejectDelaySeconds',
+] as const;
+
+/** S2-13's own local mirror row of a queue tier (`pbx-config-client.ts`'s `QueueTierConfig`). */
+export interface QueueTierRow {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly queueId: string;
+  readonly agentId: string;
+  readonly level: number;
+  readonly position: number;
+}
+
+const QUEUE_TIER_COLUMNS = [
+  'id',
+  'tenant_id as tenantId',
+  'queue_id as queueId',
+  'agent_id as agentId',
+  'level',
+  'position',
+] as const;
+
 export interface DidRow {
   readonly id: string;
   readonly tenantId: string;
@@ -582,6 +647,164 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .select(RING_GROUP_COLUMNS)
         .where('id', '=', id)
         .executeTakeFirst();
+    },
+
+    /** Upserts a queue's current state (S2-13), keyed by id — the same shape `upsertRingGroup` already establishes. */
+    async upsertQueue(trx: Executor, queue: QueueRow): Promise<void> {
+      const now = new Date();
+      await trx
+        .insertInto('queues')
+        .values({
+          id: queue.id,
+          tenant_id: queue.tenantId,
+          label: queue.label,
+          strategy: queue.strategy,
+          moh_media_asset_id: queue.mohMediaAssetId,
+          max_wait_seconds: queue.maxWaitSeconds,
+          announce_position: queue.announcePosition,
+          announce_frequency_seconds: queue.announceFrequencySeconds,
+          no_agent_destination_type: queue.noAgentDestinationType,
+          no_agent_destination_id: queue.noAgentDestinationId,
+          created_at: now,
+          updated_at: now,
+        })
+        .onDuplicateKeyUpdate({
+          label: queue.label,
+          strategy: queue.strategy,
+          moh_media_asset_id: queue.mohMediaAssetId,
+          max_wait_seconds: queue.maxWaitSeconds,
+          announce_position: queue.announcePosition,
+          announce_frequency_seconds: queue.announceFrequencySeconds,
+          no_agent_destination_type: queue.noAgentDestinationType,
+          no_agent_destination_id: queue.noAgentDestinationId,
+          updated_at: now,
+        })
+        .execute();
+    },
+
+    async deleteQueue(trx: Executor, id: string): Promise<void> {
+      await trx.deleteFrom('queue_tiers').where('queue_id', '=', id).execute();
+      await trx.deleteFrom('queues').where('id', '=', id).execute();
+    },
+
+    /** `/fs/dialplan`'s from-trunk lookup and `/fs/configuration`'s `callcenter.conf` builder both resolve against this (S2-13). */
+    findQueueById(id: string): Promise<QueueRow | undefined> {
+      return db.kysely
+        .selectFrom('queues')
+        .select(QUEUE_COLUMNS)
+        .where('id', '=', id)
+        .executeTakeFirst();
+    },
+
+    /** Every queue in a tenant. */
+    findQueuesForTenant(tenantId: string): Promise<QueueRow[]> {
+      return db.kysely
+        .selectFrom('queues')
+        .select(QUEUE_COLUMNS)
+        .where('tenant_id', '=', tenantId)
+        .orderBy('label', 'asc')
+        .execute();
+    },
+
+    /**
+     * Every queue across every tenant — `/fs/configuration`'s `callcenter.conf`
+     * builder walks all of them, then filters to the ones leased to the
+     * requesting node (S2-13). One FS node's `callcenter.conf` genuinely can
+     * span several tenants at once (each queue's own affinity lease is
+     * independent), so this has no tenant scope to give it, the same "no
+     * per-request tenant actor" reasoning this whole repo's own doc comment
+     * already gives for why it isn't `scoped(ctx)`.
+     */
+    findAllQueues(): Promise<QueueRow[]> {
+      return db.kysely.selectFrom('queues').select(QUEUE_COLUMNS).execute();
+    },
+
+    /** Upserts an agent's current state (S2-13). */
+    async upsertAgent(trx: Executor, agent: AgentRow): Promise<void> {
+      const now = new Date();
+      await trx
+        .insertInto('agents')
+        .values({
+          id: agent.id,
+          tenant_id: agent.tenantId,
+          extension_id: agent.extensionId,
+          max_no_answer: agent.maxNoAnswer,
+          wrap_up_seconds: agent.wrapUpSeconds,
+          reject_delay_seconds: agent.rejectDelaySeconds,
+          created_at: now,
+          updated_at: now,
+        })
+        .onDuplicateKeyUpdate({
+          extension_id: agent.extensionId,
+          max_no_answer: agent.maxNoAnswer,
+          wrap_up_seconds: agent.wrapUpSeconds,
+          reject_delay_seconds: agent.rejectDelaySeconds,
+          updated_at: now,
+        })
+        .execute();
+    },
+
+    async deleteAgent(trx: Executor, id: string): Promise<void> {
+      await trx.deleteFrom('queue_tiers').where('agent_id', '=', id).execute();
+      await trx.deleteFrom('agents').where('id', '=', id).execute();
+    },
+
+    findAgentById(id: string): Promise<AgentRow | undefined> {
+      return db.kysely
+        .selectFrom('agents')
+        .select(AGENT_COLUMNS)
+        .where('id', '=', id)
+        .executeTakeFirst();
+    },
+
+    /** The agent login/logout feature codes resolve the *calling* extension to its agent identity (S2-13; `fs.routes.ts`'s `buildAgentStatusDialplanDocument`). */
+    findAgentByExtensionId(tenantId: string, extensionId: string): Promise<AgentRow | undefined> {
+      return db.kysely
+        .selectFrom('agents')
+        .select(AGENT_COLUMNS)
+        .where('tenant_id', '=', tenantId)
+        .where('extension_id', '=', extensionId)
+        .executeTakeFirst();
+    },
+
+    /**
+     * Replaces a queue's entire tier list (S2-13) — the "thin event,
+     * re-fetch current state" pattern applied at list granularity
+     * (`projection.ts`'s `projectQueueTiers` doc comment on why a single
+     * tier row has no stable id an event alone identifies it by).
+     */
+    async replaceQueueTiersForQueue(
+      trx: Executor,
+      tenantId: string,
+      queueId: string,
+      tiers: readonly QueueTierRow[],
+    ): Promise<void> {
+      await trx.deleteFrom('queue_tiers').where('queue_id', '=', queueId).execute();
+      if (tiers.length === 0) return;
+      await trx
+        .insertInto('queue_tiers')
+        .values(
+          tiers.map((tier) => ({
+            id: tier.id,
+            tenant_id: tenantId,
+            queue_id: queueId,
+            agent_id: tier.agentId,
+            level: tier.level,
+            position: tier.position,
+          })),
+        )
+        .execute();
+    },
+
+    /** Every tier row for a queue, in strategy-relevant order (S2-13; `callcenter.conf`'s own `<tier>` ordering). */
+    findQueueTiersForQueue(queueId: string): Promise<QueueTierRow[]> {
+      return db.kysely
+        .selectFrom('queue_tiers')
+        .select(QUEUE_TIER_COLUMNS)
+        .where('queue_id', '=', queueId)
+        .orderBy('level', 'asc')
+        .orderBy('position', 'asc')
+        .execute();
     },
 
     /** ISO 3166-1 alpha-2, or `undefined` if not yet known (`org-client.ts`'s own comment on when that happens). */

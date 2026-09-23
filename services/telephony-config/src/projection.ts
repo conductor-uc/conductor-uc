@@ -226,6 +226,104 @@ export function createProjection(
     },
 
     /**
+     * Fetches a queue's current state and mirrors it locally (S2-13) —
+     * shared by `pbx.queue.created` and `.updated`, the same "thin event,
+     * re-fetch current state" story `projectRingGroup` tells. No `opensips`
+     * counterpart: a queue's config is entirely FS's own `mod_callcenter`
+     * concern, reached through `/fs/configuration`'s `callcenter.conf`
+     * builder, not anything OpenSIPs' script needs to know about.
+     */
+    async projectQueue(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      queueId: string,
+    ): Promise<void> {
+      const queue = await pbxConfig.findQueue(tenantId, queueId);
+      if (queue === undefined) {
+        logger.warn({ tenantId, queueId }, 'queue not found in pbx-config-service');
+        return;
+      }
+
+      await readModel.upsertQueue(trx, {
+        id: queue.id,
+        tenantId,
+        label: queue.label,
+        strategy: queue.strategy,
+        mohMediaAssetId: queue.mohMediaAssetId,
+        maxWaitSeconds: queue.maxWaitSeconds,
+        announcePosition: queue.announcePosition,
+        announceFrequencySeconds: queue.announceFrequencySeconds,
+        noAgentDestinationType: queue.noAgentDestinationType,
+        noAgentDestinationId: queue.noAgentDestinationId,
+      });
+    },
+
+    /** `pbx.queue.deleted`: remove the local mirror (its tiers cascade with it, `read-model.repo.ts`'s `deleteQueue`). */
+    async removeQueue(trx: Transaction<TelephonyConfigDb>, queueId: string): Promise<void> {
+      await readModel.deleteQueue(trx, queueId);
+    },
+
+    /** Fetches an agent's current state and mirrors it locally (S2-13) — shared by `pbx.agent.created` and `.updated`. */
+    async projectAgent(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      agentId: string,
+    ): Promise<void> {
+      const agent = await pbxConfig.findAgent(tenantId, agentId);
+      if (agent === undefined) {
+        logger.warn({ tenantId, agentId }, 'agent not found in pbx-config-service');
+        return;
+      }
+
+      await readModel.upsertAgent(trx, {
+        id: agent.id,
+        tenantId,
+        extensionId: agent.extensionId,
+        maxNoAnswer: agent.maxNoAnswer,
+        wrapUpSeconds: agent.wrapUpSeconds,
+        rejectDelaySeconds: agent.rejectDelaySeconds,
+      });
+    },
+
+    /** `pbx.agent.deleted`: remove the local mirror (its tiers cascade with it, `read-model.repo.ts`'s `deleteAgent`). */
+    async removeAgent(trx: Transaction<TelephonyConfigDb>, agentId: string): Promise<void> {
+      await readModel.deleteAgent(trx, agentId);
+    },
+
+    /**
+     * `pbx.queue_tier.added`/`.updated`/`.removed` all land here: rather
+     * than trying to patch one row from an event that only ever carries
+     * `{ queueId, agentId }` (no stable tier-row id of its own to key an
+     * upsert on), this re-fetches the queue's *entire* current tier list
+     * and replaces the local mirror wholesale (`read-model.repo.ts`'s
+     * `replaceQueueTiersForQueue`) — correct for all three event types
+     * (added/updated/removed) with one code path, at the cost of a list
+     * fetch instead of a single-row one. Tiers change rarely enough
+     * (console-driven config, not a call-setup-path write) that this cost
+     * is not worth avoiding.
+     */
+    async projectQueueTiers(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      queueId: string,
+    ): Promise<void> {
+      const tiers = await pbxConfig.findQueueTiers(tenantId, queueId);
+      await readModel.replaceQueueTiersForQueue(
+        trx,
+        tenantId,
+        queueId,
+        tiers.map((tier) => ({
+          id: tier.id,
+          tenantId,
+          queueId: tier.queueId,
+          agentId: tier.agentId,
+          level: tier.level,
+          position: tier.position,
+        })),
+      );
+    },
+
+    /**
      * Fetches a trunk's current full config (including its decrypted
      * secret and IPs) and projects it into `registrant` (register/both),
      * `address` (ip/both), and `dr_gateways` (always — 03 §1's LCR needs a

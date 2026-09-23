@@ -65,6 +65,13 @@ export const configSchema = Type.Object({
   /** Base URL for callflow-service's internal API, e.g. http://callflow-service:8080 (S2-09/S2-10). */
   CALLFLOW_SERVICE_URL: Env.url(),
   /**
+   * Base URL for call-control's `/internal/v1/affinity/...` (S2-12/S2-13),
+   * e.g. http://call-control:8080 — a DID whose `destination_type` is
+   * `queue` needs to acquire the affinity lease synchronously before it can
+   * hand the call to `mod_callcenter` (`fs.routes.ts`'s `handleQueueDial`).
+   */
+  CALL_CONTROL_URL: Env.url(),
+  /**
    * Shared bearer token pbx-config-service's and trunk-service's
    * `/internal/v1` routes expect (07 §1's precedent, same variable name
    * those services use for the identical purpose against org-service) —

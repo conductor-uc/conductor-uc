@@ -89,6 +89,41 @@ export interface RingGroupConfig {
   readonly noAnswerDestinationId: string | null;
 }
 
+/**
+ * A queue's current state (S2-13) — what `pbx.queue.*`'s "thin event,
+ * re-fetch current state" projection (`projection.ts`'s `projectQueue`)
+ * fetches to keep telephony-config's own local `queues` mirror current.
+ */
+export interface QueueConfig {
+  readonly id: string;
+  readonly label: string;
+  readonly strategy: string;
+  readonly mohMediaAssetId: string | null;
+  readonly maxWaitSeconds: number;
+  readonly announcePosition: boolean;
+  readonly announceFrequencySeconds: number | null;
+  readonly noAgentDestinationType: string | null;
+  readonly noAgentDestinationId: string | null;
+}
+
+/** An agent's current state (S2-13) — same "thin event, re-fetch" projection (`projection.ts`'s `projectAgent`). */
+export interface AgentConfig {
+  readonly id: string;
+  readonly extensionId: string;
+  readonly maxNoAnswer: number;
+  readonly wrapUpSeconds: number;
+  readonly rejectDelaySeconds: number;
+}
+
+/** One queue's tier list (S2-13) — `projection.ts`'s `projectQueueTiers` replaces the whole local list with this. */
+export interface QueueTierConfig {
+  readonly id: string;
+  readonly queueId: string;
+  readonly agentId: string;
+  readonly level: number;
+  readonly position: number;
+}
+
 export class PbxConfigClientError extends Error {
   override readonly name = 'PbxConfigClientError';
 }
@@ -115,6 +150,12 @@ export interface PbxConfigClient {
   findMediaAsset(tenantId: string, id: string): Promise<MediaAssetConfig | undefined>;
   /** Undefined when the ring group does not exist in that tenant (a 404). */
   findRingGroup(tenantId: string, ringGroupId: string): Promise<RingGroupConfig | undefined>;
+  /** Undefined when the queue does not exist in that tenant (a 404). */
+  findQueue(tenantId: string, queueId: string): Promise<QueueConfig | undefined>;
+  /** Undefined when the agent does not exist in that tenant (a 404). */
+  findAgent(tenantId: string, agentId: string): Promise<AgentConfig | undefined>;
+  /** A queue's full current tier list. */
+  findQueueTiers(tenantId: string, queueId: string): Promise<QueueTierConfig[]>;
 }
 
 export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfigClient {
@@ -249,6 +290,78 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
       }
 
       return (await response.json()) as RingGroupConfig;
+    },
+
+    async findQueue(tenantId: string, queueId: string): Promise<QueueConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/queues/${encodeURIComponent(queueId)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the queue lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return (await response.json()) as QueueConfig;
+    },
+
+    async findAgent(tenantId: string, agentId: string): Promise<AgentConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/agents/${encodeURIComponent(agentId)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the agent lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return (await response.json()) as AgentConfig;
+    },
+
+    async findQueueTiers(tenantId: string, queueId: string): Promise<QueueTierConfig[]> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/queues/${encodeURIComponent(queueId)}/tiers`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the queue tiers lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      const body = (await response.json()) as { rows: QueueTierConfig[] };
+      return body.rows;
     },
   };
 }
