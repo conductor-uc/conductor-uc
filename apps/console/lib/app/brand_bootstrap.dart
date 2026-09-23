@@ -1,6 +1,4 @@
-import 'package:console_api/console_api.dart';
-
-import '../core/config.dart';
+import '../core/api_client.dart';
 import 'brand.dart';
 import 'document.dart';
 
@@ -8,8 +6,7 @@ import 'document.dart';
 /// applies the document title and favicon. Neutral leaves the functional
 /// title from `web/index.html` and the neutral favicon in place.
 Future<Brand> bootstrapBrand() async {
-  final api = ConsoleApi(basePathOverride: apiBaseUrl);
-  final brand = await fetchBrand(api, currentHost());
+  final brand = await fetchBrand(createApi(), currentHost());
   applyBrandToDocument(brand);
   return brand;
 }
