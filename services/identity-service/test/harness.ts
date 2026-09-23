@@ -9,6 +9,7 @@ import { createGrantRepo, type GrantRepo } from '../src/repo/grant.repo.js';
 import { createMfaRepo } from '../src/repo/mfa.repo.js';
 import { createRoleRepo, type RoleRepo } from '../src/repo/role.repo.js';
 import { createSessionRepo } from '../src/repo/session.repo.js';
+import { createTokenRepo } from '../src/repo/token.repo.js';
 import { createSigningKeyRepo } from '../src/repo/signing-key.repo.js';
 import { createUserRepo, type UserRepo } from '../src/repo/user.repo.js';
 import type { IdentityServiceDb } from '../src/schema.js';
@@ -35,6 +36,8 @@ export const TEST_TTL = {
   refreshTokenTtlDays: 30,
   mfaTicketTtlSeconds: 300,
   signingKeyOverlapDays: 7,
+  passwordResetTtlMinutes: 60,
+  invitationTtlDays: 7,
 };
 
 export async function startHarness(): Promise<Harness> {
@@ -62,7 +65,8 @@ export async function startHarness(): Promise<Harness> {
   const signingKeys = createSigningKeyRepo(db, kek);
   await signingKeys.ensureCurrentKey();
 
-  const auth = createAuthService({ users, sessions, mfa, signingKeys, kek, ...TEST_TTL });
+  const tokens = createTokenRepo(db);
+  const auth = createAuthService({ users, sessions, mfa, signingKeys, tokens, kek, ...TEST_TTL });
 
   return {
     db,

@@ -37,6 +37,26 @@ describe('api-gateway: auth + proxy', () => {
         refreshToken: 'y',
         expiresIn: 600,
       }));
+      // Echoes what the gateway forwarded, and sets two cookies.
+      fake.post('/v1/auth/refresh', { config: { public: true } }, (request, reply) => {
+        void reply.header('set-cookie', [
+          'refresh=new; Path=/v1/auth; HttpOnly',
+          'other=1; Path=/',
+        ]);
+        return {
+          cookie: request.headers.cookie ?? null,
+          transport: request.headers['x-refresh-transport'] ?? null,
+          userAgent: request.headers['user-agent'] ?? null,
+          forwardedFor: request.headers['x-forwarded-for'] ?? null,
+        };
+      });
+      fake.post(
+        '/v1/orgs/:id/echo-cookie',
+        { config: { permission: 'user.manage', dataClass: 'config' } },
+        (request) => ({
+          cookie: request.headers.cookie ?? null,
+        }),
+      );
     });
 
     org = await startFakeDownstream(SECRET, (fake) => {
@@ -98,6 +118,43 @@ describe('api-gateway: auth + proxy', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({ status: 'ok' });
+  });
+
+  it('forwards the refresh cookie and transport header to /v1/auth, and every Set-Cookie back', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: {
+        cookie: 'refresh=old',
+        'x-refresh-transport': 'cookie',
+        'user-agent': 'a-browser/1.0',
+        'x-forwarded-for': '203.0.113.9',
+      },
+      payload: {},
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      cookie: 'refresh=old',
+      transport: 'cookie',
+      userAgent: 'a-browser/1.0',
+      forwardedFor: '203.0.113.9',
+    });
+    expect(response.headers['set-cookie']).toEqual([
+      'refresh=new; Path=/v1/auth; HttpOnly',
+      'other=1; Path=/',
+    ]);
+  });
+
+  it('does not forward cookies outside /v1/auth', async () => {
+    const token = await mintAccessToken(jwks.privateKey, { org: 'org-1', ot: 'master' });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/orgs/org-1/echo-cookie',
+      headers: { authorization: `Bearer ${token}`, cookie: 'refresh=secret' },
+      payload: {},
+    });
+    expect(response.json()).toEqual({ cookie: null });
   });
 
   it('rejects a protected route with no Authorization header', async () => {

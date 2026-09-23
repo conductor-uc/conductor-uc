@@ -156,6 +156,20 @@ export function createUserRepo(db: Database<IdentityServiceDb>) {
       });
     },
 
+    /** Replaces a user's password hash. Used by a completed password reset. */
+    setPassword: async (userId: string, password: string): Promise<void> => {
+      const passwordHash = await hashPassword(password);
+      await users
+        .updateTable('users')
+        .set((eb) => ({
+          password_hash: passwordHash,
+          updated_at: new Date(),
+          version: eb('version', '+', 1),
+        }))
+        .where('id', '=', userId)
+        .execute();
+    },
+
     markMfaEnrolled: async (userId: string): Promise<void> => {
       await users
         .updateTable('users')
