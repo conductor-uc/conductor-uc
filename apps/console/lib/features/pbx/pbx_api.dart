@@ -1,17 +1,19 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/acting.dart';
 import '../../core/api_client.dart';
 import '../../core/session.dart';
 
 typedef Json = Map<String, dynamic>;
 
-/// The tenant whose configuration is being edited. For now that is the signed-in
-/// tenant user's own org; master and reseller users choose one with
-/// act-as-descendant (S3-05).
+/// The tenant whose configuration is being edited: the signed-in tenant user's
+/// own org, or the tenant a master or reseller user is acting as.
 final tenantIdProvider = Provider<String?>((ref) {
   final session = ref.watch(sessionProvider);
-  return session?.orgType == OrgType.tenant ? session!.orgId : null;
+  if (session == null) return null;
+  if (session.orgType == OrgType.tenant) return session.orgId;
+  return ref.watch(actingProvider)?.id;
 });
 
 /// JSON over the gateway for `/v1/tenants/{tenantId}/...`. Plain maps rather

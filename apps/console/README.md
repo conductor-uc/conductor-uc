@@ -23,6 +23,11 @@ reach the PBX screens: extensions, phone numbers, ring groups, queues and agents
 conference rooms, parking lots, media, call flows, and emergency locations (under
 Settings). They read and write an in-memory tenant seeded in `lib/dev/demo_pbx.dart`.
 
+Sign in as `master@` to browse resellers and their tenants, or `reseller@` to browse
+tenants, then use **Act as** on a tenant to open its PBX screens. A banner shows
+while acting, and a reseller does not see the private-data sections (voicemail,
+recordings).
+
 ## Adding or changing a PBX screen
 
 The screens are driven by `lib/features/pbx/resource.dart`: one `ResourceDef` per

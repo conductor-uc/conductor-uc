@@ -89,4 +89,19 @@ void main() {
       expect(paths, contains('/v1/tenants/{tenantId}/${def.key}'));
     }
   });
+
+  test('the org lists carry the fields the org screens read', () {
+    for (final path in ['/v1/resellers', '/v1/resellers/{id}/tenants']) {
+      final list = _schema(
+        (paths[path] as Map)['get'] as Map<String, dynamic>,
+        response: '200',
+      );
+      final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll(['id', 'name', 'slug', 'status']),
+        reason: path,
+      );
+    }
+  });
 }

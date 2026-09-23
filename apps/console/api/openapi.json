@@ -134,7 +134,7 @@
         },
         "operationId": "login",
         "tags": [
-          "Login"
+          "Auth"
         ]
       }
     },
@@ -194,7 +194,7 @@
         },
         "operationId": "confirmMfaEnrollment",
         "tags": [
-          "Mfa"
+          "Auth"
         ]
       }
     },
@@ -254,7 +254,7 @@
         },
         "operationId": "verifyMfa",
         "tags": [
-          "Mfa"
+          "Auth"
         ]
       }
     },
@@ -309,7 +309,7 @@
         },
         "operationId": "refreshTokens",
         "tags": [
-          "Refresh"
+          "Auth"
         ]
       }
     },
@@ -341,7 +341,7 @@
         },
         "operationId": "logout",
         "tags": [
-          "Logout"
+          "Auth"
         ]
       }
     },
@@ -564,7 +564,7 @@
         },
         "operationId": "saveBrand",
         "tags": [
-          "Brand"
+          "Resellers"
         ]
       },
       "get": {
@@ -692,7 +692,7 @@
         },
         "operationId": "getBrand",
         "tags": [
-          "Brand"
+          "Resellers"
         ]
       }
     },
@@ -777,7 +777,7 @@
         },
         "operationId": "uploadBrandAsset",
         "tags": [
-          "Brand"
+          "Resellers"
         ]
       }
     },
@@ -843,7 +843,7 @@
         },
         "operationId": "createConsoleHostname",
         "tags": [
-          "ConsoleHostnames"
+          "Resellers"
         ]
       },
       "get": {
@@ -899,7 +899,7 @@
         },
         "operationId": "listConsoleHostnames",
         "tags": [
-          "ConsoleHostnames"
+          "Resellers"
         ]
       }
     },
@@ -1029,7 +1029,1687 @@
         },
         "operationId": "getPublicBrand",
         "tags": [
-          "Brand"
+          "Public"
+        ]
+      }
+    },
+    "/v1/resellers": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "slug",
+                  "name",
+                  "adminEmail",
+                  "adminDisplayName",
+                  "adminPassword"
+                ],
+                "properties": {
+                  "slug": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "adminEmail": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "adminDisplayName": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "adminPassword": {
+                    "type": "string",
+                    "minLength": 12
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits",
+                    "adminUser"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "adminUser": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "email"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createReseller",
+        "tags": [
+          "Resellers"
+        ]
+      },
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "type",
+                          "parentId",
+                          "resellerId",
+                          "slug",
+                          "name",
+                          "status",
+                          "timezone",
+                          "country",
+                          "limits"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "master"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "reseller"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "tenant"
+                                ]
+                              }
+                            ]
+                          },
+                          "parentId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "resellerId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "active"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "suspended"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pending_deletion"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "deleted"
+                                ]
+                              }
+                            ]
+                          },
+                          "timezone": {
+                            "type": "string"
+                          },
+                          "country": {
+                            "type": "string"
+                          },
+                          "limits": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listResellers",
+        "tags": [
+          "Resellers"
+        ]
+      }
+    },
+    "/v1/resellers/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getReseller",
+        "tags": [
+          "Resellers"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "country": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  },
+                  "limits": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateReseller",
+        "tags": [
+          "Resellers"
+        ]
+      }
+    },
+    "/v1/resellers/{id}/suspend": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "suspendReseller",
+        "tags": [
+          "Resellers"
+        ]
+      }
+    },
+    "/v1/resellers/{id}/resume": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "resumeReseller",
+        "tags": [
+          "Resellers"
+        ]
+      }
+    },
+    "/v1/resellers/{id}/tenants": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "slug",
+                  "name",
+                  "adminEmail",
+                  "adminDisplayName",
+                  "adminPassword"
+                ],
+                "properties": {
+                  "slug": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 63,
+                    "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "adminEmail": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "adminDisplayName": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "adminPassword": {
+                    "type": "string",
+                    "minLength": 12
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits",
+                    "adminUser"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    },
+                    "adminUser": {
+                      "type": "object",
+                      "required": [
+                        "id",
+                        "email"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createTenant",
+        "tags": [
+          "Resellers"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "type",
+                          "parentId",
+                          "resellerId",
+                          "slug",
+                          "name",
+                          "status",
+                          "timezone",
+                          "country",
+                          "limits"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "master"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "reseller"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "tenant"
+                                ]
+                              }
+                            ]
+                          },
+                          "parentId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "resellerId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "slug": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "active"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "suspended"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pending_deletion"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "deleted"
+                                ]
+                              }
+                            ]
+                          },
+                          "timezone": {
+                            "type": "string"
+                          },
+                          "country": {
+                            "type": "string"
+                          },
+                          "limits": {
+                            "type": "object",
+                            "additionalProperties": {}
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listTenants",
+        "tags": [
+          "Resellers"
+        ]
+      }
+    },
+    "/v1/tenants/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getTenant",
+        "tags": [
+          "Tenants"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  "timezone": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "country": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  },
+                  "limits": {
+                    "type": "object",
+                    "additionalProperties": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateTenant",
+        "tags": [
+          "Tenants"
+        ]
+      }
+    },
+    "/v1/tenants/{id}/suspend": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "suspendTenant",
+        "tags": [
+          "Tenants"
+        ]
+      }
+    },
+    "/v1/tenants/{id}/resume": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "type",
+                    "parentId",
+                    "resellerId",
+                    "slug",
+                    "name",
+                    "status",
+                    "timezone",
+                    "country",
+                    "limits"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "parentId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "resellerId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "slug": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "active"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "suspended"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending_deletion"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "deleted"
+                          ]
+                        }
+                      ]
+                    },
+                    "timezone": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "limits": {
+                      "type": "object",
+                      "additionalProperties": {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "resumeTenant",
+        "tags": [
+          "Tenants"
         ]
       }
     },

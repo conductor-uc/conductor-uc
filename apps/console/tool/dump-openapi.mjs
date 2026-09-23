@@ -21,6 +21,7 @@ const { createServer } = await load('packages/http/dist/index.js');
 const SOURCES = [
   ['identity-service', 'auth', 'registerAuthRoutes', 1],
   ['org-service', 'brand', 'registerBrandRoutes', 3],
+  ['org-service', 'org', 'registerOrgRoutes', 2],
   ['pbx-config-service', 'extension', 'registerExtensionRoutes', 2],
   ['pbx-config-service', 'did', 'registerDidRoutes', 1],
   ['pbx-config-service', 'emergency-location', 'registerEmergencyLocationRoutes', 1],
@@ -73,15 +74,18 @@ const OVERRIDES = {
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };
 
 // Path segments that name an action on one resource rather than a collection.
-const ACTIONS = new Set(['reveal', 'finalize', 'validate', 'publish', 'rollback']);
+const ACTIONS = new Set(['reveal', 'finalize', 'validate', 'publish', 'rollback', 'suspend', 'resume', 'verify']);
 
 for (const [path, item] of Object.entries(merged.paths)) {
   const segments = path.split('/').filter((s) => s && !s.startsWith('{') && s !== 'v1');
   const last = segments.at(-1);
   const endsInParam = path.endsWith('}');
   const action = ACTIONS.has(last) ? last : null;
-  // `tenants` is always first; the rest name resources, outermost first.
-  const resources = segments.slice(1, action === null ? undefined : -1);
+  // Under `/v1/tenants/{tenantId}/`, `tenants` only scopes the request; the
+  // rest name resources, outermost first. Elsewhere (`/v1/resellers/{id}/...`)
+  // every segment names a resource.
+  const scoped = path.startsWith('/v1/tenants/{tenantId}/');
+  const resources = segments.slice(scoped ? 1 : 0, action === null ? undefined : -1);
   const resource = resources.at(-1);
   for (const [method, operation] of Object.entries(item)) {
     let id;
