@@ -247,17 +247,27 @@ jobs:
       # below cannot answer the question that would actually root-cause it:
       # what FS itself thought the state was at the moment of failure.
       # These three do, and cost nothing on a passing run.
+      #
+      # S2-19: both nodes, not just the first — round-robin dispatch means
+      # a stuck call could be on either one, the same reasoning
+      # `tests/sip/src/setup.ts`'s own `fsCliAll` now applies per-test.
       - name: Show FreeSWITCH call state on failure
         if: failure()
         run: |
-          fs() { docker exec conductor-uc-freeswitch-1 fs_cli -H 127.0.0.1 -P 8021 \
-            -p "${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}" -x "$1" || true; }
-          echo '--- channels still up (a stuck call shows here) ---'
-          fs 'show channels'
-          echo '--- registrations (is the UAS even registered where FS thinks?) ---'
-          fs 'sofia status profile internal reg'
-          echo '--- sofia profile state ---'
-          fs 'sofia status'
+          fs() {
+            container="$1"; shift
+            docker exec "$container" fs_cli -H 127.0.0.1 -P 8021 \
+              -p "${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}" -x "$1" || true
+          }
+          for container in conductor-uc-freeswitch-1 conductor-uc-freeswitch-2-1; do
+            echo "=== $container ==="
+            echo '--- channels still up (a stuck call shows here) ---'
+            fs "$container" 'show channels'
+            echo '--- registrations (is the UAS even registered where FS thinks?) ---'
+            fs "$container" 'sofia status profile internal reg'
+            echo '--- sofia profile state ---'
+            fs "$container" 'sofia status'
+          done
 
       - name: Show compose logs on failure
         if: failure()

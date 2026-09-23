@@ -1,6 +1,6 @@
 import { afterEach, beforeEach } from 'vitest';
 
-import { fsCli, sipInfraOrSkipReason } from './run-scenario.js';
+import { fsCliAll, sipInfraOrSkipReason } from './run-scenario.js';
 
 /**
  * Hangs up every channel still up on the FreeSWITCH node before each test.
@@ -38,8 +38,11 @@ beforeEach(async () => {
   if (skipReason !== undefined) return;
   // Never fail a test on cleanup: a node that can't be reached here will
   // surface as the test's own failure a moment later, with far better
-  // context than a hook error would give.
-  await fsCli('hupall NORMAL_CLEARING').catch(() => undefined);
+  // context than a hook error would give. S2-19: every node, not just the
+  // first — round-robin dispatch means the previous test's channels could
+  // be on either one, and this hook exists specifically to stop a leftover
+  // channel on *any* node from poisoning the next test.
+  await fsCliAll('hupall NORMAL_CLEARING').catch(() => undefined);
 });
 
 /**
@@ -60,8 +63,11 @@ beforeEach(async () => {
 afterEach(async (ctx) => {
   if (skipReason !== undefined) return;
   if (ctx.task.result?.state !== 'fail') return;
-  const channels = await fsCli('show channels').catch(() => '<unavailable>');
-  const registrations = await fsCli('sofia status profile internal reg').catch(
+  // S2-19: both nodes — a failing call may have landed on either one via
+  // round-robin, and the dump exists to capture exactly this evidence
+  // (this file's own doc comment above).
+  const channels = await fsCliAll('show channels').catch(() => '<unavailable>');
+  const registrations = await fsCliAll('sofia status profile internal reg').catch(
     () => '<unavailable>',
   );
   process.stderr.write(
