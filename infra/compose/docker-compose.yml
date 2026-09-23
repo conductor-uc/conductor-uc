@@ -147,6 +147,10 @@ services:
       # nothing: the runner fetches the IR on every call anyway, and only
       # falls back to this cache when callflow-service is unreachable.
       - /var/cache/cuc/flow
+      # `mod_http_cache`'s own on-disk cache (`http_cache.conf.xml`, G-47) —
+      # same "nothing durable on a node" reasoning; a cache miss just
+      # re-fetches over HTTP.
+      - /var/cache/cuc/http
 
   freeswitch-2:
     # S2-19: a second, identically-configured FS node — same image, same
@@ -176,6 +180,7 @@ services:
     tmpfs:
       - /var/spool/cuc/rec
       - /var/cache/cuc/flow
+      - /var/cache/cuc/http
 
   opensips:
     # S1-11. telephony/opensips's own Dockerfile builds this from the

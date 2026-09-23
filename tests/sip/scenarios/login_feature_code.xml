@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-20 (G-47, docs/decisions.md): dials an agent status feature code
+  (`*45`/`*46`, `AGENT_LOGIN_FEATURE_CODE`/`AGENT_LOGOUT_FEATURE_CODE` in
+  `services/telephony-config/src/xml.ts`) and expects FS to answer, run
+  `callcenter_config agent set status`, then hang up unprompted —
+  `buildAgentStatusDialplanDocument`'s own dialplan ends with an explicit
+  `<action application="hangup"/>`, so there is no scripted BYE from this
+  side, the same "wait for the far end's own BYE" shape
+  `uac_call_wrong_pin.xml` already established for a different FS-initiated
+  hangup.
+
+  No REGISTER here: this scenario is always run as the *second* of three
+  chained SIPp processes bound to the same local port (`src/run-scenario.ts`'s
+  `startAgentUas` — `register.xml`, then this, then `answer_call.xml`), so
+  the registration this INVITE rides on on already exists.
+
+  `[field0]`=username, `[field1]`=domain, `[field2]`=the feature code
+  itself (`*45` or `*46`) — templated rather than hardcoded so the same
+  file covers both login and logout.
+-->
+<scenario name="Dial an agent status feature code, get answered, then hung up on">
+  <send retrans="4000">
+    <![CDATA[
+      INVITE sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0
+      a=rtpmap:0 PCMU/8000
+    ]]>
+  </send>
+
+  <recv response="100" optional="true">
+  </recv>
+
+  <recv response="180" optional="true">
+  </recv>
+
+  <recv response="200" rtd="true">
+    <action>
+      <ereg regexp="sip:[^&gt;]*" search_in="hdr" header="Contact:" assign_to="1"/>
+    </action>
+  </recv>
+
+  <send>
+    <![CDATA[
+      ACK [$1] SIP/2.0
+      [last_Via:]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv request="BYE" crlf="true">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>

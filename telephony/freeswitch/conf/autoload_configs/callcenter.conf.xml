@@ -1,0 +1,27 @@
+<configuration name="callcenter.conf" description="CallCenter">
+  <!--
+      S2-20 (G-47, docs/decisions.md): same bug class G-50 already found and
+      fixed for `mod_conference` — confirmed live, `mod_callcenter` fails to
+      *load at all* without this file (`mod_callcenter.c:1512 Open of
+      callcenter.conf failed`, then `Error Loading module
+      .../mod_callcenter.so`), even though `xml_curl.conf.xml`'s own
+      `configuration` binding already serves real, populated
+      `callcenter.conf` documents on demand
+      (`buildCallcenterConfigurationDocument`, `telephony-config`'s
+      `/fs/configuration`). The two don't conflict: this file only has to
+      satisfy the module's own load-time open (queues/agents/tiers all
+      empty, deliberately — there is no "default" tenant's data to put
+      here); `handleQueueDial`'s own `callcenter_config reload` (G-45/G-46)
+      is what pulls real per-tenant data in over xml_curl once a queue is
+      actually leased to this node. Confirmed live end to end
+      (`tests/sip/test/queue.test.ts`): with this file present, the module
+      loads, and a leased queue's own real config is what a call actually
+      sees — not this empty bootstrap document.
+  -->
+  <queues>
+  </queues>
+  <agents>
+  </agents>
+  <tiers>
+  </tiers>
+</configuration>

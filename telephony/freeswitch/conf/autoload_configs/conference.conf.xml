@@ -1,0 +1,27 @@
+<configuration name="conference.conf" description="Audio Conference">
+  <!--
+      S2-20 (G-50, docs/decisions.md): `mod_conference` needs this file to
+      exist at all — confirmed live, `conference()` failed every call with
+      "mod_conference.c:2039 Open of conference.conf failed" even though
+      `conference.lua`'s own bare room name (no `@profile` suffix) was
+      always going to resolve against a profile named "default"; the prior
+      assumption (`xml.ts`'s own `buildConferenceDialplanDocument` comment)
+      was that an *unconfigured* default profile was enough. It isn't: with
+      no config file, mod_conference has no "default" profile to fall back
+      to, config file or not.
+
+      No entry/exit sound params: this image ships no FreeSWITCH sound
+      package at all (see the Dockerfile's own comment on
+      files.freeswitch.org requiring auth), so any `*-sound` param here
+      would just point at a file that can't be opened. mod_conference logs
+      that and continues rather than failing the call, but there is no
+      reason to configure a guaranteed-missing file.
+  -->
+  <profiles>
+    <profile name="default">
+      <param name="domain" value="$${domain}"/>
+      <param name="rate" value="8000"/>
+      <param name="max-members" value="0"/>
+    </profile>
+  </profiles>
+</configuration>

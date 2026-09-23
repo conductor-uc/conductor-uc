@@ -30,7 +30,12 @@ Issue #44 (S2-20, the M2 backend SIP regression suite) is where this gets its
 first live proof.
 --]]
 
-local json = dofile("/etc/freeswitch/scripts/json.lua")
+-- S2-20 (G-43): loaded from mod_lua's own compiled-in default script
+-- directory (G-50's own confirmed fix) — `/etc/freeswitch/scripts/` was a
+-- stale path from before that fix, silently never hit because `mod_lua`'s
+-- own `script-directory` misconfiguration (also G-50) meant this whole
+-- script never actually ran until that pass.
+local json = dofile("/usr/share/freeswitch/scripts/json.lua")
 
 local tenantId = argv[1]
 local flowId = argv[2]
@@ -67,39 +72,6 @@ end
 -- HTTP
 -- ---------------------------------------------------------------------------
 
-local B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-
---[[
-Base64, in pure Lua.
-
-`voicemail.lua` (S2-16) builds the same Basic-auth header by shelling out to
-`base64` through `shell_exec`. That works only where `mod_dptools`' shell
-access is available and unrestricted, which is a deployment property this
-script should not depend on for something as small as encoding 40 bytes.
---]]
-local function base64(input)
-  local out = {}
-  for chunk in input:gmatch("..?.?") do
-    local a, b, c = chunk:byte(1, 3)
-    local n = a * 0x10000 + (b or 0) * 0x100 + (c or 0)
-    local indices = {
-      math.floor(n / 0x40000) % 0x40,
-      math.floor(n / 0x1000) % 0x40,
-      math.floor(n / 0x40) % 0x40,
-      n % 0x40,
-    }
-    local encoded = {}
-    for i = 1, 4 do
-      encoded[i] = B64_ALPHABET:sub(indices[i] + 1, indices[i] + 1)
-    end
-    -- Pad according to how many source bytes this chunk actually had.
-    if c == nil then encoded[4] = "=" end
-    if b == nil then encoded[3] = "=" end
-    out[#out + 1] = table.concat(encoded)
-  end
-  return table.concat(out)
-end
-
 local function configUrl()
   return session:getVariable("telephony_config_url") or "http://telephony-config:8080"
 end
@@ -109,14 +81,26 @@ local function configToken()
 end
 
 --[[
-`curl` here is mod_curl's own API command, not a shell-out. It writes the
-response body to stdout, signalling failure with its own prefixed error text
-rather than a status code, so the caller checks the body rather than trusting
-it blindly.
+`curl` here is mod_curl's own API command, not a shell-out — and not a
+curl-CLI lookalike either: `-H`/`-d` flags do not exist. CONFIRMED LIVE
+(S2-20, G-43): this script's own original `-H "Authorization: Basic
+<base64>"` never worked, for two compounding reasons — `-H` is not a real
+`mod_curl` option at all (its actual syntax is `append_headers
+<name:value>`, found only while debugging `conference.lua`/
+`voicemail.lua`'s identical bug), and even with the right option name, a
+value containing a space (which `Basic <token>` always has) gets silently
+truncated at the space by `mod_curl`'s own non-shell-like argument parser.
+A single `append_headers X-Fs-Node-Token:<token>` — no scheme, no
+encoding, no embedded space — is the one shape that survives it intact;
+see `authorized()` in `fs.routes.ts` for the matching server-side header.
+It writes the response body to stdout, signalling failure with its own
+prefixed error text rather than a status code, so the caller checks the
+body rather than trusting it blindly.
 --]]
 local function httpGet(path)
-  local header = "Authorization: Basic " .. base64("fs-node:" .. configToken())
-  local response = api:executeString("curl " .. configUrl() .. path .. " get -H \"" .. header .. "\"")
+  local response = api:executeString(
+    "curl " .. configUrl() .. path .. " append_headers X-Fs-Node-Token:" .. configToken() .. " get"
+  )
   if response == nil or response == "" then return nil, "empty response" end
   if response:match("^%-ERR") then return nil, response end
   return response

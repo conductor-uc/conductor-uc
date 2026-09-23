@@ -4,11 +4,27 @@ on:
   push:
     branches: [main]
   pull_request:
+  # S2-20 (issue #44): "a nightly full run and a per-PR smoke subset" — the
+  # full `tests/sip` suite (every S1/S2 scenario, ~20+ tests, each with
+  # real SIP transaction timers over real UDP) is too slow to gate every
+  # PR on, but running only the fast S1-14 smoke subset (below) means a
+  # regression in a less-frequently-touched scenario (a queue, a
+  # conference room, voicemail, presence, ...) could sit undetected for a
+  # long time between the PRs that happen to touch that exact area. A
+  # nightly cron run is the middle ground: every scenario gets run at
+  # least once a day without slowing down any individual PR. 06:00 UTC is
+  # simply "outside any of this project's own working hours" — no
+  # significance beyond that.
+  schedule:
+    - cron: '0 6 * * *'
 
 # A new push to a PR makes the previous run irrelevant. Runs on main are never
 # cancelled: `main` being green is a claim about every commit, not just the tip.
+# The nightly run's own ref (`refs/heads/main`, always) would otherwise share
+# a concurrency group with ordinary pushes to `main` and get cancelled by one
+# — `github.event_name` in the group key keeps it in a lane of its own.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -155,9 +171,15 @@ jobs:
 
   # A separate job, not a step in `check` above, so one slow suite does not
   # hold up the fast feedback loop (real SIP transaction timers over real
-  # UDP make this the slowest thing in the workflow).
+  # UDP make this the slowest thing in the workflow). One job, not two
+  # (`sip-smoke` + a separate nightly job): `schedule` and `push`/
+  # `pull_request` never trigger the same workflow run, so there is no
+  # concurrency to gain by splitting, and splitting would mean duplicating
+  # every setup/build/compose-up/teardown/diagnostics step below. The run
+  # step itself branches on `github.event_name` instead — same shape as the
+  # `check` job's own affected-vs-all split above.
   sip-smoke:
-    name: SIP smoke (S1-14)
+    name: ${{ github.event_name == 'schedule' && 'SIP full suite (nightly, S2-20)' || 'SIP smoke (S1-14)' }}
     # Tried moving this to ubuntu-latest on 2026-09-22 to escape the
     # self-hosted runner's slow per-layer Docker overhead (see the timeout
     # comment below). Reverted the same day: the very first hosted run hit
@@ -232,12 +254,27 @@ jobs:
           docker compose build
           docker compose up -d --wait --wait-timeout 180
 
-      - name: Run SIP scenarios
+      # S2-20 (issue #44): every push/PR run gets only the original S1-14
+      # smoke subset (`scenarios.test.ts` — the job's own name predates this
+      # split and still describes exactly this step). The full suite (this
+      # file plus conference/queue/voicemail/presence/parking/... — every
+      # S1/S2 scenario) only runs on the nightly `schedule` trigger, below.
+      # Same `if:`-branch-on-event_name shape as the `check` job's own
+      # affected-vs-all split above.
+      - name: Run SIP smoke scenarios
+        if: github.event_name != 'schedule'
         working-directory: tests/sip
         env:
           # A missing/broken compose stack must fail this job, not report a
           # green run full of skipped tests — same pattern as the `check`
           # job's own REQUIRE_DB_TESTS etc. above.
+          REQUIRE_SIP_TESTS: '1'
+        run: pnpm vitest run test/scenarios.test.ts
+
+      - name: Run full SIP suite (nightly)
+        if: github.event_name == 'schedule'
+        working-directory: tests/sip
+        env:
           REQUIRE_SIP_TESTS: '1'
         run: pnpm vitest run
 

@@ -1,0 +1,27 @@
+<configuration name="local_stream.conf" description="stream json config">
+  <!--
+      S2-20 (G-47, docs/decisions.md): same bug class G-50/G-47 already
+      found and fixed for `mod_conference`/`mod_callcenter` — confirmed
+      live, `mod_local_stream` fails to *load at all* without this file
+      (`mod_local_stream.c:1337 Open of local_stream.conf failed`, then
+      `Error Loading module .../mod_local_stream.so`). Without the module
+      loaded, `local_stream://moh` (`buildCallcenterConfigurationDocument`'s
+      own default `moh-sound` when a queue has no uploaded MOH asset) isn't
+      merely silent — it's an *unrecognized file format entirely*, and
+      confirmed live this doesn't fail once and move on: `mod_callcenter`
+      retried opening it in a tight loop (`switch_core_file.c:346 Invalid
+      file format [local_stream] for [moh]!`, thousands of times a second)
+      for the *entire* time a caller sat in queue, never actually reaching
+      the point of ringing an agent — a hard hang, not a cosmetic MOH gap.
+
+      `path` points at an empty directory (no sound files ship in this
+      image at all — see the Dockerfile's own comment on
+      files.freeswitch.org requiring auth): confirmed live this is fine.
+      `mod_local_stream` treats a directory with zero files as an
+      indefinite comfort-noise/silence generator, not a load error — the
+      same "degrades to silence, not to a hang or a crash" shape this
+      image's other MOH/prompt gaps already establish (`valet_hold_music`,
+      G-48; the PIN prompts, G-50).
+  -->
+  <directory name="moh" path="/usr/share/freeswitch/sounds/moh" rate="8000" shuffle="false" timer-name="soft"/>
+</configuration>

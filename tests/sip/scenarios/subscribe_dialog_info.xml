@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-20 (G-38, docs/decisions.md): SUBSCRIBEs to a presentity's own
+  `dialog` event package (extension BLF — `opensips.cfg.template`'s own
+  `is_method("SUBSCRIBE")` branch, S2-17), authenticated the same way
+  `register.xml`'s own REGISTER is (`www_authorize("", "subscriber")` — the
+  same digest credentials table, no prior registration needed first), then
+  waits for at least one NOTIFY. A genuinely new SIP method shape for this
+  suite — no INVITE/REGISTER anywhere in it.
+
+  `[field0]`=watcher user, `[field1]`=watcher's own domain (also the auth
+  realm — matches every other scenario's own `-auth_uri`), `[field2]`=
+  presentity user, `[field3]`=presentity's own domain. Same-tenant and
+  cross-tenant cases both use this one scenario file: same-tenant passes
+  `[field1]`==`[field3]`, cross-tenant does not — `opensips.cfg.template`'s
+  own `$fd != $td` check is what tells them apart, not this scenario.
+-->
+<scenario name="Subscribe to a presentity's dialog-info">
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field2]@[field3] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field3]>
+      Call-ID: [call_id]
+      CSeq: 1 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: dialog
+      Accept: application/dialog-info+xml
+      Expires: 3600
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="401" auth="true">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field2]@[field3] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field3]>
+      Call-ID: [call_id]
+      CSeq: 2 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: dialog
+      Accept: application/dialog-info+xml
+      Expires: 3600
+      Max-Forwards: 70
+      [authentication]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true">
+  </recv>
+
+  <recv request="NOTIFY" crlf="true" timeout="10000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>

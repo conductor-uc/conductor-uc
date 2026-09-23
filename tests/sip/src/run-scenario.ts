@@ -157,6 +157,11 @@ export interface SeedResult {
   readonly tenantOutbound: { readonly id: string; readonly fqdn: string };
   readonly tenantFraud: { readonly id: string; readonly fqdn: string };
   readonly tenantEmergency: { readonly id: string; readonly fqdn: string };
+  readonly tenantConference: { readonly id: string; readonly fqdn: string };
+  readonly tenantQueue: { readonly id: string; readonly fqdn: string };
+  readonly tenantVoicemail: { readonly id: string; readonly fqdn: string };
+  readonly tenantFlow: { readonly id: string; readonly fqdn: string };
+  readonly tenantPresence: { readonly id: string; readonly fqdn: string };
   readonly extensions: Record<string, SeedExtension>;
 }
 
@@ -294,6 +299,74 @@ export async function clearRegistration(aor: string): Promise<void> {
     'location',
     aor,
   ]);
+}
+
+/** `docker exec`s a real MI command — the same `opensips-cli -x mi` shape {@link clearRegistration} already establishes. */
+async function opensipsMi(command: string, ...args: readonly string[]): Promise<void> {
+  const env = sipTestEnv();
+  await execFileAsync('docker', [
+    'exec',
+    env.opensipsContainer,
+    'opensips-cli',
+    '-o',
+    'communication_type=http',
+    '-o',
+    'url=http://127.0.0.1:8888/mi',
+    '-x',
+    'mi',
+    command,
+    ...args,
+  ]);
+}
+
+const OPENSIPS_MARIADB_CONTAINER = 'conductor-uc-mariadb-1';
+
+/** `docker exec`s the real `mariadb` client against the `opensips` schema, as the `opensips` DB user — same rationale as `opensipsMi`: a real CLI already inside an already-running container, not a new throwaway one. */
+async function opensipsSql(sql: string): Promise<void> {
+  await execFileAsync('docker', [
+    'exec',
+    OPENSIPS_MARIADB_CONTAINER,
+    'mariadb',
+    '-u',
+    'opensips',
+    `-p${envOr('OPENSIPS_DB_PASSWORD', 'dev-opensips-password')}`,
+    'opensips',
+    '-e',
+    sql,
+  ]);
+}
+
+/**
+ * G-46 (docs/decisions.md): OpenSIPs does not yet act on `X-Affinity-Node`
+ * (deferred to S4-05), so once S2-19's round-robin dispatch is real, a
+ * *second*, separate call into an already-pinned queue/parking-lot/
+ * conference-room can genuinely land on the node that does not hold its
+ * affinity lease and get a real dialplan miss — not a test bug, an actual
+ * gap this platform has today. Rather than either accept that flakiness or
+ * pull S4-05 forward, S2-20's own scenarios for those three resource kinds
+ * temporarily narrow dispatcher set 1 down to one destination (direct SQL
+ * against the `dispatcher` table, then `ds_reload` — the same table
+ * `telephony/opensips/seed-dispatcher.py` seeds, so this is exercising a
+ * real, already-proven mechanism, not a new one) so every call in the test
+ * lands on the same node, restoring the full pool afterward. This tests
+ * "the resource itself works," which is what these scenarios exist to
+ * prove — it does not test "and it survives round-robin," which is exactly
+ * G-46's own open gap.
+ */
+export async function withSingleFsNode<T>(fn: () => Promise<T>): Promise<T> {
+  await opensipsSql(
+    "DELETE FROM dispatcher WHERE setid = 1 AND destination != 'sip:freeswitch:5060'",
+  );
+  await opensipsMi('ds_reload');
+  try {
+    return await fn();
+  } finally {
+    await opensipsSql(
+      'INSERT IGNORE INTO dispatcher (setid, destination, state, weight, description) ' +
+        "VALUES (1, 'sip:freeswitch-2:5060', 0, '1', 'S2-20 withSingleFsNode: restored')",
+    );
+    await opensipsMi('ds_reload');
+  }
 }
 
 /**
@@ -547,6 +620,14 @@ export interface StartUasOptions {
   readonly csvLine: string;
   readonly containerName: string;
   readonly localPort?: number;
+  /** The second chained scenario, run after `register.xml` completes.
+   * Defaults to `answer_call.xml` (the ordinary "answer, hold, wait for
+   * BYE" UAS). A caller needing a *different* reaction to the INVITE —
+   * S2-20's own `busy_call.xml` for triggering `continue_on_fail`'s
+   * `USER_BUSY` case, for instance — passes its own scenario file here
+   * instead, reusing this function's own register-then-listen chaining
+   * rather than duplicating it. */
+  readonly answerScenario?: string;
 }
 
 /**
@@ -577,7 +658,7 @@ export function startUas(opts: StartUasOptions): UasHandle {
       logPrefix: 'uas_reg',
     });
     const answerCmd = buildSippCommand({
-      scenarioPath: '/scenarios/answer_call.xml',
+      scenarioPath: `/scenarios/${opts.answerScenario ?? 'answer_call.xml'}`,
       csvPath: '/data/fields.csv',
       localPort: opts.localPort ?? 6000,
       logPrefix: 'uas_ans',
@@ -612,6 +693,113 @@ export function startUas(opts: StartUasOptions): UasHandle {
       '-c',
       `${registerCmd} && ${answerCmd}`,
     ]);
+    await waitForLog(opts.containerName, 'Sipp Server Mode', CONTAINER_LOG_TIMEOUT_MS);
+  })();
+
+  return {
+    containerName: opts.containerName,
+    ready: () => ready,
+    result: async () => {
+      await ready;
+      await waitForContainerExit(opts.containerName, CONTAINER_EXIT_TIMEOUT_MS);
+      const { stdout } = await execFileAsync('docker', ['logs', opts.containerName], {
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      return parseSippStats(stdout, 0);
+    },
+    stop: async () => {
+      await ready.catch(() => undefined);
+      await execFileAsync('docker', ['rm', '-f', opts.containerName]).catch(() => undefined);
+      if (hostCsvDir !== undefined) await rm(hostCsvDir, { recursive: true, force: true });
+    },
+  };
+}
+
+export interface StartAgentUasOptions {
+  readonly au: string;
+  readonly ap: string;
+  readonly authUri: string;
+  /** The agent's own SIP username/extension number — `[field0]` for all
+   * three chained scenarios below. */
+  readonly agentNumber: string;
+  /** `AGENT_LOGIN_FEATURE_CODE` or `AGENT_LOGOUT_FEATURE_CODE`
+   * (`services/telephony-config/src/xml.ts`). */
+  readonly featureCode: string;
+  readonly containerName: string;
+  readonly localPort?: number;
+}
+
+/**
+ * S2-20 (G-47): the agent role for a `mod_callcenter` queue scenario —
+ * `startUas`'s own two-step register-then-wait-for-INVITE shape, with one
+ * more step spliced in between: dialing an agent status feature code
+ * (`login_feature_code.xml`) to go `Available` before the queue can ever
+ * distribute a call here. All three SIPp processes (`register.xml`, the
+ * feature-code dial, `answer_call.xml`) stay bound to the same local port
+ * throughout, same reasoning `startUas`'s own doc comment gives for why
+ * that has to be three separate processes rather than one combined
+ * scenario (SIPp/sipp#412).
+ */
+export function startAgentUas(opts: StartAgentUasOptions): UasHandle {
+  const env = sipTestEnv();
+  let hostCsvDir: string | undefined;
+  const ready = (async (): Promise<void> => {
+    hostCsvDir = await mkdtemp(path.join(tmpdir(), 'sip-test-'));
+    await writeFile(
+      path.join(hostCsvDir, 'fields.csv'),
+      `SEQUENTIAL\n${opts.agentNumber};${opts.authUri};${opts.featureCode}\n`,
+    );
+    const registerCmd = buildSippCommand({
+      scenarioPath: '/scenarios/register.xml',
+      csvPath: '/data/fields.csv',
+      au: opts.au,
+      ap: opts.ap,
+      authUri: opts.authUri,
+      localPort: opts.localPort ?? 6000,
+      remoteHost: env.opensipsTarget,
+      logPrefix: 'agent_reg',
+    });
+    const loginCmd = buildSippCommand({
+      scenarioPath: '/scenarios/login_feature_code.xml',
+      csvPath: '/data/fields.csv',
+      localPort: opts.localPort ?? 6000,
+      remoteHost: env.opensipsTarget,
+      logPrefix: 'agent_login',
+    });
+    const answerCmd = buildSippCommand({
+      scenarioPath: '/scenarios/answer_call.xml',
+      csvPath: '/data/fields.csv',
+      localPort: opts.localPort ?? 6000,
+      logPrefix: 'agent_ans',
+    });
+    // Same defensive cleanup as `startUas` — a killed (not just failed)
+    // prior run can leave a same-named container behind despite this not
+    // being `--rm`.
+    await execFileAsync('docker', ['rm', '-f', opts.containerName]).catch(() => undefined);
+    await execFileAsync('docker', [
+      'run',
+      '-d',
+      '--name',
+      opts.containerName,
+      '--network',
+      env.network,
+      '--entrypoint',
+      'sh',
+      '-w',
+      '/data',
+      '-v',
+      `${SCENARIOS_DIR}:/scenarios:ro`,
+      '-v',
+      `${hostCsvDir}:/data`,
+      env.sippImage,
+      '-c',
+      `${registerCmd} && ${loginCmd} && ${answerCmd}`,
+    ]);
+    // Only `answer_call.xml` (the third, final process) ever prints this —
+    // the first two are ordinary client-mode scenarios with a known
+    // target, not a true "server mode" listener — so this correctly means
+    // "registered AND logged in AND now actually waiting for the queue's
+    // own distributed call", not just "the container started".
     await waitForLog(opts.containerName, 'Sipp Server Mode', CONTAINER_LOG_TIMEOUT_MS);
   })();
 

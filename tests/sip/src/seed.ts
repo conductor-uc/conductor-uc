@@ -70,6 +70,16 @@ export interface SeedResult {
    * (a trunk-service resource) no other test should see.
    */
   readonly tenantEmergency: { readonly id: string; readonly fqdn: string };
+  /** S2-20 (G-50): three extensions, for the "three SIPp participants join" acceptance test issue #39's own "Done when" describes. */
+  readonly tenantConference: { readonly id: string; readonly fqdn: string };
+  /** S2-20 (G-47): an agent extension (301) and a caller extension (302). */
+  readonly tenantQueue: { readonly id: string; readonly fqdn: string };
+  /** S2-20 (G-41): one extension (401) with a mailbox to leave/retrieve a message against. */
+  readonly tenantVoicemail: { readonly id: string; readonly fqdn: string };
+  /** S2-20 (G-43): a caller extension (501) and a bridge-target extension (502) for the auto-attendant's own extension node. */
+  readonly tenantFlow: { readonly id: string; readonly fqdn: string };
+  /** S2-20 (G-38): a watcher extension (601) and a presentity extension (602). */
+  readonly tenantPresence: { readonly id: string; readonly fqdn: string };
   /** `{ number: { password, realm } }`, one entry per seeded extension. */
   readonly extensions: Record<string, { readonly password: string; readonly realm: string }>;
 }
@@ -252,6 +262,46 @@ export async function seed(): Promise<SeedResult> {
       'emergency',
       'Emergency calling test tenant',
     );
+    const tenantConference = await findOrCreateOrg(
+      orgRepo,
+      orgDb,
+      'tenant',
+      reseller.id,
+      'conference',
+      'Conference rooms test tenant',
+    );
+    const tenantQueue = await findOrCreateOrg(
+      orgRepo,
+      orgDb,
+      'tenant',
+      reseller.id,
+      'queue',
+      'Queues test tenant',
+    );
+    const tenantVoicemail = await findOrCreateOrg(
+      orgRepo,
+      orgDb,
+      'tenant',
+      reseller.id,
+      'voicemail',
+      'Voicemail test tenant',
+    );
+    const tenantFlow = await findOrCreateOrg(
+      orgRepo,
+      orgDb,
+      'tenant',
+      reseller.id,
+      'flow',
+      'Auto-attendant test tenant',
+    );
+    const tenantPresence = await findOrCreateOrg(
+      orgRepo,
+      orgDb,
+      'tenant',
+      reseller.id,
+      'presence',
+      'BLF/presence test tenant',
+    );
 
     const extensions: SeedResult['extensions'] = {};
 
@@ -292,6 +342,17 @@ export async function seed(): Promise<SeedResult> {
     await seedExtension(tenantOutbound.id, '104', 'SIP Test 104 (outbound failover)');
     await seedExtension(tenantFraud.id, '105', 'SIP Test 105 (toll-fraud controls)');
     await seedExtension(tenantEmergency.id, '106', 'SIP Test 106 (emergency calling)');
+    await seedExtension(tenantConference.id, '201', 'SIP Test 201 (conference participant 1)');
+    await seedExtension(tenantConference.id, '202', 'SIP Test 202 (conference participant 2)');
+    await seedExtension(tenantConference.id, '203', 'SIP Test 203 (conference participant 3)');
+    await seedExtension(tenantQueue.id, '301', 'SIP Test 301 (queue agent)');
+    await seedExtension(tenantQueue.id, '302', 'SIP Test 302 (queue caller)');
+    await seedExtension(tenantVoicemail.id, '401', 'SIP Test 401 (voicemail mailbox owner)');
+    await seedExtension(tenantVoicemail.id, '402', 'SIP Test 402 (voicemail caller)');
+    await seedExtension(tenantFlow.id, '501', 'SIP Test 501 (auto-attendant caller)');
+    await seedExtension(tenantFlow.id, '502', 'SIP Test 502 (auto-attendant bridge target)');
+    await seedExtension(tenantPresence.id, '601', 'SIP Test 601 (BLF watcher)');
+    await seedExtension(tenantPresence.id, '602', 'SIP Test 602 (BLF presentity)');
 
     // Suspended last, and idempotent: `suspend()` on an already-suspended
     // tenant is a real InvalidOrgStatusTransitionError, not "nothing to do".
@@ -319,6 +380,26 @@ export async function seed(): Promise<SeedResult> {
       tenantEmergency: {
         id: tenantEmergency.id,
         fqdn: await tenantFqdn(orgDb, tenantEmergency.id),
+      },
+      tenantConference: {
+        id: tenantConference.id,
+        fqdn: await tenantFqdn(orgDb, tenantConference.id),
+      },
+      tenantQueue: {
+        id: tenantQueue.id,
+        fqdn: await tenantFqdn(orgDb, tenantQueue.id),
+      },
+      tenantVoicemail: {
+        id: tenantVoicemail.id,
+        fqdn: await tenantFqdn(orgDb, tenantVoicemail.id),
+      },
+      tenantFlow: {
+        id: tenantFlow.id,
+        fqdn: await tenantFqdn(orgDb, tenantFlow.id),
+      },
+      tenantPresence: {
+        id: tenantPresence.id,
+        fqdn: await tenantFqdn(orgDb, tenantPresence.id),
       },
       tenantFraud: {
         id: tenantFraud.id,

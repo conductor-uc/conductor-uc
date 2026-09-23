@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-20 (G-50, docs/decisions.md): the caller side of "dial a PIN-required
+  conference room, enter the wrong PIN three times, get hung up on" —
+  issue #39's own second "Done when" clause, `conference.lua`'s own 3-attempt
+  `playAndGetDigits` retry loop. `uac_call.xml` verbatim through ACK, then
+  diverges: no scripted BYE from this side at all. `conference.lua` calls
+  `session:hangup()` once `attempt` reaches 3 with `authorized` still false,
+  so the far end ends the call — this scenario's own last step is `<recv
+  request="BYE">`, not a `<send>` of one, deliberately the mirror image of
+  every other scenario in this directory.
+
+  `[field0]`=username, `[field1]`=domain, `[field2]`=destination number (the
+  conference room). Every attempt sends "5678#" — never the room's real PIN
+  (this file never encodes a tenant secret, matching every other scenario
+  here), and never a *repeated* digit within or across attempts either: see
+  below for why that matters here specifically.
+
+  DTMF via `<exec play_dtmf="…"/>` (SIPp's newer, simpler API) was tried
+  first and rejected outright: this image's `ctaloi/sipp` is SIPp v3.5.1
+  (built 2017), confirmed directly (`sipp -v` plus `strings` on the binary)
+  to have no `play_dtmf` support at all — only `play_pcap_audio`, playing a
+  literal pre-recorded RTP pcap file onto the existing media socket. The
+  image ships one per DTMF symbol at `/sipp/dtmf_2833_<digit>.pcap` /
+  `dtmf_2833_pound.pcap` — inspected directly (a small Python RTP parser):
+  each is a *static* capture, RFC 4733 telephone-event packets at a fixed
+  payload type (101) with fixed sequence numbers and timestamps baked in at
+  capture time, not regenerated per play. `m=audio`'s SDP below advertises
+  payload type 101 as `telephone-event` for exactly this reason — the
+  original SDP (copied from `uac_call.xml`, no DTMF need there) didn't, and
+  `conference.lua`'s own `playAndGetDigits` never saw any digits without it.
+
+  Confirmed directly and the reason this scenario never repeats a digit:
+  replaying the *same* pcap file twice in one call sends the identical
+  baked-in RTP sequence number and timestamp twice — FS's own RTP layer
+  treats the second play as a duplicate/retransmission of the first and
+  silently drops it, not as a second keypress. An earlier version of this
+  scenario sent "9999#" and only ever got a single "9" through per attempt
+  (confirmed live via FS's own `switch_rtp.c` DTMF debug logging) — four
+  *different* digits sidesteps the bug entirely, since no two pcaps here
+  share a sequence number or timestamp.
+
+  A `<nop>` wraps every `<action>` here (also confirmed directly): a bare
+  top-level `<action>` between message exchanges is rejected outright by
+  this SIPp version's scenario parser ("Unknown element 'action' in xml
+  scenario file") — `<nop>` is SIPp's own "run actions, send/receive
+  nothing" element.
+
+  250ms between each digit's pcap is real time for FS's own RFC 4733
+  detection, well inside `conference.lua`'s 5000ms interdigit timeout; the
+  1500ms pause after each full attempt (4 digits + `#`) is real time for
+  the verify-pin round trip plus `mod_conference`'s own bad-PIN prompt
+  attempt (which fails instantly — no sound package in this image, G-50)
+  before the next `playAndGetDigits` call is already waiting.
+-->
+<scenario name="Register, call a PIN-required room, fail the PIN three times, get hung up on">
+  <send retrans="500">
+    <![CDATA[
+      REGISTER sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Expires: 300
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="401" auth="true">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      REGISTER sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 2 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Expires: 300
+      [authentication]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true">
+  </recv>
+
+  <send retrans="4000">
+    <![CDATA[
+      INVITE sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      [extraheader]
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0 101
+      a=rtpmap:0 PCMU/8000
+      a=rtpmap:101 telephone-event/8000
+      a=fmtp:101 0-16
+    ]]>
+  </send>
+
+  <recv response="100" optional="true">
+  </recv>
+
+  <recv response="180" optional="true">
+  </recv>
+
+  <recv response="200" rtd="true">
+    <action>
+      <ereg regexp="sip:[^&gt;]*" search_in="hdr" header="Contact:" assign_to="1"/>
+    </action>
+  </recv>
+
+  <send>
+    <![CDATA[
+      ACK [$1] SIP/2.0
+      [last_Via:]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <pause milliseconds="500"/>
+
+  <!-- Attempt 1 of 3: "5678#", all wrong. -->
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_5.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_6.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_7.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_8.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_pound.pcap"/></action></nop>
+  <pause milliseconds="1500"/>
+
+  <!-- Attempt 2 of 3. -->
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_5.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_6.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_7.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_8.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_pound.pcap"/></action></nop>
+  <pause milliseconds="1500"/>
+
+  <!-- Attempt 3 of 3 — conference.lua's own loop exits after this one and
+       hangs up rather than prompting again. No trailing pause after this
+       attempt's own digits (unlike the two above): FS hangs up as soon as
+       it processes this attempt's `verify-pin` call, real time that can
+       land *during* a scripted pause here — confirmed directly, an
+       incoming BYE that arrives while this scenario is sitting in a
+       `<pause>` rather than already on the `<recv request="BYE">` step
+       below is treated as unscripted and aborts the whole call. Going
+       straight into the `<recv>` after the last digit means it is already
+       waiting, however long FS actually takes. -->
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_5.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_6.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_7.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_8.pcap"/></action></nop>
+  <pause milliseconds="250"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_pound.pcap"/></action></nop>
+
+  <recv request="BYE" crlf="true">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>

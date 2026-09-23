@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-20 (G-38, docs/decisions.md): `subscribe_dialog_info.xml` verbatim
+  through the authenticated SUBSCRIBE, but expects `403` instead of `200`
+  — `opensips.cfg.template`'s own `$fd != $td` tenant-scoping check
+  (S2-17), a watcher authenticated in one tenant's own domain SUBSCRIBEing
+  to a presentity URI in a *different* tenant's domain. Same field
+  convention as `subscribe_dialog_info.xml`.
+-->
+<scenario name="Subscribe cross-tenant, expect 403">
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field2]@[field3] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field3]>
+      Call-ID: [call_id]
+      CSeq: 1 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: dialog
+      Accept: application/dialog-info+xml
+      Expires: 3600
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="401" auth="true">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field2]@[field3] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field3]>
+      Call-ID: [call_id]
+      CSeq: 2 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: dialog
+      Accept: application/dialog-info+xml
+      Expires: 3600
+      Max-Forwards: 70
+      [authentication]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="403" crlf="true">
+  </recv>
+
+</scenario>

@@ -17,15 +17,49 @@ Every response this script reads is a flat, known-shape `{"valid":true}` —
 `voicemail.lua` gets away with the same thing), so no `json.lua` decode is
 needed here.
 
-UNVERIFIED LIVE (docs/decisions.md G-50, same discipline as G-38/G-41/G-43/
-G-47/G-48 for prior tasks' own FS-side code): `session:execute("conference",
-roomName)` with no explicit profile suffix (`mod_conference`'s own
-documented default-profile behavior) and the `conference/conf-pin.wav` /
-`conference/conf-bad-pin.wav` prompt paths (the stock FreeSWITCH sound
-package's own conference prompts, the same package `voicemail/vm-*.wav`
-already confirms is present) are this task's own best-effort reasoning, not
-confirmed against a real FreeSWITCH 1.10.12 node. Issue #44 (S2-20, the M2
-backend SIP regression suite) is where this gets its first live proof.
+CONFIRMED LIVE (docs/decisions.md G-50, S2-20): `session:execute("conference",
+roomName)` with no explicit profile suffix does join the `default` profile —
+but only because `autoload_configs/conference.conf.xml` now defines one
+statically; `mod_conference` fails the call outright if that file is
+missing entirely, not merely unconfigured.
+
+Also confirmed live, and fixed: the original `conference/conf-pin.wav` /
+`conference/conf-bad-pin.wav` prompt paths below were a real, load-bearing
+bug, not just an unconfirmed guess — this image ships no FreeSWITCH sound
+package at all (see the Dockerfile's own comment), so `playAndGetDigits`
+hit a missing-file error and returned immediately, every one of its 3
+internal tries exhausted within milliseconds, without ever actually
+listening for a caller's DTMF. A PIN-required room hung up on *every*
+caller instantly, right PIN or wrong, not merely a rejected wrong one.
+Fixed the same way G-48 already fixed `valet_hold_music` for the same
+underlying cause: `silence_stream://1000`, a synthetic, always-resolvable
+stream, in place of both file paths — `playAndGetDigits` now genuinely
+waits out its own timeout for real digits.
+
+A third bug, found later (S2-20, while debugging `voicemail.lua`'s own
+identical `httpCall`), turned out to be two compounding bugs, both fixed:
+(a) `shell_exec` — this script's original way of base64-encoding a Basic
+auth header — is not a registered FS API command in this image at all
+(confirmed directly: `show api` has no such entry); (b) even fixed with a
+real base64 encoder, `mod_curl`'s own `curl` API command turned out not to
+be a curl-CLI lookalike at all — `-H`/`-d` flags do not exist, and neither
+does reliably chaining more than one of its own real options together (its
+own usage string documents `append_headers <n:v>[|append_headers <n:v>]`
+as valid; confirmed live, with a raw packet capture, that it is not — the
+literal `|...` text ends up appended to the first option's own value).
+Since `Basic <token>` always has a space right after `Basic`, and that
+command's argument parser breaks on any space in a header value, *no*
+Basic-auth header could ever survive it intact, base64 or not. Every
+`verify-pin` call this script ever made sent a malformed/truncated
+Authorization header and got a 401 back, meaning `authorized` could never
+become `true` regardless of whether the PIN itself was right — a bug the
+wrong-PIN test below never could have caught (a broken auth header and a
+genuinely wrong PIN produce the identical "always rejected" outcome).
+Fixed by dropping Basic auth for this script entirely in favor of a
+single, space-free `X-Fs-Node-Token: <token>` header (`append_headers`'s
+one reliable shape) — see `authorized()` in `fs.routes.ts` for the
+matching server-side change. Verified end to end, including a genuinely
+*correct* PIN this time (`tests/sip/test/conference.test.ts`).
 --]]
 
 local tenantId = argv[1]
@@ -35,17 +69,17 @@ local pinRequired = argv[4] == "1"
 
 local api = freeswitch.API()
 
--- Same `curl` API shape as `voicemail.lua`'s own `httpCall`.
+-- Same `curl` API shape as `voicemail.lua`'s own `httpCall` — see that
+-- script's own doc comment for the full detail on why this is a single
+-- `append_headers` and no explicit Content-Type.
 local function httpCall(method, path, body)
   local baseUrl = session:getVariable("telephony_config_url") or "http://telephony-config:8080"
   local token = session:getVariable("telephony_config_token") or ""
   local url = baseUrl .. path
-  local authHeader = "Authorization: Basic " .. api:executeString("shell_exec base64 -w0 <<< 'fs-node:" .. token .. "'")
 
-  local cmd = url .. " " .. method
-  cmd = cmd .. " -H " .. authHeader
+  local cmd = url .. " append_headers X-Fs-Node-Token:" .. token .. " " .. method
   if body ~= nil then
-    cmd = cmd .. " -H \"Content-Type: application/json\" -d '" .. body .. "'"
+    cmd = cmd .. " " .. body
   end
   return api:executeString("curl " .. cmd)
 end
@@ -69,7 +103,7 @@ if pinRequired then
   local attempt = 0
   while attempt < 3 and not authorized do
     attempt = attempt + 1
-    local pin = session:playAndGetDigits(4, 8, 3, 5000, "#", "conference/conf-pin.wav", "conference/conf-bad-pin.wav", "\\d+")
+    local pin = session:playAndGetDigits(4, 8, 3, 5000, "#", "silence_stream://1000", "silence_stream://1000", "\\d+")
     if pin ~= nil and pin ~= "" then
       local verified = httpCall(
         "POST",

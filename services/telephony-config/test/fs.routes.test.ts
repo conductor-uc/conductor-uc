@@ -2508,7 +2508,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
 
         expect(response.statusCode).toBe(200);
         expect(response.body).toContain(
-          `callcenter_config agent set status &apos;101@acme.platform.test&apos; &apos;Available&apos;`,
+          `<action application="lua" data="agent_status.lua 101@acme.platform.test 1"/>`,
         );
       });
 
@@ -2532,7 +2532,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         });
 
         expect(response.body).toContain(
-          `callcenter_config agent set status &apos;101@acme.platform.test&apos; &apos;Logged Out&apos;`,
+          `<action application="lua" data="agent_status.lua 101@acme.platform.test 0"/>`,
         );
       });
 
@@ -2674,7 +2674,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
 
       expect(response.statusCode).toBe(200);
       expect(response.body).toContain(
-        `<action application="valet_park" data="${lotId}@acme.platform.test/705"/>`,
+        `<action application="valet_park" data="${lotId}@acme.platform.test 705"/>`,
       );
       expect(h.callControl.acquireCalls).toContainEqual({
         tenantId,

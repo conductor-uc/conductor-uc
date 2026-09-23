@@ -240,12 +240,34 @@ export function registerFsRoutes(
   // box but not this, so every field (including the dozens of `Caller-*`/
   // `Hunt-*`/`variable_*` ones a dialplan hunt attaches) needs an explicit
   // parser rather than a new dependency for one line of decoding.
+  //
+  // Also handles every `/fs/voicemail/...`/`/fs/conference-rooms/.../
+  // verify-pin`/etc. request `conference.lua`/`voicemail.lua`/
+  // `flow_runner.lua` send: confirmed live (S2-20, G-41/G-43) that
+  // `mod_curl`'s own `curl` API command cannot reliably be told to send
+  // `Content-Type: application/json` at all (its `content-type <mime>`/
+  // `json` options both consume the rest of the argument string as their
+  // own literal value rather than combining with `append_headers`, a
+  // `mod_curl` limitation this file's own doc comment on `authorized()`
+  // has the full detail on) — every one of those scripts' own POST bodies
+  // arrives labeled `application/x-www-form-urlencoded` regardless, even
+  // though the bytes are genuinely a JSON object literal (`{}`,
+  // `{"pin":"1234"}`, ...), never real `key=value&...` form data. A body
+  // that starts with `{` after trimming is JSON parsed instead of
+  // URL-decoded; `mod_xml_curl`'s own bodies never do (its own fields are
+  // always `Caller-*`/`Hunt-*`/`variable_*` keys), so this never
+  // misclassifies that path.
   app.addContentTypeParser(
     'application/x-www-form-urlencoded',
     { parseAs: 'string' },
     (_request, body, done) => {
       try {
-        done(null, Object.fromEntries(new URLSearchParams(body as string)));
+        const text = body as string;
+        if (text.trimStart().startsWith('{')) {
+          done(null, JSON.parse(text));
+          return;
+        }
+        done(null, Object.fromEntries(new URLSearchParams(text)));
       } catch (error) {
         done(error as Error, undefined);
       }
@@ -307,7 +329,43 @@ export function registerFsRoutes(
     return { ringGroup, orderedMembers };
   }
 
-  function authorized(authorization: string | undefined): boolean {
+  /**
+   * Two accepted forms, checked against the same `fsXmlCurlToken`.
+   *
+   * `Authorization: Basic <base64(fs-node:token)>` is what `mod_xml_curl`
+   * itself sends (`xml_curl.conf.xml`'s own `gateway-credentials`/
+   * `auth-scheme` params) — confirmed live to always work, since
+   * `mod_xml_curl` builds it internally via libcurl, not by hand.
+   *
+   * `X-Fs-Node-Token: <token>` (no scheme, no encoding) is for every
+   * Lua-script-originated call instead (`conference.lua`/`voicemail.lua`/
+   * `flow_runner.lua`'s own `httpCall`s, via `mod_curl`'s `curl` API
+   * command) — confirmed live, the hard way (S2-20, G-41/G-43): that
+   * command's own argument parser is not shell-like at all. A header
+   * *value* containing a space — exactly what `Basic <token>` always has —
+   * gets silently truncated at the space, and chaining more than one
+   * `append_headers`/`content-type` option together (the scenario shape
+   * `mod_curl`'s own usage string documents as valid,
+   * `append_headers <n:v>[|append_headers <n:v>]`) does not actually work
+   * in this FreeSWITCH build either — the literal `|...` text ends up
+   * appended to the first option's own value instead of starting a second
+   * one. A single-token header with no embedded space is the only shape
+   * that survives that parser intact, so this is the scheme every
+   * Lua-script call uses now, not a Basic-auth workaround.
+   */
+  function authorized(headers: {
+    readonly authorization?: string | undefined;
+    readonly 'x-fs-node-token'?: string | string[] | undefined;
+  }): boolean {
+    const nodeToken = headers['x-fs-node-token'];
+    if (
+      typeof nodeToken === 'string' &&
+      nodeToken !== '' &&
+      secretEquals(fsXmlCurlToken, nodeToken)
+    ) {
+      return true;
+    }
+    const authorization = headers.authorization;
     if (authorization === undefined) return false;
     const [scheme, encoded] = authorization.split(' ');
     if (scheme !== 'Basic' || encoded === undefined || encoded === '') return false;
@@ -559,7 +617,7 @@ export function registerFsRoutes(
     // Fastify's schema-driven request/response pipeline.
     { config: { public: true } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -820,7 +878,7 @@ export function registerFsRoutes(
   }
 
   app.post('/fs/dialplan', { config: { public: true } }, async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       reply.code(401);
       return '';
     }
@@ -1210,7 +1268,7 @@ export function registerFsRoutes(
     '/fs/media/:tenantId/:assetId/:rate',
     { config: { public: true }, schema: { params: MediaParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1272,7 +1330,7 @@ export function registerFsRoutes(
     '/fs/flow/:tenantId/:flowId/ir',
     { config: { public: true }, schema: { params: FlowIrParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1309,7 +1367,7 @@ export function registerFsRoutes(
     '/fs/flow/:tenantId/extension/:extensionId',
     { config: { public: true }, schema: { params: FlowExtensionParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1335,7 +1393,7 @@ export function registerFsRoutes(
     '/fs/flow/:tenantId/ring-group/:ringGroupId',
     { config: { public: true }, schema: { params: FlowRingGroupParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1373,7 +1431,7 @@ export function registerFsRoutes(
       schema: { params: FlowQueueParamsSchema, querystring: FlowQueueQuerySchema },
     },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1430,7 +1488,7 @@ export function registerFsRoutes(
     '/fs/voicemail/:tenantId/mailbox/by-extension/:extensionId',
     { config: { public: true }, schema: { params: VoicemailExtensionParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1451,7 +1509,7 @@ export function registerFsRoutes(
       schema: { params: VoicemailMailboxParamsSchema, body: VoicemailPinBodySchema },
     },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1475,7 +1533,7 @@ export function registerFsRoutes(
       schema: { params: ConferenceRoomParamsSchema, body: ConferencePinBodySchema },
     },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1492,7 +1550,7 @@ export function registerFsRoutes(
       schema: { params: VoicemailMailboxParamsSchema, body: VoicemailCreateMessageBodySchema },
     },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1509,7 +1567,7 @@ export function registerFsRoutes(
       schema: { params: VoicemailMessageParamsSchema, body: VoicemailCompleteMessageBodySchema },
     },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1522,7 +1580,7 @@ export function registerFsRoutes(
     '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/fail',
     { config: { public: true }, schema: { params: VoicemailMessageParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1536,7 +1594,7 @@ export function registerFsRoutes(
     '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages',
     { config: { public: true }, schema: { params: VoicemailMailboxParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1549,7 +1607,7 @@ export function registerFsRoutes(
     '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/mark-read',
     { config: { public: true }, schema: { params: VoicemailMessageParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1562,7 +1620,7 @@ export function registerFsRoutes(
     '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/delete',
     { config: { public: true }, schema: { params: VoicemailMessageParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1576,7 +1634,7 @@ export function registerFsRoutes(
     '/fs/voicemail/:tenantId/mailbox/:mailboxId/greeting/presign',
     { config: { public: true }, schema: { params: VoicemailMailboxParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1590,7 +1648,7 @@ export function registerFsRoutes(
     '/fs/voicemail/:tenantId/mailbox/:mailboxId/greeting/complete',
     { config: { public: true }, schema: { params: VoicemailMailboxParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1608,7 +1666,7 @@ export function registerFsRoutes(
     '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/audio',
     { config: { public: true }, schema: { params: VoicemailMessageParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1638,7 +1696,7 @@ export function registerFsRoutes(
     '/fs/voicemail/:tenantId/mailbox/:mailboxId/greeting/audio',
     { config: { public: true }, schema: { params: VoicemailMailboxParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }
@@ -1689,7 +1747,7 @@ export function registerFsRoutes(
    * tenant's queues.
    */
   app.post('/fs/configuration', { config: { public: true } }, async (request, reply) => {
-    if (!authorized(request.headers.authorization)) {
+    if (!authorized(request.headers)) {
       reply.code(401);
       return '';
     }
@@ -1782,7 +1840,7 @@ export function registerFsRoutes(
     '/fs/affinity/:tenantId/:kind/:resourceId',
     { config: { public: true }, schema: { params: AffinityParamsSchema } },
     async (request, reply) => {
-      if (!authorized(request.headers.authorization)) {
+      if (!authorized(request.headers)) {
         reply.code(401);
         return '';
       }

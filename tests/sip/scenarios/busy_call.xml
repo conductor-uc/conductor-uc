@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-20 (G-38, docs/decisions.md): waits for an unsolicited INVITE and
+  immediately rejects it with 486 Busy Here — deterministically triggers
+  `mod_dptools`'s `bridge`/`continue_on_fail` "USER_BUSY" case
+  (`buildDialplanDocument`'s own voicemail fallback, S2-16), rather than
+  waiting out a real no-answer timeout. Run as the second half of
+  `startUas`'s own register-then-listen chain (`answerScenario:
+  'busy_call.xml'`), the same reasoning `answer_call.xml`'s own doc
+  comment gives for why this has to be a fresh, second SIPp process rather
+  than one combined register-and-wait scenario (SIPp/sipp#412).
+-->
+<scenario name="Answer one call with 486 Busy Here">
+  <recv request="INVITE" crlf="true" timeout="60000">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      SIP/2.0 486 Busy Here
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv request="ACK" crlf="true">
+  </recv>
+
+</scenario>
