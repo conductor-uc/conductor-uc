@@ -316,6 +316,66 @@ jobs:
         working-directory: infra/compose
         run: docker compose down -v
 
+  # The Flutter console (D-001): not a pnpm workspace member, so it has its own
+  # job. brand-leak runs here, after `flutter build web`, because that is the
+  # only place `apps/console/build/web` exists to be scanned.
+  console:
+    name: console (analyze, test, build web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Regenerate the API client and check it is committed
+        # The client is generated from api/openapi.yaml (08 §1). A stale
+        # checked-in copy would let the spec and the app drift apart.
+        working-directory: apps/console
+        env:
+          OPENAPI_GENERATOR_JAR: ${{ runner.temp }}/openapi-generator-cli.jar
+        run: |
+          curl -fsSL -o "$OPENAPI_GENERATOR_JAR" \
+            https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.14.0/openapi-generator-cli-7.14.0.jar
+          ./tool/generate-api.sh
+          git diff --exit-code -- packages/console_api
+
+      - run: flutter pub get
+        working-directory: apps/console
+
+      - run: dart format --output=none --set-exit-if-changed lib test
+        working-directory: apps/console
+
+      - run: flutter analyze
+        working-directory: apps/console
+
+      - run: flutter test
+        working-directory: apps/console
+
+      - run: flutter build web --release
+        working-directory: apps/console
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Brand-leak scan (includes build/web)
+        run: pnpm brand-leak
+
   # Later stages plug in here rather than in the job above:
-  #   - Flutter console build and widget tests (S3)
   #   - container image builds, pushed on main (S1)

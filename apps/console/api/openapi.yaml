@@ -1,0 +1,80 @@
+openapi: 3.1.0
+info:
+  title: Console API
+  version: 0.1.0
+  description: >-
+    Seed of the merged api-gateway spec the console client is generated from.
+    It covers only the public routes S3-01 needs (brand bootstrap and login);
+    it is replaced by the real merged document once one exists (G-54).
+servers:
+  - url: /
+paths:
+  /v1/public/brand:
+    get:
+      operationId: getPublicBrand
+      tags: [public]
+      parameters:
+        - name: host
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: The reseller brand for the hostname, or the neutral marker.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicBrand' }
+  /v1/auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Tokens, or the next MFA step.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+components:
+  schemas:
+    # The server's response is a discriminated union on `neutral`. It is modelled
+    # here as one object with optional fields, which is wire-compatible and keeps
+    # the generated Dart model a plain class.
+    PublicBrand:
+      type: object
+      required: [neutral]
+      properties:
+        neutral: { type: boolean }
+        displayName: { type: [string, 'null'] }
+        primaryColor: { type: [string, 'null'] }
+        accentColor: { type: [string, 'null'] }
+        logoLightUrl: { type: [string, 'null'] }
+        logoDarkUrl: { type: [string, 'null'] }
+        faviconUrl: { type: [string, 'null'] }
+        supportEmail: { type: [string, 'null'] }
+        supportUrl: { type: [string, 'null'] }
+        supportPhone: { type: [string, 'null'] }
+        legalFooter: { type: [string, 'null'] }
+    LoginRequest:
+      type: object
+      required: [orgId, email, password]
+      properties:
+        orgId: { type: string, minLength: 1 }
+        email: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+    LoginResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, mfa_enrollment_required, mfa_verification_required]
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer }
+        enrollmentTicket: { type: string }
+        verificationTicket: { type: string }

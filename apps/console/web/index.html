@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!-- Replaced by `flutter build` with the --base-href value. -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <!-- Neutral on purpose (08 §2): the brand fetch sets the real title. -->
+  <title>Loading…</title>
+  <link rel="manifest" href="manifest.json">
+  <style>
+    body { margin: 0; background: #fafafa; }
+    #loading {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    }
+    #loading div {
+      width: 32px; height: 32px; border-radius: 50%;
+      border: 3px solid #e0e0e0; border-top-color: #9e9e9e;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="loading"><div></div></div>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
