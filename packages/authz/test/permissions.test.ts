@@ -82,6 +82,11 @@ describe('PERMISSION_CATALOG', () => {
     expect(isKnownPermission('parking_lot.manage')).toBe(true);
     expect(dataClassOf('parking_lot.manage')).toBe('config');
   });
+
+  it('includes conference_room.manage — S2-15, not in 07 §3.3, added for conference-room config routes', () => {
+    expect(isKnownPermission('conference_room.manage')).toBe(true);
+    expect(dataClassOf('conference_room.manage')).toBe('config');
+  });
 });
 
 describe('dataClassOf', () => {

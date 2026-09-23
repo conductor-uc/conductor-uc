@@ -2750,4 +2750,307 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(response.body).not.toContain('valet_park');
     });
   });
+
+  describe('conference rooms (S2-15)', () => {
+    async function seedTenant(tenantId: string, fqdn = 'acme.platform.test'): Promise<void> {
+      await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+      await h.readModel.upsertDomain(h.db.kysely, { id: crypto.randomUUID(), tenantId, fqdn });
+    }
+
+    async function seedRoom(
+      tenantId: string,
+      overrides: Partial<Parameters<typeof h.readModel.upsertConferenceRoom>[1]> = {},
+    ): Promise<string> {
+      const id = crypto.randomUUID();
+      await h.readModel.upsertConferenceRoom(h.db.kysely, {
+        id,
+        tenantId,
+        label: 'All Hands',
+        number: '600',
+        pinRequired: false,
+        maxMembers: 50,
+        ...overrides,
+      });
+      return id;
+    }
+
+    function internalPayload(tenantId: string, fields: Record<string, string>) {
+      return form({
+        section: 'dialplan',
+        'Caller-Context': 'internal',
+        'variable_sip_h_X-Call-Direction': 'internal',
+        'variable_sip_h_X-Tenant-Id': tenantId,
+        ...fields,
+      });
+    }
+
+    it('dialing a room’s number runs the conference lua app after acquiring the lease', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const roomId = await seedRoom(tenantId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-1',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: internalPayload(tenantId, { 'Caller-Destination-Number': '600' }),
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain(
+        `<action application="lua" data="conference.lua ${tenantId} ${roomId} ${roomId}@acme.platform.test 0"/>`,
+      );
+      expect(h.callControl.acquireCalls).toContainEqual({
+        tenantId,
+        kind: 'conf',
+        resourceId: roomId,
+        preferredNodeId: 'fs-1',
+      });
+    });
+
+    it('a room requiring a PIN passes that through to the lua app', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const roomId = await seedRoom(tenantId, { number: '601', pinRequired: true });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-1',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: internalPayload(tenantId, { 'Caller-Destination-Number': '601' }),
+      });
+
+      expect(response.body).toContain(
+        `<action application="lua" data="conference.lua ${tenantId} ${roomId} ${roomId}@acme.platform.test 1"/>`,
+      );
+    });
+
+    it('a real extension wins over a coincidentally-numbered conference room', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      await seedRoom(tenantId, { number: '150' });
+      await h.readModel.upsertExtension(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        number: '150',
+        username: '150',
+        ha1: 'a'.repeat(32),
+        realm: 'acme.platform.test',
+        callerIdName: null,
+        callerIdNumber: null,
+        emergencyLocationId: crypto.randomUUID(),
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-1',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: internalPayload(tenantId, { 'Caller-Destination-Number': '150' }),
+      });
+
+      expect(response.body).not.toContain('conference.lua');
+      expect(response.body).toContain('sofia/internal/150@acme.platform.test');
+    });
+
+    it('a conference room wins over a coincidentally-numbered parking slot', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const roomId = await seedRoom(tenantId, { number: '705' });
+      await h.readModel.upsertParkingLot(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        label: 'Main Lot',
+        slotStart: 700,
+        slotEnd: 719,
+        timeoutSeconds: 120,
+        returnDestinationType: null,
+        returnDestinationId: null,
+      });
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-1',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: internalPayload(tenantId, { 'Caller-Destination-Number': '705' }),
+      });
+
+      expect(response.body).toContain(`conference.lua ${tenantId} ${roomId}`);
+      expect(response.body).not.toContain('valet_park');
+    });
+
+    it('404s when the room is leased to a different node', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const roomId = await seedRoom(tenantId);
+      h.callControl.acquireResults[`${tenantId}:conf:${roomId}`] = {
+        nodeId: 'fs-2',
+        acquired: false,
+      };
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-1',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: internalPayload(tenantId, { 'Caller-Destination-Number': '600' }),
+      });
+
+      expect(response.body).toContain('<result status="not found"/>');
+    });
+
+    describe('/fs/dialplan (from-trunk DID -> conference)', () => {
+      async function seedTrunk(tenantId: string, trunkId: string): Promise<void> {
+        await h.readModel.upsertTrunk(h.db.kysely, {
+          id: trunkId,
+          tenantId,
+          name: 'Carrier',
+          authMode: 'ip',
+          host: 'carrier.test',
+          port: 5060,
+          transport: 'udp',
+          username: null,
+          secret: null,
+          fromDomain: null,
+          status: 'active',
+          callerIdName: null,
+          callerIdNumber: null,
+        });
+      }
+
+      function inboundPayload(fields: Record<string, string>) {
+        return form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'variable_sip_h_X-Call-Direction': 'inbound',
+          ...fields,
+        });
+      }
+
+      it('acquires the affinity lease onto the requesting node and hands off to the conference lua app', async () => {
+        const tenantId = crypto.randomUUID();
+        const trunkId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        await seedTrunk(tenantId, trunkId);
+        const roomId = await seedRoom(tenantId);
+        await h.readModel.upsertDid(h.db.kysely, {
+          id: crypto.randomUUID(),
+          tenantId,
+          e164: '+15551234567',
+          trunkId,
+          destinationType: 'conference',
+          destinationId: roomId,
+        });
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/dialplan?nodeId=fs-1',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: inboundPayload({
+            'Caller-Destination-Number': '+15551234567',
+            'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+          }),
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toContain(
+          `<action application="lua" data="conference.lua ${tenantId} ${roomId} ${roomId}@acme.platform.test 0"/>`,
+        );
+        expect(h.callControl.acquireCalls).toContainEqual({
+          tenantId,
+          kind: 'conf',
+          resourceId: roomId,
+          preferredNodeId: 'fs-1',
+        });
+      });
+
+      it('404s when the room is leased to a different node', async () => {
+        const tenantId = crypto.randomUUID();
+        const trunkId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        await seedTrunk(tenantId, trunkId);
+        const roomId = await seedRoom(tenantId);
+        await h.readModel.upsertDid(h.db.kysely, {
+          id: crypto.randomUUID(),
+          tenantId,
+          e164: '+15551234567',
+          trunkId,
+          destinationType: 'conference',
+          destinationId: roomId,
+        });
+        h.callControl.acquireResults[`${tenantId}:conf:${roomId}`] = {
+          nodeId: 'fs-2',
+          acquired: false,
+        };
+
+        const response = await app.inject({
+          method: 'POST',
+          url: '/fs/dialplan?nodeId=fs-1',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: inboundPayload({
+            'Caller-Destination-Number': '+15551234567',
+            'variable_sip_h_X-Trunk-Id': toContextId(trunkId),
+          }),
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toContain('<result status="not found"/>');
+      });
+    });
+
+    describe('/fs/conference-rooms/:tenantId/:roomId/verify-pin', () => {
+      it('proxies to pbx-config-service and returns its verdict', async () => {
+        const tenantId = crypto.randomUUID();
+        const roomId = crypto.randomUUID();
+        h.pbxConfig.conferencePins[roomId] = '1234';
+
+        const correct = await app.inject({
+          method: 'POST',
+          url: `/fs/conference-rooms/${tenantId}/${roomId}/verify-pin`,
+          headers: { 'content-type': 'application/json', authorization: BASIC_AUTH },
+          payload: { pin: '1234' },
+        });
+        expect(correct.statusCode).toBe(200);
+        expect(correct.json()).toMatchObject({ valid: true });
+
+        const wrong = await app.inject({
+          method: 'POST',
+          url: `/fs/conference-rooms/${tenantId}/${roomId}/verify-pin`,
+          headers: { 'content-type': 'application/json', authorization: BASIC_AUTH },
+          payload: { pin: '9999' },
+        });
+        expect(wrong.statusCode).toBe(200);
+        expect(wrong.json()).toMatchObject({ valid: false });
+      });
+
+      it('401s with no auth', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: `/fs/conference-rooms/${crypto.randomUUID()}/${crypto.randomUUID()}/verify-pin`,
+          headers: { 'content-type': 'application/json' },
+          payload: { pin: '1234' },
+        });
+        expect(response.statusCode).toBe(401);
+      });
+    });
+  });
 });

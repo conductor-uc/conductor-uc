@@ -4,13 +4,14 @@
  * `repo/extension.repo.ts` is where this meets actual rows.
  *
  * 06 describes the full check as "no collisions with feature codes, parking
- * slots, conference numbers, or queue numbers" — but parking lots, conference
- * rooms, and queues have no owning task yet (they arrive in S2-13/14/15), so
- * there is nothing for those checks to run against today. This validates the
- * two things S1-09 actually has: the number's own shape, and collisions with
- * other extensions in the same tenant. Extending `NumberCollisionChecker`'s
- * caller with more sources is how a later stage adds its own check without
- * this module changing.
+ * slots, conference numbers, or queue numbers" — this still only validates
+ * the two things S1-09 actually has: the number's own shape, and collisions
+ * with other extensions in the same tenant. Parking lots (S2-14) and
+ * conference rooms (S2-15) now exist, but each still only checks collisions
+ * against its own kind (a lot's slot range against other lots', a room's
+ * number against other rooms') — this module was not extended to cross-check
+ * against them, or they against it, when those tasks landed (docs/decisions.md
+ * G-49: 06's full cross-resource numbering-plan check remains unimplemented).
  */
 
 // 2-6 digits: short enough to dial comfortably, long enough for a few

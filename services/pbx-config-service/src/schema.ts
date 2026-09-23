@@ -216,4 +216,23 @@ export interface PbxConfigServiceDb extends EventTables {
     updated_at: Date;
     version: number;
   };
+  /**
+   * A conference room (S2-15; `mod_conference`). `pin_enc` is envelope-
+   * encrypted (07 §5) — null means no PIN required. `video` records intent
+   * only; see `008_add_conference_rooms.ts`'s own comment on why it has no
+   * effect yet.
+   */
+  conference_rooms: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    number: string;
+    pin_enc: string | null;
+    video: boolean;
+    layout: string | null;
+    max_members: number;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
 }

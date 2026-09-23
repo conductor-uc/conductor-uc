@@ -7,6 +7,7 @@ import * as addMediaAssets from './004_add_media_assets.js';
 import * as addRingGroups from './005_add_ring_groups.js';
 import * as addQueues from './006_add_queues.js';
 import * as addParkingLots from './007_add_parking_lots.js';
+import * as addConferenceRooms from './008_add_conference_rooms.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -25,4 +26,5 @@ export const migrations: Record<string, Migration> = {
   '005_add_ring_groups': addRingGroups,
   '006_add_queues': addQueues,
   '007_add_parking_lots': addParkingLots,
+  '008_add_conference_rooms': addConferenceRooms,
 };

@@ -11,13 +11,14 @@ const E164_PATTERN = /^\+[1-9]\d{1,14}$/;
 
 /**
  * 03 §3.2's own dialplan node-type list (MVP): everything a DID can point
- * at. As of S2-08, `extension` and `ring_group` both have an owning
- * subsystem (pbx-config-service's own `extensions`/`ring_groups` tables) —
- * `queue` (S2-13), `conference_room` (S2-15), `flow` (S2-09/10), and
- * `voicemail` (S2-16) still do not exist. A DID can still be *created*
- * against any of these (the data model in 05 §3.3 names all of them), but
- * only `extension`/`ring_group` resolve to a real call today — everything
- * else is an honest miss at dial time, not a rejected write (docs/decisions.md G-25).
+ * at. As of S2-15, `extension` (S2-03), `ring_group` (S2-08), `flow`
+ * (S2-09/10), `queue` (S2-13), and `conference` (S2-15) all have an owning
+ * subsystem and resolve to a real call at dial time (telephony-config's own
+ * `fs.routes.ts`); `voicemail` (S2-16) also resolves (a DID dialed straight
+ * into a mailbox). A DID can still be *created* against any of these (the
+ * data model in 05 §3.3 names all of them) even before its destination type
+ * had an owning subsystem — the ones that did not yet were an honest miss
+ * at dial time, not a rejected write (docs/decisions.md G-25).
  */
 export const DESTINATION_TYPES = [
   'extension',

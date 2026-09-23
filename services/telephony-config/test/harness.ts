@@ -24,6 +24,7 @@ import type {
 import type { OrgClient } from '../src/org-client.js';
 import type {
   AgentConfig,
+  ConferenceRoomConfig,
   DidConfig,
   DigestCredential,
   EmergencyLocationConfig,
@@ -135,9 +136,12 @@ export interface FakePbxConfigClient extends PbxConfigClient {
   /** Keyed by `queueId` — the whole tier list for that queue, same shape `findQueueTiers` returns. */
   queueTiers: Record<string, QueueTierConfig[]>;
   parkingLots: Record<string, ParkingLotConfig>;
+  conferenceRooms: Record<string, ConferenceRoomConfig>;
+  /** Keyed by `roomId` — the PIN `verifyConferencePin` treats as correct for that room, set per test. */
+  conferencePins: Record<string, string>;
 }
 
-/** A digest-credential/DID/emergency-location/media-asset/ring-group/queue/agent/tier/parking-lot lookup whose answers are set per test — no live pbx-config-service needed. */
+/** A digest-credential/DID/emergency-location/media-asset/ring-group/queue/agent/tier/parking-lot/conference-room lookup whose answers are set per test — no live pbx-config-service needed. */
 function fakePbxConfigClient(): FakePbxConfigClient {
   const state: FakePbxConfigClient = {
     credentials: {},
@@ -149,6 +153,8 @@ function fakePbxConfigClient(): FakePbxConfigClient {
     agents: {},
     queueTiers: {},
     parkingLots: {},
+    conferenceRooms: {},
+    conferencePins: {},
     findCredential: (_tenantId: string, extensionId: string) =>
       Promise.resolve(state.credentials[extensionId]),
     findDid: (_tenantId: string, didId: string) => Promise.resolve(state.dids[didId]),
@@ -163,6 +169,10 @@ function fakePbxConfigClient(): FakePbxConfigClient {
       Promise.resolve(state.queueTiers[queueId] ?? []),
     findParkingLot: (_tenantId: string, parkingLotId: string) =>
       Promise.resolve(state.parkingLots[parkingLotId]),
+    findConferenceRoom: (_tenantId: string, conferenceRoomId: string) =>
+      Promise.resolve(state.conferenceRooms[conferenceRoomId]),
+    verifyConferencePin: (_tenantId: string, conferenceRoomId: string, pin: string) =>
+      Promise.resolve(state.conferencePins[conferenceRoomId] === pin),
   };
   return state;
 }
@@ -584,6 +594,7 @@ export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void
   await db.kysely.deleteFrom('queues').execute();
   await db.kysely.deleteFrom('agents').execute();
   await db.kysely.deleteFrom('parking_lots').execute();
+  await db.kysely.deleteFrom('conference_rooms').execute();
   await db.kysely.deleteFrom('dids').execute();
   await db.kysely.deleteFrom('outbound_routes').execute();
   await db.kysely.deleteFrom('emergency_routes').execute();

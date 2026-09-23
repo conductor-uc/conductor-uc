@@ -23,6 +23,8 @@ import type { DataClass, Permission } from './types.js';
  * one for parking-lot config and none of the catalog's existing resource
  * permissions (`queue.manage` et al.) name it, so it is added here rather
  * than overloaded onto a semantically different resource's permission.
+ *
+ * `conference_room.manage` is the same story again — S2-15.
  */
 export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'reseller.create': 'config',
@@ -42,6 +44,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'group.manage': 'config',
   'queue.manage': 'config',
   'parking_lot.manage': 'config',
+  'conference_room.manage': 'config',
   'schedule.manage': 'config',
   'media.manage': 'config',
   'trunk.manage': 'config',

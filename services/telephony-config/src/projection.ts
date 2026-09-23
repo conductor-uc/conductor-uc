@@ -363,6 +363,47 @@ export function createProjection(
     },
 
     /**
+     * Fetches a conference room's current state and mirrors it locally
+     * (S2-15) — shared by `pbx.conference_room.created` and `.updated`, the
+     * same "thin event, re-fetch current state" story `projectParkingLot`
+     * tells. No `opensips` counterpart, same reasoning as parking lots — a
+     * room's config is entirely FS's own `mod_conference` concern. No PIN
+     * mirrored either (`read-model.repo.ts`'s own comment): only
+     * `pinRequired` travels into the local row.
+     */
+    async projectConferenceRoom(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      conferenceRoomId: string,
+    ): Promise<void> {
+      const room = await pbxConfig.findConferenceRoom(tenantId, conferenceRoomId);
+      if (room === undefined) {
+        logger.warn(
+          { tenantId, conferenceRoomId },
+          'conference room not found in pbx-config-service',
+        );
+        return;
+      }
+
+      await readModel.upsertConferenceRoom(trx, {
+        id: room.id,
+        tenantId,
+        label: room.label,
+        number: room.number,
+        pinRequired: room.pinRequired,
+        maxMembers: room.maxMembers,
+      });
+    },
+
+    /** `pbx.conference_room.deleted`: remove the local mirror. */
+    async removeConferenceRoom(
+      trx: Transaction<TelephonyConfigDb>,
+      conferenceRoomId: string,
+    ): Promise<void> {
+      await readModel.deleteConferenceRoom(trx, conferenceRoomId);
+    },
+
+    /**
      * Fetches a trunk's current full config (including its decrypted
      * secret and IPs) and projects it into `registrant` (register/both),
      * `address` (ip/both), and `dr_gateways` (always — 03 §1's LCR needs a
