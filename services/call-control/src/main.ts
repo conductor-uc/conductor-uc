@@ -5,10 +5,12 @@ import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { Redis } from 'ioredis';
 
+import { createAffinityManager } from './affinity/manager.js';
 import { createChannelHandler } from './channel-handler.js';
 import { configSchema, loadServiceConfig, parseFsNodes } from './config.js';
-import { createEslClient } from './esl/client.js';
+import { createEslClient, type EslClient } from './esl/client.js';
 import { createCallRegistry } from './redis/registry.js';
+import { registerInternalRoutes } from './routes/internal.routes.js';
 import type { CallControlDb } from './schema.js';
 
 const config = loadServiceConfig();
@@ -74,6 +76,7 @@ const channelHandler = createChannelHandler({
 // independent of what FS sends).
 const fsNodes = parseFsNodes(config.FS_NODES);
 const heartbeatIntervals = new Map<string, ReturnType<typeof setInterval>>();
+const eslClientsById = new Map<string, EslClient>();
 
 const eslClients = fsNodes.map((node) =>
   createEslClient({
@@ -104,13 +107,34 @@ const eslClients = fsNodes.map((node) =>
   }),
 );
 
+fsNodes.forEach((node, index) => {
+  const client = eslClients[index];
+  if (client !== undefined) eslClientsById.set(node.id, client);
+});
+
 for (const client of eslClients) client.start();
+
+// S2-12 (04 §3.3): acquire/renew/release for `aff:{tenantId}:{kind}:
+// {resourceId}` — needs both the ESL clients above (to reload the chosen
+// node after a fresh acquire) and the call registry (to pick the
+// least-loaded live node and to know which nodes are live at all).
+const affinity = createAffinityManager({
+  redis,
+  keyPrefix: config.REDIS_KEY_PREFIX,
+  callRegistry: registry,
+  eslClients: eslClientsById,
+  logger,
+  leaseTtlMs: config.AFFINITY_LEASE_TTL_MS,
+  renewIntervalMs: config.AFFINITY_RENEW_INTERVAL_MS,
+});
 
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
   serviceVersion: config.SERVICE_VERSION,
   logger,
 });
+
+registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN);
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
@@ -128,6 +152,7 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   for (const interval of heartbeatIntervals.values()) clearInterval(interval);
+  affinity.stop();
   await Promise.all(eslClients.map((client) => client.stop()));
   relay.stop();
   await Promise.race([

@@ -123,6 +123,9 @@ services:
       FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}
       TELEPHONY_CONFIG_URL: ${TELEPHONY_CONFIG_URL:-http://telephony-config:8080}
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
+      # S2-12: must match the id half of call-control's own `FS_NODES` entry
+      # for this node (below: `freeswitch:freeswitch:8021`).
+      FS_NODE_ID: ${FS_NODE_ID:-freeswitch}
       # S2-05: mod_redis (the "redis" `limit` backend) — the container-
       # internal port, not `REDIS_PORT` (that one's the *host*-side mapping,
       # same distinction `OPENSIPS_DB_URL`'s own `mariadb:3306` already
@@ -340,6 +343,10 @@ services:
       FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
       RECONCILE_INTERVAL_MS: '900000'
       REDIS_URL: redis://redis:6379
+      # S2-12: must match call-control's own REDIS_KEY_PREFIX exactly — both
+      # default to 'cuc:dev:' already, set explicitly here so the dependency
+      # is visible rather than incidental.
+      REDIS_KEY_PREFIX: 'cuc:dev:'
 
   media-worker:
     # S2-07: isolated from pbx-config-service on purpose — the one service
@@ -422,6 +429,9 @@ services:
       # for auth to succeed; there is one shared value in dev, same as
       # `FS_XML_CURL_TOKEN`'s pattern elsewhere in this file.
       FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}
+      # S2-12: `/internal/v1/affinity/...`'s own gate (07 §1's precedent) —
+      # same shared value every other service's own INTERNAL_SERVICE_TOKEN uses.
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
 
   callflow-service:
     build:

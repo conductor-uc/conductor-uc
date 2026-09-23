@@ -26,11 +26,26 @@ export interface EslClientOptions {
   readonly connect?: (port: number, host: string) => Socket;
 }
 
+export interface EslApiResult {
+  /** `false` when the response body starts with `-ERR` — FS's own convention for a failed `api` command, not a distinct reply type. */
+  readonly ok: boolean;
+  readonly body: string;
+}
+
 export interface EslClient {
   /** Connects and begins the reconnect loop. Idempotent. */
   start(): void;
   /** Stops reconnecting and closes any open connection. */
   stop(): Promise<void>;
+  /**
+   * Sends one `api <command>` (S2-12: `xml_flush_cache`/module reloads after
+   * an affinity lease acquire, 04 §3.3) and resolves with its response body.
+   * Rejects immediately if this client is not currently connected and
+   * subscribed — there is no queue-and-retry here, the same "an honest
+   * failure beats a silent guess" discipline the rest of this codebase
+   * holds ESL/FS interactions to.
+   */
+  sendApi(command: string): Promise<EslApiResult>;
 }
 
 const SUBSCRIBE_COMMAND =
@@ -67,6 +82,21 @@ export function createEslClient(options: EslClientOptions): EslClient {
   let reconnectDelay = reconnectMinDelayMs;
   let state: ConnectionState = 'connecting';
   let wasConnected = false;
+
+  // `api` replies (`api/response` frames) arrive in the same order the
+  // commands were sent, one per command — mod_event_socket's inbound-mode
+  // connections are not pipelined the way `bgapi` is. A plain FIFO queue is
+  // therefore enough to match each response back to its caller.
+  let pendingApiCalls: {
+    resolve: (result: EslApiResult) => void;
+    reject: (error: Error) => void;
+  }[] = [];
+
+  function failPendingApiCalls(error: Error): void {
+    const pending = pendingApiCalls;
+    pendingApiCalls = [];
+    for (const call of pending) call.reject(error);
+  }
 
   function scheduleReconnect(): void {
     if (stopped) return;
@@ -112,6 +142,15 @@ export function createEslClient(options: EslClientOptions): EslClient {
 
     if (contentType === 'text/disconnect-notice') {
       socket?.end();
+      return;
+    }
+
+    if (contentType === 'api/response') {
+      const call = pendingApiCalls.shift();
+      if (call !== undefined) {
+        const body = frame.body ?? '';
+        call.resolve({ ok: !body.startsWith('-ERR'), body });
+      }
       return;
     }
 
@@ -162,6 +201,7 @@ export function createEslClient(options: EslClientOptions): EslClient {
 
     sock.on('close', () => {
       if (socket === sock) socket = undefined;
+      failPendingApiCalls(new Error(`ESL connection to node '${node.id}' closed`));
       if (wasConnected) onDisconnect?.(node.id);
       scheduleReconnect();
     });
@@ -182,7 +222,21 @@ export function createEslClient(options: EslClientOptions): EslClient {
       }
       socket?.destroy();
       socket = undefined;
+      failPendingApiCalls(new Error(`ESL client for node '${node.id}' stopped`));
       return Promise.resolve();
+    },
+
+    sendApi(command) {
+      if (socket === undefined || state !== 'ready') {
+        return Promise.reject(
+          new Error(`ESL client for node '${node.id}' is not connected and subscribed`),
+        );
+      }
+      const sock = socket;
+      return new Promise((resolve, reject) => {
+        pendingApiCalls.push({ resolve, reject });
+        sock.write(eslCommand(`api ${command}`));
+      });
     },
   };
 }

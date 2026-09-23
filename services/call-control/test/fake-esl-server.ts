@@ -18,6 +18,10 @@ export interface FakeEslServer {
   dropAllConnections(): void;
   /** When true, the next connection's auth request gets a rejecting reply. */
   rejectNextAuth: boolean;
+  /** Every `api <command>` this server has received, in arrival order (S2-12's own `sendApi` tests). */
+  readonly receivedApiCommands: readonly string[];
+  /** Overrides the `api/response` body for the next `api` command received; defaults to `+OK`. */
+  nextApiResponse: string;
   close(): Promise<void>;
 }
 
@@ -25,6 +29,8 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
   const readySockets = new Set<Socket>();
   let readyCount = 0;
   let rejectNextAuth = false;
+  const receivedApiCommands: string[] = [];
+  let nextApiResponse = '+OK';
 
   const server: Server = createServer((socket) => {
     let buffer = '';
@@ -52,6 +58,13 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
           socket.write('Content-Type: command/reply\nReply-Text: +OK\n\n');
           readySockets.add(socket);
           readyCount += 1;
+        } else if (line.startsWith('api ')) {
+          receivedApiCommands.push(line.slice(4));
+          const body = nextApiResponse;
+          nextApiResponse = '+OK';
+          socket.write(
+            `Content-Type: api/response\nContent-Length: ${String(Buffer.byteLength(body))}\n\n${body}`,
+          );
         }
 
         frameEnd = buffer.indexOf('\n\n');
@@ -85,6 +98,13 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
     },
     set rejectNextAuth(value: boolean) {
       rejectNextAuth = value;
+    },
+    receivedApiCommands,
+    get nextApiResponse() {
+      return nextApiResponse;
+    },
+    set nextApiResponse(value: string) {
+      nextApiResponse = value;
     },
     async close() {
       for (const socket of readySockets) socket.destroy();

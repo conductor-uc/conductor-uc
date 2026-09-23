@@ -75,6 +75,68 @@ describe('createEslClient', () => {
     await waitFor(() => events.length === 1);
   });
 
+  it('sends an api command and resolves with its response body (S2-12)', async () => {
+    server = await startFakeEslServer(PASSWORD);
+    const connected: string[] = [];
+
+    client = createEslClient({
+      node: { id: 'fs-1', host: '127.0.0.1', port: server.port },
+      password: PASSWORD,
+      logger: silentLogger(),
+      reconnectMinDelayMs: 50,
+      reconnectMaxDelayMs: 200,
+      onEvent: () => {},
+      onConnect: (nodeId) => connected.push(nodeId),
+      connect: (port, host) => netConnect(port, host),
+    });
+    client.start();
+    await waitFor(() => connected.includes('fs-1'));
+
+    server.nextApiResponse = '+OK reloaded';
+    const result = await client.sendApi('xml_flush_cache');
+
+    expect(result).toEqual({ ok: true, body: '+OK reloaded' });
+    expect(server.receivedApiCommands).toEqual(['xml_flush_cache']);
+  });
+
+  it('resolves an api command with ok:false on a -ERR response', async () => {
+    server = await startFakeEslServer(PASSWORD);
+    const connected: string[] = [];
+
+    client = createEslClient({
+      node: { id: 'fs-1', host: '127.0.0.1', port: server.port },
+      password: PASSWORD,
+      logger: silentLogger(),
+      reconnectMinDelayMs: 50,
+      reconnectMaxDelayMs: 200,
+      onEvent: () => {},
+      onConnect: (nodeId) => connected.push(nodeId),
+      connect: (port, host) => netConnect(port, host),
+    });
+    client.start();
+    await waitFor(() => connected.includes('fs-1'));
+
+    server.nextApiResponse = '-ERR no such command';
+    const result = await client.sendApi('bogus_command');
+
+    expect(result).toEqual({ ok: false, body: '-ERR no such command' });
+  });
+
+  it('rejects sendApi when not connected', async () => {
+    client = createEslClient({
+      node: { id: 'fs-1', host: '127.0.0.1', port: 1 },
+      password: PASSWORD,
+      logger: silentLogger(),
+      reconnectMinDelayMs: 10_000,
+      reconnectMaxDelayMs: 10_000,
+      onEvent: () => {},
+      connect: (port, host) => netConnect(port, host),
+    });
+    client.start();
+
+    await expect(client.sendApi('xml_flush_cache')).rejects.toThrow('not connected');
+  });
+
   it('does not reach onConnect when the password is rejected', async () => {
     server = await startFakeEslServer(PASSWORD);
     server.rejectNextAuth = true;

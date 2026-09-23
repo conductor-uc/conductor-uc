@@ -103,6 +103,13 @@ export const configSchema = Type.Object({
    * lived caches" — a per-tenant-ring-group dial counter fits that.
    */
   REDIS_URL: Env.url(),
+  /**
+   * S2-12 (04 §3.3): affinity lease keys (`aff:{tenantId}:{kind}:
+   * {resourceId}`) are written by call-control under its own
+   * `REDIS_KEY_PREFIX` — this must match that value exactly, or a lookup
+   * here would silently miss every lease call-control actually holds.
+   */
+  REDIS_KEY_PREFIX: Env.string({ default: 'cuc:dev:' }),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

@@ -18,6 +18,14 @@ export interface CallRegistry {
   /** For tests and the "50 concurrent calls" proof: every call UUID currently owned by a node. */
   callsForNode(nodeId: string): Promise<string[]>;
   getCall(callUuid: string): Promise<Record<string, string> | undefined>;
+  /**
+   * Every node id whose `fsnode:{id}` key currently exists with `status: up`
+   * (04 §3.1: "A node is alive iff `fsnode:{id}` exists and its status is
+   * up") — a `draining` or TTL-expired node is excluded, since neither
+   * should receive a new affinity lease (S2-12; 04 §3.3: "The node is chosen
+   * by least load among live nodes").
+   */
+  liveNodeIds(): Promise<string[]>;
 }
 
 export interface CallRecord {
@@ -86,6 +94,20 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
     async getCall(callUuid) {
       const record = await redis.hgetall(k(`call:${callUuid}`));
       return Object.keys(record).length === 0 ? undefined : record;
+    },
+
+    async liveNodeIds() {
+      const nodeIds = await redis.smembers(k('fsnodes'));
+      if (nodeIds.length === 0) return [];
+
+      const pipeline = redis.pipeline();
+      for (const nodeId of nodeIds) pipeline.hget(k(`fsnode:${nodeId}`), 'status');
+      const results = await pipeline.exec();
+
+      return nodeIds.filter((_nodeId, index) => {
+        const entry = results?.[index];
+        return entry !== undefined && entry[0] === null && entry[1] === 'up';
+      });
     },
   };
 }

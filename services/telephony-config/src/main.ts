@@ -1,3 +1,4 @@
+import { createAffinityRegistry } from '@cuc/affinity';
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
@@ -118,6 +119,10 @@ const callflowClient = createCallflowClient({
 // rate-limiter client uses, so this fails fast at startup rather than
 // retrying forever silently.
 const redisClient = new Redis(config.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: 2 });
+// S2-12: a direct read of call-control's own affinity-lease keys — see
+// `fs.routes.ts`'s own doc comment on why this is a shared-Redis read
+// rather than an HTTP call to call-control.
+const affinityRegistry = createAffinityRegistry(redisClient, config.REDIS_KEY_PREFIX);
 
 const readModel = createReadModelRepo(db);
 const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
@@ -184,6 +189,7 @@ registerFsRoutes(
   voicemailClient,
   redisClient,
   callflowClient,
+  affinityRegistry,
 );
 registerInternalRoutes(
   app,
