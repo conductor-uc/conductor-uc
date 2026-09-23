@@ -105,6 +105,19 @@ export function createSessionRepo(db: Database<IdentityServiceDb>) {
     },
 
     /**
+     * Ends every session of a user (a password change): whoever held the old
+     * password must not stay signed in.
+     */
+    revokeAllForUser: async (userId: string): Promise<void> => {
+      await sessions
+        .updateTable('sessions')
+        .set({ revoked_at: new Date() })
+        .where('user_id', '=', userId)
+        .where('revoked_at', 'is', null)
+        .execute();
+    },
+
+    /**
      * Reuse of an already-rotated refresh token revokes every session sharing
      * its family (07 §2) — the whole chain is presumed compromised, not just
      * the one token that was replayed.

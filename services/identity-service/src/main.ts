@@ -14,6 +14,7 @@ import { createGrantRepo } from './repo/grant.repo.js';
 import { createMfaRepo } from './repo/mfa.repo.js';
 import { createRoleRepo } from './repo/role.repo.js';
 import { createSessionRepo } from './repo/session.repo.js';
+import { createTokenRepo } from './repo/token.repo.js';
 import { createSigningKeyRepo } from './repo/signing-key.repo.js';
 import { createUserRepo } from './repo/user.repo.js';
 import { registerAuditRoutes } from './routes/audit.routes.js';
@@ -105,6 +106,7 @@ const userRepo = createUserRepo(db);
 const sessionRepo = createSessionRepo(db);
 const mfaRepo = createMfaRepo(db);
 const signingKeyRepo = createSigningKeyRepo(db, kek);
+const tokenRepo = createTokenRepo(db);
 
 // Idempotent: generates the first signing key on a brand-new deployment,
 // otherwise finds the one already current. Must happen before any route that
@@ -116,14 +118,21 @@ const authService = createAuthService({
   sessions: sessionRepo,
   mfa: mfaRepo,
   signingKeys: signingKeyRepo,
+  tokens: tokenRepo,
   kek,
   accessTokenTtlSeconds: config.ACCESS_TOKEN_TTL_SECONDS,
   refreshTokenTtlDays: config.REFRESH_TOKEN_TTL_DAYS,
   mfaTicketTtlSeconds: config.MFA_TICKET_TTL_SECONDS,
   signingKeyOverlapDays: config.SIGNING_KEY_OVERLAP_DAYS,
+  passwordResetTtlMinutes: config.PASSWORD_RESET_TTL_MINUTES,
+  invitationTtlDays: config.INVITATION_TTL_DAYS,
 });
 
-registerAuthRoutes(app, authService);
+registerAuthRoutes(app, authService, {
+  cookieSecure: config.COOKIE_SECURE,
+  refreshTokenTtlDays: config.REFRESH_TOKEN_TTL_DAYS,
+  devExposeTokens: config.DEV_EXPOSE_TOKENS,
+});
 registerJwksRoute(app, signingKeyRepo, config.SIGNING_KEY_OVERLAP_DAYS);
 registerInternalRoutes(app, userRepo, config.INTERNAL_SERVICE_TOKEN);
 registerRoleRoutes(app, createRoleRepo(db));

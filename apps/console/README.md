@@ -28,6 +28,11 @@ tenants and edit the brand (colors, name, hostnames, with a live preview), then 
 while acting, and a reseller does not see the private-data sections (voicemail,
 recordings).
 
+Sign-in details for the demo: `master@` is asked for a code, `reseller@` first sets up
+an authenticator (both accept `123456`), any other email signs in directly. Open
+`/reset` for password reset (a token of `expired` is rejected on the confirm page) and
+`/invite?token=x` for an invitation (`expired` is invalid, `taken` conflicts).
+
 ## Adding or changing a PBX screen
 
 The screens are driven by `lib/features/pbx/resource.dart`: one `ResourceDef` per

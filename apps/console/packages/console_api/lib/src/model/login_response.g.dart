@@ -25,6 +25,10 @@ LoginResponse _$LoginResponseFromJson(Map<String, dynamic> json) =>
           'verificationTicket',
           (v) => v as String?,
         ),
+        totp: $checkedConvert(
+          'totp',
+          (v) => v == null ? null : Totp.fromJson(v as Map<String, dynamic>),
+        ),
       );
       return val;
     });
@@ -37,6 +41,7 @@ Map<String, dynamic> _$LoginResponseToJson(LoginResponse instance) =>
       'expiresIn': ?instance.expiresIn,
       'enrollmentTicket': ?instance.enrollmentTicket,
       'verificationTicket': ?instance.verificationTicket,
+      'totp': ?instance.totp?.toJson(),
     };
 
 const _$LoginResponseStatusEnumEnumMap = {

@@ -47,6 +47,21 @@ export const configSchema = Type.Object({
    * that itself lives only 10 minutes.
    */
   SIGNING_KEY_OVERLAP_DAYS: Env.int({ minimum: 0, default: 7 }),
+
+  /** How long an emailed password-reset link works. */
+  PASSWORD_RESET_TTL_MINUTES: Env.int({ minimum: 5, default: 60 }),
+  /** How long an emailed invitation link works. */
+  INVITATION_TTL_DAYS: Env.int({ minimum: 1, default: 7 }),
+  /**
+   * Adds `Secure` to the refresh cookie (07 §2). Turn off only for a local
+   * plain-HTTP dev setup, where a browser would otherwise refuse to store it.
+   */
+  COOKIE_SECURE: Env.bool({ default: true }),
+  /**
+   * Development only: log reset and invitation tokens when no mailer is
+   * running. They are credentials; leave this off everywhere real.
+   */
+  DEV_EXPOSE_TOKENS: Env.bool({ default: false }),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

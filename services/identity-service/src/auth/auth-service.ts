@@ -1,10 +1,12 @@
 import { decryptString, encrypt, type KekProvider } from '@cuc/crypto';
+import type { DbContext } from '@cuc/db';
 
 import { generateTotpSecret, verifyTotpCode } from '../domain/totp.js';
-import { verifyPassword } from '../domain/password.js';
+import { assertPasswordStrength, verifyPassword } from '../domain/password.js';
 import type { MfaRepo } from '../repo/mfa.repo.js';
 import type { SessionRepo } from '../repo/session.repo.js';
 import type { SigningKeyRepo } from '../repo/signing-key.repo.js';
+import type { TokenRepo } from '../repo/token.repo.js';
 import type { User, UserRepo } from '../repo/user.repo.js';
 import {
   signAccessToken,
@@ -45,6 +47,22 @@ export class RefreshTokenReuseError extends Error {
   }
 }
 
+export class InvalidResetTokenError extends Error {
+  override readonly name = 'InvalidResetTokenError';
+
+  constructor() {
+    super('This reset link is invalid or has expired.');
+  }
+}
+
+export class InvalidInvitationError extends Error {
+  override readonly name = 'InvalidInvitationError';
+
+  constructor() {
+    super('This invitation is invalid or has expired.');
+  }
+}
+
 export interface RequestMeta {
   readonly ip: string | null;
   readonly ua: string | null;
@@ -70,11 +88,14 @@ export interface AuthServiceOptions {
   readonly sessions: SessionRepo;
   readonly mfa: MfaRepo;
   readonly signingKeys: SigningKeyRepo;
+  readonly tokens: TokenRepo;
   readonly kek: KekProvider;
   readonly accessTokenTtlSeconds: number;
   readonly refreshTokenTtlDays: number;
   readonly mfaTicketTtlSeconds: number;
   readonly signingKeyOverlapDays: number;
+  readonly passwordResetTtlMinutes: number;
+  readonly invitationTtlDays: number;
 }
 
 /**
@@ -89,11 +110,14 @@ export function createAuthService(options: AuthServiceOptions) {
     sessions,
     mfa,
     signingKeys,
+    tokens,
     kek,
     accessTokenTtlSeconds,
     refreshTokenTtlDays,
     mfaTicketTtlSeconds,
     signingKeyOverlapDays,
+    passwordResetTtlMinutes,
+    invitationTtlDays,
   } = options;
 
   /** 07 §1: MFA is required for master and reseller users. */
@@ -274,6 +298,85 @@ export function createAuthService(options: AuthServiceOptions) {
     async logout(refreshToken: string): Promise<void> {
       const found = await sessions.findByToken(refreshToken);
       if (found !== undefined) await sessions.revoke(found.id);
+    },
+
+    /**
+     * Starts a password reset. Says nothing about whether the account exists:
+     * the caller answers 202 either way, so this cannot be used to find out
+     * who has an account. Returns the token only so a dev-mode flag can log it
+     * when no mailer is running; it is never part of an HTTP response.
+     */
+    async requestPasswordReset(
+      ctx: DbContext,
+      orgId: string,
+      email: string,
+    ): Promise<{ token: string; email: string } | undefined> {
+      const user = await users.findByOrgAndEmail(orgId, email);
+      if (user === undefined || user.status !== 'active') return undefined;
+      const { token } = await tokens.createPasswordReset(ctx, user, passwordResetTtlMinutes);
+      return { token, email: user.email };
+    },
+
+    /**
+     * Sets a new password from a reset token, and signs the user out
+     * everywhere. The strength check comes first so a weak password does not
+     * spend the token.
+     */
+    async confirmPasswordReset(token: string, newPassword: string): Promise<void> {
+      assertPasswordStrength(newPassword);
+      const userId = await tokens.consumePasswordReset(token);
+      if (userId === undefined) throw new InvalidResetTokenError();
+      await users.setPassword(userId, newPassword);
+      await sessions.revokeAllForUser(userId);
+    },
+
+    /** Invites a person into the actor's own org. */
+    async invite(
+      ctx: DbContext,
+      actor: {
+        readonly orgId: string;
+        readonly orgType: User['orgType'];
+        readonly resellerId: string | null;
+        readonly userId: string | null;
+      },
+      input: { readonly email: string; readonly displayName: string },
+    ) {
+      return tokens.createInvitation(
+        ctx,
+        {
+          orgId: actor.orgId,
+          orgType: actor.orgType,
+          resellerId: actor.resellerId,
+          email: input.email,
+          displayName: input.displayName,
+          invitedBy: actor.userId,
+        },
+        invitationTtlDays,
+      );
+    },
+
+    /** Who an invitation is for, so the accept page can say so. */
+    async lookupInvitation(token: string): Promise<{ email: string; displayName: string }> {
+      const invitation = await tokens.findOpenInvitation(token);
+      if (invitation === undefined) throw new InvalidInvitationError();
+      return { email: invitation.email, displayName: invitation.displayName };
+    },
+
+    /** Accepts an invitation: creates the user with their chosen password. */
+    async acceptInvitation(ctx: DbContext, token: string, password: string): Promise<User> {
+      assertPasswordStrength(password);
+      const invitation = await tokens.findOpenInvitation(token);
+      if (invitation === undefined) throw new InvalidInvitationError();
+      const user = await users.create(ctx, {
+        orgId: invitation.orgId,
+        orgType: invitation.orgType,
+        resellerId: invitation.resellerId,
+        email: invitation.email,
+        displayName: invitation.displayName,
+        password,
+      });
+      await tokens.markInvitationAccepted(invitation.id);
+      return user;
     },
 
     /**

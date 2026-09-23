@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:console_api/src/model/totp.dart';
 import 'package:json_annotation/json_annotation.dart';
 
 part 'login_response.g.dart';
@@ -29,6 +30,8 @@ class LoginResponse {
      this.enrollmentTicket,
 
      this.verificationTicket,
+
+     this.totp,
   });
 
   @JsonKey(
@@ -103,6 +106,18 @@ class LoginResponse {
 
 
 
+  @JsonKey(
+    
+    name: r'totp',
+    required: false,
+    includeIfNull: false,
+  )
+
+
+  final Totp? totp;
+
+
+
 
 
     @override
@@ -112,7 +127,8 @@ class LoginResponse {
       other.refreshToken == refreshToken &&
       other.expiresIn == expiresIn &&
       other.enrollmentTicket == enrollmentTicket &&
-      other.verificationTicket == verificationTicket;
+      other.verificationTicket == verificationTicket &&
+      other.totp == totp;
 
     @override
     int get hashCode =>
@@ -121,7 +137,8 @@ class LoginResponse {
         refreshToken.hashCode +
         expiresIn.hashCode +
         enrollmentTicket.hashCode +
-        verificationTicket.hashCode;
+        verificationTicket.hashCode +
+        totp.hashCode;
 
   factory LoginResponse.fromJson(Map<String, dynamic> json) => _$LoginResponseFromJson(json);
 

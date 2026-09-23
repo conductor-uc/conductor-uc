@@ -61,7 +61,12 @@ export function registerProxy(app: Server, options: ProxyOptions): void {
       }
 
       const target = new URL(request.url, route.target);
-      const headers = buildForwardHeaders(request, route, options.internalHeaderSigningSecret);
+      const headers = buildForwardHeaders(
+        request,
+        route,
+        options.internalHeaderSigningSecret,
+        path,
+      );
       const body = hasBody(request) ? JSON.stringify(request.body ?? null) : undefined;
       if (body !== undefined) headers.set('content-type', 'application/json');
 
@@ -83,8 +88,12 @@ export function registerProxy(app: Server, options: ProxyOptions): void {
 
       void reply.status(upstream.status);
       upstream.headers.forEach((value, key) => {
-        if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) void reply.header(key, value);
+        const name = key.toLowerCase();
+        // Set-Cookie is added below: `forEach` folds several into one string.
+        if (!HOP_BY_HOP_HEADERS.has(name) && name !== 'set-cookie') void reply.header(key, value);
       });
+      const cookies = upstream.headers.getSetCookie();
+      if (cookies.length > 0) void reply.header('set-cookie', cookies);
 
       const payload = Buffer.from(await upstream.arrayBuffer());
       return reply.send(payload);
@@ -100,10 +109,23 @@ function hasBody(request: { method: string; body?: unknown }): boolean {
   );
 }
 
+/**
+ * Only the auth endpoints read the refresh cookie (its `Path` is `/v1/auth`),
+ * so it is forwarded there and nowhere else, along with the header that asks
+ * for cookie-only transport.
+ */
+const AUTH_PREFIX = '/v1/auth';
+const REFRESH_TRANSPORT_HEADER = 'x-refresh-transport';
+
 function buildForwardHeaders(
-  request: { headers: Record<string, string | string[] | undefined>; context: RequestContext },
+  request: {
+    headers: Record<string, string | string[] | undefined>;
+    context: RequestContext;
+    ip?: string;
+  },
   _route: RouteEntry,
   secret: string,
+  path: string,
 ): Headers {
   const headers = new Headers();
   headers.set('accept', 'application/json');
@@ -111,6 +133,19 @@ function buildForwardHeaders(
 
   const traceparent = request.headers[TRACEPARENT_HEADER];
   if (typeof traceparent === 'string') headers.set(TRACEPARENT_HEADER, traceparent);
+
+  // Sessions record where they were opened from; without these, identity-service
+  // would see the gateway's own address and the proxy's User-Agent.
+  const userAgent = request.headers['user-agent'];
+  if (typeof userAgent === 'string') headers.set('user-agent', userAgent);
+  if (request.ip !== undefined) headers.set('x-forwarded-for', request.ip);
+
+  if (path === AUTH_PREFIX || path.startsWith(`${AUTH_PREFIX}/`)) {
+    const cookie = request.headers['cookie'];
+    if (typeof cookie === 'string') headers.set('cookie', cookie);
+    const transport = request.headers[REFRESH_TRANSPORT_HEADER];
+    if (typeof transport === 'string') headers.set(REFRESH_TRANSPORT_HEADER, transport);
+  }
 
   const signed = signInternalHeaders(secret, contextFields(request.context));
   for (const [name, value] of Object.entries(signed)) headers.set(name, value);

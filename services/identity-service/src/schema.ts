@@ -156,4 +156,31 @@ export interface IdentityServiceDb extends EventTables {
     ip: string | null;
     request_id: string | null;
   };
+
+  /** One row per password-reset request; single use (`used_at`), short-lived. */
+  password_reset_tokens: {
+    id: string;
+    user_id: string;
+    /** SHA-256 of the emailed token. The raw token is never stored. */
+    token_hash: string;
+    expires_at: Date;
+    used_at: Date | null;
+    created_at: Date;
+  };
+
+  /** A pending invitation to join an org; accepting it creates the user. */
+  invitations: {
+    id: string;
+    org_id: string;
+    org_type: UserOrgType;
+    reseller_id: string | null;
+    email: string;
+    display_name: string;
+    invited_by: string | null;
+    /** SHA-256 of the emailed token. */
+    token_hash: string;
+    expires_at: Date;
+    accepted_at: Date | null;
+    created_at: Date;
+  };
 }

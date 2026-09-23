@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:console/app/app.dart';
 import 'package:console/app/brand.dart';
 import 'package:console/core/api_client.dart';
+import 'package:console/dev/demo_backend.dart';
 import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -66,4 +67,35 @@ Future<void> pumpApp(WidgetTester tester, Widget app) async {
   addTearDown(tester.view.reset);
   await tester.pumpWidget(app);
   await tester.pumpAndSettle();
+}
+
+/// Signs in to the demo backend the way a person does, including the
+/// two-step code that master and reseller users are asked for (`123456`).
+Future<void> completeSignIn(
+  WidgetTester tester,
+  String email, {
+  ConsoleApi? api,
+}) async {
+  await pumpApp(tester, appWith(api: api ?? demoApi()));
+  await submitSignIn(tester, email);
+}
+
+/// Fills in and submits the sign-in page that is already showing.
+Future<void> submitSignIn(WidgetTester tester, String email) async {
+  await tester.enterText(
+    find.widgetWithText(TextField, 'Organization ID'),
+    'demo',
+  );
+  await tester.enterText(find.widgetWithText(TextField, 'Email'), email);
+  await tester.enterText(find.widgetWithText(TextField, 'Password'), 'pw');
+  await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+  await tester.pumpAndSettle();
+
+  final code = find.widgetWithText(TextField, 'Code');
+  if (code.evaluate().isNotEmpty) {
+    await tester.enterText(code, '123456');
+    await tester.pump();
+    await tester.tap(find.byType(FilledButton));
+    await tester.pumpAndSettle();
+  }
 }

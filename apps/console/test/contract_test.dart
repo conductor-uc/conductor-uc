@@ -5,6 +5,7 @@ import 'package:console/features/orgs/brand_page.dart';
 import 'package:console/features/orgs/org_defs.dart';
 import 'package:console/features/pbx/resource.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:yaml/yaml.dart';
 
 /// `api/openapi.json` is dumped from the services' own route schemas
 /// (`tool/dump-openapi.mjs`). These tests fail when a screen's fields drift
@@ -164,5 +165,65 @@ void main() {
         containsAll(['fqdn', 'tlsStatus']),
       );
     });
+  });
+
+  group('generated client description (api/openapi.yaml)', () {
+    final seed =
+        loadYaml(File('api/openapi.yaml').readAsStringSync()) as YamlMap;
+    final seedPaths = seed['paths'] as YamlMap;
+    final seedSchemas = (seed['components'] as YamlMap)['schemas'] as YamlMap;
+
+    /// The schema an operation's body or response points at, resolved.
+    Map<dynamic, dynamic>? seedBody(YamlMap operation) {
+      final content =
+          (operation['requestBody'] as YamlMap?)?['content'] as YamlMap?;
+      final ref =
+          ((content?['application/json'] as YamlMap?)?['schema']
+              as YamlMap?)?[r'$ref'];
+      return ref == null
+          ? null
+          : seedSchemas['$ref'.split('/').last] as YamlMap;
+    }
+
+    for (final path in seedPaths.keys.cast<String>()) {
+      for (final method in (seedPaths[path] as YamlMap).keys.cast<String>()) {
+        final operation = (seedPaths[path] as YamlMap)[method] as YamlMap;
+        final live = ((paths[path] as Map?)?[method]) as Map<String, dynamic>?;
+
+        test('$method $path exists in the services', () {
+          expect(
+            live,
+            isNotNull,
+            reason: 'the services do not serve $method $path',
+          );
+        });
+
+        test('$method $path: request body matches', () {
+          final mine = seedBody(operation);
+          if (live == null || mine == null) return;
+          final theirs = _schema(live);
+          expect(
+            (mine['properties'] as Map).keys.toSet(),
+            (theirs['properties'] as Map).keys.toSet(),
+          );
+          expect(
+            {...?(mine['required'] as List?)?.cast<String>()},
+            {...?(theirs['required'] as List?)?.cast<String>()},
+            reason: 'required fields',
+          );
+        });
+
+        test(
+          '$method $path: documented success code is one the service sends',
+          () {
+            if (live == null) return;
+            final codes = (operation['responses'] as YamlMap).keys.map(
+              (k) => '$k',
+            );
+            expect((live['responses'] as Map).keys, containsAll(codes));
+          },
+        );
+      }
+    }
   });
 }

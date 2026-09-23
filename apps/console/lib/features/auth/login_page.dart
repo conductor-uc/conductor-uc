@@ -1,24 +1,30 @@
 import 'package:console_api/console_api.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../app/brand.dart';
 import '../../core/api_client.dart';
 import '../../core/session.dart';
-import '../../widgets/brand_header.dart';
+import 'auth_errors.dart';
+import 'auth_scaffold.dart';
 
-/// Password sign-in. MFA, reset, and invitations are S3-04; until the gateway
-/// resolves the organization from the hostname, the organization id is typed.
+/// Password sign-in, the first step of S3-04. Until the gateway resolves the
+/// organization from the hostname, the organization id is typed (G-56); a
+/// link from an invitation or reset can prefill it with `?org=`.
 class LoginPage extends ConsumerStatefulWidget {
-  const LoginPage({super.key});
+  const LoginPage({super.key, this.orgId, this.notice});
+
+  final String? orgId;
+
+  /// A message to show above the form, such as "Password changed".
+  final String? notice;
 
   @override
   ConsumerState<LoginPage> createState() => _LoginPageState();
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
-  final _org = TextEditingController();
+  late final _org = TextEditingController(text: widget.orgId ?? '');
   final _email = TextEditingController();
   final _password = TextEditingController();
   String? _error;
@@ -49,24 +55,41 @@ class _LoginPageState extends ConsumerState<LoginPage> {
             ),
           );
       final data = response.data;
-      if (data?.status == LoginResponseStatusEnum.ok) {
-        ref
-            .read(sessionProvider.notifier)
-            .signIn(
-              Session.fromTokens(
-                accessToken: data!.accessToken!,
-                refreshToken: data.refreshToken!,
-              ),
-            );
-        return;
+      switch (data?.status) {
+        case LoginResponseStatusEnum.ok:
+          ref
+              .read(sessionProvider.notifier)
+              .signIn(
+                Tokens(
+                  accessToken: data!.accessToken!,
+                  refreshToken: data.refreshToken,
+                  expiresIn: data.expiresIn!,
+                ),
+              );
+        case LoginResponseStatusEnum.mfaEnrollmentRequired:
+          ref
+              .read(authStepProvider.notifier)
+              .set(
+                MfaEnrollStep(
+                  ticket: data!.enrollmentTicket!,
+                  secret: data.totp!.secret,
+                  otpauthUri: data.totp!.otpauthUri,
+                ),
+              );
+          if (mounted) context.go('/login/mfa');
+        case LoginResponseStatusEnum.mfaVerificationRequired:
+          ref
+              .read(authStepProvider.notifier)
+              .set(MfaVerifyStep(ticket: data!.verificationTicket!));
+          if (mounted) context.go('/login/mfa');
+        default:
+          setState(() => _error = 'Could not sign in.');
       }
-      setState(() => _error = 'Multi-factor sign-in is not available yet.');
-    } on DioException catch (e) {
-      final status = e.response?.statusCode;
+    } catch (e) {
       setState(
-        () => _error = status == 401 || status == 400
-            ? 'Those details were not recognized.'
-            : 'Could not reach the server.',
+        () => _error = isOffline(e)
+            ? 'Could not reach the server.'
+            : 'Those details were not recognized.',
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -75,69 +98,37 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
-    final brand = ref.watch(brandProvider);
-    return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 380),
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: AutofillGroup(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  BrandHeader(brand: brand, large: true),
-                  Text(
-                    'Sign in',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _org,
-                    decoration: const InputDecoration(
-                      labelText: 'Organization ID',
-                    ),
-                  ),
-                  TextField(
-                    controller: _email,
-                    autofillHints: const [AutofillHints.username],
-                    decoration: const InputDecoration(labelText: 'Email'),
-                  ),
-                  TextField(
-                    controller: _password,
-                    obscureText: true,
-                    autofillHints: const [AutofillHints.password],
-                    decoration: const InputDecoration(labelText: 'Password'),
-                    onSubmitted: (_) => _busy ? null : _submit(),
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: _busy ? null : _submit,
-                    child: const Text('Sign in'),
-                  ),
-                  if (brand.legalFooter != null) ...[
-                    const SizedBox(height: 24),
-                    Text(
-                      brand.legalFooter!,
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+    return AuthScaffold(
+      title: 'Sign in',
+      children: [
+        if (widget.notice != null) FormMessage(widget.notice!),
+        TextField(
+          controller: _org,
+          decoration: const InputDecoration(labelText: 'Organization ID'),
         ),
-      ),
+        TextField(
+          controller: _email,
+          autofillHints: const [AutofillHints.username],
+          decoration: const InputDecoration(labelText: 'Email'),
+        ),
+        TextField(
+          controller: _password,
+          obscureText: true,
+          autofillHints: const [AutofillHints.password],
+          decoration: const InputDecoration(labelText: 'Password'),
+          onSubmitted: (_) => _busy ? null : _submit(),
+        ),
+        if (_error != null) FormMessage(_error!, isError: true),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: const Text('Sign in'),
+        ),
+        TextButton(
+          onPressed: () => context.go('/reset'),
+          child: const Text('Forgot your password?'),
+        ),
+      ],
     );
   }
 }
