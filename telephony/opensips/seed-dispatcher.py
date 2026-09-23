@@ -8,6 +8,13 @@ start, not just first boot), unlike the mariadb-side init scripts, since
 this destination can legitimately change between deployments of the same
 data volume.
 
+S2-19: `OPENSIPS_FS_DESTINATION` is comma-separated (one entry per FS node,
+e.g. `sip:freeswitch:5060,sip:freeswitch-2:5060`) — every entry becomes its
+own row in the same set 1, which is both what `ds_select_dst(1, 4)`
+(algorithm 4: round robin) spreads calls across, and what `ds_is_from_list
+("1")` recognizes as "this request came from an FS node" (both node's own
+traffic, not just the first).
+
 Uses `pymysql`, already present in the base image for `opensips-cli`'s own
 sake — no new package needed.
 """
@@ -18,7 +25,11 @@ from urllib.parse import urlparse
 import pymysql
 
 db_url = urlparse(os.environ["OPENSIPS_DB_URL"])
-destination = os.environ.get("OPENSIPS_FS_DESTINATION", "sip:freeswitch:5060")
+destinations = [
+    d.strip()
+    for d in os.environ.get("OPENSIPS_FS_DESTINATION", "sip:freeswitch:5060").split(",")
+    if d.strip() != ""
+]
 
 conn = pymysql.connect(
     host=db_url.hostname,
@@ -30,13 +41,13 @@ conn = pymysql.connect(
 try:
     with conn.cursor() as cur:
         cur.execute("DELETE FROM dispatcher WHERE setid = 1")
-        cur.execute(
+        cur.executemany(
             "INSERT INTO dispatcher (setid, destination, state, weight, description) "
-            "VALUES (1, %s, 0, '1', 'S1-14 seed: the FS node pool')",
-            (destination,),
+            "VALUES (1, %s, 0, '1', 'S1-14/S2-19 seed: the FS node pool')",
+            [(destination,) for destination in destinations],
         )
     conn.commit()
 finally:
     conn.close()
 
-sys.stdout.write(f"dispatcher: seeded set 1 -> {destination}\n")
+sys.stdout.write(f"dispatcher: seeded set 1 -> {', '.join(destinations)}\n")

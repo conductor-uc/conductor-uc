@@ -148,6 +148,35 @@ services:
       # falls back to this cache when callflow-service is unreachable.
       - /var/cache/cuc/flow
 
+  freeswitch-2:
+    # S2-19: a second, identically-configured FS node — same image, same
+    # shared services (telephony-config, cdr-service, redis), only its own
+    # node identity differs (`FS_NODE_ID_2`, below). Proves "any node serves
+    # any tenant" (D-009/D-011's own framing) rather than assuming it:
+    # OpenSIPs' dispatcher (`OPENSIPS_FS_DESTINATION`, below) round-robins
+    # real SIP traffic across both from here on, not just this one.
+    build:
+      context: ../../telephony/freeswitch
+    restart: unless-stopped
+    environment:
+      FS_OPENSIPS_CIDR: ${FS_OPENSIPS_CIDR:-172.16.0.0/12}
+      FS_CLUSTER_CIDR: ${FS_CLUSTER_CIDR:-172.16.0.0/12}
+      FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}
+      TELEPHONY_CONFIG_URL: ${TELEPHONY_CONFIG_URL:-http://telephony-config:8080}
+      FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN:-dev-internal-token}
+      CDR_SERVICE_URL: ${CDR_SERVICE_URL:-http://cdr-service:8080}
+      FS_CDR_INGEST_TOKEN: ${FS_CDR_INGEST_TOKEN:-dev-cdr-ingest-token}
+      # Must match the id half of call-control's own second `FS_NODES` entry
+      # (below: `freeswitch-2:freeswitch-2:8021`) and this service's own
+      # compose hostname (`freeswitch-2`), which `OPENSIPS_FS_DESTINATION`
+      # also has to agree with.
+      FS_NODE_ID: ${FS_NODE_ID_2:-freeswitch-2}
+      FS_REDIS_HOST: ${FS_REDIS_HOST:-redis}
+      FS_REDIS_PORT: ${FS_REDIS_PORT:-6379}
+    tmpfs:
+      - /var/spool/cuc/rec
+      - /var/cache/cuc/flow
+
   opensips:
     # S1-11. telephony/opensips's own Dockerfile builds this from the
     # upstream opensips/opensips:3.6 image plus the extra modules 03 §2
@@ -170,12 +199,14 @@ services:
       OPENSIPS_DB_URL: mysql://opensips:${OPENSIPS_DB_PASSWORD:-dev-opensips-password}@mariadb/opensips
       OPENSIPS_REDIS_URL: ${OPENSIPS_REDIS_URL:-redis:cuc://redis:6379/0}
       # S1-14 (G-18): seeded into `dispatcher` set 1 at container start
-      # (seed-dispatcher.py) — one FS node in this stage. `route{}` also
-      # uses this same set (`ds_is_from_list("1")`) to tell a request FS
-      # sent back to us (ext→ext, 03 §2.1) apart from a registered phone
-      # dialing out — a CIDR check was tried first and confirmed wrong on
-      # this flat compose network (opensips.cfg.template's own comment).
-      OPENSIPS_FS_DESTINATION: ${OPENSIPS_FS_DESTINATION:-sip:freeswitch:5060}
+      # (seed-dispatcher.py, comma-separated since S2-19's second node) —
+      # `route{}` also uses this same set (`ds_is_from_list("1")`) to tell a
+      # request FS sent back to us (ext→ext, 03 §2.1) apart from a
+      # registered phone dialing out — a CIDR check was tried first and
+      # confirmed wrong on this flat compose network (opensips.cfg.template's
+      # own comment). `ds_select_dst(1, 4)`'s algorithm 4 is round robin, so
+      # this is also what actually spreads calls across both nodes.
+      OPENSIPS_FS_DESTINATION: ${OPENSIPS_FS_DESTINATION:-sip:freeswitch:5060,sip:freeswitch-2:5060}
       # S2-02: fast in dev/test so a newly created trunk registers within
       # seconds rather than the module's ~100-200s default worst case.
       OPENSIPS_REGISTRANT_TIMER_INTERVAL: ${OPENSIPS_REGISTRANT_TIMER_INTERVAL:-10}
@@ -419,6 +450,8 @@ services:
         condition: service_healthy
       freeswitch:
         condition: service_started
+      freeswitch-2:
+        condition: service_started
     environment:
       SERVICE_NAME: call-control
       DB_HOST: mariadb
@@ -431,9 +464,9 @@ services:
       HTTP_PORT: 8080
       REDIS_URL: redis://redis:6379
       REDIS_KEY_PREFIX: 'cuc:dev:'
-      # One node in this stage (S1-10's `freeswitch` service); S2-19 adds a
-      # second and widens this to a comma-separated pair.
-      FS_NODES: freeswitch:freeswitch:8021
+      # S2-19: two nodes now (`main.ts`'s own comment: this was "a list from
+      # the start... so that task is a compose/env change only" — it was).
+      FS_NODES: freeswitch:freeswitch:8021,freeswitch-2:freeswitch-2:8021
       # Matches the `freeswitch` service's own FS_EVENT_SOCKET_PASSWORD
       # default above (telephony/freeswitch/conf/vars.xml) — both must agree
       # for auth to succeed; there is one shared value in dev, same as
