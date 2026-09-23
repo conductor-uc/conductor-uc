@@ -10,6 +10,10 @@ import type { QueueRepo } from '../repo/queue.repo.js';
 import type { AgentRepo } from '../repo/agent.repo.js';
 import type { QueueTierRepo } from '../repo/queue-tier.repo.js';
 import type { ParkingLotRepo } from '../repo/parking-lot.repo.js';
+import {
+  ConferenceRoomNotFoundError,
+  type ConferenceRoomRepo,
+} from '../repo/conference-room.repo.js';
 
 const ParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
@@ -117,6 +121,17 @@ const ParkingLotResponseSchema = Type.Object({
   returnDestinationType: Type.Union([Type.String(), Type.Null()]),
   returnDestinationId: Type.Union([Type.String(), Type.Null()]),
 });
+const ConferenceRoomResponseSchema = Type.Object({
+  id: Type.String(),
+  label: Type.String(),
+  number: Type.String(),
+  pinRequired: Type.Boolean(),
+  video: Type.Boolean(),
+  layout: Type.Union([Type.String(), Type.Null()]),
+  maxMembers: Type.Number(),
+});
+const VerifyConferencePinBodySchema = Type.Object({ pin: Type.String({ minLength: 1 }) });
+const VerifyConferencePinResponseSchema = Type.Object({ valid: Type.Boolean() });
 
 /**
  * `GET /internal/v1/tenants/:tenantId/extensions/:id` (S1-12). What
@@ -144,6 +159,7 @@ export function registerInternalRoutes(
   agents: AgentRepo,
   queueTiers: QueueTierRepo,
   parkingLots: ParkingLotRepo,
+  conferenceRooms: ConferenceRoomRepo,
   internalServiceToken: string,
 ): void {
   app.get(
@@ -520,6 +536,79 @@ export function registerInternalRoutes(
         returnDestinationType: lot.returnDestinationType,
         returnDestinationId: lot.returnDestinationId,
       } satisfies Static<typeof ParkingLotResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/conference-rooms/:id` (S2-15) — how
+   * telephony-config's `pbx.conference_room.*` consumer re-fetches a room's
+   * current state, the same "thin event" pattern `parking-lots` above
+   * establishes. Never returns the PIN itself, only `pinRequired`
+   * (`conference-room.repo.ts`'s own doc comment on why) — verifying a
+   * submitted PIN goes through the dedicated route below instead.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/conference-rooms/:id',
+    {
+      config: { public: true },
+      schema: { params: ParamsSchema, response: { 200: ConferenceRoomResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      const room = await conferenceRooms.findById({ tenantId }, id);
+      if (room === undefined) {
+        throw ProblemError.notFound('No conference room with that id in that tenant.');
+      }
+      return {
+        id: room.id,
+        label: room.label,
+        number: room.number,
+        pinRequired: room.pinRequired,
+        video: room.video,
+        layout: room.layout,
+        maxMembers: room.maxMembers,
+      } satisfies Static<typeof ConferenceRoomResponseSchema>;
+    },
+  );
+
+  /**
+   * `POST /internal/v1/tenants/:tenantId/conference-rooms/:id/verify-pin`
+   * (S2-15) — what `conference.lua` calls after collecting DTMF digits from
+   * a caller, the same shape as voicemail-service's own
+   * `/internal/v1/tenants/:tenantId/voicemail/mailboxes/:id/verify-pin`.
+   * The decrypted PIN never leaves `conference-room.repo.ts`'s own
+   * `verifyPin` — this route only ever sees the boolean result.
+   */
+  app.post(
+    '/internal/v1/tenants/:tenantId/conference-rooms/:id/verify-pin',
+    {
+      config: { public: true },
+      schema: {
+        params: ParamsSchema,
+        body: VerifyConferencePinBodySchema,
+        response: { 200: VerifyConferencePinResponseSchema },
+      },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      const { tenantId, id } = request.params;
+      try {
+        const valid = await conferenceRooms.verifyPin({ tenantId }, id, request.body.pin);
+        return { valid };
+      } catch (error) {
+        if (error instanceof ConferenceRoomNotFoundError)
+          throw ProblemError.notFound(error.message);
+        throw error;
+      }
     },
   );
 }

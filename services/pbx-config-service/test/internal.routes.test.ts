@@ -28,6 +28,7 @@ describe.skipIf(skipReason !== undefined)(
         h.agents,
         h.queueTiers,
         h.parkingLots,
+        h.conferenceRooms,
         TOKEN,
       );
       await app.ready();
@@ -174,6 +175,7 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/tenants/:tenantId/di
       h.agents,
       h.queueTiers,
       h.parkingLots,
+      h.conferenceRooms,
       TOKEN,
     );
     await app.ready();
@@ -321,6 +323,7 @@ describe.skipIf(skipReason !== undefined)('media asset internal routes (S2-07)',
       h.agents,
       h.queueTiers,
       h.parkingLots,
+      h.conferenceRooms,
       TOKEN,
     );
     await app.ready();
@@ -461,6 +464,7 @@ describe.skipIf(skipReason !== undefined)(
         h.agents,
         h.queueTiers,
         h.parkingLots,
+        h.conferenceRooms,
         TOKEN,
       );
       await app.ready();
@@ -545,3 +549,115 @@ describe.skipIf(skipReason !== undefined)(
     });
   },
 );
+
+describe.skipIf(skipReason !== undefined)('conference room internal routes (S2-15)', () => {
+  let h: Harness;
+  let app: Server;
+
+  beforeAll(async () => {
+    h = await startHarness();
+    app = await createServer({ serviceName: 'pbx-config-service', logger: h.logger });
+    registerInternalRoutes(
+      app,
+      h.extensions,
+      h.dids,
+      h.emergencyLocations,
+      h.mediaAssets,
+      h.ringGroups,
+      h.queues,
+      h.agents,
+      h.queueTiers,
+      h.parkingLots,
+      h.conferenceRooms,
+      TOKEN,
+    );
+    await app.ready();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+    await h?.close();
+  });
+
+  afterEach(async () => {
+    await resetSchema(h.db);
+  });
+
+  it('returns a conference room for a valid token, without the PIN', async () => {
+    const tenantId = crypto.randomUUID();
+    const created = await h.conferenceRooms.create(
+      { tenantId },
+      { label: 'Board Room', number: '601', pin: '1234', maxMembers: 10 },
+    );
+
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${tenantId}/conference-rooms/${created.id}`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: created.id,
+      label: 'Board Room',
+      number: '601',
+      pinRequired: true,
+      maxMembers: 10,
+    });
+    expect(JSON.stringify(response.json())).not.toContain('1234');
+  });
+
+  it('404s an unknown conference room', async () => {
+    const response = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${crypto.randomUUID()}/conference-rooms/${crypto.randomUUID()}`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('verify-pin accepts the correct PIN and rejects a wrong one', async () => {
+    const tenantId = crypto.randomUUID();
+    const created = await h.conferenceRooms.create(
+      { tenantId },
+      { label: 'Board Room', number: '601', pin: '1234', maxMembers: 10 },
+    );
+
+    const correct = await app.inject({
+      method: 'POST',
+      url: `/internal/v1/tenants/${tenantId}/conference-rooms/${created.id}/verify-pin`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+      payload: { pin: '1234' },
+    });
+    expect(correct.statusCode).toBe(200);
+    expect(correct.json()).toMatchObject({ valid: true });
+
+    const wrong = await app.inject({
+      method: 'POST',
+      url: `/internal/v1/tenants/${tenantId}/conference-rooms/${created.id}/verify-pin`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+      payload: { pin: '9999' },
+    });
+    expect(wrong.statusCode).toBe(200);
+    expect(wrong.json()).toMatchObject({ valid: false });
+  });
+
+  it('verify-pin 401s with no token', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/internal/v1/tenants/${crypto.randomUUID()}/conference-rooms/${crypto.randomUUID()}/verify-pin`,
+      payload: { pin: '1234' },
+    });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('verify-pin 404s an unknown conference room', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: `/internal/v1/tenants/${crypto.randomUUID()}/conference-rooms/${crypto.randomUUID()}/verify-pin`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+      payload: { pin: '1234' },
+    });
+    expect(response.statusCode).toBe(404);
+  });
+});

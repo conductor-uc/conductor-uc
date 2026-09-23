@@ -154,6 +154,21 @@ export const pbxEvents = defineEvents({
     description: 'A parking lot was deleted.',
     data: Type.Object({ parkingLotId: Type.String({ minLength: 1 }) }),
   },
+  'pbx.conference_room.created': {
+    schemaVersion: 1,
+    description: 'A conference room was created.',
+    data: Type.Object({ conferenceRoomId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.conference_room.updated': {
+    schemaVersion: 1,
+    description: "A conference room's number, PIN, video, layout, or max members changed.",
+    data: Type.Object({ conferenceRoomId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.conference_room.deleted': {
+    schemaVersion: 1,
+    description: 'A conference room was deleted.',
+    data: Type.Object({ conferenceRoomId: Type.String({ minLength: 1 }) }),
+  },
   'org.domain.added': {
     schemaVersion: 1,
     description:
