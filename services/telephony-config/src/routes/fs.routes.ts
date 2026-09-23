@@ -1,3 +1,4 @@
+import type { AffinityRegistry } from '@cuc/affinity';
 import type { Database } from '@cuc/db';
 import { secretEquals } from '@cuc/crypto';
 import { Type, type Server } from '@cuc/http';
@@ -67,6 +68,13 @@ const FlowExtensionParamsSchema = Type.Object({
 const FlowRingGroupParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
   ringGroupId: Type.String({ minLength: 1 }),
+});
+
+/** `/fs/affinity/:tenantId/:kind/:resourceId` (S2-12) — the flow runner's own hairpin-vs-local check. */
+const AffinityParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  kind: Type.Union([Type.Literal('queue'), Type.Literal('park'), Type.Literal('conf')]),
+  resourceId: Type.String({ minLength: 1 }),
 });
 
 /** `/fs/media/:tenantId/:assetId/:rate` (S2-07) — `rate` names which transcoded variant, not a raw Hz value FS would need to parse. */
@@ -183,6 +191,17 @@ export function registerFsRoutes(
   redis: Redis | null,
   /** S2-10: `/fs/flow/:tenantId/:flowId/ir`'s own client into callflow-service's internal IR API. */
   callflowClient: CallflowClient,
+  /**
+   * S2-12 (04 §3.3): a direct read of the same Redis affinity-lease state
+   * call-control owns — "OpenSIPs reads the lease with `cachedb_redis`"
+   * (the architecture doc's own words for a *different* reader) is the same
+   * precedent this follows: a plain lookup needs no HTTP hop through
+   * call-control, only agreement on the key shape (`packages/affinity`) and
+   * the key prefix (`config.ts`'s own comment on why `REDIS_KEY_PREFIX` must
+   * match call-control's). `null` when `REDIS_URL` is not configured, same
+   * convention as the `redis` parameter below.
+   */
+  affinity: AffinityRegistry | null,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -1216,6 +1235,22 @@ export function registerFsRoutes(
     },
   );
 
+  /**
+   * S2-12 (04 §3.3) still returns the not-found document unconditionally:
+   * "serves only the resources leased to the requesting node" needs to know
+   * *which node* is asking, and FS's stock `section=configuration` xml_curl
+   * request carries no node-identity field to check that against (unlike
+   * `/fs/dialplan`'s trusted `variable_sip_h_X-*` headers, which OpenSIPs
+   * sets — nothing sets an equivalent here). Real `callcenter.conf`/
+   * `conference.conf`/`valet_parking.conf` content also does not exist yet
+   * (S2-13/14/15). Flagged as G-45 in docs/decisions.md: whichever of those
+   * tasks first needs to serve real config here also has to teach the
+   * `xml_curl.conf.xml` binding profile to pass the node's own
+   * `cuc_node_id` (S2-12's own `vars.xml` addition) as a request param, so
+   * this handler can finally check it against `affinity.getOwner(...)`
+   * below — the lease-read half of the abstraction is ready; the missing
+   * half is FS-side, not here.
+   */
   app.post('/fs/configuration', { config: { public: true } }, async (request, reply) => {
     if (!authorized(request.headers.authorization)) {
       reply.code(401);
@@ -1224,4 +1259,32 @@ export function registerFsRoutes(
     reply.type('text/xml');
     return NOT_FOUND_DOCUMENT;
   });
+
+  /**
+   * `GET /fs/affinity/:tenantId/:kind/:resourceId` (S2-12; 04 §3.3) — the
+   * flow runner's own hairpin-vs-local check: "if the resource is leased to
+   * another node, the runner transfers the call to that node ... Otherwise
+   * the runner acquires the lease locally." This route only answers "who
+   * holds it right now, if anyone" — the runner compares that against its
+   * own `cuc_node_id` (`vars.xml`) to decide which branch it's in; deciding
+   * *how* to acquire it locally (which FS reload commands, if any) is each
+   * resource kind's own concern (S2-13/14/15), not this route's.
+   */
+  app.get(
+    '/fs/affinity/:tenantId/:kind/:resourceId',
+    { config: { public: true }, schema: { params: AffinityParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers.authorization)) {
+        reply.code(401);
+        return '';
+      }
+      if (affinity === null) {
+        reply.code(503);
+        return '';
+      }
+      const { tenantId, kind, resourceId } = request.params;
+      const nodeId = await affinity.getOwner({ tenantId, kind, resourceId });
+      return { nodeId: nodeId ?? null };
+    },
+  );
 }

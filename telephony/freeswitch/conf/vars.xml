@@ -85,6 +85,18 @@
   <X-PRE-PROCESS cmd="set" data="telephony_config_token=change-me-FS_XML_CURL_TOKEN"/>
   <X-PRE-PROCESS cmd="env-set" data="telephony_config_token=$FS_XML_CURL_TOKEN"/>
 
+  <!-- S2-12 (04 §3.3): this node's own affinity identity — must be the same
+       id call-control's own `FS_NODES` config names this node by (`id:host:
+       port` triples), since that id is what ends up as an `aff:{tenantId}:
+       {kind}:{resourceId}` lease's value. `flow_runner.lua`'s `resolveAffinity`/
+       `hairpinTransfer` read this the same way `telephony_config_url`/
+       `telephony_config_token` above already are: a global var, not a
+       per-call channel `set`, since it is about the node, not the call.
+       No safe default: every real deployment MUST set FS_NODE_ID to
+       something call-control's own FS_NODES agrees on. -->
+  <X-PRE-PROCESS cmd="set" data="cuc_node_id=change-me-FS_NODE_ID"/>
+  <X-PRE-PROCESS cmd="env-set" data="cuc_node_id=$FS_NODE_ID"/>
+
   <X-PRE-PROCESS cmd="set" data="console_loglevel=info"/>
   <X-PRE-PROCESS cmd="env-set" data="console_loglevel=$FS_LOG_LEVEL"/>
 

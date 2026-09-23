@@ -338,6 +338,69 @@ local function bridgeNumbers(numbers, timeoutSeconds, separator)
   session:execute("bridge", table.concat(legs, separator))
 end
 
+--[[
+S2-12 (04 §3.3): this node's own affinity identity — `vars.xml`'s
+`cuc_node_id` (`env-set FS_NODE_ID`), read the same way `telephony_config_url`/
+`telephony_config_token` already are (a global var, not a per-call channel
+`set`, since it is the node's own identity, not anything about this call).
+--]]
+local function ownNodeId()
+  return session:getVariable("cuc_node_id") or ""
+end
+
+--[[
+Resolves whether a pinned resource (`kind` one of `queue`/`park`/`conf`,
+04 §3.3) is this node's to run locally, or leased to another node.
+
+Returns `true` when it's local — either already leased to this node, or not
+leased to anyone yet (04 §3.3: "Otherwise the runner acquires the lease
+locally" — *acquiring* it is each resource kind's own concern, S2-13/14/15,
+not this helper's: it only answers the question). Returns `false` plus the
+actual holder's node id when leased elsewhere, for `hairpinTransfer` below.
+
+A failed or unparseable affinity check degrades to "local" rather than
+hairpinning on a guess — the same "an honest local attempt beats a blind
+transfer" bias `handlers.queue`'s own G-43 stub already takes for a missing
+subsystem, applied here to a missing *answer*.
+--]]
+local function resolveAffinity(kind, resourceId)
+  local body, err = httpGet("/fs/affinity/" .. tenantId .. "/" .. kind .. "/" .. resourceId)
+  if body == nil then
+    log("WARNING", "affinity check for " .. kind .. " '" .. resourceId .. "' failed (" .. tostring(err) .. "); assuming local")
+    return true
+  end
+
+  local decoded = json.decode(body)
+  local ownerNodeId = decoded ~= nil and decoded.nodeId or nil
+  if ownerNodeId == nil or ownerNodeId == json.null or ownerNodeId == ownNodeId() then
+    return true
+  end
+  return false, ownerNodeId
+end
+
+--[[
+The "hairpin" (04 §3.3): sends the call back out through OpenSIPs carrying
+an `X-Affinity-Node` hint naming the node that actually holds the lease.
+
+UNVERIFIED LIVE and presently inert (docs/decisions.md G-46, same discipline
+as G-43/G-45 above): `opensips.cfg.template`'s own `route{}` does not yet
+read this header at all (its own comment on the `cachedb_redis` load: "read
+by call-control (S2+), not by anything in this script") — teaching OpenSIPs
+to dispatch on it is S4-05's job ("Affinity routing at OpenSIPs + multi-node
+lease tests"), not this one's. This function exists so S2-13/14/15 have a
+single, correct place to call once they have a real pinned resource to
+hairpin *to* — today, with exactly one FS node in the dev stack (S2-19 adds
+the second), there is nowhere for a hairpin to actually go, so nothing in
+this file calls it yet.
+--]]
+local function hairpinTransfer(targetNodeId)
+  local domain = session:getVariable("cuc_tenant_domain")
+  local routeUri = session:getVariable("cuc_opensips_sip_uri")
+  log("INFO", "hairpinning to node '" .. targetNodeId .. "' via " .. tostring(routeUri))
+  session:setVariable("sip_h_X-Affinity-Node", targetNodeId)
+  session:execute("bridge", "{sip_route_uri=sip:" .. tostring(routeUri) .. "}sofia/internal/" .. tenantId .. "@" .. tostring(domain))
+end
+
 function handlers.extension(node)
   local resolved = httpGet("/fs/flow/" .. tenantId .. "/extension/" .. node.config.extensionId)
   local decoded = resolved ~= nil and json.decode(resolved) or nil
@@ -376,7 +439,10 @@ function handlers.ring_group(node)
 end
 
 --[[
-Queues are S2-13's subsystem and do not exist yet.
+Queues are S2-13's subsystem and do not exist yet — `resolveAffinity`/
+`hairpinTransfer` above are ready for S2-13 to call once `node.config.queueId`
+names a real, leaseable queue, but there is nothing real to check affinity
+against today, so this stays the same G-43 stub.
 
 The node takes its `next` port rather than hanging up: a flow that routes to
 a queue almost always has something after it (voicemail, an overflow menu),

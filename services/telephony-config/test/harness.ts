@@ -1,3 +1,4 @@
+import { createAffinityRegistry, type AffinityRegistry } from '@cuc/affinity';
 import { createDatabase, migrateToLatest, type Database } from '@cuc/db';
 import type { Bus } from '@cuc/events';
 import { connectBus } from '@cuc/events';
@@ -66,6 +67,7 @@ export interface Harness {
   readonly callflow: FakeCallflowClient;
   readonly storage: Storage;
   readonly redis: Redis;
+  readonly affinity: AffinityRegistry;
   readonly logger: Logger;
   close(): Promise<void>;
 }
@@ -402,6 +404,11 @@ export async function startHarness(): Promise<Harness> {
   const s3Handle: TestS3Handle = await startTestS3();
   const redisHandle: TestRedisHandle = await startTestRedis();
   const redis = new Redis(redisHandle.url, { lazyConnect: false, maxRetriesPerRequest: 2 });
+  // `redisHandle.keyPrefix` is unique per harness instance, so affinity
+  // lease reads/writes in one test never see another test's leftover state
+  // (the same isolation `redisHandle.keyPrefix` already gives every other
+  // key this harness touches).
+  const affinity = createAffinityRegistry(redis, redisHandle.keyPrefix);
 
   const handle = await startTestDatabase();
   const db = createDatabase<TelephonyConfigDb>({
@@ -469,6 +476,7 @@ export async function startHarness(): Promise<Harness> {
     callflow,
     storage,
     redis,
+    affinity,
     logger,
     async close() {
       redis.disconnect();

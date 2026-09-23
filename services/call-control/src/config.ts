@@ -43,6 +43,13 @@ export const configSchema = Type.Object({
   /** Initial ESL reconnect backoff; doubles up to `ESL_RECONNECT_MAX_DELAY_MS` on repeated failures. */
   ESL_RECONNECT_MIN_DELAY_MS: Env.int({ minimum: 100, default: 500 }),
   ESL_RECONNECT_MAX_DELAY_MS: Env.int({ minimum: 1_000, default: 15_000 }),
+
+  /** S2-12 (04 §3.3): "30 s lease, renewed every 10 s". */
+  AFFINITY_LEASE_TTL_MS: Env.int({ minimum: 1_000, default: 30_000 }),
+  AFFINITY_RENEW_INTERVAL_MS: Env.int({ minimum: 500, default: 10_000 }),
+
+  /** `/internal/v1/affinity/...` (S2-12) — same shared token every other service's own internal API checks (07 §1's precedent); must match those services' own `INTERNAL_SERVICE_TOKEN`. */
+  INTERNAL_SERVICE_TOKEN: Env.secret(),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

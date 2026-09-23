@@ -16,8 +16,10 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@cuc/affinity": "workspace:*",
     "@cuc/api-contracts": "workspace:*",
     "@cuc/config": "workspace:*",
+    "@cuc/crypto": "workspace:*",
     "@cuc/db": "workspace:*",
     "@cuc/events": "workspace:*",
     "@cuc/http": "workspace:*",

@@ -36,6 +36,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       h.voicemail,
       h.redis,
       h.callflow,
+      h.affinity,
     );
     await app.ready();
   });
@@ -2102,6 +2103,56 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       });
 
       expect(response.statusCode).toBe(404);
+    });
+  });
+
+  describe('/fs/affinity (S2-12: resource affinity leases)', () => {
+    it('reports null when nothing holds the lease', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/affinity/${crypto.randomUUID()}/queue/${crypto.randomUUID()}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json<{ nodeId: string | null }>()).toEqual({ nodeId: null });
+    });
+
+    it('reports the current holder, read directly off the same Redis state call-control writes', async () => {
+      const tenantId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
+      await h.affinity.acquire({ tenantId, kind: 'conf', resourceId }, 'fs-1', 30_000);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/affinity/${tenantId}/conf/${resourceId}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.json<{ nodeId: string | null }>()).toEqual({ nodeId: 'fs-1' });
+    });
+
+    it('keeps leases of different kinds on the same resourceId independent', async () => {
+      const tenantId = crypto.randomUUID();
+      const resourceId = crypto.randomUUID();
+      await h.affinity.acquire({ tenantId, kind: 'queue', resourceId }, 'fs-1', 30_000);
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/affinity/${tenantId}/park/${resourceId}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.json<{ nodeId: string | null }>()).toEqual({ nodeId: null });
+    });
+
+    it('401s without the fs-node token', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/affinity/${crypto.randomUUID()}/queue/${crypto.randomUUID()}`,
+      });
+
+      expect(response.statusCode).toBe(401);
     });
   });
 });

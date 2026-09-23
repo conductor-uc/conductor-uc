@@ -27,6 +27,21 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
     expect(members).toContain('fs-1');
   });
 
+  it('reports only nodes whose heartbeat key still exists with status up (S2-12)', async () => {
+    await h.registry.heartbeat('fs-live', 5_000);
+    // A node that was once seen (still in the `fsnodes` set) but whose
+    // heartbeat key has since expired must not count as live.
+    await h.redis.sadd(`${h.keyPrefix}fsnodes`, 'fs-expired');
+    await h.redis.sadd(`${h.keyPrefix}fsnodes`, 'fs-draining');
+    await h.redis.hset(`${h.keyPrefix}fsnode:fs-draining`, { status: 'draining' });
+
+    const live = await h.registry.liveNodeIds();
+
+    expect(live).toContain('fs-live');
+    expect(live).not.toContain('fs-expired');
+    expect(live).not.toContain('fs-draining');
+  });
+
   it('creates a call, indexes it by node and tenant, and removes it on end', async () => {
     const callUuid = crypto.randomUUID();
     const tenantId = crypto.randomUUID();
