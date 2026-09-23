@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 
 import '../core/acting.dart';
 import '../core/session.dart';
+import '../features/auth/invite_page.dart';
 import '../features/auth/login_page.dart';
+import '../features/auth/mfa_page.dart';
+import '../features/auth/reset_pages.dart';
 import '../features/callflow/flows_page.dart';
 import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
@@ -30,11 +33,19 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: refresh,
     redirect: (context, state) {
       final session = ref.read(sessionProvider);
-      final atLogin = state.uri.path == '/login';
-      if (session == null) return atLogin ? null : '/login';
-      final sections = visibleSections(session, ref.read(actingProvider));
       final path = state.uri.path;
-      if (atLogin || path == '/') return sections.first.path;
+      if (session == null) {
+        // The second sign-in step only makes sense mid sign-in; a reload lands
+        // here with no pending step and goes back to the first.
+        if (path == '/login/mfa') {
+          return ref.read(authStepProvider) == null ? '/login' : null;
+        }
+        return _signedOutPaths.contains(path) ? null : '/login';
+      }
+      final sections = visibleSections(session, ref.read(actingProvider));
+      if (_signedOutPaths.contains(path) || path == '/') {
+        return sections.first.path;
+      }
       // A section the org type does not have is not reachable by URL either.
       if (!sections.any((s) => path.startsWith(s.path))) {
         return sections.first.path;
@@ -42,7 +53,28 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => LoginPage(
+          orgId: state.uri.queryParameters['org'],
+          notice: _notices[state.uri.queryParameters['notice']],
+        ),
+      ),
+      GoRoute(path: '/login/mfa', builder: (context, state) => const MfaPage()),
+      GoRoute(
+        path: '/reset',
+        builder: (context, state) => const ResetRequestPage(),
+      ),
+      GoRoute(
+        path: '/reset/confirm',
+        builder: (context, state) =>
+            ResetConfirmPage(token: state.uri.queryParameters['token']),
+      ),
+      GoRoute(
+        path: '/invite',
+        builder: (context, state) =>
+            InvitePage(token: state.uri.queryParameters['token']),
+      ),
       ShellRoute(
         builder: (context, state, child) => ShellPage(child: child),
         routes: [
@@ -86,4 +118,19 @@ const _pbxPages = <String, List<ResourceDef>>{
   '/parking-lots': [parkingLotsDef],
   '/media': [mediaAssetsDef],
   '/settings': [emergencyLocationsDef],
+};
+
+/// Pages a signed-out visitor may open.
+const _signedOutPaths = {
+  '/login',
+  '/login/mfa',
+  '/reset',
+  '/reset/confirm',
+  '/invite',
+};
+
+/// What a `?notice=` on the sign-in page says.
+const _notices = {
+  'password-changed': 'Password changed. Sign in with your new password.',
+  'account-created': 'Account created. Sign in to continue.',
 };

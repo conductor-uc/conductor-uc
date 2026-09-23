@@ -1,20 +1,10 @@
-import 'package:console/dev/demo_backend.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
 
-Future<void> signInAs(WidgetTester tester, String email) async {
-  await pumpApp(tester, appWith(api: demoApi()));
-  await tester.enterText(
-    find.widgetWithText(TextField, 'Organization ID'),
-    'demo',
-  );
-  await tester.enterText(find.widgetWithText(TextField, 'Email'), email);
-  await tester.enterText(find.widgetWithText(TextField, 'Password'), 'pw');
-  await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
-  await tester.pumpAndSettle();
-}
+Future<void> signInAs(WidgetTester tester, String email) =>
+    completeSignIn(tester, email);
 
 Finder field(String label) => find.widgetWithText(TextFormField, label);
 

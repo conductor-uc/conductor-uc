@@ -225,20 +225,26 @@ export function registerAuthRoutes(
 
   app.post(
     '/v1/auth/logout',
-    { config: { public: true }, schema: { body: LogoutBodySchema } },
+    {
+      config: { public: true },
+      schema: { body: LogoutBodySchema, response: { 204: Type.Null() } },
+    },
     async (request, reply) => {
       const presented =
         request.body.refreshToken ?? readCookie(request.headers.cookie, REFRESH_COOKIE);
       if (presented !== undefined) await auth.logout(presented);
       void reply.header('set-cookie', clearRefreshCookieHeader({ secure }));
-      return reply.status(204).send();
+      return reply.status(204).send(null);
     },
   );
 
   // Password reset (06). Always 202, whether or not the account exists.
   app.post(
     '/v1/auth/password-reset',
-    { config: { public: true }, schema: { body: PasswordResetBodySchema } },
+    {
+      config: { public: true },
+      schema: { body: PasswordResetBodySchema, response: { 202: Type.Null() } },
+    },
     async (request, reply) => {
       const issued = await auth.requestPasswordReset(
         request.context,
@@ -251,20 +257,23 @@ export function registerAuthRoutes(
           'DEV ONLY: password reset token (no mailer is running)',
         );
       }
-      return reply.status(202).send();
+      return reply.status(202).send(null);
     },
   );
 
   app.post(
     '/v1/auth/password-reset/confirm',
-    { config: { public: true }, schema: { body: PasswordResetConfirmBodySchema } },
+    {
+      config: { public: true },
+      schema: { body: PasswordResetConfirmBodySchema, response: { 204: Type.Null() } },
+    },
     async (request, reply) => {
       try {
         await auth.confirmPasswordReset(request.body.token, request.body.newPassword);
       } catch (error) {
         throw toProblem(error);
       }
-      return reply.status(204).send();
+      return reply.status(204).send(null);
     },
   );
 

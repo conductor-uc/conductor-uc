@@ -53,7 +53,6 @@
                       "required": [
                         "status",
                         "accessToken",
-                        "refreshToken",
                         "expiresIn"
                       ],
                       "properties": {
@@ -173,7 +172,6 @@
                   "type": "object",
                   "required": [
                     "accessToken",
-                    "refreshToken",
                     "expiresIn"
                   ],
                   "properties": {
@@ -233,7 +231,6 @@
                   "type": "object",
                   "required": [
                     "accessToken",
-                    "refreshToken",
                     "expiresIn"
                   ],
                   "properties": {
@@ -266,9 +263,6 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "refreshToken"
-                ],
                 "properties": {
                   "refreshToken": {
                     "type": "string",
@@ -288,7 +282,6 @@
                   "type": "object",
                   "required": [
                     "accessToken",
-                    "refreshToken",
                     "expiresIn"
                   ],
                   "properties": {
@@ -321,9 +314,6 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "refreshToken"
-                ],
                 "properties": {
                   "refreshToken": {
                     "type": "string",
@@ -335,13 +325,266 @@
           }
         },
         "responses": {
-          "200": {
+          "204": {
             "description": "Default Response"
           }
         },
         "operationId": "logout",
         "tags": [
           "Auth"
+        ]
+      }
+    },
+    "/v1/auth/password-reset": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "orgId",
+                  "email"
+                ],
+                "properties": {
+                  "orgId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "email": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "createPasswordReset",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/v1/auth/password-reset/confirm": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "newPassword"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "createConfirm",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/v1/auth/invitations/lookup": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "email",
+                    "displayName"
+                  ],
+                  "properties": {
+                    "email": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createLookup",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/v1/auth/invitations/accept": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "token",
+                  "password"
+                ],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "email",
+                    "orgId"
+                  ],
+                  "properties": {
+                    "email": {
+                      "type": "string"
+                    },
+                    "orgId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createAccept",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/v1/orgs/{orgId}/invitations": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "displayName"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "displayName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "orgId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "email",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createInvitation",
+        "tags": [
+          "Orgs"
         ]
       }
     },

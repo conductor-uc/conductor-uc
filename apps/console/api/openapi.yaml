@@ -3,9 +3,9 @@ info:
   title: Console API
   version: 0.1.0
   description: >-
-    Seed of the merged api-gateway spec the console client is generated from.
-    It covers only the public routes S3-01 needs (brand bootstrap and login);
-    it is replaced by the real merged document once one exists (G-54).
+    The slice of the api-gateway API the console generates its client from.
+    Hand-kept: test/contract_test.dart checks every operation here against
+    api/openapi.json, which is dumped from the services' own route schemas.
 servers:
   - url: /
 paths:
@@ -39,11 +39,122 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LoginResponse' }
+  /v1/auth/mfa/enroll/confirm:
+    post:
+      operationId: confirmMfaEnrollment
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MfaEnrollConfirmRequest' }
+      responses:
+        '200':
+          description: Tokens.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tokens' }
+  /v1/auth/mfa/verify:
+    post:
+      operationId: verifyMfa
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MfaVerifyRequest' }
+      responses:
+        '200':
+          description: Tokens.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tokens' }
+  /v1/auth/refresh:
+    post:
+      operationId: refreshTokens
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: A new token pair; the presented refresh token is spent.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Tokens' }
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '204':
+          description: Signed out.
+  /v1/auth/password-reset:
+    post:
+      operationId: requestPasswordReset
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetRequest' }
+      responses:
+        '202':
+          description: Accepted, whether or not the account exists.
+  /v1/auth/password-reset/confirm:
+    post:
+      operationId: confirmPasswordReset
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordResetConfirmRequest' }
+      responses:
+        '204':
+          description: Password changed.
+  /v1/auth/invitations/lookup:
+    post:
+      operationId: lookupInvitation
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvitationTokenRequest' }
+      responses:
+        '200':
+          description: Who the invitation is for.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationSummary' }
+  /v1/auth/invitations/accept:
+    post:
+      operationId: acceptInvitation
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/InvitationAcceptRequest' }
+      responses:
+        '201':
+          description: Account created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/InvitationAccepted' }
 components:
   schemas:
-    # The server's response is a discriminated union on `neutral`. It is modelled
-    # here as one object with optional fields, which is wire-compatible and keeps
-    # the generated Dart model a plain class.
+    # The server's responses here are discriminated unions. They are modelled as
+    # one object with optional fields, which is wire-compatible and keeps the
+    # generated Dart models plain classes.
     PublicBrand:
       type: object
       required: [neutral]
@@ -78,3 +189,68 @@ components:
         expiresIn: { type: integer }
         enrollmentTicket: { type: string }
         verificationTicket: { type: string }
+        totp: { $ref: '#/components/schemas/Totp' }
+    Totp:
+      type: object
+      required: [secret, otpauthUri]
+      properties:
+        secret: { type: string }
+        otpauthUri: { type: string }
+    Tokens:
+      type: object
+      required: [accessToken, expiresIn]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer }
+    MfaEnrollConfirmRequest:
+      type: object
+      required: [enrollmentTicket, code]
+      properties:
+        enrollmentTicket: { type: string, minLength: 1 }
+        code: { type: string, minLength: 1 }
+    MfaVerifyRequest:
+      type: object
+      required: [verificationTicket, code]
+      properties:
+        verificationTicket: { type: string, minLength: 1 }
+        code: { type: string, minLength: 1 }
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken: { type: string, minLength: 1 }
+    PasswordResetRequest:
+      type: object
+      required: [orgId, email]
+      properties:
+        orgId: { type: string, minLength: 1 }
+        email: { type: string, minLength: 1 }
+    PasswordResetConfirmRequest:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token: { type: string, minLength: 1 }
+        newPassword: { type: string, minLength: 1 }
+    InvitationTokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 1 }
+    InvitationAcceptRequest:
+      type: object
+      required: [token, password]
+      properties:
+        token: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+    InvitationSummary:
+      type: object
+      required: [email, displayName]
+      properties:
+        email: { type: string }
+        displayName: { type: string }
+    InvitationAccepted:
+      type: object
+      required: [email, orgId]
+      properties:
+        email: { type: string }
+        orgId: { type: string }

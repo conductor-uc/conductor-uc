@@ -52,7 +52,13 @@ void main() {
         .widgetList<Text>(find.byType(Text))
         .map((t) => t.data)
         .toSet();
-    expect(texts, {'Sign in', 'Organization ID', 'Email', 'Password'});
+    expect(texts, {
+      'Sign in',
+      'Organization ID',
+      'Email',
+      'Password',
+      'Forgot your password?',
+    });
     expect(find.byType(Image), findsNothing);
   });
 
