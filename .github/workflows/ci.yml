@@ -156,6 +156,16 @@ jobs:
         if: github.event_name != 'pull_request'
         run: pnpm check
 
+      - name: Console OpenAPI snapshot is current
+        # apps/console/api/openapi.json is dumped from the services' own route
+        # schemas, and the console's contract test compares its screens against
+        # it. Building the four services first makes this independent of which
+        # packages `--affected` happened to build above.
+        run: |
+          pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service
+          node apps/console/tool/dump-openapi.mjs
+          git diff --exit-code -- apps/console/api/openapi.json
+
       - name: Brand-leak scan
         # Rule 1 in CLAUDE.md: no branding on any user-facing or network-visible
         # surface. Runs after build so it sees built artifacts as well as sources.

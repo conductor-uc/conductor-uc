@@ -18,6 +18,19 @@ Demo mode serves canned responses for the two routes the console calls today
   (a tenant user). Any password works except `wrong`, which shows the error state.
   The organization ID can be anything.
 
+Sign in as a tenant user (any email that is not `master@` or `reseller@`) to
+reach the PBX screens: extensions, phone numbers, ring groups, queues and agents,
+conference rooms, parking lots, media, call flows, and emergency locations (under
+Settings). They read and write an in-memory tenant seeded in `lib/dev/demo_pbx.dart`.
+
+## Adding or changing a PBX screen
+
+The screens are driven by `lib/features/pbx/resource.dart`: one `ResourceDef` per
+service resource, listing its fields. `test/contract_test.dart` compares those
+definitions with `api/openapi.json`, which `tool/dump-openapi.mjs` builds from the
+services' own route schemas (run `pnpm build` first). When a service's schema changes,
+re-run the dump and the contract test says which screen to update.
+
 ## Run it against a gateway
 
 ```sh

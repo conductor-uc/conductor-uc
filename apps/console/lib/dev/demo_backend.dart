@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
 
+import 'demo_pbx.dart';
+
 /// A stand-in for api-gateway so the console can be clicked through without a
 /// backend (`--dart-define=DEMO=true`). Development only: the real client is
 /// used whenever DEMO is unset, and this is tree-shaken out of that build.
@@ -17,12 +19,16 @@ ConsoleApi demoApi() =>
     ConsoleApi(dio: Dio()..httpClientAdapter = _DemoAdapter());
 
 class _DemoAdapter implements HttpClientAdapter {
+  final _pbx = DemoPbx();
+
   @override
   Future<ResponseBody> fetch(
     RequestOptions options,
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    final pbx = _pbx.handle(options);
+    if (pbx != null) return pbx;
     switch (options.path) {
       case '/v1/public/brand':
         final host = '${options.queryParameters['host']}';
