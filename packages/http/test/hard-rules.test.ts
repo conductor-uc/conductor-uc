@@ -50,7 +50,7 @@ describe('H1 — reseller private-data wall', () => {
     expect(response.statusCode).toBe(200);
   });
 
-  it('allows a reseller actor on a usage route, pending D-013', async () => {
+  it('allows a reseller actor on a usage route (D-013, issue #95: resellers always get billing/usage access)', async () => {
     const response = await get('/v1/usage', 'reseller');
 
     expect(response.statusCode).toBe(200);

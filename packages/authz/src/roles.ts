@@ -43,6 +43,7 @@ const RESELLER_ADMIN_PERMISSIONS: readonly Permission[] = [
   'trunk.manage',
   'audit.read',
   'apikey.manage',
+  'billing.read',
 ];
 
 const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [

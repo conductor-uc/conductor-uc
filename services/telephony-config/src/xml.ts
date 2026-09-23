@@ -40,6 +40,40 @@ export function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/**
+ * `<action application="set" data="cuc_tenant_id=...">` (S2-18) — every
+ * dialplan document's own first action, on every branch. `sip_h_X-Tenant-Id`
+ * (`opensips.cfg.template`'s own header, confirmed live) is already a
+ * reliable channel variable for an internal-direction call by the time it
+ * reaches FS, but an inbound (from-trunk) call carries no such header — so
+ * this is the one channel variable every branch can agree to set explicitly,
+ * giving cdr-service (`domain/cdr.ts`) a single, direction-independent field
+ * to read off `mod_json_cdr`'s own `variables.cuc_tenant_id` rather than
+ * needing direction-dependent fallback logic. `buildFlowDialplanDocument`
+ * does not call this helper — it already sets the same variable itself, as
+ * part of the small set flow_runner.lua reads directly.
+ */
+function tenantIdAction(tenantId: string): string {
+  return `<action application="set" data="${escapeXml(`cuc_tenant_id=${tenantId}`)}"/>`;
+}
+
+/**
+ * `<action application="set" data="cuc_call_direction=outbound">` (S2-18) —
+ * cdr-service's CDR v1 `direction` field (`inbound`/`outbound`/`internal`)
+ * does not line up with `X-Call-Direction`'s own two values the way
+ * `tenantIdAction` lines up with `X-Tenant-Id`: an outbound-to-PSTN call is
+ * still `X-Call-Direction: internal` at the moment OpenSIPs first routes the
+ * INVITE to FS (a registered extension's own call) — "outbound" is a purely
+ * FS-dialplan-level distinction, decided only once the dialled number fails
+ * to resolve internally. So only the two builders that reach that decision
+ * (`buildOutboundDialplanDocument`, `buildEmergencyDialplanDocument`) set
+ * this override; cdr-service falls back to `X-Call-Direction` for every
+ * other call (`docs/decisions.md`'s new G-51 has the full reasoning).
+ */
+function outboundCallDirectionAction(): string {
+  return '<action application="set" data="cuc_call_direction=outbound"/>';
+}
+
 export const NOT_FOUND_DOCUMENT =
   '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
   '<document type="freeswitch/xml">\n' +
@@ -126,6 +160,7 @@ export function buildDialplanDocument(
   destinationNumber: string,
   tenantDomain: string,
   opensipsSipUri: string,
+  tenantId: string,
   /**
    * The user part actually dialed at the bridge target — S2-03's from-trunk
    * case needs this distinct from `destinationNumber` (matched against the
@@ -150,7 +185,10 @@ export function buildDialplanDocument(
   const target =
     `{sip_route_uri=sip:${opensipsSipUri}}` + `sofia/internal/${bridgeNumber}@${tenantDomain}`;
 
-  const actions = [`<action application="bridge" data="${escapeXml(target)}"/>`];
+  const actions = [
+    tenantIdAction(tenantId),
+    `<action application="bridge" data="${escapeXml(target)}"/>`,
+  ];
   if (voicemail !== undefined) {
     actions.unshift(
       '<action application="set" data="continue_on_fail=NORMAL_CLEARING,USER_BUSY,NO_ANSWER,ORIGINATOR_CANCEL,UNALLOCATED_NUMBER"/>',
@@ -201,6 +239,7 @@ export function buildVoicemailDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="voicemail-${escapeXml(destinationNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
     `          <action application="lua" data="voicemail.lua ${mode} ${escapeXml(tenantId)} ${escapeXml(mailboxId)}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +
@@ -356,6 +395,8 @@ export function buildOutboundDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="outbound-${escapeXml(destinationNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
+    `          ${outboundCallDirectionAction()}\n` +
     limitAction +
     `          <action application="bridge" data="${escapeXml(target)}"/>\n` +
     '        </condition>\n' +
@@ -401,6 +442,7 @@ export function buildRingGroupDialplanDocument(
   destinationNumber: string,
   tenantDomain: string,
   opensipsSipUri: string,
+  tenantId: string,
   memberNumbersInRingOrder: readonly string[],
   strategy: 'simultaneous' | 'sequential' | 'round_robin' | 'random',
   ringTimeoutSeconds: number,
@@ -432,6 +474,7 @@ export function buildRingGroupDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="ring-group-${escapeXml(destinationNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
     `          <action application="bridge" data="${escapeXml(bridgeTarget)}"/>\n` +
     noAnswerAction +
     '        </condition>\n' +
@@ -474,6 +517,7 @@ export function buildEmergencyDialplanDocument(
   dialedNumber: string,
   tenantDomain: string,
   opensipsSipUri: string,
+  tenantId: string,
   drGroupId: number,
   callerId: { readonly name: string | null; readonly number: string | null } | null,
   location: EmergencyLocationDetail | null,
@@ -518,6 +562,8 @@ export function buildEmergencyDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="emergency-${escapeXml(dialedNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(dialedNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
+    `          ${outboundCallDirectionAction()}\n` +
     `          <action application="bridge" data="${escapeXml(target)}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +
@@ -639,6 +685,7 @@ export function buildQueueDialplanDocument(
   callerContext: string,
   destinationNumber: string,
   queueName: string,
+  tenantId: string,
 ): string {
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
@@ -647,6 +694,7 @@ export function buildQueueDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="queue-${escapeXml(destinationNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
     '          <action application="answer"/>\n' +
     `          <action application="callcenter" data="${escapeXml(queueName)}"/>\n` +
     '        </condition>\n' +
@@ -678,6 +726,7 @@ export function buildAgentStatusDialplanDocument(
   featureCode: string,
   agentName: string,
   status: 'Available' | 'Logged Out',
+  tenantId: string,
 ): string {
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
@@ -686,6 +735,7 @@ export function buildAgentStatusDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="agent-status-${escapeXml(featureCode)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(featureCode)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
     '          <action application="answer"/>\n' +
     `          <action application="api" data="${escapeXml(`callcenter_config agent set status '${agentName}' '${status}'`)}"/>\n` +
     '          <action application="hangup"/>\n' +
@@ -718,6 +768,7 @@ export function buildParkDialplanDocument(
   destinationNumber: string,
   lotName: string,
   slotNumber: number,
+  tenantId: string,
 ): string {
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
@@ -726,6 +777,7 @@ export function buildParkDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="park-${escapeXml(destinationNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
     '          <action application="answer"/>\n' +
     `          <action application="valet_park" data="${escapeXml(`${lotName}/${String(slotNumber)}`)}"/>\n` +
     '        </condition>\n' +
@@ -766,6 +818,7 @@ export function buildConferenceDialplanDocument(
     `    <context name="${escapeXml(callerContext)}">\n` +
     `      <extension name="conference-${escapeXml(destinationNumber)}">\n` +
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
     `          <action application="lua" data="conference.lua ${escapeXml(tenantId)} ${escapeXml(roomId)} ${escapeXml(roomName)} ${pinRequired ? '1' : '0'}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +

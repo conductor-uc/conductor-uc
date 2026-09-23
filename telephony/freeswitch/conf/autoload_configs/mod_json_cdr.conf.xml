@@ -1,0 +1,33 @@
+<configuration name="json_cdr.conf" description="JSON CDR">
+  <!-- S2-18 (06's cdr-service section): every call's CDR, POSTed as JSON at
+       hangup. Reachable only from FS nodes (07 §1's own network-ACL
+       framing) plus this shared token, presented as HTTP basic auth — the
+       same `fs-node:<token>` convention `xml_curl.conf.xml`'s own bindings
+       already use, a distinct token (`cdr_service_token`, vars.xml) because
+       this is cdr-service's own gate, not telephony-config's.
+
+       UNVERIFIED LIVE (docs/decisions.md G-51, same "no live FS process
+       reached while building this task" discipline as G-35/G-36/G-43/G-47/
+       G-48/G-50): every param name below is `mod_json_cdr`'s own
+       documented config surface, not invented, but not run against a real
+       FreeSWITCH process. `log-b-leg=false` in particular is load-bearing —
+       cdr-service's own "exactly one CDR per call" design (`domain/cdr.ts`'s
+       own doc comment) depends on only the A-leg (the channel that actually
+       entered the dialplan, and so carries `cuc_tenant_id`/`cuc_call_
+       direction`) ever POSTing. -->
+  <settings>
+    <param name="url" value="$${cdr_service_url}/ingest/json-cdr"/>
+    <param name="cred" value="fs-node:$${cdr_service_token}"/>
+    <!-- Only the live HTTP POST — no local `log-dir`/`err-log-dir` fallback
+         spool is configured, since this task builds no process that ever
+         reads one back. FS's own retry-then-give-up behavior on a
+         persistently unreachable cdr-service is accepted as-is rather than
+         building a second ingestion path for it. -->
+    <param name="log-http-and-disk" value="false"/>
+    <param name="log-b-leg" value="false"/>
+    <param name="encode-values" value="true"/>
+    <param name="retries" value="2"/>
+    <param name="delay" value="5"/>
+    <param name="timeout" value="10"/>
+  </settings>
+</configuration>

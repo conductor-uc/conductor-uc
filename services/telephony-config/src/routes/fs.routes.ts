@@ -429,6 +429,7 @@ export function registerFsRoutes(
       dialedNumber,
       domain.fqdn,
       opensipsSipUri,
+      tenantId,
       drGroupId,
       callerId,
       location,
@@ -635,6 +636,7 @@ export function registerFsRoutes(
       featureCode,
       callcenterName(callingExtension.number, domain.fqdn),
       status,
+      tenantId,
     );
   }
 
@@ -696,6 +698,7 @@ export function registerFsRoutes(
       callerContext,
       destinationNumber,
       callcenterName(queueId, domainFqdn),
+      tenantId,
     );
   }
 
@@ -752,6 +755,7 @@ export function registerFsRoutes(
       destinationNumber,
       callcenterName(lot.id, domain.fqdn),
       slotNumber,
+      tenantId,
     );
   }
 
@@ -954,6 +958,7 @@ export function registerFsRoutes(
         destinationNumber,
         domain.fqdn,
         opensipsSipUri,
+        tenantId,
         destinationNumber,
         mailbox === undefined ? undefined : { tenantId, mailboxId: mailbox.id },
       );
@@ -1062,6 +1067,7 @@ export function registerFsRoutes(
           destinationNumber,
           domain.fqdn,
           opensipsSipUri,
+          trunk.tenantId,
           extension.number,
         );
       }
@@ -1164,6 +1170,7 @@ export function registerFsRoutes(
         destinationNumber,
         domain.fqdn,
         opensipsSipUri,
+        trunk.tenantId,
         orderedMembers.map((extension) => extension.number),
         ringGroup.strategy as 'simultaneous' | 'sequential' | 'round_robin' | 'random',
         ringGroup.ringTimeoutSeconds,

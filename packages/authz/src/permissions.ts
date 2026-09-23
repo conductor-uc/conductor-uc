@@ -25,6 +25,12 @@ import type { DataClass, Permission } from './types.js';
  * than overloaded onto a semantically different resource's permission.
  *
  * `conference_room.manage` is the same story again — S2-15.
+ *
+ * `billing.read` is not in 07 §3.3's own initial catalog either: it is the
+ * new permission C-1/D-013 (issue #95, resolved 2026-09-15) calls for — a
+ * `usage`-class billing record distinct from a full, `private`-class CDR,
+ * so a reseller can read it without H1 blocking them the way `cdr.read`
+ * already does (docs/decisions.md's C-1 entry has the full resolution).
  */
 export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'reseller.create': 'config',
@@ -57,6 +63,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'recording.delete': 'private',
   'cdr.read': 'private',
   'cdr.export': 'private',
+  'billing.read': 'usage',
   'voicemail.access': 'private',
   'monitor.presence': 'config',
   'monitor.listen': 'private',

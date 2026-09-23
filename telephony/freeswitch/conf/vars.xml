@@ -85,6 +85,15 @@
   <X-PRE-PROCESS cmd="set" data="telephony_config_token=change-me-FS_XML_CURL_TOKEN"/>
   <X-PRE-PROCESS cmd="env-set" data="telephony_config_token=$FS_XML_CURL_TOKEN"/>
 
+  <!-- S2-18: cdr-service's `POST /ingest/json-cdr` (`mod_json_cdr.conf.xml`'s
+       own `cred` param reads these) — same shared-token-as-basic-auth
+       mechanism as telephony_config_url/token above, a distinct pair
+       because this is a different service's own gate. -->
+  <X-PRE-PROCESS cmd="set" data="cdr_service_url=http://cdr-service:8080"/>
+  <X-PRE-PROCESS cmd="env-set" data="cdr_service_url=$CDR_SERVICE_URL"/>
+  <X-PRE-PROCESS cmd="set" data="cdr_service_token=change-me-FS_CDR_INGEST_TOKEN"/>
+  <X-PRE-PROCESS cmd="env-set" data="cdr_service_token=$FS_CDR_INGEST_TOKEN"/>
+
   <!-- S2-12 (04 §3.3): this node's own affinity identity — must be the same
        id call-control's own `FS_NODES` config names this node by (`id:host:
        port` triples), since that id is what ends up as an `aff:{tenantId}:
