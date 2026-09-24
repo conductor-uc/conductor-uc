@@ -157,12 +157,16 @@ class HistoryPanel extends StatelessWidget {
     required this.currentVersionId,
     required this.onRollback,
     required this.onOpenAsDraft,
+    this.canRollback = true,
   });
 
   final List<Json> versions;
   final String? currentVersionId;
   final void Function(int versionNumber) onRollback;
   final void Function(int versionNumber) onOpenAsDraft;
+
+  /// Rolling back changes what calls do, so it needs the publish permission.
+  final bool canRollback;
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +204,7 @@ class HistoryPanel extends StatelessWidget {
                   Wrap(
                     spacing: 8,
                     children: [
-                      if (v['id'] != currentVersionId)
+                      if (v['id'] != currentVersionId && canRollback)
                         TextButton(
                           onPressed: () =>
                               onRollback(v['versionNumber'] as int),

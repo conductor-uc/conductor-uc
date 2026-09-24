@@ -5,8 +5,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
 
-Future<void> signInAs(WidgetTester tester, String email) =>
-    completeSignIn(tester, email);
+Future<void> signInAs(WidgetTester tester, String email) async {
+  await completeSignIn(tester, email);
+  // Everyone lands on the dashboard; these tests start from the org list.
+  final list = email.startsWith('master@')
+      ? 'Resellers'
+      : email.startsWith('reseller@')
+      ? 'Tenants'
+      : null;
+  if (list == null) return;
+  await tester.tap(
+    find.descendant(of: find.byType(NavigationRail), matching: find.text(list)),
+  );
+  await tester.pumpAndSettle();
+}
 
 Finder navItem(String label) => find.descendant(
   of: find.byType(NavigationRail),
@@ -54,6 +66,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Acting as'), findsNothing);
     expect(navItem('Resellers'), findsOneWidget);
+    await tester.tap(navItem('Resellers'));
+    await tester.pumpAndSettle();
     expect(find.text('Northwind Telecom'), findsOneWidget);
   });
 
@@ -75,7 +89,9 @@ void main() {
     container.read(routerProvider).go('/recordings');
     await tester.pumpAndSettle();
     final router = container.read(routerProvider);
-    expect(router.state.uri.path, isNot('/recordings'));
+    expect(router.state.uri.path, '/forbidden');
+    expect(find.text('Not available to you'), findsOneWidget);
+    expect(navItem('Recordings'), findsNothing);
   });
 
   testWidgets('a suspended tenant cannot be entered', (tester) async {

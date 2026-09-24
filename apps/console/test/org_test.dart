@@ -3,8 +3,20 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
 
-Future<void> signInAs(WidgetTester tester, String email) =>
-    completeSignIn(tester, email);
+Future<void> signInAs(WidgetTester tester, String email) async {
+  await completeSignIn(tester, email);
+  // Everyone lands on the dashboard; these tests start from the org list.
+  final list = email.startsWith('master@')
+      ? 'Resellers'
+      : email.startsWith('reseller@')
+      ? 'Tenants'
+      : null;
+  if (list == null) return;
+  await tester.tap(
+    find.descendant(of: find.byType(NavigationRail), matching: find.text(list)),
+  );
+  await tester.pumpAndSettle();
+}
 
 Finder field(String label) => find.widgetWithText(TextFormField, label);
 

@@ -56,6 +56,7 @@ const _country = Field(
 /// while these live at `/v1/resellers` and `/v1/tenants/{id}`.
 const resellerDef = ResourceDef(
   key: 'resellers',
+  permission: 'reseller.manage',
   singular: 'Reseller',
   plural: 'Resellers',
   icon: Icons.storefront_outlined,
@@ -72,6 +73,7 @@ const resellerDef = ResourceDef(
 
 const tenantDef = ResourceDef(
   key: 'tenants',
+  permission: 'tenant.manage',
   singular: 'Tenant',
   plural: 'Tenants',
   icon: Icons.apartment_outlined,

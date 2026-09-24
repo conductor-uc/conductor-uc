@@ -106,6 +106,7 @@ class ResourceDef {
     required this.icon,
     required this.fields,
     this.readOnly = false,
+    this.permission,
     this.title,
     this.blurb,
   });
@@ -119,6 +120,10 @@ class ResourceDef {
 
   /// No create or edit from the console (deleting still works).
   final bool readOnly;
+
+  /// The permission that lets someone change these rows; without it the page
+  /// is for reading. Null when there is no single one.
+  final String? permission;
 
   /// One line naming a row, for pickers and confirmations.
   final String Function(Map<String, dynamic> row)? title;
@@ -156,6 +161,7 @@ const destinationResource = {
 
 const extensionsDef = ResourceDef(
   key: 'extensions',
+  permission: 'extension.manage',
   singular: 'Extension',
   plural: 'Extensions',
   icon: Icons.dialpad_outlined,
@@ -196,6 +202,7 @@ String _extensionTitle(Map<String, dynamic> row) =>
 
 const didsDef = ResourceDef(
   key: 'dids',
+  permission: 'did.manage',
   singular: 'Phone number',
   plural: 'Phone numbers',
   icon: Icons.phone_outlined,
@@ -259,6 +266,7 @@ const _noAnswerFields = [
 
 const ringGroupsDef = ResourceDef(
   key: 'ring-groups',
+  permission: 'group.manage',
   singular: 'Ring group',
   plural: 'Ring groups',
   icon: Icons.groups_outlined,
@@ -299,6 +307,7 @@ const ringGroupsDef = ResourceDef(
 
 const queuesDef = ResourceDef(
   key: 'queues',
+  permission: 'queue.manage',
   singular: 'Queue',
   plural: 'Queues',
   icon: Icons.queue_outlined,
@@ -371,6 +380,7 @@ const queuesDef = ResourceDef(
 
 const agentsDef = ResourceDef(
   key: 'agents',
+  permission: 'queue.manage',
   singular: 'Agent',
   plural: 'Agents',
   icon: Icons.headset_mic_outlined,
@@ -409,6 +419,7 @@ const agentsDef = ResourceDef(
 
 const conferenceRoomsDef = ResourceDef(
   key: 'conference-rooms',
+  permission: 'conference_room.manage',
   singular: 'Conference room',
   plural: 'Conference rooms',
   icon: Icons.video_call_outlined,
@@ -465,6 +476,7 @@ const commonTimezones = [
 
 const schedulesDef = ResourceDef(
   key: 'schedules',
+  permission: 'schedule.manage',
   singular: 'Schedule',
   plural: 'Schedules',
   icon: Icons.schedule_outlined,
@@ -505,6 +517,7 @@ const schedulesDef = ResourceDef(
 
 const parkingLotsDef = ResourceDef(
   key: 'parking-lots',
+  permission: 'parking_lot.manage',
   singular: 'Parking lot',
   plural: 'Parking lots',
   icon: Icons.local_parking_outlined,
@@ -554,6 +567,7 @@ const parkingLotsDef = ResourceDef(
 
 const emergencyLocationsDef = ResourceDef(
   key: 'emergency-locations',
+  permission: 'emergency_location.manage',
   singular: 'Emergency location',
   plural: 'Emergency locations',
   icon: Icons.local_hospital_outlined,
@@ -577,6 +591,7 @@ const emergencyLocationsDef = ResourceDef(
 
 const mediaAssetsDef = ResourceDef(
   key: 'media-assets',
+  permission: 'media.manage',
   singular: 'Media file',
   plural: 'Media',
   icon: Icons.library_music_outlined,
@@ -595,6 +610,7 @@ const mediaAssetsDef = ResourceDef(
 /// dialog (`trunks_page.dart`).
 const trunksDef = ResourceDef(
   key: 'trunks',
+  permission: 'trunk.manage',
   singular: 'Trunk',
   plural: 'Trunks',
   icon: Icons.cable_outlined,
@@ -669,6 +685,7 @@ const trunksDef = ResourceDef(
 /// resources can pick a flow as a destination.
 const flowsDef = ResourceDef(
   key: 'flows',
+  permission: 'callflow.edit',
   singular: 'Call flow',
   plural: 'Call flows',
   icon: Icons.account_tree_outlined,

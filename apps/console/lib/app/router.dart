@@ -1,8 +1,10 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart' show Scaffold;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/acting.dart';
+import '../core/permissions.dart';
 import '../core/session.dart';
 import '../features/auth/invite_page.dart';
 import '../features/auth/login_page.dart';
@@ -18,6 +20,10 @@ import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
 import '../features/pbx/resource.dart';
 import '../features/pbx/resource_page.dart';
+import '../features/dashboard/dashboard_page.dart';
+import '../features/audit/audit_page.dart';
+import '../features/platform/platform_health_page.dart';
+import '../features/shell/notice_pages.dart';
 import '../features/shell/sections.dart';
 import '../features/users/users_page.dart';
 import '../features/shell/shell_page.dart';
@@ -28,6 +34,8 @@ final routerProvider = Provider<GoRouter>((ref) {
   final refresh = ValueNotifier<int>(0);
   ref.listen(sessionProvider, (_, _) => refresh.value++);
   ref.listen(actingProvider, (_, _) => refresh.value++);
+  // What the user may see arrives after sign-in; recheck the page they are on.
+  ref.listen(permissionsProvider, (_, _) => refresh.value++);
   ref.onDispose(refresh.dispose);
 
   final everySection = {
@@ -37,6 +45,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     refreshListenable: refresh,
+    errorBuilder: (context, state) => const Scaffold(body: NotFoundPage()),
     redirect: (context, state) {
       final session = ref.read(sessionProvider);
       final path = state.uri.path;
@@ -48,13 +57,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         }
         return _signedOutPaths.contains(path) ? null : '/login';
       }
-      final sections = visibleSections(session, ref.read(actingProvider));
+      final sections = visibleSections(
+        session,
+        ref.read(actingProvider),
+        ref.read(knownPermissionsProvider),
+      );
       if (_signedOutPaths.contains(path) || path == '/') {
         return sections.first.path;
       }
-      // A section the org type does not have is not reachable by URL either.
+      // A section the role does not have is not reachable by URL either: it
+      // gets the forbidden page. An address that is no section at all is a
+      // 404 page.
+      if (path == '/forbidden') return null;
       if (!sections.any((s) => path.startsWith(s.path))) {
-        return sections.first.path;
+        return everySection.any((s) => path.startsWith(s.path))
+            ? '/forbidden'
+            : null;
       }
       return null;
     },
@@ -94,6 +112,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) =>
                 FlowBuilderPage(flowId: state.pathParameters['id']!),
           ),
+          GoRoute(
+            path: '/forbidden',
+            builder: (context, state) => const ForbiddenPage(),
+          ),
           for (final s in everySection)
             GoRoute(path: s.path, builder: (context, state) => _pageFor(s)),
         ],
@@ -111,6 +133,9 @@ Widget _pageFor(Section section) {
   if (section.path == '/brand') return const BrandPage();
   if (section.path == '/users') return const UsersPage();
   if (section.path == '/media') return const MediaPage();
+  if (section.path == '/dashboard') return const DashboardPage();
+  if (section.path == '/audit') return const AuditPage();
+  if (section.path == '/platform-health') return const PlatformHealthPage();
   if (section.path == '/trunks') return const TrunksPage();
   if (section.path == '/domains') return const DomainsPage();
   if (section.path == '/resellers' || section.path == '/tenants') {
