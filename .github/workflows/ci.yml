@@ -52,7 +52,10 @@ env:
 jobs:
   check:
     name: lint, typecheck, test, build
-    runs-on: ubuntu-latest
+    # Self-hosted like `sip-smoke`: the runner is faster than GitHub-hosted
+    # tenancy. It is a long-lived host, not a fresh VM, so anything a step
+    # starts by hand must be removed again (see the NATS/MinIO steps).
+    runs-on: self-hosted
     timeout-minutes: 20
 
     services:
@@ -104,6 +107,9 @@ jobs:
         # Not a `services:` entry: JetStream needs the `-js` argument, and a
         # service container has no way to pass one.
         run: |
+          # A previous run on this long-lived runner may have been cancelled
+          # before its cleanup step; a stale container would hold the name.
+          docker rm -f nats >/dev/null 2>&1 || true
           docker run -d --name nats -p 4222:4222 nats:2.10-alpine -js
           for _ in $(seq 1 30); do
             if (exec 3<>/dev/tcp/127.0.0.1/4222) 2>/dev/null; then
@@ -122,9 +128,10 @@ jobs:
         # @cuc/storage's tests fall back to Testcontainers pulling the image
         # cold, which routinely outruns vitest's default hook timeout here.
         run: |
+          docker rm -f minio >/dev/null 2>&1 || true
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=ci-minio -e MINIO_ROOT_PASSWORD=ci-minio-password \
-            quay.io/minio/minio:latest server /data
+            pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data
           for _ in $(seq 1 30); do
             if (exec 3<>/dev/tcp/127.0.0.1/9000) 2>/dev/null; then
               echo "MinIO is accepting connections"
@@ -204,6 +211,11 @@ jobs:
       - name: Show MinIO logs on failure
         if: failure()
         run: docker logs minio || true
+
+      - name: Remove NATS and MinIO
+        # Not a `services:` entry, so the runner does not clean these up.
+        if: always()
+        run: docker rm -f nats minio || true
 
   # A separate job, not a step in `check` above, so one slow suite does not
   # hold up the fast feedback loop (real SIP transaction timers over real
@@ -357,7 +369,7 @@ jobs:
   # only place `apps/console/build/web` exists to be scanned.
   console:
     name: console (analyze, test, build web)
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     timeout-minutes: 20
 
     steps:
