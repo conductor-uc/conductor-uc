@@ -23,6 +23,7 @@ import { createConferenceRoomRepo } from './repo/conference-room.repo.js';
 import { registerDidRoutes } from './routes/did.routes.js';
 import { registerEmergencyLocationRoutes } from './routes/emergency-location.routes.js';
 import { registerExtensionRoutes } from './routes/extension.routes.js';
+import { parseSipTransports, registerSipEndpointRoutes } from './routes/sip-endpoint.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerScheduleInternalRoutes } from './routes/schedule-internal.routes.js';
 import { registerMediaAssetRoutes } from './routes/media-asset.routes.js';
@@ -128,6 +129,10 @@ app.addReadinessCheck('outbox', async () => {
 });
 
 registerExtensionRoutes(app, extensionRepo, bus);
+registerSipEndpointRoutes(app, orgClient.primaryDomain, {
+  port: config.SIP_PUBLIC_PORT,
+  transports: parseSipTransports(config.SIP_PUBLIC_TRANSPORTS),
+});
 registerDidRoutes(app, didRepo);
 registerEmergencyLocationRoutes(app, emergencyLocationRepo);
 registerMediaAssetRoutes(app, mediaAssetRepo);

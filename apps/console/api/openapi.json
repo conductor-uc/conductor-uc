@@ -5955,6 +5955,60 @@
         ]
       }
     },
+    "/v1/tenants/{tenantId}/sip-endpoint": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "server",
+                    "port",
+                    "transports",
+                    "realm"
+                  ],
+                  "properties": {
+                    "server": {
+                      "type": "string"
+                    },
+                    "port": {
+                      "type": "integer"
+                    },
+                    "transports": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "realm": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listSipEndpoint",
+        "tags": [
+          "SipEndpoint"
+        ]
+      }
+    },
     "/v1/tenants/{tenantId}/dids": {
       "get": {
         "parameters": [

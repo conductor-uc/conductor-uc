@@ -78,7 +78,11 @@ describe('api-gateway: auth + proxy', () => {
     });
 
     const routes: Record<string, string[]> = {
-      pbx: ['/v1/tenants/:id/extensions', '/v1/tenants/:id/extensions/:extId/reveal'],
+      pbx: [
+        '/v1/tenants/:id/extensions',
+        '/v1/tenants/:id/sip-endpoint',
+        '/v1/tenants/:id/extensions/:extId/reveal',
+      ],
       callflow: ['/v1/tenants/:id/flows/:flowId/versions/:n'],
       voicemail: ['/v1/tenants/:id/voicemail/mailboxes'],
       trunk: ['/v1/tenants/:id/trunks'],
@@ -295,6 +299,7 @@ describe('api-gateway: auth + proxy', () => {
   it.each([
     ['/v1/tenants/tenant-9/extensions', 'pbx'],
     ['/v1/tenants/tenant-9/extensions/e1/reveal', 'pbx'],
+    ['/v1/tenants/tenant-9/sip-endpoint', 'pbx'],
     ['/v1/tenants/tenant-9/flows/f1/versions/2', 'callflow'],
     ['/v1/tenants/tenant-9/voicemail/mailboxes', 'voicemail'],
     ['/v1/tenants/tenant-9/trunks', 'trunk'],

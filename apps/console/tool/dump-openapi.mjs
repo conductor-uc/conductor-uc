@@ -29,6 +29,7 @@ const SOURCES = [
   ['org-service', 'domain', 'registerDomainRoutes', 2],
   ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
   ['pbx-config-service', 'extension', 'registerExtensionRoutes', 2],
+  ['pbx-config-service', 'sip-endpoint', 'registerSipEndpointRoutes', 2],
   ['pbx-config-service', 'did', 'registerDidRoutes', 1],
   ['pbx-config-service', 'emergency-location', 'registerEmergencyLocationRoutes', 1],
   ['pbx-config-service', 'media-asset', 'registerMediaAssetRoutes', 1],

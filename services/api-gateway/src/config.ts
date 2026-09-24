@@ -61,6 +61,7 @@ export const configSchema = Type.Object({
       '/v1/session=org',
       // pbx-config-service
       '/v1/tenants/*/extensions=pbx',
+      '/v1/tenants/*/sip-endpoint=pbx',
       '/v1/tenants/*/dids=pbx',
       '/v1/tenants/*/ring-groups=pbx',
       '/v1/tenants/*/queues=pbx',
