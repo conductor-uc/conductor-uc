@@ -4,8 +4,12 @@ import type { Redis } from 'ioredis';
 
 import { createAccessTokenVerifier } from './auth/access-token-verifier.js';
 import { registerAuthentication } from './auth/authenticate.js';
+import { registerConsoleHosting } from './console-hosting.js';
 import { registerCors } from './cors.js';
 import { registerPlatformHealth } from './platform-health.js';
+import { registerProvisioningTransport } from './provisioning-transport.js';
+import { registerSecurityHeaders } from './security-headers.js';
+import { tlsServerOptions } from './tls.js';
 import { createRateLimiter } from './rate-limit/limiter.js';
 import { registerRateLimit } from './rate-limit/hooks.js';
 import { registerProxy } from './routing/proxy.js';
@@ -35,6 +39,11 @@ export interface BuildAppOptions {
  */
 export async function buildApp(options: BuildAppOptions): Promise<Server> {
   const { config } = options;
+  const https = tlsServerOptions({
+    certFile: config.TLS_CERT_FILE,
+    keyFile: config.TLS_KEY_FILE,
+    certDir: config.TLS_CERT_DIR,
+  });
 
   const app = await createServer({
     serviceName: config.SERVICE_NAME,
@@ -44,10 +53,20 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     // The gateway is the edge itself, reached through a load balancer — client
     // IPs (rate limiting, audit) come from X-Forwarded-For, not the socket.
     trustProxy: true,
+    // HTTPS when a certificate is configured (TLS_CERT_FILE / TLS_CERT_DIR).
+    ...(https === undefined ? {} : { https }),
     // Always false: an external client's own x-internal-* headers must never
     // be believed here — this service is the one that *produces* them, from a
     // verified JWT, not a consumer of them.
     context: { trustInternalHeaders: false },
+  });
+
+  // Behind a TLS-terminating proxy the connection here is plain, but the browser
+  // is on HTTPS, so HSTS follows what the proxy says (request.protocol), not
+  // only whether this process holds a certificate.
+  registerSecurityHeaders(app, { hstsMaxAgeSeconds: config.HSTS_MAX_AGE_SECONDS });
+  registerProvisioningTransport(app, {
+    requireHttps: config.REQUIRE_HTTPS_FOR_PROVISIONING,
   });
 
   app.addReadinessCheck('redis', async () => {
@@ -115,6 +134,14 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     timeoutMs: config.PROXY_TIMEOUT_MS,
     internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET,
   });
+
+  // Last, so every more specific route (the API, health, the platform page) wins.
+  if (config.CONSOLE_DIR !== undefined) {
+    registerConsoleHosting(app, {
+      dir: config.CONSOLE_DIR,
+      extraConnectSources: config.CONSOLE_CONNECT_SOURCES,
+    });
+  }
 
   return app;
 }

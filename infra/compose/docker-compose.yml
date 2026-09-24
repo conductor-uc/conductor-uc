@@ -688,6 +688,12 @@ services:
       VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
       CDR_SERVICE_URL: http://cdr-service:8080
       TRUNK_SERVICE_URL: http://trunk-service:8080
+      # 07 §5: the edge speaks HTTPS when it is given a certificate, and refuses to
+      # serve phone provisioning (which carries a SIP password) over plain HTTP.
+      # A laptop runs plain HTTP, so dev turns both off; production sets
+      # TLS_CERT_FILE / TLS_KEY_FILE (or TLS_CERT_DIR) and leaves them on.
+      REQUIRE_HTTPS_FOR_PROVISIONING: ${REQUIRE_HTTPS_FOR_PROVISIONING:-false}
+      HSTS_MAX_AGE_SECONDS: ${HSTS_MAX_AGE_SECONDS:-0}
 
   notification-service:
     build:
