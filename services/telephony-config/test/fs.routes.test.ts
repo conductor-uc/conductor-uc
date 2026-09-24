@@ -2495,7 +2495,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         });
 
         expect(response.body).toContain(
-          `<param name="moh-sound" value="http_cache://http://fs-node:${TOKEN}@telephony-config-test:8080/fs/media/${tenantId}/${mediaAssetId}/8k"/>`,
+          `<param name="moh-sound" value="http_cache://http://fs-node:${TOKEN}@telephony-config-test:8080/fs/media/${tenantId}/${mediaAssetId}/8k.wav"/>`,
         );
       });
 
