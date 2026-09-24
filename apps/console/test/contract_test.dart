@@ -31,6 +31,8 @@ Map<String, dynamic> _schema(
 const _notExposed = {
   // Linking an extension to a user belongs with the Users screen.
   'extensions': {'userId'},
+  // A trunk's caller-ID policy is a nested object with no screen yet.
+  'trunks': {'callerIdPolicy'},
 };
 
 void main() {
@@ -90,7 +92,7 @@ void main() {
   });
 
   test('every resource with a page has a list route', () {
-    for (final def in allResources.where((r) => r.key != 'trunks')) {
+    for (final def in allResources) {
       expect(paths, contains('/v1/tenants/{tenantId}/${def.key}'));
     }
   });

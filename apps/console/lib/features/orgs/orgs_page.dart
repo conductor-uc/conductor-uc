@@ -16,10 +16,13 @@ import 'orgs_api.dart';
 /// - Master at `/resellers`: the resellers; open one for its tenants.
 /// - Master at `/resellers/:id`, or a reseller at `/tenants`: tenants.
 class OrgsPage extends ConsumerWidget {
-  const OrgsPage({super.key, this.resellerId});
+  const OrgsPage({super.key, this.resellerId, this.embedded = false});
 
   /// The reseller whose tenants to list. Null lists the master's resellers.
   final String? resellerId;
+
+  /// Inside a reseller's page, which already has the title and the way back.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,7 +38,7 @@ class OrgsPage extends ConsumerWidget {
       children: [
         PageHeader(
           title: showingResellers ? 'Resellers' : 'Tenants',
-          leading: isMaster && !showingResellers
+          leading: isMaster && !showingResellers && !embedded
               ? IconButton(
                   tooltip: 'Back to resellers',
                   icon: const Icon(Icons.arrow_back),
@@ -117,13 +120,24 @@ class _OrgTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final suspended = org['status'] != 'active';
+    // A tenant's own name under a reseller base domain (S1-03).
+    final domain = isReseller
+        ? null
+        : ref.watch(tenantDomainProvider('${org['id']}')).value?['fqdn'];
     return ListTile(
       leading: Icon(
         isReseller ? Icons.storefront_outlined : Icons.apartment_outlined,
       ),
       title: Text('${org['name']}'),
-      subtitle: Text(
-        suspended ? '${org['slug']} · ${org['status']}' : '${org['slug']}',
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            suspended ? '${org['slug']} · ${org['status']}' : '${org['slug']}',
+          ),
+          if (domain != null)
+            Text(domain, key: ValueKey('domain-${org['id']}')),
+        ],
       ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -147,7 +161,8 @@ class _OrgTile extends ConsumerWidget {
             ),
           PopupMenuButton<String>(
             tooltip: 'More',
-            onSelected: (choice) => _menu(context, ref, choice),
+            onSelected: (choice) =>
+                orgAction(context, ref, org, isReseller, choice),
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'edit', child: Text('Edit')),
               if (!isReseller)
@@ -166,68 +181,73 @@ class _OrgTile extends ConsumerWidget {
   }
 }
 
-extension on _OrgTile {
-  Future<void> _menu(BuildContext context, WidgetRef ref, String choice) async {
-    final api = ref.read(orgsApiProvider);
-    if (api == null) return;
-    final id = '${org['id']}';
-    void refresh() {
-      ref.invalidate(resellersProvider);
-      ref.invalidate(tenantsProvider);
-    }
+/// Edit, suspend or resume, or open the people of one org: what the row menu
+/// and a reseller's own page both offer.
+Future<void> orgAction(
+  BuildContext context,
+  WidgetRef ref,
+  Json org,
+  bool isReseller,
+  String choice,
+) async {
+  final api = ref.read(orgsApiProvider);
+  if (api == null) return;
+  final id = '${org['id']}';
+  void refresh() {
+    ref.invalidate(resellersProvider);
+    ref.invalidate(tenantsProvider);
+  }
 
-    if (choice == 'people') {
-      // A tenant's people are managed from inside the tenant, like the rest.
-      ref
-          .read(actingProvider.notifier)
-          .enter(ActingTenant(id: id, name: '${org['name']}'));
-      context.go('/users');
-      return;
-    }
+  if (choice == 'people') {
+    // A tenant's people are managed from inside the tenant, like the rest.
+    ref
+        .read(actingProvider.notifier)
+        .enter(ActingTenant(id: id, name: '${org['name']}'));
+    context.go('/users');
+    return;
+  }
 
-    if (choice == 'edit') {
-      final saved = await showDialog<Json>(
-        context: context,
-        builder: (_) => ResourceFormDialog(
-          def: isReseller ? resellerDef : tenantDef,
-          row: org,
-          save: (_, body) =>
-              api.update(reseller: isReseller, id: id, body: body),
-        ),
-      );
-      if (saved != null) refresh();
-      return;
-    }
-
-    final suspend = org['status'] == 'active';
-    final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
+  if (choice == 'edit') {
+    final saved = await showDialog<Json>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${suspend ? 'Suspend' : 'Resume'} ${org['name']}?'),
-        content: Text(
-          suspend
-              ? 'Their users are signed out and calls stop routing until it is resumed.'
-              : 'Service is restored.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(suspend ? 'Suspend' : 'Resume'),
-          ),
-        ],
+      builder: (_) => ResourceFormDialog(
+        def: isReseller ? resellerDef : tenantDef,
+        row: org,
+        save: (_, body) => api.update(reseller: isReseller, id: id, body: body),
       ),
     );
-    if (confirmed != true) return;
-    try {
-      await api.setSuspended(reseller: isReseller, id: id, suspended: suspend);
-      refresh();
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
-    }
+    if (saved != null) refresh();
+    return;
+  }
+
+  final suspend = org['status'] == 'active';
+  final messenger = ScaffoldMessenger.of(context);
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: Text('${suspend ? 'Suspend' : 'Resume'} ${org['name']}?'),
+      content: Text(
+        suspend
+            ? 'Their users are signed out and calls stop routing until it is resumed.'
+            : 'Service is restored.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(suspend ? 'Suspend' : 'Resume'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+  try {
+    await api.setSuspended(reseller: isReseller, id: id, suspended: suspend);
+    refresh();
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
   }
 }
