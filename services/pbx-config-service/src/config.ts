@@ -31,6 +31,12 @@ export const configSchema = Type.Object({
    */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
 
+  /**
+   * The public address phones use to reach the API gateway, e.g. `https://api.example.com`.
+   * Provisioning URLs are built from it; without it they are reported as unset.
+   */
+  PROVISIONING_BASE_URL: Env.optional(Env.url()),
+
   /** The port the SIP edge accepts registrations on, as phones are told (the console's "connect a phone"). */
   SIP_PUBLIC_PORT: Env.port({ default: 5060 }),
   /** Transports the edge accepts, comma-separated, most preferred first: `udp`, `tcp`, `tls`. */

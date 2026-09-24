@@ -103,6 +103,12 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       requires: ['extension.manage'],
     ),
     Section(
+      '/phones',
+      'Phones',
+      Icons.phone_android_outlined,
+      requires: ['extension.manage'],
+    ),
+    Section(
       '/phone-numbers',
       'Phone numbers',
       Icons.phone_outlined,

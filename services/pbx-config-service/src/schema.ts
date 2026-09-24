@@ -217,6 +217,26 @@ export interface PbxConfigServiceDb extends EventTables {
     version: number;
   };
   /**
+   * A provisioned desk phone (see `010_add_devices.ts`). `mac` is unique across
+   * tenants; `token_hash` is the SHA-256 of the provisioning password, null
+   * until one is issued.
+   */
+  devices: {
+    id: string;
+    tenant_id: string;
+    extension_id: string;
+    vendor: string;
+    model: string | null;
+    mac: string;
+    label: string | null;
+    token_hash: string | null;
+    last_provisioned_at: Date | null;
+    last_seen_ip: string | null;
+    last_user_agent: string | null;
+    created_at: Date;
+    updated_at: Date;
+  };
+  /**
    * A schedule (S3-08; 05 §3.3): open hours as weekly windows plus holiday
    * dates, evaluated in `timezone`. `rules` and `holidays` hold what
    * `domain/schedule.ts` validates, as parsed JSON or JSON text depending on

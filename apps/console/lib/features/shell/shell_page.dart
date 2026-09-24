@@ -39,17 +39,29 @@ class ShellPage extends ConsumerWidget {
       ),
       body: Row(
         children: [
-          NavigationRail(
-            extended: MediaQuery.sizeOf(context).width >= 900,
-            selectedIndex: selected < 0 ? null : selected,
-            onDestinationSelected: (i) => context.go(sections[i].path),
-            destinations: [
-              for (final s in sections)
-                NavigationRailDestination(
-                  icon: Icon(s.icon),
-                  label: Text(s.label),
+          // A rail does not scroll by itself, and a tenant has enough sections
+          // to overflow a short window. Scrolling only when it has to, and
+          // otherwise laying out exactly as before, is Flutter's own pattern.
+          LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                child: IntrinsicHeight(
+                  child: NavigationRail(
+                    extended: MediaQuery.sizeOf(context).width >= 900,
+                    selectedIndex: selected < 0 ? null : selected,
+                    onDestinationSelected: (i) => context.go(sections[i].path),
+                    destinations: [
+                      for (final s in sections)
+                        NavigationRailDestination(
+                          icon: Icon(s.icon),
+                          label: Text(s.label),
+                        ),
+                    ],
+                  ),
                 ),
-            ],
+              ),
+            ),
           ),
           const VerticalDivider(width: 1),
           Expanded(

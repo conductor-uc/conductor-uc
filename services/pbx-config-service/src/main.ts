@@ -11,6 +11,7 @@ import { createDomainConsumer } from './consumers/domain.consumer.js';
 import { createOrgClient } from './org-client.js';
 import { createDidRepo } from './repo/did.repo.js';
 import { createEmergencyLocationRepo } from './repo/emergency-location.repo.js';
+import { createDeviceRepo } from './repo/device.repo.js';
 import { createExtensionRepo } from './repo/extension.repo.js';
 import { createMediaAssetRepo } from './repo/media-asset.repo.js';
 import { createRingGroupRepo } from './repo/ring-group.repo.js';
@@ -22,7 +23,9 @@ import { createScheduleRepo } from './repo/schedule.repo.js';
 import { createConferenceRoomRepo } from './repo/conference-room.repo.js';
 import { registerDidRoutes } from './routes/did.routes.js';
 import { registerEmergencyLocationRoutes } from './routes/emergency-location.routes.js';
+import { registerDeviceRoutes } from './routes/device.routes.js';
 import { registerExtensionRoutes } from './routes/extension.routes.js';
+import { registerProvisionRoutes } from './routes/provision.routes.js';
 import { parseSipTransports, registerSipEndpointRoutes } from './routes/sip-endpoint.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerScheduleInternalRoutes } from './routes/schedule-internal.routes.js';
@@ -89,6 +92,7 @@ const orgClient = createOrgClient({
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
 const extensionRepo = createExtensionRepo(db, orgClient.primaryDomain, kek);
+const deviceRepo = createDeviceRepo(db);
 const trunkClient = createTrunkClient({
   baseUrl: config.TRUNK_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
@@ -129,10 +133,17 @@ app.addReadinessCheck('outbox', async () => {
 });
 
 registerExtensionRoutes(app, extensionRepo, bus);
-registerSipEndpointRoutes(app, orgClient.primaryDomain, {
+const sipEdge = {
   port: config.SIP_PUBLIC_PORT,
   transports: parseSipTransports(config.SIP_PUBLIC_TRANSPORTS),
+};
+registerSipEndpointRoutes(app, orgClient.primaryDomain, sipEdge);
+registerDeviceRoutes(app, deviceRepo, bus, {
+  ...(config.PROVISIONING_BASE_URL === undefined
+    ? {}
+    : { provisioningBaseUrl: config.PROVISIONING_BASE_URL }),
 });
+registerProvisionRoutes(app, deviceRepo, extensionRepo, orgClient.primaryDomain, sipEdge);
 registerDidRoutes(app, didRepo);
 registerEmergencyLocationRoutes(app, emergencyLocationRepo);
 registerMediaAssetRoutes(app, mediaAssetRepo);

@@ -5,6 +5,7 @@ import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import 'connect_phone_dialog.dart';
 import 'pbx_api.dart';
+import 'provisioning_dialog.dart';
 import 'resource.dart';
 import 'resource_form.dart';
 import '../queues/tiers_dialog.dart';
@@ -301,6 +302,16 @@ class ResourcePage extends ConsumerWidget {
           onPressed: () => showDialog<void>(
             context: context,
             builder: (_) => ConnectPhoneDialog(extension: row),
+          ),
+        ),
+      ],
+      'devices' => (context, ref, row) => [
+        IconButton(
+          tooltip: 'Set up this phone',
+          icon: const Icon(Icons.settings_remote_outlined),
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => ProvisioningDialog(device: row),
           ),
         ),
       ],

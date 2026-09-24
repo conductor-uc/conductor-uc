@@ -9,6 +9,7 @@ import * as addQueues from './006_add_queues.js';
 import * as addParkingLots from './007_add_parking_lots.js';
 import * as addConferenceRooms from './008_add_conference_rooms.js';
 import * as addSchedules from './009_add_schedules.js';
+import * as addDevices from './010_add_devices.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -29,4 +30,5 @@ export const migrations: Record<string, Migration> = {
   '007_add_parking_lots': addParkingLots,
   '008_add_conference_rooms': addConferenceRooms,
   '009_add_schedules': addSchedules,
+  '010_add_devices': addDevices,
 };

@@ -147,6 +147,98 @@ void main() {
     },
   );
 
+  testWidgets('Phones lists the desk phones with the extension each uses', (
+    tester,
+  ) async {
+    await openSection(tester, 'Phones');
+    expect(find.text('001565aabbcc'), findsOneWidget);
+    expect(find.text('T46U'), findsOneWidget);
+    expect(find.text('Front desk'), findsWidgets);
+    expect(find.textContaining('Alice Kim'), findsWidgets);
+  });
+
+  testWidgets('adding a phone needs a MAC address and an extension', (
+    tester,
+  ) async {
+    await openSection(tester, 'Phones');
+    await tester.tap(find.text('New phone'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('New phone'), findsWidgets);
+    expect(find.text('Required'), findsWidgets);
+
+    await tester.enterText(field('MAC address *'), '00:15:65:aa:bb:dd');
+    await pickFromDropdown(tester, 'Extension *', '102 · Bob Osei');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('00:15:65:aa:bb:dd'), findsOneWidget);
+  });
+
+  testWidgets(
+    'setting up a phone needs a reason, then shows the address and password once',
+    (tester) async {
+      await openSection(tester, 'Phones');
+      await tapIn(tester, '001565aabbcc', find.byTooltip('Set up this phone'));
+
+      expect(find.text('Set up this phone'), findsOneWidget);
+      expect(
+        find.text('No setup details have been created yet.'),
+        findsOneWidget,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'Create setup details'),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Why do you need them?'),
+        'Setting up the front desk phone',
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Create setup details'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('https://api.demo.example/v1/public/provision/yealink/'),
+        findsOneWidget,
+      );
+      expect(find.text('dev-1'), findsOneWidget);
+      expect(find.textContaining('demo-provision-'), findsWidgets);
+      expect(find.text('This password is not shown again.'), findsOneWidget);
+    },
+  );
+
+  testWidgets('someone who cannot reveal secrets cannot create setup details', (
+    tester,
+  ) async {
+    await completeSignIn(tester, 'limited@example.test');
+    await tester.tap(
+      find.descendant(
+        of: find.byType(NavigationRail),
+        matching: find.text('Phones'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapIn(tester, '001565aabbcc', find.byTooltip('Set up this phone'));
+
+    expect(
+      find.text(
+        'Setup details are created only by people allowed to reveal passwords.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.widgetWithText(FilledButton, 'Create setup details'),
+      findsNothing,
+    );
+  });
+
   testWidgets('creating an extension adds a row', (tester) async {
     await openSection(tester, 'Extensions');
     await tester.tap(find.text('New extension'));
