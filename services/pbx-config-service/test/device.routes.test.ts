@@ -65,7 +65,7 @@ describe.skipIf(skipReason !== undefined)('devices and provisioning HTTP routes'
       h.devices,
       h.extensions,
       h.domains.lookup,
-      { port: 5060, transports: ['udp', 'tcp'] },
+      { port: 5060, tlsPort: 5061, transports: ['udp', 'tcp'] },
       { globalCredential: { username: 'phones', password: 'shared-secret' } },
     );
     await app.ready();
@@ -422,6 +422,33 @@ describe.skipIf(skipReason !== undefined)('devices and provisioning HTTP routes'
         });
         expect(own.statusCode).toBe(200);
       });
+    });
+
+    it('points the phone at the TLS port, and asks for TLS, when TLS is the preferred transport', async () => {
+      const { creds } = await provisioned();
+      const tls = await createServer({
+        serviceName: 'pbx-config-service',
+        logger: h.logger,
+        context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
+      });
+      registerProvisionRoutes(tls, h.devices, h.extensions, h.domains.lookup, {
+        port: 5060,
+        tlsPort: 5061,
+        transports: ['tls', 'udp'],
+      });
+      await tls.ready();
+      try {
+        const response = await tls.inject({
+          method: 'GET',
+          url: '/v1/public/provision/yealink/001565aabbcc.cfg',
+          headers: { authorization: basic(creds.username, creds.password) },
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).toContain('account.1.sip_server.1.port = 5061\n');
+        expect(response.body).toContain('account.1.sip_server.1.transport_type = 2\n');
+      } finally {
+        await tls.close();
+      }
     });
 
     it("will not serve another phone's file, or one that is not a Yealink file", async () => {

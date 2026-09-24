@@ -47,6 +47,8 @@ export const configSchema = Type.Object({
 
   /** The port the SIP edge accepts registrations on, as phones are told (the console's "connect a phone"). */
   SIP_PUBLIC_PORT: Env.port({ default: 5060 }),
+  /** The port the SIP edge accepts TLS on, when `tls` is one of the transports. */
+  SIP_PUBLIC_TLS_PORT: Env.port({ default: 5061 }),
   /** Transports the edge accepts, comma-separated, most preferred first: `udp`, `tcp`, `tls`. */
   SIP_PUBLIC_TRANSPORTS: Env.string({ default: 'udp,tcp' }),
 });

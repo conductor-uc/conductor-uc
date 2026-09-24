@@ -540,6 +540,8 @@ export interface RunForegroundOptions {
    * section early (RFC 3261) and corrupts the message. */
   readonly extraHeader?: string;
   readonly containerName: string;
+  /** Send over TLS to OpenSIPs' TLS port (SIPp `-t l1`) instead of UDP. */
+  readonly tls?: boolean;
 }
 
 /** Runs one SIPp scenario to completion in the foreground (`docker run
@@ -576,7 +578,8 @@ export async function runForeground(opts: RunForegroundOptions): Promise<SippSta
         ap: opts.ap,
         authUri: opts.authUri,
         extraHeader: opts.extraHeader,
-        remoteHost: env.opensipsTarget,
+        remoteHost: opts.tls === true ? tlsTarget(env.opensipsTarget) : env.opensipsTarget,
+        tls: opts.tls,
       }),
     ];
     const result = await execFileAsync('docker', args, {
@@ -591,6 +594,12 @@ export async function runForeground(opts: RunForegroundOptions): Promise<SippSta
   });
 }
 
+/** OpenSIPs' TLS listener on the same host as its plain one. */
+function tlsTarget(target: string): string {
+  const host = target.split(':')[0] ?? target;
+  return `${host}:${envOr('SIP_TEST_OPENSIPS_TLS_PORT', '5061')}`;
+}
+
 function buildSippCommand(opts: {
   scenarioPath: string;
   csvPath: string;
@@ -601,6 +610,7 @@ function buildSippCommand(opts: {
   localPort?: number | undefined;
   remoteHost?: string | undefined;
   logPrefix?: string | undefined;
+  tls?: boolean | undefined;
 }): string {
   const parts = [
     'sipp',
@@ -655,6 +665,19 @@ function buildSippCommand(opts: {
   // Fix 5 (checkpoint memory): default to a harmless real header, never ''.
   parts.push('-key', 'extraheader', `"${opts.extraHeader ?? 'X-Sip-Test: 1'}"`);
   if (opts.localPort !== undefined) parts.push('-p', String(opts.localPort));
+  if (opts.tls === true) {
+    // SIPp needs a certificate of its own to run TLS at all. This image ships
+    // OpenSSL's demo pair; OpenSIPs does not ask clients for one (phones
+    // authenticate with a digest), so which certificate this is does not matter.
+    parts.push(
+      '-t',
+      'l1',
+      '-tls_cert',
+      '/usr/share/doc/libssl-doc/demos/smime/cacert.pem',
+      '-tls_key',
+      '/usr/share/doc/libssl-doc/demos/smime/cakey.pem',
+    );
+  }
   const prefix = opts.logPrefix ?? 'run';
   parts.push(
     '-message_file',

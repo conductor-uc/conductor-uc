@@ -14,8 +14,44 @@ set -eu
 # image's own template variables is what keeps OpenSIPs' own syntax intact.
 TEMPLATE_VARS='$OPENSIPS_LOG_LEVEL $OPENSIPS_IDENTITY $OPENSIPS_SIP_PORT $OPENSIPS_MI_PORT $OPENSIPS_DB_URL $OPENSIPS_REDIS_URL $OPENSIPS_REGISTRANT_TIMER_INTERVAL'
 
-envsubst "$TEMPLATE_VARS" \
-  < /etc/opensips/opensips.cfg.template > /etc/opensips/opensips.cfg
+# SIP over TLS (07 §5) is on only when OPENSIPS_TLS_CERT_FILE is set. The
+# template's `# @if-tls` ... `# @end-tls` blocks are kept or dropped here, before
+# OpenSIPs reads the file. (OpenSIPs' own `#!ifdef` does not skip a block that
+# holds a `socket=` line when its symbol is undefined: it is a parse error.)
+KEEP_TLS=no
+if [ -n "${OPENSIPS_TLS_CERT_FILE:-}" ]; then
+  : "${OPENSIPS_TLS_KEY_FILE:?OPENSIPS_TLS_KEY_FILE must be set with OPENSIPS_TLS_CERT_FILE}"
+  export OPENSIPS_TLS_PORT="${OPENSIPS_TLS_PORT:-5061}"
+
+  # Development only: make a self-signed certificate when none is there yet,
+  # so `make up` offers TLS without any setup. The subject alternative names
+  # are the platform's domains. A real deployment mounts a real certificate
+  # (an ACME client writes it) and leaves this off; a self-signed one is not
+  # trusted by any phone.
+  if [ "${OPENSIPS_TLS_DEV_SELF_SIGNED:-}" = "true" ] && [ ! -s "$OPENSIPS_TLS_CERT_FILE" ]; then
+    NAMES="${OPENSIPS_TLS_DEV_NAMES:-platform.test,*.platform.test}"
+    SAN=$(echo "$NAMES" | awk -F, '{ for (i = 1; i <= NF; i++) printf "%sDNS:%s", (i > 1 ? "," : ""), $i }')
+    FIRST=$(echo "$NAMES" | cut -d, -f1)
+    mkdir -p "$(dirname "$OPENSIPS_TLS_CERT_FILE")" "$(dirname "$OPENSIPS_TLS_KEY_FILE")"
+    openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+      -subj "/CN=$FIRST" -addext "subjectAltName=$SAN" \
+      -keyout "$OPENSIPS_TLS_KEY_FILE" -out "$OPENSIPS_TLS_CERT_FILE" 2>/dev/null
+    echo "opensips: made a self-signed development certificate for $NAMES" >&2
+  fi
+
+  [ -s "$OPENSIPS_TLS_CERT_FILE" ] || { echo "opensips: TLS certificate $OPENSIPS_TLS_CERT_FILE is missing" >&2; exit 1; }
+  [ -s "$OPENSIPS_TLS_KEY_FILE" ] || { echo "opensips: TLS key $OPENSIPS_TLS_KEY_FILE is missing" >&2; exit 1; }
+  KEEP_TLS=yes
+  TEMPLATE_VARS="$TEMPLATE_VARS \$OPENSIPS_TLS_PORT \$OPENSIPS_TLS_CERT_FILE \$OPENSIPS_TLS_KEY_FILE"
+fi
+
+if [ "$KEEP_TLS" = yes ]; then
+  DROP='/^# @if-tls$/d; /^# @end-tls$/d'
+else
+  DROP='/^# @if-tls$/,/^# @end-tls$/d'
+fi
+sed "$DROP" /etc/opensips/opensips.cfg.template | envsubst "$TEMPLATE_VARS" \
+  > /etc/opensips/opensips.cfg
 
 # S1-14 (G-18): must run before opensips starts — the dispatcher module
 # loads its table into memory once, at init, with no cache-mode indirection

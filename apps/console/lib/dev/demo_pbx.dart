@@ -480,7 +480,8 @@ class DemoPbx {
       return _json({
         'server': realm,
         'port': 5060,
-        'transports': ['udp', 'tcp'],
+        'tlsPort': 5061,
+        'transports': ['udp', 'tcp', 'tls'],
         'realm': realm,
       });
     }

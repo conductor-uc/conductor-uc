@@ -32,6 +32,7 @@ describe('pbx-config-service SIP endpoint route', () => {
     });
     registerSipEndpointRoutes(app, (tenantId) => Promise.resolve(domains[tenantId]), {
       port: 5060,
+      tlsPort: 5061,
       transports: ['udp', 'tcp'],
     });
     await app.ready();
@@ -61,9 +62,38 @@ describe('pbx-config-service SIP endpoint route', () => {
     expect(response.json()).toEqual({
       server: 'acme.voice.platform.test',
       port: 5060,
+      tlsPort: null,
       transports: ['udp', 'tcp'],
       realm: 'acme.voice.platform.test',
     });
+  });
+
+  it('reports the TLS port, which is not the plain one, when TLS is offered', async () => {
+    const tls = await createServer({
+      serviceName: 'pbx-config-service',
+      logger: silentLogger(),
+      context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
+    });
+    registerSipEndpointRoutes(tls, (tenantId) => Promise.resolve(domains[tenantId]), {
+      port: 5060,
+      tlsPort: 5061,
+      transports: ['tls', 'udp'],
+    });
+    await tls.ready();
+    try {
+      const response = await tls.inject({
+        method: 'GET',
+        url: '/v1/tenants/t-1/sip-endpoint',
+        headers: headers('t-1'),
+      });
+      expect(response.json()).toMatchObject({
+        port: 5060,
+        tlsPort: 5061,
+        transports: ['tls', 'udp'],
+      });
+    } finally {
+      await tls.close();
+    }
   });
 
   it('says so, rather than inventing a server, when the tenant has no domain yet', async () => {

@@ -136,6 +136,7 @@ app.addReadinessCheck('outbox', async () => {
 registerExtensionRoutes(app, extensionRepo, bus);
 const sipEdge = {
   port: config.SIP_PUBLIC_PORT,
+  tlsPort: config.SIP_PUBLIC_TLS_PORT,
   transports: parseSipTransports(config.SIP_PUBLIC_TRANSPORTS),
 };
 registerSipEndpointRoutes(app, orgClient.primaryDomain, sipEdge);

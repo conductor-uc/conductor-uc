@@ -216,9 +216,20 @@ services:
       # S2-02: fast in dev/test so a newly created trunk registers within
       # seconds rather than the module's ~100-200s default worst case.
       OPENSIPS_REGISTRANT_TIMER_INTERVAL: ${OPENSIPS_REGISTRANT_TIMER_INTERVAL:-10}
+      # 07 §5: SIP over TLS on 5061. Dev makes its own self-signed certificate
+      # for the platform's test domains the first time it starts, and keeps it
+      # in the volume below. A real deployment mounts a real certificate here
+      # and leaves the self-signed switch off (no phone trusts a self-signed one).
+      OPENSIPS_TLS_CERT_FILE: ${OPENSIPS_TLS_CERT_FILE:-/etc/opensips/tls/cert.pem}
+      OPENSIPS_TLS_KEY_FILE: ${OPENSIPS_TLS_KEY_FILE:-/etc/opensips/tls/key.pem}
+      OPENSIPS_TLS_DEV_SELF_SIGNED: ${OPENSIPS_TLS_DEV_SELF_SIGNED:-true}
+      OPENSIPS_TLS_DEV_NAMES: ${OPENSIPS_TLS_DEV_NAMES:-platform.test,*.platform.test}
+    volumes:
+      - opensips-tls:/etc/opensips/tls
     ports:
       - '${OPENSIPS_SIP_PORT:-5060}:5060/udp'
       - '${OPENSIPS_SIP_PORT:-5060}:5060/tcp'
+      - '${OPENSIPS_TLS_PORT:-5061}:5061/tcp'
 
   org-service:
     # S1-14: the first Node service to actually run in this stack (09 §1's
@@ -296,6 +307,10 @@ services:
       # G-103: phones fetch their settings from the gateway's own address. On a
       # laptop that is the published gateway port; set this to the address the
       # phones can actually reach.
+      # 07 §5: the edge offers SIP over TLS on 5061 as well as UDP and TCP on 5060.
+      # Most preferred first. Dev lists TLS last because its certificate is self-
+      # signed, which no phone trusts; production puts `tls` first.
+      SIP_PUBLIC_TRANSPORTS: ${SIP_PUBLIC_TRANSPORTS:-udp,tcp,tls}
       PROVISIONING_BASE_URL: ${PROVISIONING_BASE_URL:-http://localhost:8080}
       # G-103: the platform-wide user name and password phones use (HTTP Basic).
       # Dev-only defaults; production sets its own.
@@ -706,6 +721,7 @@ services:
       CONSOLE_URL_OVERRIDE: ${CONSOLE_URL_OVERRIDE:-}
 
 volumes:
+  opensips-tls:
   mariadb-data:
   redis-data:
   nats-data:

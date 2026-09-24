@@ -9,8 +9,10 @@ export type SipTransport = (typeof TRANSPORTS)[number];
 
 /** Where a phone reaches the edge, as the platform is deployed. Set by the operator, not per tenant. */
 export interface SipEdgeConfig {
-  /** The port the edge accepts SIP on. */
+  /** The port the edge accepts SIP on over UDP and TCP. */
   readonly port: number;
+  /** The port it accepts SIP on over TLS. Only used when `tls` is offered. */
+  readonly tlsPort: number;
   /** Transports the edge accepts, most preferred first. */
   readonly transports: readonly SipTransport[];
 }
@@ -36,6 +38,8 @@ const SipEndpointSchema = Type.Object({
   /** What to enter as the phone's server / registrar. The tenant's own domain, so it is also the realm. */
   server: Type.String(),
   port: Type.Integer(),
+  /** Set when TLS is offered: the port for that transport, which is not the plain one. */
+  tlsPort: Type.Union([Type.Integer(), Type.Null()]),
   transports: Type.Array(Type.String()),
   realm: Type.String(),
 });
@@ -71,6 +75,7 @@ export function registerSipEndpointRoutes(
       return {
         server: domain,
         port: edge.port,
+        tlsPort: edge.transports.includes('tls') ? edge.tlsPort : null,
         transports: [...edge.transports],
         realm: domain,
       };
