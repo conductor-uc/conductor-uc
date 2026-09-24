@@ -1,19 +1,31 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import { loadServiceConfig } from '../src/config.js';
 import { buildRouteTable, isPublicPath, resolveRoute } from '../src/routing/route-table.js';
 
-const SERVICES = { identity: 'http://identity:8080', org: 'http://org:8080' };
+const SERVICES = {
+  identity: 'http://identity:8080',
+  org: 'http://org:8080',
+  pbx: 'http://pbx:8080',
+  callflow: 'http://callflow:8080',
+  voicemail: 'http://voicemail:8080',
+  cdr: 'http://cdr:8080',
+  trunk: 'http://trunk:8080',
+};
 
 describe('buildRouteTable', () => {
   it('resolves each prefix to its configured service base URL', () => {
     const table = buildRouteTable(['/v1/auth=identity', '/v1/tenants=org'], SERVICES);
 
-    expect(resolveRoute(table, '/v1/auth/login')).toEqual({
+    expect(resolveRoute(table, '/v1/auth/login')).toMatchObject({
       prefix: '/v1/auth',
       target: 'http://identity:8080',
     });
-    expect(resolveRoute(table, '/v1/tenants/t1')).toEqual({
+    expect(resolveRoute(table, '/v1/tenants/t1')).toMatchObject({
       prefix: '/v1/tenants',
       target: 'http://org:8080',
     });
@@ -24,6 +36,28 @@ describe('buildRouteTable', () => {
 
     expect(resolveRoute(table, '/v1/orgs/special/x')?.target).toBe('http://org:8080');
     expect(resolveRoute(table, '/v1/orgs/other')?.target).toBe('http://identity:8080');
+  });
+
+  it('lets * stand for one segment, and prefers the more specific pattern', () => {
+    const table = buildRouteTable(['/v1/tenants=org', '/v1/tenants/*/flows=callflow'], SERVICES);
+
+    expect(resolveRoute(table, '/v1/tenants/t1/flows')?.target).toBe(SERVICES.callflow);
+    expect(resolveRoute(table, '/v1/tenants/t1/flows/f1/publish?x=1')?.target).toBe(
+      SERVICES.callflow,
+    );
+    // Not a flows path: falls back to the tenant tree.
+    expect(resolveRoute(table, '/v1/tenants/t1')?.target).toBe(SERVICES.org);
+    expect(resolveRoute(table, '/v1/tenants/t1/suspend')?.target).toBe(SERVICES.org);
+    // `*` is one segment, not zero: this is the tenant id position.
+    expect(resolveRoute(table, '/v1/tenants/flows')?.target).toBe(SERVICES.org);
+  });
+
+  it('orders by literal segments before length, whatever order they are listed in', () => {
+    const forward = buildRouteTable(['/v1/a/*/b=pbx', '/v1/a=org'], SERVICES);
+    const backward = buildRouteTable(['/v1/a=org', '/v1/a/*/b=pbx'], SERVICES);
+
+    expect(resolveRoute(forward, '/v1/a/x/b')?.target).toBe(SERVICES.pbx);
+    expect(resolveRoute(backward, '/v1/a/x/b')?.target).toBe(SERVICES.pbx);
   });
 
   it('matches the bare prefix itself, not only its children', () => {
@@ -78,19 +112,123 @@ describe('the default routing table', () => {
     INTERNAL_HEADER_SIGNING_SECRET: 'a-signing-secret-of-enough-length',
     IDENTITY_SERVICE_URL: SERVICES.identity,
     ORG_SERVICE_URL: SERVICES.org,
+    PBX_CONFIG_SERVICE_URL: SERVICES.pbx,
+    CALLFLOW_SERVICE_URL: SERVICES.callflow,
+    VOICEMAIL_SERVICE_URL: SERVICES.voicemail,
+    CDR_SERVICE_URL: SERVICES.cdr,
+    TRUNK_SERVICE_URL: SERVICES.trunk,
     REDIS_URL: 'redis://localhost:6379',
   });
   const table = buildRouteTable(config.ROUTE_TABLE, SERVICES);
 
-  // Every path the console calls that these two services own.
   it.each([
     ['/v1/auth/login', SERVICES.identity],
     ['/v1/orgs/o1/invitations', SERVICES.identity],
     ['/v1/public/brand', SERVICES.org],
     ['/v1/resellers/r1/brand', SERVICES.org],
     ['/v1/tenants/t1', SERVICES.org],
+    ['/v1/tenants/t1/suspend', SERVICES.org],
+    ['/v1/tenants/t1/domain', SERVICES.org],
     ['/v1/session/brand', SERVICES.org],
+    ['/v1/tenants/t1/extensions/e1/reveal', SERVICES.pbx],
+    ['/v1/tenants/t1/schedules', SERVICES.pbx],
+    ['/v1/tenants/t1/flows/f1/versions/2', SERVICES.callflow],
+    ['/v1/tenants/t1/voicemail/mailboxes/m1/messages', SERVICES.voicemail],
+    ['/v1/tenants/t1/cdrs', SERVICES.cdr],
+    ['/v1/tenants/t1/trunks/tr1/ips', SERVICES.trunk],
   ])('%s goes to its service', (path, target) => {
     expect(resolveRoute(table, path)?.target).toBe(target);
+  });
+});
+
+/**
+ * Every route a service registers, read from its source, so a route added to a
+ * service without a gateway pattern fails here instead of answering 404 (or
+ * worse, reaching the wrong service) at the edge.
+ */
+const OWNERS: Readonly<Record<string, keyof typeof SERVICES>> = {
+  'identity-service': 'identity',
+  'org-service': 'org',
+  'pbx-config-service': 'pbx',
+  'callflow-service': 'callflow',
+  'voicemail-service': 'voicemail',
+  'cdr-service': 'cdr',
+  'trunk-service': 'trunk',
+};
+
+const SERVICES_DIR = fileURLToPath(new URL('../../', import.meta.url));
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    return entry.isDirectory() ? sourceFiles(path) : path.endsWith('.ts') ? [path] : [];
+  });
+}
+
+function declaredPaths(service: string): string[] {
+  const found = new Set<string>();
+  for (const file of sourceFiles(join(SERVICES_DIR, service, 'src', 'routes'))) {
+    for (const match of readFileSync(file, 'utf8').matchAll(/'(\/v1\/[^']*)'/g)) {
+      // Not `/internal/...`, not a table entry like '/v1/auth=identity'.
+      if (match[1] !== undefined && !match[1].includes('=')) found.add(match[1]);
+    }
+  }
+  return [...found];
+}
+
+const filled = (path: string) => path.replace(/:[A-Za-z]+/g, 'p1');
+
+describe('every service route resolves through the default table', () => {
+  const table = buildRouteTable(
+    loadServiceConfig({
+      SERVICE_NAME: 'api-gateway',
+      INTERNAL_HEADER_SIGNING_SECRET: 'a-signing-secret-of-enough-length',
+      IDENTITY_SERVICE_URL: SERVICES.identity,
+      ORG_SERVICE_URL: SERVICES.org,
+      PBX_CONFIG_SERVICE_URL: SERVICES.pbx,
+      CALLFLOW_SERVICE_URL: SERVICES.callflow,
+      VOICEMAIL_SERVICE_URL: SERVICES.voicemail,
+      CDR_SERVICE_URL: SERVICES.cdr,
+      TRUNK_SERVICE_URL: SERVICES.trunk,
+      REDIS_URL: 'redis://localhost:6379',
+    }).ROUTE_TABLE,
+    SERVICES,
+  );
+
+  for (const [service, key] of Object.entries(OWNERS)) {
+    it(`${service}: each route goes to ${key}, decided by one most specific pattern`, () => {
+      const paths = declaredPaths(service);
+      expect(paths.length).toBeGreaterThan(0);
+      for (const declared of paths) {
+        const path = filled(declared);
+        const matches = table.filter((e) => resolveRoute([e], path) !== undefined);
+        expect(matches[0]?.target, declared).toBe(SERVICES[key]);
+        // No other service is equally specific about this path.
+        const first = matches[0];
+        const rival = matches.find(
+          (e) =>
+            e !== first &&
+            e.target !== first?.target &&
+            e.segments.filter((s) => s !== '*').length ===
+              first?.segments.filter((s) => s !== '*').length &&
+            e.segments.length === first?.segments.length,
+        );
+        expect(rival, `${declared} is claimed equally by two services`).toBeUndefined();
+      }
+    });
+  }
+
+  it('every path in the console OpenAPI dump is a declared service route', () => {
+    const dump = JSON.parse(
+      readFileSync(join(SERVICES_DIR, '../apps/console/api/openapi.json'), 'utf8'),
+    ) as { paths: Record<string, unknown> };
+    const declared = new Set(
+      Object.keys(OWNERS).flatMap((service) => declaredPaths(service).map(filled)),
+    );
+    const braces = (path: string) => path.replace(/\{[^}]+\}/g, 'p1');
+    for (const path of Object.keys(dump.paths)) {
+      expect(declared.has(braces(path)), path).toBe(true);
+      expect(resolveRoute(table, braces(path)), path).toBeDefined();
+    }
   });
 });

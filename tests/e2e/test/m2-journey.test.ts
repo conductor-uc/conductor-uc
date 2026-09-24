@@ -5,7 +5,6 @@ import {
   redisOrSkipReason,
   s3OrSkipReason,
 } from '@cuc/testing';
-import { signInternalHeaders } from '@cuc/http';
 
 import { Browser, mailTo, tokenIn, totp } from '../src/browser.js';
 import {
@@ -21,12 +20,16 @@ import {
  * driven over HTTP with real processes on real infrastructure. The console's
  * own walk through the same journey is `apps/console/test/journey_test.dart`.
  *
- * What it covers: master and reseller sign-in with authenticator enrollment,
- * the reseller and its brand and hostname, a tenant and its admin, the
- * re-theme lookup, branded email, and building, validating, publishing and
- * rolling back a call flow the way the builder writes one.
+ * Everything a browser would call goes through the gateway (G-60), with a
+ * real access token. What it covers: master and reseller sign-in with
+ * authenticator enrollment, the reseller and its brand and hostname, a tenant
+ * and its admin, the re-theme lookup, branded email, the tenant's PBX
+ * configuration (emergency location, extension, ring group, media, voicemail
+ * mailbox, schedule, trunk, DID), a call flow built, validated, published and
+ * rolled back the way the builder writes one and pointed at by the DID, and
+ * the CDR routes including the wall that keeps a reseller out of them.
  *
- * What it cannot cover yet, and says so with `todo`: see the end.
+ * What it cannot cover here, and says so with `todo`: see the end.
  */
 async function infraSkipReason(): Promise<string | undefined> {
   const missing =
@@ -67,6 +70,14 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
   let resellerId = '';
   let tenantId = '';
   let flowId = '';
+  // The tenant's PBX configuration, made in the steps below and used by the flow.
+  let locationId = '';
+  let extensionId = '';
+  let ringGroupId = '';
+  let mediaId = '';
+  let mailboxId = '';
+  let trunkId = '';
+  let didId = '';
 
   const resellerPassword = 'an acme boss passphrase';
   const tenantPassword = 'a dental admin passphrase';
@@ -265,80 +276,156 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
     expect(`${mail?.HTML ?? ''}${mail?.Text ?? ''}`).not.toMatch(/conductor/i);
   });
 
-  /** Calls callflow-service the way the gateway would once it routes there. */
-  async function callflow<T = Record<string, unknown>>(
-    method: string,
-    path: string,
-    body?: unknown,
-  ): Promise<{ status: number; json: T }> {
-    const response = await fetch(`${stack.callflow}/v1/tenants/${tenantId}${path}`, {
-      method,
-      headers: {
-        'content-type': 'application/json',
-        ...signInternalHeaders(stack.headerSecret, {
-          actorId: 'dental-admin',
-          actorType: 'user',
-          orgId: tenantId,
-          orgType: 'tenant',
-          tenantId,
-        }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-    const text = await response.text();
-    return { status: response.status, json: (text === '' ? null : JSON.parse(text)) as T };
+  /** Calls one of the tenant's routes through the gateway as its admin. */
+  function tenant<T = Record<string, unknown>>(method: string, path: string, body?: unknown) {
+    return tenantAdmin.call<T>(method, `/v1/tenants/${tenantId}${path}`, body);
   }
 
+  // ---- the tenant's PBX configuration, through the gateway ---------------
+
+  it('3. the tenant admin configures the PBX through the gateway: location, extension, ring group', async () => {
+    const location = await tenant<{ id: string }>('POST', '/emergency-locations', {
+      label: 'Head office',
+      addressLine1: '1 Main St',
+      city: 'Springfield',
+      state: 'IL',
+      postalCode: '62701',
+      country: 'US',
+    });
+    expect(location.status).toBe(201);
+    locationId = location.json.id;
+
+    const extension = await tenant<{ id: string; number: string }>('POST', '/extensions', {
+      number: '101',
+      displayName: 'Front desk',
+      emergencyLocationId: locationId,
+    });
+    expect(extension.status).toBe(201);
+    extensionId = extension.json.id;
+
+    const listed = await tenant<{ rows: { id: string }[] }>('GET', '/extensions');
+    expect(listed.json.rows.map((r) => r.id)).toContain(extensionId);
+
+    const group = await tenant<{ id: string }>('POST', '/ring-groups', {
+      label: 'Reception',
+      strategy: 'simultaneous',
+      memberExtensionIds: [extensionId],
+      ringTimeoutSeconds: 20,
+    });
+    expect(group.status).toBe(201);
+    ringGroupId = group.json.id;
+  });
+
+  it('3. a prompt, a voicemail mailbox, and opening hours', async () => {
+    const media = await tenant<{ asset: { id: string } }>('POST', '/media-assets', {
+      kind: 'prompt',
+      label: 'Greeting',
+      contentType: 'audio/wav',
+    });
+    expect(media.status).toBe(201);
+    mediaId = media.json.asset.id;
+
+    const mailbox = await tenant<{ id: string }>('POST', '/voicemail/mailboxes', {
+      extensionId,
+      pin: '2468',
+    });
+    expect(mailbox.status).toBe(201);
+    mailboxId = mailbox.json.id;
+    const mailboxes = await tenant<{ rows: { id: string }[] }>('GET', '/voicemail/mailboxes');
+    expect(mailboxes.json.rows.map((r) => r.id)).toContain(mailboxId);
+
+    const schedule = await tenant('POST', '/schedules', {
+      label: 'Office hours',
+      timezone: 'America/Chicago',
+      rules: [{ days: [1, 2, 3, 4, 5], start: '09:00', end: '17:00' }],
+    });
+    expect(schedule.status).toBe(201);
+  });
+
+  it('3. the reseller, acting for the tenant, adds a trunk, and the tenant points a number at the extension', async () => {
+    const trunk = await reseller.call<{ id: string }>('POST', `/v1/tenants/${tenantId}/trunks`, {
+      name: 'Carrier',
+      authMode: 'register',
+      host: 'sip.carrier.test',
+      port: 5060,
+      transport: 'udp',
+      username: 'acme',
+      secret: 'a carrier secret',
+      codecs: ['PCMU', 'PCMA'],
+    });
+    expect(trunk.status).toBe(201);
+    trunkId = trunk.json.id;
+    // The secret is never handed back.
+    expect(trunk.text).not.toContain('a carrier secret');
+
+    const did = await tenant<{ id: string }>('POST', '/dids', {
+      e164: '+12175550101',
+      trunkId,
+      destinationType: 'extension',
+      destinationId: extensionId,
+    });
+    expect(did.status).toBe(201);
+    didId = did.json.id;
+  });
+
   // A flow shaped as the builder saves it: layout beside each node.
-  const graph = {
+  const buildGraph = () => ({
     entryPoints: { main: 'menu' },
     nodes: [
       {
         id: 'menu',
         type: 'menu',
-        config: { promptMediaAssetId: 'greeting', timeoutSeconds: 5, maxInvalidAttempts: 3 },
+        config: { promptMediaAssetId: mediaId, timeoutSeconds: 5, maxInvalidAttempts: 3 },
         position: { x: 60, y: 60 },
-        openPorts: ['1'],
+        openPorts: ['1', '2'],
+      },
+      {
+        id: 'desk',
+        type: 'ring_group',
+        config: { ringGroupId },
+        position: { x: 380, y: 0 },
       },
       {
         id: 'mail',
         type: 'voicemail',
-        config: { mailboxId: 'mailbox-1' },
-        position: { x: 380, y: 60 },
+        config: { mailboxId },
+        position: { x: 380, y: 200 },
       },
       { id: 'bye', type: 'hangup', config: {}, position: { x: 700, y: 60 } },
     ],
     edges: [
-      { from: 'menu', port: '1', to: 'mail' },
+      { from: 'menu', port: '1', to: 'desk' },
+      { from: 'menu', port: '2', to: 'mail' },
       { from: 'menu', port: 'timeout', to: 'bye' },
       { from: 'menu', port: 'invalid', to: 'bye' },
+      { from: 'desk', port: 'noAnswer', to: 'mail' },
       { from: 'mail', port: 'next', to: 'bye' },
     ],
-  };
-
+  });
+  type Graph = ReturnType<typeof buildGraph>;
   it('4. the tenant builds a call flow: draft, validate, publish, and the runner-facing IR', async () => {
-    const created = await callflow<{ id: string }>('POST', '/flows', { name: 'Main menu' });
+    const created = await tenant<{ id: string }>('POST', '/flows', { name: 'Main menu' });
     expect(created.status).toBe(201);
     flowId = created.json.id;
 
-    const empty = await callflow<{ valid: boolean }>('POST', `/flows/${flowId}/validate`, {});
+    const empty = await tenant<{ valid: boolean }>('POST', `/flows/${flowId}/validate`, {});
     expect(empty.json.valid).toBe(false);
 
-    const saved = await callflow('PUT', `/flows/${flowId}/draft`, graph);
+    const saved = await tenant('PUT', `/flows/${flowId}/draft`, buildGraph());
     expect(saved.status).toBe(200);
-    const valid = await callflow<{ valid: boolean; issues: unknown[] }>(
+    const valid = await tenant<{ valid: boolean; issues: unknown[] }>(
       'POST',
       `/flows/${flowId}/validate`,
       {},
     );
     expect(valid.json).toEqual({ valid: true, issues: [] });
 
-    const published = await callflow<{ versionNumber: number }>(
+    const published = await tenant<{ versionNumber: number }>(
       'POST',
       `/flows/${flowId}/publish`,
       {},
     );
-    expect(published.status).toBe(201);
+    expect(published.status, JSON.stringify(published.json)).toBe(201);
     expect(published.json.versionNumber).toBe(1);
 
     const irResponse = await fetch(
@@ -353,21 +440,25 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
   });
 
   it('4. a published version keeps its graph and layout, can be replaced, and rolled back to', async () => {
-    const v1 = await callflow<{ graph: typeof graph }>('GET', `/flows/${flowId}/versions/1`);
-    expect(v1.json.graph.nodes[0]).toMatchObject({ position: { x: 60, y: 60 } });
+    const v1 = await tenant<{ graph: Graph }>('GET', `/flows/${flowId}/versions/1`);
+    expect(v1.json.graph.nodes[0]).toMatchObject({
+      position: { x: 60, y: 60 },
+      openPorts: ['1', '2'],
+    });
 
+    const original = buildGraph();
     const changed = {
-      ...graph,
-      nodes: graph.nodes.map((n) =>
+      ...original,
+      nodes: original.nodes.map((n) =>
         n.id === 'menu' ? { ...n, config: { ...(n.config as object), timeoutSeconds: 8 } } : n,
       ),
     };
-    await callflow('PUT', `/flows/${flowId}/draft`, changed);
-    const v2 = await callflow<{ versionNumber: number }>('POST', `/flows/${flowId}/publish`, {});
+    await tenant('PUT', `/flows/${flowId}/draft`, changed);
+    const v2 = await tenant<{ versionNumber: number }>('POST', `/flows/${flowId}/publish`, {});
     expect(v2.json.versionNumber).toBe(2);
-    const back = await callflow('POST', `/flows/${flowId}/rollback`, { versionNumber: 1 });
+    const back = await tenant('POST', `/flows/${flowId}/rollback`, { versionNumber: 1 });
     expect(back.status).toBe(200);
-    const versions = await callflow<{ rows: { versionNumber: number }[] }>(
+    const versions = await tenant<{ rows: { versionNumber: number }[] }>(
       'GET',
       `/flows/${flowId}/versions`,
     );
@@ -375,8 +466,8 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
   });
 
   it('4. an invalid flow is refused at publish, with every problem', async () => {
-    const created = await callflow<{ id: string }>('POST', '/flows', { name: 'Broken' });
-    await callflow('PUT', `/flows/${created.json.id}/draft`, {
+    const created = await tenant<{ id: string }>('POST', '/flows', { name: 'Broken' });
+    await tenant('PUT', `/flows/${created.json.id}/draft`, {
       entryPoints: { main: 'm' },
       nodes: [
         {
@@ -387,8 +478,44 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
       ],
       edges: [],
     });
-    const r = await callflow('POST', `/flows/${created.json.id}/publish`, {});
+    const r = await tenant('POST', `/flows/${created.json.id}/publish`, {});
     expect(r.status).toBe(422);
+  });
+
+  it('4. the number is pointed at the published flow, and the extension it replaced can be listed', async () => {
+    const updated = await tenant<{ destinationType: string; destinationId: string }>(
+      'PATCH',
+      `/dids/${didId}`,
+      { destinationType: 'flow', destinationId: flowId },
+    );
+    expect(updated.status).toBe(200);
+    expect(updated.json).toMatchObject({ destinationType: 'flow', destinationId: flowId });
+
+    const flows = await tenant<{
+      rows: { id: string; currentPublishedVersionId: string | null }[];
+    }>('GET', '/flows');
+    const ours = flows.json.rows.find((f) => f.id === flowId);
+    expect(ours?.currentPublishedVersionId).toBeTruthy();
+  });
+
+  it('6. call records: the tenant reads them and can start an export; the reseller is walled out', async () => {
+    const cdrs = await tenant<{ rows: unknown[] }>('GET', '/cdrs');
+    expect(cdrs.status).toBe(200);
+    expect(cdrs.json.rows).toEqual([]);
+
+    const now = new Date();
+    const exported = await tenant<{ id: string; status: string }>('POST', '/cdr-exports', {
+      from: new Date(now.getTime() - 86_400_000).toISOString(),
+      to: now.toISOString(),
+    });
+    expect(exported.status).toBe(201);
+    const one = await tenant<{ id: string }>('GET', `/cdr-exports/${exported.json.id}`);
+    expect(one.json.id).toBe(exported.json.id);
+
+    // H1 through the gateway: a reseller never reads a tenant's call records.
+    const walled = await reseller.call('GET', `/v1/tenants/${tenantId}/cdrs`);
+    expect(walled.status).toBe(403);
+    expect(walled.json).toMatchObject({ code: 'reseller_private_data_denied' });
   });
 
   it('1. logging out ends the cookie session', async () => {
@@ -400,13 +527,6 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
   // ---- what this journey cannot walk yet ---------------------------------
 
   it.todo(
-    '3. the reseller adds a trunk: the gateway does not route to trunk-service or pbx-config-service (G-60)',
-  );
-  it.todo(
-    '4. the tenant admin creates extensions and a DID through the gateway: same gap (G-60); the console screens for them cannot work through the gateway until it routes /v1/tenants/:id/<resource> by service',
-  );
-  it.todo(
     '5. a SIPp carrier call traverses the flow into voicemail: needs the FreeSWITCH and OpenSIPs compose stack (tests/sip), and a published flow reachable from a DID',
   );
-  it.todo('6. a CDR is exported: cdr-service has no export route through the gateway (G-60)');
 });

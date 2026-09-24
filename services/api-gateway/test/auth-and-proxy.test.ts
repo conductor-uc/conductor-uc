@@ -22,6 +22,9 @@ describe('api-gateway: auth + proxy', () => {
   let jwks: FakeIdentityKeys;
   let identity: FakeDownstream;
   let org: FakeDownstream;
+  // One fake per tenant-route service: each answers with its own name so a
+  // test can see which one the gateway chose (G-60).
+  let tenantServices: Record<string, FakeDownstream>;
   let app: Server;
 
   beforeAll(async () => {
@@ -67,11 +70,6 @@ describe('api-gateway: auth + proxy', () => {
         { config: { permission: 'tenant.read', dataClass: 'config' } },
         (request) => ({ id: (request.params as { id: string }).id, context: request.context }),
       );
-      fake.get(
-        '/v1/tenants/:id/cdrs',
-        { config: { permission: 'cdr.read', dataClass: 'private' } },
-        () => ({ rows: [] }),
-      );
       fake.post(
         '/v1/tenants/:id/echo',
         { config: { permission: 'tenant.read', dataClass: 'config' } },
@@ -79,10 +77,37 @@ describe('api-gateway: auth + proxy', () => {
       );
     });
 
+    const routes: Record<string, string[]> = {
+      pbx: ['/v1/tenants/:id/extensions', '/v1/tenants/:id/extensions/:extId/reveal'],
+      callflow: ['/v1/tenants/:id/flows/:flowId/versions/:n'],
+      voicemail: ['/v1/tenants/:id/voicemail/mailboxes'],
+      trunk: ['/v1/tenants/:id/trunks'],
+      cdr: ['/v1/tenants/:id/cdrs'],
+    };
+    tenantServices = {};
+    for (const [name, urls] of Object.entries(routes)) {
+      tenantServices[name] = await startFakeDownstream(SECRET, (fake) => {
+        for (const url of urls) {
+          fake.get(
+            url,
+            {
+              config: { permission: 'cdr.read', dataClass: name === 'cdr' ? 'private' : 'config' },
+            },
+            (request) => ({ service: name, tenantId: request.context.tenantId, rows: [] }),
+          );
+        }
+      });
+    }
+
     app = await buildApp({
       config: testConfig({
         IDENTITY_SERVICE_URL: identity.url,
         ORG_SERVICE_URL: org.url,
+        PBX_CONFIG_SERVICE_URL: tenantServices['pbx']!.url,
+        CALLFLOW_SERVICE_URL: tenantServices['callflow']!.url,
+        VOICEMAIL_SERVICE_URL: tenantServices['voicemail']!.url,
+        CDR_SERVICE_URL: tenantServices['cdr']!.url,
+        TRUNK_SERVICE_URL: tenantServices['trunk']!.url,
         RATE_LIMIT_IP_MAX: '100000',
         RATE_LIMIT_ACTOR_MAX: '100000',
       }),
@@ -98,6 +123,7 @@ describe('api-gateway: auth + proxy', () => {
     await app.close();
     await identity.stop();
     await org.stop();
+    for (const fake of Object.values(tenantServices)) await fake.stop();
     await jwks.stop();
     redis.disconnect();
     await redisHandle.stop();
@@ -264,6 +290,46 @@ describe('api-gateway: auth + proxy', () => {
         tenantId: 'tenant-9',
       },
     });
+  });
+
+  it.each([
+    ['/v1/tenants/tenant-9/extensions', 'pbx'],
+    ['/v1/tenants/tenant-9/extensions/e1/reveal', 'pbx'],
+    ['/v1/tenants/tenant-9/flows/f1/versions/2', 'callflow'],
+    ['/v1/tenants/tenant-9/voicemail/mailboxes', 'voicemail'],
+    ['/v1/tenants/tenant-9/trunks', 'trunk'],
+    ['/v1/tenants/tenant-9/cdrs', 'cdr'],
+  ])('sends %s to the %s service, still signed as the actor', async (url, service) => {
+    const token = await mintAccessToken(jwks.privateKey, {
+      sub: 'user-42',
+      org: 'tenant-9',
+      ot: 'tenant',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url,
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ service, tenantId: 'tenant-9' });
+  });
+
+  it('still sends the tenant record itself to org-service', async () => {
+    const token = await mintAccessToken(jwks.privateKey, {
+      sub: 'user-42',
+      org: 'tenant-9',
+      ot: 'tenant',
+    });
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/v1/tenants/t1',
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    expect(response.json()).toMatchObject({ id: 't1' });
   });
 
   it('lets the downstream service enforce H1 on the forwarded org type', async () => {
