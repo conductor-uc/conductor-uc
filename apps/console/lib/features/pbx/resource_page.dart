@@ -15,9 +15,13 @@ class ResourceView extends ConsumerWidget {
     required this.def,
     this.headerActions = const [],
     this.rowActions,
+    this.header,
   });
 
   final ResourceDef def;
+
+  /// Shown between the page title and the table.
+  final Widget? header;
 
   /// Extra buttons beside "New", such as an upload.
   final List<Widget> headerActions;
@@ -48,6 +52,7 @@ class ResourceView extends ConsumerWidget {
               ),
           ],
         ),
+        ?header,
         const SizedBox(height: 16),
         Expanded(
           child: AsyncBody(
@@ -167,6 +172,9 @@ class ResourceView extends ConsumerWidget {
               ? '—'
               : ids.map((id) => _lookup(ref, f.ref!, id)).join(', '),
         );
+      case FieldKind.textList:
+        final words = [...?(value as List?)];
+        return Text(words.isEmpty ? '—' : words.join(', '));
       case FieldKind.weeklyHours:
         return Text(summarizeRules(value));
       case FieldKind.dateList:

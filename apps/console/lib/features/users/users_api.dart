@@ -147,6 +147,16 @@ class UsersApi {
     }
   }
 
+  /// Removes a person's authenticator (a lost phone). They are signed out
+  /// everywhere, emailed, and asked to set up a new one at the next sign-in.
+  Future<Json> resetMfa(Json user) async {
+    final response = await _dio.post<Object?>(
+      '/v1/orgs/$orgId/users/${user['id']}/mfa-reset',
+      options: _options,
+    );
+    return _row((response.data as Map).cast<Object?, Object?>());
+  }
+
   Future<Json> invite(Json body) async {
     final response = await _dio.post<Object?>(
       '/v1/orgs/$orgId/invitations',

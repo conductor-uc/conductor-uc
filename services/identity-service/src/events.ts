@@ -31,6 +31,19 @@ export const identityEvents = defineEvents({
       status: Type.Union([Type.Literal('active'), Type.Literal('disabled')]),
     }),
   },
+  'identity.user.mfa_reset': {
+    schemaVersion: 1,
+    description:
+      "An admin reset a user's two-step verification: their authenticator was removed and " +
+      'every session revoked, so they enroll a new one at the next sign-in. notification-service ' +
+      'emails the user. Carries no secret.',
+    data: Type.Object({
+      userId: Type.String({ minLength: 1 }),
+      orgId: Type.String({ minLength: 1 }),
+      email: Type.String({ minLength: 1 }),
+      displayName: Type.String({ minLength: 1 }),
+    }),
+  },
   'identity.user.password_reset_requested': {
     schemaVersion: 1,
     description:

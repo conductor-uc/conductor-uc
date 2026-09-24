@@ -23,6 +23,9 @@ enum FieldKind {
 
   /// A list of dates, each with an optional name.
   dateList,
+
+  /// A list of short words typed as one comma-separated line (codec names).
+  textList,
 }
 
 /// Whether a field appears when creating, when editing, or both.
@@ -587,14 +590,79 @@ const mediaAssetsDef = ResourceDef(
   ],
 );
 
-/// Reseller-managed; a tenant only picks from it (a DID's trunk).
+/// A carrier connection. A reseller adds and edits its tenants' trunks; a
+/// DID picks one. Its registration status and IP allowlist have their own
+/// dialog (`trunks_page.dart`).
 const trunksDef = ResourceDef(
   key: 'trunks',
   singular: 'Trunk',
   plural: 'Trunks',
   icon: Icons.cable_outlined,
-  readOnly: true,
-  fields: [],
+  blurb: 'Carrier connections a tenant\'s numbers and outbound calls use.',
+  fields: [
+    Field('name', 'Name', FieldKind.text, required: true, showInList: true),
+    Field(
+      'authMode',
+      'Authentication',
+      FieldKind.choice,
+      required: true,
+      choices: ['register', 'ip', 'both'],
+      choiceLabels: {
+        'register': 'Register with a username and secret',
+        'ip': 'Carrier IP addresses only',
+        'both': 'Both',
+      },
+      initial: 'register',
+      showInList: true,
+      help: 'IP-only trunks take no username or secret; the others need both.',
+    ),
+    Field('host', 'Host', FieldKind.text, required: true, showInList: true),
+    Field(
+      'port',
+      'Port',
+      FieldKind.integer,
+      required: true,
+      min: 1,
+      max: 65535,
+      initial: 5060,
+      showInList: true,
+    ),
+    Field(
+      'transport',
+      'Transport',
+      FieldKind.choice,
+      required: true,
+      choices: ['udp', 'tcp', 'tls'],
+      initial: 'udp',
+      showInList: true,
+    ),
+    Field('username', 'Username', FieldKind.text),
+    Field(
+      'secret',
+      'Secret',
+      FieldKind.text,
+      secret: true,
+      writeOnly: true,
+      help: 'Never shown again. Leave blank on edit to keep the current one.',
+    ),
+    Field('fromDomain', 'From domain', FieldKind.text),
+    Field(
+      'codecs',
+      'Codecs',
+      FieldKind.textList,
+      required: true,
+      initial: ['PCMU', 'PCMA'],
+      help: 'Comma-separated, in order of preference.',
+      showInList: true,
+    ),
+    Field(
+      'maxChannels',
+      'Channel limit',
+      FieldKind.integer,
+      min: 1,
+      help: 'Blank for no limit.',
+    ),
+  ],
 );
 
 /// Callflows are listed by their own page; the definition exists so other

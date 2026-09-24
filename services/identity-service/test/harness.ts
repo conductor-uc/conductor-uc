@@ -6,7 +6,7 @@ import { silentLogger, startTestDatabase, type TestDatabaseHandle } from '@cuc/t
 
 import { createAuthService } from '../src/auth/auth-service.js';
 import { createGrantRepo, type GrantRepo } from '../src/repo/grant.repo.js';
-import { createMfaRepo } from '../src/repo/mfa.repo.js';
+import { createMfaRepo, type MfaRepo } from '../src/repo/mfa.repo.js';
 import { createRoleRepo, type RoleRepo } from '../src/repo/role.repo.js';
 import { createSessionRepo } from '../src/repo/session.repo.js';
 import { createTokenRepo } from '../src/repo/token.repo.js';
@@ -19,6 +19,7 @@ export interface Harness {
   readonly db: Database<IdentityServiceDb>;
   readonly kek: KekProvider;
   readonly users: UserRepo;
+  readonly mfa: MfaRepo;
   readonly roles: RoleRepo;
   readonly grants: GrantRepo;
   readonly auth: ReturnType<typeof createAuthService>;
@@ -72,6 +73,7 @@ export async function startHarness(): Promise<Harness> {
     db,
     kek,
     users,
+    mfa,
     roles,
     grants,
     auth,

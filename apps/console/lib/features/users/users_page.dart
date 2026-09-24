@@ -93,6 +93,12 @@ class UsersPage extends ConsumerWidget {
                 icon: const Icon(Icons.edit_outlined),
                 onPressed: () => _edit(context, ref, session, u),
               ),
+              if (!mine && u['mfaEnrolled'] == true)
+                IconButton(
+                  tooltip: 'Reset two-step verification',
+                  icon: const Icon(Icons.phonelink_erase_outlined),
+                  onPressed: () => _confirmResetMfa(context, ref, u),
+                ),
               if (!mine)
                 IconButton(
                   tooltip: disabled ? 'Allow sign-in' : 'Disable',
@@ -178,6 +184,51 @@ class UsersPage extends ConsumerWidget {
     );
     if (ok == true && context.mounted) {
       await _setStatus(context, ref, user, 'disabled');
+    }
+  }
+
+  Future<void> _confirmResetMfa(
+    BuildContext context,
+    WidgetRef ref,
+    Json user,
+  ) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reset two-step verification for ${user['displayName']}?'),
+        content: const Text(
+          'Use this when they have lost their phone. They are signed out everywhere '
+          'and asked to set up a new authenticator app the next time they sign in. '
+          'We email them to say it happened.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !context.mounted) return;
+    final api = ref.read(usersApiProvider);
+    if (api == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await api.resetMfa(user);
+      ref.invalidate(usersProvider);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Two-step verification reset for ${user['displayName']}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
     }
   }
 

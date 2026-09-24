@@ -15,8 +15,27 @@ final tenantIdProvider = Provider<String?>((ref) {
   final session = ref.watch(sessionProvider);
   if (session == null) return null;
   if (session.orgType == OrgType.tenant) return session.orgId;
-  return ref.watch(actingProvider)?.id;
+  return ref.watch(actingProvider)?.id ?? ref.watch(pickedTenantProvider);
 });
+
+/// A tenant chosen on a page that works on one tenant's records without
+/// entering it (a reseller's Trunks page). Acting as a tenant takes
+/// precedence; signing out clears it.
+class PickedTenant extends Notifier<String?> {
+  @override
+  String? build() {
+    ref.listen(sessionProvider, (_, session) {
+      if (session == null) state = null;
+    });
+    return null;
+  }
+
+  void pick(String? id) => state = id;
+}
+
+final pickedTenantProvider = NotifierProvider<PickedTenant, String?>(
+  PickedTenant.new,
+);
 
 /// JSON over the gateway for `/v1/tenants/{tenantId}/...`. Plain maps rather
 /// than generated models: every resource here is edited through the same
