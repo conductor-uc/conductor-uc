@@ -123,4 +123,74 @@ describe('createPbxConfigClient', () => {
     await client.findCredential('tenant1', 'ext1');
     expect(seenPath).toBe('/internal/v1/tenants/tenant1/extensions/ext1');
   });
+
+  describe('call handling (parity 1a)', () => {
+    const doc = {
+      dnd: false,
+      dndAction: 'voicemail',
+      forwardAlways: { type: 'external', e164: '+14155552671' },
+      forwardBusy: null,
+      forwardNoAnswer: null,
+      noAnswerSeconds: 20,
+      forwardUnreachable: null,
+      simultaneousRing: [],
+    };
+
+    it('findCallHandling GETs the extension path with the bearer token and returns the document', async () => {
+      let seenPath: string | undefined;
+      let seenAuth: string | undefined;
+      const fake = await fakePbxConfigService((req, res) => {
+        seenPath = req.url;
+        seenAuth = req.headers.authorization;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(doc));
+      });
+      close = fake.close;
+      const client = createPbxConfigClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+
+      expect(await client.findCallHandling('tenant1', 'ext1')).toEqual(doc);
+      expect(seenPath).toBe('/internal/v1/tenants/tenant1/extensions/ext1/call-handling');
+      expect(seenAuth).toBe(`Bearer ${TOKEN}`);
+    });
+
+    it('findCallHandling returns undefined on 404 and throws on other errors', async () => {
+      let status = 404;
+      const fake = await fakePbxConfigService((_req, res) => {
+        res.writeHead(status, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ title: 'nope' }));
+      });
+      close = fake.close;
+      const client = createPbxConfigClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+
+      expect(await client.findCallHandling('t', 'e')).toBeUndefined();
+      status = 500;
+      await expect(client.findCallHandling('t', 'e')).rejects.toBeInstanceOf(PbxConfigClientError);
+    });
+
+    it('listCallHandling reads the tenant list and keeps the extension id with each document', async () => {
+      let seenPath: string | undefined;
+      const fake = await fakePbxConfigService((req, res) => {
+        seenPath = req.url;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ rows: [{ extensionId: 'ext1', ...doc }] }));
+      });
+      close = fake.close;
+      const client = createPbxConfigClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+
+      expect(await client.listCallHandling('tenant1')).toEqual([
+        { extensionId: 'ext1', settings: doc },
+      ]);
+      expect(seenPath).toBe('/internal/v1/tenants/tenant1/call-handling');
+    });
+
+    it('drops a malformed destination it is handed instead of passing it on', async () => {
+      const fake = await fakePbxConfigService((_req, res) => {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ ...doc, forwardAlways: { type: 'external', e164: '1,2' } }));
+      });
+      close = fake.close;
+      const client = createPbxConfigClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+      expect((await client.findCallHandling('t', 'e'))?.forwardAlways).toBeNull();
+    });
+  });
 });

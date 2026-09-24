@@ -174,6 +174,7 @@ const reconciler = createReconciler(
   miClient,
   logger,
   config.OPENSIPS_SIP_URI,
+  pbxConfigClient,
 );
 reconciler.start(config.RECONCILE_INTERVAL_MS);
 

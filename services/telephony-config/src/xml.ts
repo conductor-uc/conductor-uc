@@ -236,6 +236,261 @@ export function buildDialplanDocument(
 }
 
 /**
+ * Parity 1a: per-extension call handling.
+ *
+ * `fs.routes.ts` resolves what an extension's stored settings mean for one
+ * call (which destinations exist, which external ones pass the tenant's
+ * toll-fraud policy and have an outbound route, whose caller ID they carry)
+ * into a {@link CallHandlingPlan}; this builder only turns a finished plan
+ * into XML, so it stays a pure string builder like the rest of this file.
+ *
+ * Verified only by the unit tests on this string, not against a real
+ * FreeSWITCH node (see the report for this feature and G-41). The mechanisms
+ * relied on are the same documented ones the voicemail fallback above uses
+ * (`continue_on_fail`, then further actions run), plus reading
+ * `originate_disposition` (the cause of the bridge that just failed) with
+ * nested variable expansion to pick the fallback for that cause.
+ */
+
+/** How many times a call may be forwarded onward before forwarding is switched off for it. */
+export const MAX_FORWARD_HOPS = 3;
+
+/** The SIP header (and so `sip_h_*` channel variable) carrying the count of forwards a call has been through. Neutral, no branding. */
+export const FORWARD_HOPS_HEADER = 'X-Forward-Hops';
+
+/** One thing to ring. */
+export type PlanLeg =
+  /** A registered phone in the tenant, reached back through OpenSIPs' location lookup. */
+  | { readonly kind: 'internal'; readonly number: string; readonly forwarded: boolean }
+  /**
+   * A PSTN number, dialled exactly as an ordinary outbound call is: tagged
+   * with the tenant's routing group (`drTag`) so only that tenant's outbound
+   * routes can match, with the caller ID `resolveOutboundCallerId` chose.
+   */
+  | {
+      readonly kind: 'external';
+      readonly normalizedNumber: string;
+      readonly drGroupId: number;
+      readonly callerId: { readonly name: string | null; readonly number: string | null } | null;
+    };
+
+/** What happens to the call. A voicemail target is a mailbox id (`voicemail.lua leave`). */
+export type PlanTarget =
+  | { readonly kind: 'bridge'; readonly legs: readonly PlanLeg[] }
+  | { readonly kind: 'voicemail'; readonly mailboxId: string }
+  | { readonly kind: 'busy' };
+
+/** What a busy / no-answer / unreachable call falls through to: another ring, or a mailbox. */
+export type FallbackTarget = Exclude<PlanTarget, { readonly kind: 'busy' }>;
+
+export interface CallHandlingPlan {
+  /** Forwards this call has already been through (0 for a fresh call). */
+  readonly hops: number;
+  /** Set: the call ends here, in this target, and nothing else is tried. Do not disturb. */
+  readonly dnd: PlanTarget | null;
+  /** Set: replaces ringing the extension altogether. */
+  readonly forwardAlways: PlanTarget | null;
+  /** The extension's own leg first, then simultaneous-ring legs. */
+  readonly ringLegs: readonly PlanLeg[];
+  /** Seconds the primary ring lasts before "no answer"; null leaves the ring untimed. */
+  readonly ringSeconds: number | null;
+  readonly onBusy: FallbackTarget | null;
+  readonly onNoAnswer: FallbackTarget | null;
+  readonly onUnreachable: FallbackTarget | null;
+  /** `null` is unlimited (`fraud-limits.ts`); applied before any bridge that leaves the platform. */
+  readonly maxConcurrentChannels: number | null;
+}
+
+/**
+ * The `originate_disposition` values each fallback class answers to. What a
+ * caller reaches when the extension's phone is not registered here arrives
+ * through OpenSIPs' failed location lookup as a 404, which FreeSWITCH reports
+ * as UNALLOCATED_NUMBER, not USER_NOT_REGISTERED, so both count as
+ * "unreachable". ORIGINATOR_CANCEL (the caller hung up) is deliberately in
+ * none of them: a caller who gives up must not be forwarded.
+ */
+export const BUSY_CAUSES = ['USER_BUSY'] as const;
+export const NO_ANSWER_CAUSES = [
+  'NO_ANSWER',
+  'NO_USER_RESPONSE',
+  'RECOVERY_ON_TIMER_EXPIRE',
+] as const;
+export const UNREACHABLE_CAUSES = [
+  'USER_NOT_REGISTERED',
+  'UNALLOCATED_NUMBER',
+  'NO_ROUTE_DESTINATION',
+  'DESTINATION_OUT_OF_ORDER',
+  'SUBSCRIBER_ABSENT',
+] as const;
+
+function legDialString(
+  leg: PlanLeg,
+  tenantDomain: string,
+  opensipsSipUri: string,
+  hops: number,
+): string {
+  const vars = [`sip_route_uri=sip:${opensipsSipUri}`];
+  if (leg.kind === 'external') {
+    vars.push(...callerIdVars(leg.callerId));
+  }
+  if (leg.kind === 'external' || leg.forwarded) {
+    vars.push(`sip_h_${FORWARD_HOPS_HEADER}=${String(hops + 1)}`);
+  }
+  const user =
+    leg.kind === 'internal'
+      ? leg.number
+      : drTag(leg.drGroupId) + stripLeadingPlus(leg.normalizedNumber);
+  return `[${vars.join(',')}]sofia/internal/${user}@${tenantDomain}`;
+}
+
+const hasExternalLeg = (target: PlanTarget | null): boolean =>
+  target?.kind === 'bridge' && target.legs.some((leg) => leg.kind === 'external');
+
+export function buildCallHandlingDialplanDocument(
+  callerContext: string,
+  destinationNumber: string,
+  tenantDomain: string,
+  opensipsSipUri: string,
+  tenantId: string,
+  plan: CallHandlingPlan,
+): string {
+  const dial = (legs: readonly PlanLeg[], prefix = ''): string =>
+    prefix + legs.map((l) => legDialString(l, tenantDomain, opensipsSipUri, plan.hops)).join(',');
+
+  const limitAction =
+    plan.maxConcurrentChannels === null
+      ? []
+      : [
+          `<action application="limit" data="${escapeXml(`redis ${tenantId} ${OUTBOUND_CHANNEL_LIMIT_RESOURCE} ${String(plan.maxConcurrentChannels)}`)}"/>`,
+        ];
+
+  /** The actions that carry a call to one target and finish there. */
+  const finalActions = (target: PlanTarget): string[] => {
+    switch (target.kind) {
+      case 'busy':
+        return ['<action application="hangup" data="USER_BUSY"/>'];
+      case 'voicemail':
+        return [
+          `<action application="lua" data="voicemail.lua leave ${escapeXml(tenantId)} ${escapeXml(target.mailboxId)}"/>`,
+        ];
+      case 'bridge':
+        return [
+          ...(hasExternalLeg(target) ? limitAction : []),
+          `<action application="bridge" data="${escapeXml(dial(target.legs))}"/>`,
+        ];
+    }
+  };
+
+  const actions: string[] = [
+    tenantIdAction(tenantId),
+    `<action application="set" data="cuc_forward_hops=${String(plan.hops)}"/>`,
+  ];
+
+  if (plan.dnd !== null) {
+    actions.push(...finalActions(plan.dnd));
+  } else if (plan.forwardAlways !== null) {
+    actions.push(...finalActions(plan.forwardAlways));
+  } else {
+    const classes = (
+      [
+        { causes: BUSY_CAUSES, target: plan.onBusy },
+        { causes: NO_ANSWER_CAUSES, target: plan.onNoAnswer },
+        { causes: UNREACHABLE_CAUSES, target: plan.onUnreachable },
+      ] as { causes: readonly string[]; target: FallbackTarget | null }[]
+    ).filter((c): c is { causes: readonly string[]; target: FallbackTarget } => c.target !== null);
+
+    if (classes.length > 0) {
+      actions.push(
+        `<action application="set" data="${escapeXml(`continue_on_fail=${classes.flatMap((c) => [...c.causes]).join(',')}`)}"/>`,
+      );
+    }
+
+    // Fallbacks are stored per cause and picked with
+    // `${cuc_cf_${originate_disposition}}` after the bridge fails: a
+    // condition on `originate_disposition` would be evaluated when the
+    // dialplan is parsed, before any bridge has run.
+    let bridgeFallbacks = false;
+    let voicemailFallbacks = false;
+    for (const { causes, target } of classes) {
+      for (const cause of causes) {
+        if (target.kind === 'bridge') {
+          bridgeFallbacks = true;
+          actions.push(
+            `<action application="set" data="${escapeXml(`cuc_cf_${cause}=${dial(target.legs)}`)}"/>`,
+          );
+        } else if (target.kind === 'voicemail') {
+          voicemailFallbacks = true;
+          actions.push(
+            `<action application="set" data="${escapeXml(`cuc_cf_vm_${cause}=leave ${tenantId} ${target.mailboxId}`)}"/>`,
+          );
+        }
+      }
+    }
+
+    const timeout =
+      plan.ringSeconds !== null && plan.onNoAnswer !== null
+        ? `{call_timeout=${String(plan.ringSeconds)}}`
+        : '';
+    const ringsExternal = plan.ringLegs.some((l) => l.kind === 'external');
+    // One channel-limit action per call, before the first bridge that can leave the platform.
+    const externalFallback = classes.some((c) => hasExternalLeg(c.target));
+    if (ringsExternal || externalFallback) actions.push(...limitAction);
+
+    actions.push(
+      `<action application="bridge" data="${escapeXml(dial(plan.ringLegs, timeout))}"/>`,
+    );
+    if (bridgeFallbacks) {
+      actions.push('<action application="bridge" data="${cuc_cf_${originate_disposition}}"/>');
+    }
+    if (voicemailFallbacks) {
+      actions.push(
+        '<action application="lua" data="voicemail.lua ${cuc_cf_vm_${originate_disposition}}"/>',
+      );
+    }
+  }
+
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="ext-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    actions.map((action) => `          ${action}\n`).join('') +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/**
+ * `origination_caller_id_number`/`_name` channel-variable assignments for an
+ * originated leg. The values come from admin-editable fields and end up
+ * inside a dial string, so anything that could end the value early or start
+ * a new variable (`'`, `,`, braces, brackets, `|`, backslash, control
+ * characters) is removed from the name, and a number that is not plain
+ * dialable characters is dropped.
+ */
+function callerIdVars(
+  callerId: { readonly name: string | null; readonly number: string | null } | null,
+): string[] {
+  const vars: string[] = [];
+  if (callerId?.number !== null && callerId?.number !== undefined) {
+    if (/^\+?[0-9]{1,32}$/.test(callerId.number)) {
+      vars.push(`origination_caller_id_number=${callerId.number}`);
+    }
+  }
+  if (callerId?.name !== null && callerId?.name !== undefined) {
+    // eslint-disable-next-line no-control-regex
+    const name = callerId.name.replace(/['\\{}[\]|,\u0000-\u001f]/g, '').trim();
+    if (name !== '') vars.push(`origination_caller_id_name='${name}'`);
+  }
+  return vars;
+}
+
+/**
  * S2-16: `voicemail.lua`'s own entry points — a DID dialed directly into a
  * mailbox (`destination_type = 'voicemail'`, G-25's own "each later stage
  * teaches `/fs/dialplan` to resolve its own destination type" — this is
@@ -379,13 +634,7 @@ export function buildOutboundDialplanDocument(
   /** `null` means unlimited (`fraud-limits.ts`'s own convention) — no `limit` action is emitted at all. */
   maxConcurrentChannels: number | null,
 ): string {
-  const vars: string[] = [`sip_route_uri=sip:${opensipsSipUri}`];
-  if (callerId?.number !== null && callerId?.number !== undefined) {
-    vars.push(`origination_caller_id_number=${callerId.number}`);
-  }
-  if (callerId?.name !== null && callerId?.name !== undefined) {
-    vars.push(`origination_caller_id_name='${callerId.name}'`);
-  }
+  const vars: string[] = [`sip_route_uri=sip:${opensipsSipUri}`, ...callerIdVars(callerId)];
 
   // G-28/G-29 (docs/decisions.md): `do_routing()`'s own `groupID` param
   // turned out to be compile-time-only, so there is no way to hand

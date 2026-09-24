@@ -78,6 +78,7 @@ export function createPbxConsumer(
       'pbx.extension.created',
       'pbx.extension.updated',
       'pbx.extension.deleted',
+      'pbx.call_handling.updated',
       'pbx.did.created',
       'pbx.did.updated',
       'pbx.did.deleted',
@@ -112,6 +113,14 @@ export function createPbxConsumer(
         case 'pbx.extension.created':
         case 'pbx.extension.updated':
           await projection.projectExtension(
+            trx,
+            tenantId,
+            (envelope.data as ExtensionEventData).extensionId,
+          );
+          return;
+
+        case 'pbx.call_handling.updated':
+          await projection.projectCallHandling(
             trx,
             tenantId,
             (envelope.data as ExtensionEventData).extensionId,

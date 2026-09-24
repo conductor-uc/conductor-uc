@@ -133,3 +133,126 @@ describe.skipIf(skipReason !== undefined)('reconciler', () => {
     expect(await h.opensipsProjection.listSubscribers()).toEqual([]);
   });
 });
+
+describe.skipIf(skipReason !== undefined)('reconciler: call handling', () => {
+  let h: Harness;
+
+  beforeAll(async () => {
+    h = await startHarness();
+  });
+  afterAll(async () => {
+    await h?.close();
+  });
+  afterEach(async () => {
+    await resetSchema(h.db);
+    await resetOpenSipsSchema(h.opensipsDb);
+    h.pbxConfig.callHandling = {};
+    h.pbxConfig.callHandlingListFailsFor.clear();
+  });
+
+  const reconciler = () =>
+    createReconciler(
+      h.readModel,
+      h.opensipsProjection,
+      h.mi,
+      h.logger,
+      TEST_OPENSIPS_SIP_URI,
+      h.pbxConfig,
+    );
+
+  const settings = {
+    dnd: true,
+    dndAction: 'busy' as const,
+    forwardAlways: null,
+    forwardBusy: null,
+    forwardNoAnswer: null,
+    noAnswerSeconds: 20,
+    forwardUnreachable: null,
+    simultaneousRing: [],
+  };
+
+  async function seedTenant(): Promise<string> {
+    const tenantId = crypto.randomUUID();
+    await h.readModel.upsertTenant(h.db.kysely, { id: tenantId, status: 'active' });
+    return tenantId;
+  }
+
+  it('heals a missed event: adds what is missing, corrects what differs, removes what is gone', async () => {
+    const tenantId = await seedTenant();
+    const missing = crypto.randomUUID();
+    const stale = crypto.randomUUID();
+    const gone = crypto.randomUUID();
+    h.pbxConfig.callHandling[missing] = { tenantId, settings };
+    h.pbxConfig.callHandling[stale] = { tenantId, settings };
+    await h.readModel.upsertCallHandling(h.db.kysely, {
+      extensionId: stale,
+      tenantId,
+      settings: { ...settings, dnd: false },
+    });
+    await h.readModel.upsertCallHandling(h.db.kysely, { extensionId: gone, tenantId, settings });
+
+    const result = await reconciler().reconcileCallHandlingOnce();
+
+    expect(result).toEqual({ upserted: 2, removed: 1 });
+    expect(await h.readModel.findCallHandling(missing)).toEqual(settings);
+    expect((await h.readModel.findCallHandling(stale))?.dnd).toBe(true);
+    expect(await h.readModel.findCallHandling(gone)).toBeUndefined();
+
+    // A second pass finds nothing to do.
+    expect(await reconciler().reconcileCallHandlingOnce()).toEqual({ upserted: 0, removed: 0 });
+  });
+
+  it('does not touch another tenant, and skips suspended tenants', async () => {
+    const tenantA = await seedTenant();
+    const tenantB = await seedTenant();
+    const suspended = crypto.randomUUID();
+    await h.readModel.upsertTenant(h.db.kysely, { id: suspended, status: 'suspended' });
+    const a = crypto.randomUUID();
+    const b = crypto.randomUUID();
+    const s = crypto.randomUUID();
+    h.pbxConfig.callHandling[a] = { tenantId: tenantA, settings };
+    h.pbxConfig.callHandling[s] = { tenantId: suspended, settings };
+    await h.readModel.upsertCallHandling(h.db.kysely, {
+      extensionId: b,
+      tenantId: tenantB,
+      settings: { ...settings, dnd: false },
+    });
+    h.pbxConfig.callHandling[b] = { tenantId: tenantB, settings: { ...settings, dnd: false } };
+
+    await reconciler().reconcileCallHandlingOnce();
+
+    expect(await h.readModel.findCallHandling(a)).toEqual(settings);
+    expect(await h.readModel.findCallHandling(s)).toBeUndefined();
+    expect((await h.readModel.findCallHandling(b))?.dnd).toBe(false);
+  });
+
+  it('leaves a tenant as it is when pbx-config-service cannot be reached, and carries on with the rest', async () => {
+    const down = await seedTenant();
+    const up = await seedTenant();
+    const kept = crypto.randomUUID();
+    const added = crypto.randomUUID();
+    await h.readModel.upsertCallHandling(h.db.kysely, {
+      extensionId: kept,
+      tenantId: down,
+      settings,
+    });
+    h.pbxConfig.callHandlingListFailsFor.add(down);
+    h.pbxConfig.callHandling[added] = { tenantId: up, settings };
+
+    await reconciler().reconcileCallHandlingOnce();
+
+    expect(await h.readModel.findCallHandling(kept)).toEqual(settings);
+    expect(await h.readModel.findCallHandling(added)).toEqual(settings);
+  });
+
+  it('does nothing without a pbx-config client (the projection-only reconciler)', async () => {
+    const withoutClient = createReconciler(
+      h.readModel,
+      h.opensipsProjection,
+      h.mi,
+      h.logger,
+      TEST_OPENSIPS_SIP_URI,
+    );
+    expect(await withoutClient.reconcileCallHandlingOnce()).toEqual({ upserted: 0, removed: 0 });
+  });
+});

@@ -145,9 +145,29 @@ export function createProjection(
 
     /** `pbx.extension.deleted`: remove the local row and its subscriber projection. */
     async removeExtension(trx: Transaction<TelephonyConfigDb>, extensionId: string): Promise<void> {
+      await readModel.deleteCallHandling(trx, extensionId);
       const removed = await readModel.deleteExtension(trx, extensionId);
       if (removed === undefined) return;
       await opensips.deleteSubscriber(removed.username, removed.realm);
+    },
+
+    /**
+     * `pbx.call_handling.updated` (parity 1a): re-fetches the extension's call
+     * handling and mirrors it. A 404 means nothing is configured (or the
+     * extension is gone), so the mirror is cleared. Every such event is
+     * idempotent, so a redelivery is harmless.
+     */
+    async projectCallHandling(
+      trx: Transaction<TelephonyConfigDb>,
+      tenantId: string,
+      extensionId: string,
+    ): Promise<void> {
+      const settings = await pbxConfig.findCallHandling(tenantId, extensionId);
+      if (settings === undefined) {
+        await readModel.deleteCallHandling(trx, extensionId);
+        return;
+      }
+      await readModel.upsertCallHandling(trx, { extensionId, tenantId, settings });
     },
 
     /**
