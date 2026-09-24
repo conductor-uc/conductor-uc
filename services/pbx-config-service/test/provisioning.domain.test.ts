@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   InvalidMacError,
   generateProvisioningToken,
+  globalCredentialMatches,
+  globalProvisioningCredential,
   hashProvisioningToken,
   normalizeMac,
   parseBasicAuth,
@@ -125,5 +127,34 @@ describe('renderYealinkConfig', () => {
 describe('renderYealinkCommonConfig', () => {
   it('is only the version line', () => {
     expect(renderYealinkCommonConfig()).toBe('#!version:1.0.0.1\n');
+  });
+});
+
+describe('the global provisioning credential', () => {
+  it('is absent when neither part is configured, and present when both are', () => {
+    expect(globalProvisioningCredential(undefined, undefined)).toBeUndefined();
+    expect(globalProvisioningCredential('phones', 'pw')).toEqual({
+      username: 'phones',
+      password: 'pw',
+    });
+  });
+
+  it('refuses half a credential, so a typo cannot silently drop it', () => {
+    expect(() => globalProvisioningCredential('phones', undefined)).toThrow(/together/);
+    expect(() => globalProvisioningCredential(undefined, 'pw')).toThrow(/together/);
+  });
+
+  it('matches only the exact user name and password', () => {
+    const expected = { username: 'phones', password: 'shared-secret' };
+    expect(
+      globalCredentialMatches(expected, { username: 'phones', password: 'shared-secret' }),
+    ).toBe(true);
+    expect(
+      globalCredentialMatches(expected, { username: 'phones', password: 'shared-secreT' }),
+    ).toBe(false);
+    expect(
+      globalCredentialMatches(expected, { username: 'Phones', password: 'shared-secret' }),
+    ).toBe(false);
+    expect(globalCredentialMatches(expected, { username: '', password: '' })).toBe(false);
   });
 });

@@ -267,4 +267,4 @@ Tenant-level analytics are private. Resellers get only aggregate usage metrics (
 
 ## provisioning-service (Stage 8)
 
-Serves per-MAC configuration for Yealink, Polycom, Snom, and Grandstream over HTTPS with per-device credentials. Templates are brand-neutral, with reseller branding optional (for example, a phone display logo).
+Serves per-MAC configuration for Yealink, Polycom, Snom, and Grandstream over HTTPS. A phone authenticates with HTTP Basic, using either its own per-device credential or a platform-wide credential (G-103 records the trade-off). Templates are brand-neutral, with reseller branding optional (for example, a phone display logo).

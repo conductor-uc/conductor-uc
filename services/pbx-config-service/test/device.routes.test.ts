@@ -60,10 +60,14 @@ describe.skipIf(skipReason !== undefined)('devices and provisioning HTTP routes'
       context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
     });
     registerDeviceRoutes(app, h.devices, bus, { provisioningBaseUrl: BASE_URL });
-    registerProvisionRoutes(app, h.devices, h.extensions, h.domains.lookup, {
-      port: 5060,
-      transports: ['udp', 'tcp'],
-    });
+    registerProvisionRoutes(
+      app,
+      h.devices,
+      h.extensions,
+      h.domains.lookup,
+      { port: 5060, transports: ['udp', 'tcp'] },
+      { globalCredential: { username: 'phones', password: 'shared-secret' } },
+    );
     await app.ready();
   });
 
@@ -329,6 +333,95 @@ describe.skipIf(skipReason !== undefined)('devices and provisioning HTTP routes'
         expect(response.body).toBe('Unauthorized\n');
       }
       expect(device.id).toBeDefined();
+    });
+
+    describe('with the platform-wide credential', () => {
+      const global = basic('phones', 'shared-secret');
+
+      it("serves the file for any registered phone's MAC, with nothing set up for that phone", async () => {
+        const tenantId = crypto.randomUUID();
+        const ext = await seedExtension(tenantId);
+        const device = await createDevice(tenantId, ext.id);
+        expect(device.provisioningIssued).toBe(false);
+        const secret = await h.extensions.reveal({ tenantId }, ext.id);
+
+        const response = await app.inject({
+          method: 'GET',
+          url: '/v1/public/provision/yealink/001565aabbcc.cfg',
+          headers: { authorization: global },
+        });
+
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.body).toContain(`account.1.password = ${secret.password}\n`);
+        expect(response.body).toContain('account.1.user_name = 101\n');
+        expect(
+          (await h.devices.findById({ tenantId }, device.id))?.lastProvisionedAt,
+        ).toBeInstanceOf(Date);
+      });
+
+      it('serves each phone its own extension, whichever tenant it belongs to', async () => {
+        const a = crypto.randomUUID();
+        const b = crypto.randomUUID();
+        const extA = await seedExtension(a, '101');
+        const extB = await seedExtension(b, '202');
+        await createDevice(a, extA.id, '001565000001');
+        await createDevice(b, extB.id, '001565000002');
+
+        const one = await app.inject({
+          method: 'GET',
+          url: '/v1/public/provision/yealink/001565000001.cfg',
+          headers: { authorization: global },
+        });
+        const two = await app.inject({
+          method: 'GET',
+          url: '/v1/public/provision/yealink/001565000002.cfg',
+          headers: { authorization: global },
+        });
+        expect(one.body).toContain('account.1.user_name = 101\n');
+        expect(two.body).toContain('account.1.user_name = 202\n');
+        expect(two.body).not.toContain('account.1.user_name = 101');
+      });
+
+      it('answers an address nobody registered like any other missing file, and the model-wide file normally', async () => {
+        const missing = await app.inject({
+          method: 'GET',
+          url: '/v1/public/provision/yealink/001565ffffff.cfg',
+          headers: { authorization: global },
+        });
+        expect(missing.statusCode).toBe(404);
+        expect(missing.body).not.toContain('account.1');
+
+        const common = await app.inject({
+          method: 'GET',
+          url: '/v1/public/provision/yealink/y000000000028.cfg',
+          headers: { authorization: global },
+        });
+        expect(common.statusCode).toBe(200);
+        expect(common.body).toBe('#!version:1.0.0.1\n');
+      });
+
+      it('does not accept a wrong user or password, and a device password still works for its own file', async () => {
+        const { creds } = await provisioned();
+        for (const authorization of [
+          basic('phones', 'wrong'),
+          basic('other', 'shared-secret'),
+          basic('phones', ''),
+        ]) {
+          const response = await app.inject({
+            method: 'GET',
+            url: '/v1/public/provision/yealink/001565aabbcc.cfg',
+            headers: { authorization },
+          });
+          expect(response.statusCode).toBe(401);
+          expect(response.headers['www-authenticate']).toBe('Basic realm="provisioning"');
+        }
+        const own = await app.inject({
+          method: 'GET',
+          url: '/v1/public/provision/yealink/001565aabbcc.cfg',
+          headers: { authorization: basic(creds.username, creds.password) },
+        });
+        expect(own.statusCode).toBe(200);
+      });
     });
 
     it("will not serve another phone's file, or one that is not a Yealink file", async () => {

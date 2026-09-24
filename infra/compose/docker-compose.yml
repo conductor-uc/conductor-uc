@@ -297,6 +297,10 @@ services:
       # laptop that is the published gateway port; set this to the address the
       # phones can actually reach.
       PROVISIONING_BASE_URL: ${PROVISIONING_BASE_URL:-http://localhost:8080}
+      # G-103: the platform-wide user name and password phones use (HTTP Basic).
+      # Dev-only defaults; production sets its own.
+      PROVISIONING_USERNAME: ${PROVISIONING_USERNAME:-phones}
+      PROVISIONING_PASSWORD: ${PROVISIONING_PASSWORD:-dev-provisioning-password}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}

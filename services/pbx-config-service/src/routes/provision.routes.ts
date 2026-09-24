@@ -2,14 +2,16 @@ import type { DbContext } from '@cuc/db';
 import { ProblemError, Type, type Server } from '@cuc/http';
 
 import {
+  globalCredentialMatches,
   parseBasicAuth,
   parseYealinkFile,
   renderYealinkCommonConfig,
   renderYealinkConfig,
   tokenMatches,
+  type GlobalProvisioningCredential,
 } from '../domain/provisioning.js';
 import type { TenantDomainLookup } from '../org-client.js';
-import type { DeviceRepo } from '../repo/device.repo.js';
+import type { DeviceRepo, ProvisioningTarget } from '../repo/device.repo.js';
 import type { ExtensionRepo } from '../repo/extension.repo.js';
 import type { SipEdgeConfig } from './sip-endpoint.routes.js';
 
@@ -34,6 +36,7 @@ export function registerProvisionRoutes(
   extensions: ExtensionRepo,
   primaryDomain: TenantDomainLookup,
   edge: SipEdgeConfig,
+  options: { readonly globalCredential?: GlobalProvisioningCredential } = {},
 ): void {
   app.get(
     '/v1/public/provision/yealink/:file',
@@ -51,9 +54,19 @@ export function registerProvisionRoutes(
 
       const credentials = parseBasicAuth(request.headers.authorization);
       if (credentials === undefined) return denied();
-      const target = await devices.findProvisioningTarget(credentials.username);
-      if (target === undefined || !tokenMatches(target.tokenHash, credentials.password)) {
-        return denied();
+
+      // Two ways in. The platform-wide credential lets any phone fetch the file
+      // named for its own MAC address, so a phone needs nothing set up for it
+      // beforehand. A device's own credential opens only that device's file.
+      const global =
+        options.globalCredential !== undefined &&
+        globalCredentialMatches(options.globalCredential, credentials);
+      let target: ProvisioningTarget | undefined;
+      if (!global) {
+        target = await devices.findProvisioningTarget(credentials.username);
+        if (target === undefined || !tokenMatches(target.tokenHash, credentials.password)) {
+          return denied();
+        }
       }
 
       const file = parseYealinkFile(request.params.file);
@@ -62,7 +75,12 @@ export function registerProvisionRoutes(
       if (file.kind === 'common') {
         return reply.type('text/plain; charset=utf-8').send(renderYealinkCommonConfig());
       }
-      if (file.mac !== target.mac) throw ProblemError.notFound('No such file.');
+      // With the global credential the file name is the only identity, and an
+      // unknown address gets the same answer as any other file that is not there.
+      if (global) target = await devices.findProvisioningTargetByMac(file.mac);
+      if (target === undefined || file.mac !== target.mac) {
+        throw ProblemError.notFound('No such file.');
+      }
 
       const ctx: DbContext = { tenantId: target.tenantId };
       const extension = await extensions.findById(ctx, target.extensionId);
