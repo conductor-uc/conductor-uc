@@ -18,7 +18,7 @@ class LoginRequest {
   /// Returns a new [LoginRequest] instance.
   LoginRequest({
 
-    required  this.orgId,
+     this.orgId,
 
     required  this.email,
 
@@ -28,12 +28,12 @@ class LoginRequest {
   @JsonKey(
     
     name: r'orgId',
-    required: true,
+    required: false,
     includeIfNull: false,
   )
 
 
-  final String orgId;
+  final String? orgId;
 
 
 

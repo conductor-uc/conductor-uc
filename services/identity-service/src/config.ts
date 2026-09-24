@@ -28,6 +28,9 @@ export const configSchema = Type.Object({
    */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
 
+  /** org-service, asked which org a console hostname belongs to (G-56). */
+  ORG_SERVICE_URL: Env.url(),
+
   /** 07 §2: the access token lives 10 minutes. */
   ACCESS_TOKEN_TTL_SECONDS: Env.int({ minimum: 30, default: 600 }),
   /** 07 §2: the refresh token lives 30 days, sliding. */

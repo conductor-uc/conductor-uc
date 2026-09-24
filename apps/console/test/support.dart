@@ -82,10 +82,6 @@ Future<void> completeSignIn(
 
 /// Fills in and submits the sign-in page that is already showing.
 Future<void> submitSignIn(WidgetTester tester, String email) async {
-  await tester.enterText(
-    find.widgetWithText(TextField, 'Organization ID'),
-    'demo',
-  );
   await tester.enterText(find.widgetWithText(TextField, 'Email'), email);
   await tester.enterText(find.widgetWithText(TextField, 'Password'), 'pw');
   await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));

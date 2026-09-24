@@ -33,6 +33,7 @@ class _ResetRequestPageState extends ConsumerState<ResetRequestPage> {
   final _email = TextEditingController();
   bool _busy = false;
   bool _sent = false;
+  bool _askOrg = false;
   String? _error;
 
   @override
@@ -43,8 +44,12 @@ class _ResetRequestPageState extends ConsumerState<ResetRequestPage> {
   }
 
   Future<void> _submit() async {
-    if (_org.text.trim().isEmpty || _email.text.trim().isEmpty) {
-      setState(() => _error = 'Enter your organization ID and email.');
+    if (_email.text.trim().isEmpty || (_askOrg && _org.text.trim().isEmpty)) {
+      setState(
+        () => _error = _askOrg
+            ? 'Enter your organization ID and email.'
+            : 'Enter your email.',
+      );
       return;
     }
     setState(() {
@@ -57,18 +62,27 @@ class _ResetRequestPageState extends ConsumerState<ResetRequestPage> {
           .getAuthApi()
           .requestPasswordReset(
             passwordResetRequest: PasswordResetRequest(
-              orgId: _org.text.trim(),
+              orgId: _org.text.trim().isEmpty ? null : _org.text.trim(),
               email: _email.text.trim(),
             ),
           );
       if (mounted) setState(() => _sent = true);
     } catch (e) {
       if (mounted) {
-        setState(
-          () => _error = isOffline(e)
-              ? 'Could not reach the server.'
-              : 'Something went wrong. Try again in a moment.',
-        );
+        if (problemCode(e) == 'org_required') {
+          // This hostname does not say which organization; it depends on the
+          // address the page is served from, not on the account.
+          setState(() {
+            _askOrg = true;
+            _error = 'Enter your organization ID to continue.';
+          });
+        } else {
+          setState(
+            () => _error = isOffline(e)
+                ? 'Could not reach the server.'
+                : 'Something went wrong. Try again in a moment.',
+          );
+        }
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -96,10 +110,11 @@ class _ResetRequestPageState extends ConsumerState<ResetRequestPage> {
     return AuthScaffold(
       title: 'Reset your password',
       children: [
-        TextField(
-          controller: _org,
-          decoration: const InputDecoration(labelText: 'Organization ID'),
-        ),
+        if (_askOrg)
+          TextField(
+            controller: _org,
+            decoration: const InputDecoration(labelText: 'Organization ID'),
+          ),
         TextField(
           controller: _email,
           autofillHints: const [AutofillHints.email],

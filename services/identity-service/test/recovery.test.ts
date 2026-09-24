@@ -245,8 +245,9 @@ describe.skipIf(skipReason !== undefined)('password reset, invitations, refresh 
         orgId,
         'admin@example.com',
       );
-      if (issued === undefined) throw new Error('no token issued');
-      return issued.token;
+      const first = issued[0];
+      if (first === undefined) throw new Error('no token issued');
+      return first.token;
     }
 
     it('sets the new password, and the old one stops working', async () => {

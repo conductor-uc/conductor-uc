@@ -172,8 +172,10 @@ components:
         legalFooter: { type: [string, 'null'] }
     LoginRequest:
       type: object
-      required: [orgId, email, password]
+      required: [email, password]
       properties:
+        # Omitted at a console hostname, which says which org users sign in
+        # there. Required when the service answers org_required.
         orgId: { type: string, minLength: 1 }
         email: { type: string, minLength: 1 }
         password: { type: string, minLength: 1 }
@@ -221,7 +223,7 @@ components:
         refreshToken: { type: string, minLength: 1 }
     PasswordResetRequest:
       type: object
-      required: [orgId, email]
+      required: [email]
       properties:
         orgId: { type: string, minLength: 1 }
         email: { type: string, minLength: 1 }

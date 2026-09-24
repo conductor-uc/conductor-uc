@@ -82,6 +82,30 @@ export function createUserRepo(db: Database<IdentityServiceDb>) {
       return row === undefined ? undefined : { ...toUser(row), passwordHash: row.password_hash };
     },
 
+    /**
+     * The users with [emailInput] who sign in at a console hostname whose
+     * scope is [scopeOrgId]: that org's own users, and, for a reseller, its
+     * tenants' users too (a tenant user's `reseller_id` names the reseller).
+     * A master's console reaches only the master's own users.
+     */
+    findByScopeAndEmail: async (
+      scope: { readonly orgId: string; readonly type: 'master' | 'reseller' },
+      emailInput: string,
+    ): Promise<UserWithHash[]> => {
+      const email = normalizeEmail(emailInput);
+      const rows = await users
+        .selectFrom('users')
+        .selectAll()
+        .where('email', '=', email)
+        .where((eb) =>
+          scope.type === 'reseller'
+            ? eb.or([eb('org_id', '=', scope.orgId), eb('reseller_id', '=', scope.orgId)])
+            : eb('org_id', '=', scope.orgId),
+        )
+        .execute();
+      return rows.map((row) => ({ ...toUser(row), passwordHash: row.password_hash }));
+    },
+
     findById: async (id: string): Promise<User | undefined> => {
       const row = await users
         .selectFrom('users')

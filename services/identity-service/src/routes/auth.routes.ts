@@ -20,12 +20,14 @@ import {
 } from '../http/refresh-cookie.js';
 import { InvitationConflictError } from '../repo/token.repo.js';
 import { EmailTakenError } from '../repo/user.repo.js';
-import type { createAuthService } from '../auth/auth-service.js';
+import { OrgRequiredError, type OrgTarget, type createAuthService } from '../auth/auth-service.js';
+import { OrgClientError, type OrgClient } from '../org-client.js';
 
 type AuthService = ReturnType<typeof createAuthService>;
 
 const LoginBodySchema = Type.Object({
-  orgId: Type.String({ minLength: 1 }),
+  // Optional: at a console hostname the org is known from the hostname (G-56).
+  orgId: Type.Optional(Type.String({ minLength: 1 })),
   email: Type.String({ minLength: 1 }),
   password: Type.String({ minLength: 1 }),
 });
@@ -56,7 +58,7 @@ const TokensSchema = Type.Object({
 });
 
 const PasswordResetBodySchema = Type.Object({
-  orgId: Type.String({ minLength: 1 }),
+  orgId: Type.Optional(Type.String({ minLength: 1 })),
   email: Type.String({ minLength: 1 }),
 });
 const PasswordResetConfirmBodySchema = Type.Object({
@@ -84,6 +86,11 @@ export interface AuthRouteOptions {
    * anywhere real.
    */
   readonly devExposeTokens?: boolean;
+  /**
+   * Finds the org a console hostname belongs to, for a sign-in or reset that
+   * names none. Without it every request must name its org.
+   */
+  readonly orgClient?: OrgClient;
 }
 
 /**
@@ -92,9 +99,9 @@ export interface AuthRouteOptions {
  * `config: { public: true }` is the correct use of that escape hatch, not an
  * exception to it.
  *
- * `orgId` is taken directly in each request body. Resolving it from a
- * hostname or subdomain is api-gateway's job (S1-08), which does not exist
- * yet; this is the interim, directly testable shape this task's own API needs.
+ * `orgId` may be in the request body; without it the org is
+ * the one the console hostname belongs to (G-56), looked up through
+ * org-service.
  */
 export function registerAuthRoutes(
   app: Server,
@@ -116,6 +123,26 @@ export function registerAuthRoutes(
     void reply.header('set-cookie', refreshCookieHeader(tokens.refreshToken, ttlDays, { secure }));
     const cookieOnly = request.headers[REFRESH_TRANSPORT_HEADER] === 'cookie';
     return cookieOnly ? { accessToken: tokens.accessToken, expiresIn: tokens.expiresIn } : tokens;
+  }
+
+  /**
+   * Where a sign-in or reset looks for the account: the org the body names,
+   * else the org the console hostname belongs to (`x-forwarded-host`, set by
+   * the gateway, or `host`). A hostname nobody owns and no named org is a 400,
+   * which depends on the request, not on any account.
+   */
+  async function targetOf(
+    request: { headers: Record<string, unknown> },
+    orgId: string | undefined,
+  ): Promise<OrgTarget> {
+    if (orgId !== undefined) return { kind: 'org', orgId };
+    const raw = request.headers['x-forwarded-host'] ?? request.headers['host'];
+    const first = (Array.isArray(raw) ? raw[0] : raw) as unknown;
+    const host = typeof first === 'string' ? hostnameOf(first) : undefined;
+    if (host === undefined || options.orgClient === undefined) throw new OrgRequiredError();
+    const scope = await options.orgClient.signInScope(host);
+    if (scope === undefined) throw new OrgRequiredError();
+    return { kind: 'scope', orgId: scope.orgId, type: scope.type };
   }
 
   app.post(
@@ -143,7 +170,7 @@ export function registerAuthRoutes(
     async (request, reply) => {
       try {
         const result = await auth.login(
-          request.body.orgId,
+          await targetOf(request, request.body.orgId),
           request.body.email,
           request.body.password,
           metaOf(request),
@@ -246,16 +273,22 @@ export function registerAuthRoutes(
       schema: { body: PasswordResetBodySchema, response: { 202: Type.Null() } },
     },
     async (request, reply) => {
-      const issued = await auth.requestPasswordReset(
-        request.context,
-        request.body.orgId,
-        request.body.email,
-      );
-      if (issued !== undefined && options.devExposeTokens === true) {
-        request.log.warn(
-          { email: issued.email, token: issued.token },
-          'DEV ONLY: password reset token (no mailer is running)',
+      try {
+        const issued = await auth.requestPasswordReset(
+          request.context,
+          await targetOf(request, request.body.orgId),
+          request.body.email,
         );
+        if (options.devExposeTokens === true) {
+          for (const one of issued) {
+            request.log.warn(
+              { email: one.email, token: one.token },
+              'DEV ONLY: password reset token (no mailer is running)',
+            );
+          }
+        }
+      } catch (error) {
+        throw toProblem(error);
       }
       return reply.status(202).send(null);
     },
@@ -386,7 +419,27 @@ function metaOf(request: { headers: Record<string, unknown>; ip?: string }): Req
  * this mapping adds no detail the domain layer did not already choose to
  * reveal.
  */
+/** The hostname in a `Host` header: lowercased, without a port. */
+function hostnameOf(value: string): string | undefined {
+  const host = value.split(',')[0]?.trim().toLowerCase().replace(/:\d+$/, '');
+  return host === undefined || host === '' ? undefined : host;
+}
+
 function toProblem(error: unknown): ProblemError {
+  if (error instanceof OrgRequiredError) {
+    return error.afterPasswordCheck
+      ? ProblemError.conflict(error.message, { code: 'org_required' })
+      : ProblemError.badRequest(error.message, { code: 'org_required' });
+  }
+  if (error instanceof OrgClientError) {
+    return new ProblemError(
+      503,
+      '/problems/unavailable',
+      'Service unavailable',
+      'org_lookup_unavailable',
+      { detail: 'Could not work out which organization this is. Try again shortly.' },
+    );
+  }
   if (error instanceof RefreshTokenReuseError) {
     return ProblemError.unauthorized(error.message, { code: 'refresh_token_reused' });
   }

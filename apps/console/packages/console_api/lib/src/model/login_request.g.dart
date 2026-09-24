@@ -8,9 +8,9 @@ part of 'login_request.dart';
 
 LoginRequest _$LoginRequestFromJson(Map<String, dynamic> json) =>
     $checkedCreate('LoginRequest', json, ($checkedConvert) {
-      $checkKeys(json, requiredKeys: const ['orgId', 'email', 'password']);
+      $checkKeys(json, requiredKeys: const ['email', 'password']);
       final val = LoginRequest(
-        orgId: $checkedConvert('orgId', (v) => v as String),
+        orgId: $checkedConvert('orgId', (v) => v as String?),
         email: $checkedConvert('email', (v) => v as String),
         password: $checkedConvert('password', (v) => v as String),
       );
@@ -19,7 +19,7 @@ LoginRequest _$LoginRequestFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$LoginRequestToJson(LoginRequest instance) =>
     <String, dynamic>{
-      'orgId': instance.orgId,
+      'orgId': ?instance.orgId,
       'email': instance.email,
       'password': instance.password,
     };
