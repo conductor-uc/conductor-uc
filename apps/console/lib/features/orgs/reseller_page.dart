@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../trunks/trunks_page.dart';
+import '../users/users_api.dart';
+import '../users/users_page.dart';
 import 'brand_page.dart';
 import 'domains_panel.dart';
 import 'orgs_api.dart';
@@ -44,7 +46,7 @@ class _Detail extends ConsumerWidget {
     final suspended = reseller['status'] != 'active';
     final id = '${reseller['id']}';
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -79,6 +81,7 @@ class _Detail extends ConsumerWidget {
               tabAlignment: TabAlignment.start,
               tabs: [
                 Tab(text: 'Tenants'),
+                Tab(text: 'People'),
                 Tab(text: 'Trunks'),
                 Tab(text: 'Domains'),
                 Tab(text: 'Brand'),
@@ -88,6 +91,11 @@ class _Detail extends ConsumerWidget {
               child: TabBarView(
                 children: [
                   OrgsPage(resellerId: id, embedded: true),
+                  UsersPage(
+                    org: UsersTarget.reseller(id),
+                    orgName: '${reseller['name']}',
+                    embedded: true,
+                  ),
                   TrunksPage(resellerId: id),
                   Padding(
                     padding: const EdgeInsets.only(top: 16),
