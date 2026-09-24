@@ -1,7 +1,11 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { crossTenantProbe, databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 
-import { InvalidExtensionIdError, InvalidPinError } from '../src/domain/mailbox.js';
+import {
+  InvalidEmailSettingsError,
+  InvalidExtensionIdError,
+  InvalidPinError,
+} from '../src/domain/mailbox.js';
 import { MailboxAlreadyExistsError, MailboxNotFoundError } from '../src/repo/mailbox.repo.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
@@ -155,6 +159,47 @@ describe.skipIf(skipReason !== undefined)('mailbox repo', () => {
     });
     await h.mailboxes.remove(ctxFor(tenantId), mailbox.id);
     expect(await h.mailboxes.findById(ctxFor(tenantId), mailbox.id)).toBeUndefined();
+  });
+
+  it('stores email settings per mailbox and rejects invalid ones without changing the row', async () => {
+    const tenantId = crypto.randomUUID();
+    const mailbox = await h.mailboxes.create(ctxFor(tenantId), {
+      extensionId: crypto.randomUUID(),
+      pin: '1234',
+    });
+    const other = await h.mailboxes.create(ctxFor(tenantId), {
+      extensionId: crypto.randomUUID(),
+      pin: '1234',
+    });
+    await h.mailboxes.updateEmailSettings(ctxFor(tenantId), mailbox.id, {
+      notifyEmail: 'a@example.test',
+      attachAudio: true,
+      afterEmail: 'delete',
+    });
+    await expect(
+      h.mailboxes.updateEmailSettings(ctxFor(tenantId), mailbox.id, {
+        notifyEmail: 'nope',
+        attachAudio: true,
+        afterEmail: 'keep',
+      }),
+    ).rejects.toBeInstanceOf(InvalidEmailSettingsError);
+    expect(await h.mailboxes.findById(ctxFor(tenantId), mailbox.id)).toMatchObject({
+      notifyEmail: 'a@example.test',
+      emailAttachAudio: true,
+      emailAfter: 'delete',
+    });
+    expect(await h.mailboxes.findById(ctxFor(tenantId), other.id)).toMatchObject({
+      notifyEmail: null,
+      emailAttachAudio: false,
+      emailAfter: 'keep',
+    });
+    await expect(
+      h.mailboxes.updateEmailSettings(ctxFor(crypto.randomUUID()), mailbox.id, {
+        notifyEmail: null,
+        attachAudio: false,
+        afterEmail: 'keep',
+      }),
+    ).rejects.toBeInstanceOf(MailboxNotFoundError);
   });
 
   // 05 §2.4: every repository test suite includes a cross-tenant probe.

@@ -728,6 +728,8 @@ services:
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
       ORG_SERVICE_URL: ${ORG_SERVICE_URL:-http://org-service:8080}
+      # S5-07: voicemail-to-email reads mailbox settings and the recording from here.
+      VOICEMAIL_SERVICE_URL: ${VOICEMAIL_SERVICE_URL:-http://voicemail-service:8080}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025

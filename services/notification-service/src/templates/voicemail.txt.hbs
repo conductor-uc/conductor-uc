@@ -1,0 +1,26 @@
+{{#if brandName}}{{brandName}}
+
+{{/if}}New voicemail From:
+{{caller}}{{#if callerName}}{{#if callerNumber}} ({{callerNumber}}){{/if}}{{/if}}
+Received:
+{{receivedAt}}
+{{#if duration}}Length:
+  {{duration}}
+{{/if}}
+{{#if audioAttached}}
+  The recording is attached to this email.
+{{/if}}
+{{#if audioTooLarge}}
+  The recording is too large to attach. Listen to it in your voicemail inbox.
+{{/if}}
+
+Open your voicemail:
+{{link}}
+{{#if supportLine}}
+
+  {{supportLine}}
+{{/if}}
+{{#if legalFooter}}
+
+  {{legalFooter}}
+{{/if}}

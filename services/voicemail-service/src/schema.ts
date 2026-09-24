@@ -22,6 +22,10 @@ export interface VoicemailServiceDb extends EventTables {
     pin_enc: string;
     greeting_status: string;
     greeting_object_key: string | null;
+    /** Voicemail-to-email (S5-07). Personal data: never logged. Null means no email. */
+    notify_email: string | null;
+    email_attach_audio: boolean;
+    email_after: string;
     created_at: Date;
     updated_at: Date;
     version: number;

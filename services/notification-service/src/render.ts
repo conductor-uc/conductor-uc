@@ -5,7 +5,7 @@ import mjml2html from 'mjml';
 
 import { readableOn, safeColor, type MailBrand } from './domain/brand.js';
 
-export type TemplateName = 'password-reset' | 'invitation' | 'mfa-reset';
+export type TemplateName = 'password-reset' | 'invitation' | 'mfa-reset' | 'voicemail';
 
 export interface RenderInput {
   readonly template: TemplateName;
@@ -18,6 +18,20 @@ export interface RenderInput {
   readonly link: string;
   /** How long a one-time link works, in words: "1 hour", "7 days". */
   readonly validFor?: string;
+  /** Required for the `voicemail` template. */
+  readonly voicemail?: VoicemailSummary;
+}
+
+/** How the recording relates to the email: it is attached, was not asked for, or was too big to attach. */
+export type VoicemailAudio = 'attached' | 'not_requested' | 'too_large';
+
+/** A new voicemail message, as the `voicemail` template shows it. All of it is private-class data. */
+export interface VoicemailSummary {
+  readonly callerName: string | null;
+  readonly callerNumber: string | null;
+  readonly receivedAt: Date;
+  readonly durationMs: number | null;
+  readonly audio: VoicemailAudio;
 }
 
 export interface RenderedEmail {
@@ -30,6 +44,7 @@ const SUBJECTS: Record<TemplateName, string> = {
   'password-reset': 'Reset your password',
   invitation: 'You have been invited',
   'mfa-reset': 'Your two-step verification was reset',
+  voicemail: 'New voicemail',
 };
 
 const TEMPLATE_DIR = new URL('./templates/', import.meta.url);
@@ -74,8 +89,12 @@ export async function renderEmail(input: RenderInput): Promise<RenderedEmail> {
     input.brand.supportUrl === null ? null : `Help: ${input.brand.supportUrl}`,
   ].filter((part): part is string => part !== null);
 
+  const voicemail = voicemailContext(input);
+  const subject = voicemail === undefined ? SUBJECTS[input.template] : voicemail.subject;
+
   const context = {
-    title: SUBJECTS[input.template],
+    ...(voicemail === undefined ? {} : voicemail.fields),
+    title: subject,
     brandName: input.brand.displayName,
     primary,
     onPrimary: readableOn(primary),
@@ -94,7 +113,7 @@ export async function renderEmail(input: RenderInput): Promise<RenderedEmail> {
   }
   const text = (await load(`${input.template}.txt.hbs`))(context);
 
-  return { subject: SUBJECTS[input.template], html, text };
+  return { subject, html, text };
 }
 
 /**
@@ -120,4 +139,51 @@ export function validFor(expiresAt: Date, now = new Date()): string {
     return `${String(hours)} ${hours === 1 ? 'hour' : 'hours'}`;
   }
   return `${String(minutes)} ${minutes === 1 ? 'minute' : 'minutes'}`;
+}
+
+/** Caller ID is set by whoever placed the call, so it is untrusted text: no control characters, and short. */
+function cleanCaller(value: string | null): string | null {
+  if (value === null) return null;
+  // eslint-disable-next-line no-control-regex
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned === '' ? null : cleaned.slice(0, 64);
+}
+
+/** "0:42", "12:05": a duration in minutes and seconds. */
+export function formatDuration(durationMs: number | null): string | null {
+  if (durationMs === null) return null;
+  const total = Math.max(0, Math.round(durationMs / 1000));
+  return `${String(Math.floor(total / 60))}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** "Thu, 24 Sep 2026 19:20 UTC": the same wording in every locale, and unambiguous. */
+export function formatReceivedAt(date: Date): string {
+  return `${date.toUTCString().replace(/:\d\d GMT$/, '')} UTC`;
+}
+
+function voicemailContext(
+  input: RenderInput,
+): { subject: string; fields: Record<string, unknown> } | undefined {
+  if (input.template !== 'voicemail') return undefined;
+  const summary = input.voicemail;
+  if (summary === undefined) throw new Error('The voicemail template needs a voicemail summary.');
+
+  const name = cleanCaller(summary.callerName);
+  const number = cleanCaller(summary.callerNumber);
+  const caller = name ?? number ?? 'an unknown caller';
+  return {
+    subject: `New voicemail from ${caller}`,
+    fields: {
+      callerName: name,
+      callerNumber: number,
+      caller,
+      receivedAt: formatReceivedAt(summary.receivedAt),
+      duration: formatDuration(summary.durationMs),
+      audioAttached: summary.audio === 'attached',
+      audioTooLarge: summary.audio === 'too_large',
+    },
+  };
 }
