@@ -479,6 +479,14 @@ class DemoPbx {
     'ready': false,
   };
 
+  /// Where the platform is reached from the internet, as the operator last saved it.
+  String? _publicAddress;
+
+  static String _recordType(String address) {
+    if (RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(address)) return 'A';
+    return address.contains(':') ? 'AAAA' : 'CNAME';
+  }
+
   /// Certificates: the platform's own, and a reseller's (one working, one failing).
   ResponseBody? _certificates(RequestOptions options) {
     final path = options.path;
@@ -510,6 +518,41 @@ class DemoPbx {
         _acme['ready'] = email.isNotEmpty && agree;
         return _json(_acme);
       }
+    }
+    if (path == '/v1/platform/network-settings') {
+      if (method == 'PUT') {
+        final value = '${_body(options)['publicAddress'] ?? ''}'.trim();
+        if (value.contains('://') ||
+            value.contains('/') ||
+            value.contains(' ')) {
+          return _problem(
+            400,
+            'Enter an IP address or a hostname, such as 203.0.113.10 or '
+            'edge.example.com, without http:// or a port.',
+          );
+        }
+        _publicAddress = value.isEmpty ? null : value;
+      }
+      return _json({'publicAddress': _publicAddress});
+    }
+    if (method == 'GET' &&
+        RegExp(r'^/v1/resellers/[^/]+/dns-records$').hasMatch(path)) {
+      final address = _publicAddress;
+      return _json({
+        'publicAddress': address,
+        'rows': [
+          for (final (name, purpose) in [
+            ('sip.voice.northwind.example', 'sip'),
+            ('portal.northwind.example', 'console'),
+          ])
+            {
+              'name': name,
+              'type': address == null ? 'A' : _recordType(address),
+              'value': address,
+              'purpose': purpose,
+            },
+        ],
+      });
     }
     if (method == 'GET' && path == '/v1/platform/certificates') {
       return _json({
