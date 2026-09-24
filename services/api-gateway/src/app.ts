@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 
 import { createAccessTokenVerifier } from './auth/access-token-verifier.js';
 import { registerAuthentication } from './auth/authenticate.js';
+import { createChallengeLookup, registerAcmeChallengeRoute } from './acme-challenge.js';
 import { registerConsoleHosting } from './console-hosting.js';
 import { registerCors } from './cors.js';
 import { registerPlatformHealth } from './platform-health.js';
@@ -134,6 +135,16 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     timeoutMs: config.PROXY_TIMEOUT_MS,
     internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET,
   });
+
+  // A certificate authority checking that this host answers for a name it asked for a
+  // certificate for (G-105): the answer is held by org-service.
+  registerAcmeChallengeRoute(
+    app,
+    createChallengeLookup({
+      orgServiceUrl: config.ORG_SERVICE_URL,
+      internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+    }),
+  );
 
   // Last, so every more specific route (the API, health, the platform page) wins.
   if (config.CONSOLE_DIR !== undefined) {

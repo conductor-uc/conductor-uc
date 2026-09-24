@@ -145,7 +145,16 @@ export const configSchema = Type.Object({
   TLS_CERT_FILE: Env.optional(Env.string()),
   TLS_KEY_FILE: Env.optional(Env.string()),
   TLS_CERT_DIR: Env.optional(Env.string()),
-  /** When set, a plain-HTTP listener on this port redirects browsers to HTTPS. */
+  /**
+   * The token org-service's internal routes expect. The gateway uses it only to
+   * ask for the answer to a certificate authority's HTTP challenge (G-105); left
+   * unset, challenges are never answered and no certificate can be requested.
+   */
+  INTERNAL_SERVICE_TOKEN: Env.optional(Env.secret()),
+  /**
+   * When set, a plain-HTTP listener on this port redirects browsers to HTTPS, and
+   * answers certificate authorities' HTTP challenges. Port 80 in production.
+   */
   HTTP_REDIRECT_PORT: Env.optional(Env.port()),
   /** How long browsers are told to insist on HTTPS. 0 leaves the header off. */
   HSTS_MAX_AGE_SECONDS: Env.int({ minimum: 0, default: 31_536_000 }),

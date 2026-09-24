@@ -8,8 +8,11 @@ import { storageFromConfig } from '@cuc/storage';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { nodeDnsResolver } from './dns-resolver.js';
+import { createAcmeIssuer } from './acme-issuer.js';
 import { createTermsLookup } from './acme-terms.js';
+import { createCertificateWorker } from './certificate-worker.js';
 import { createIdentityClient } from './identity-client.js';
+import { createAcmeAccountRepo } from './repo/acme-account.repo.js';
 import { createAcmeSettingsRepo } from './repo/acme-settings.repo.js';
 import { createBrandRepo } from './repo/brand.repo.js';
 import { createCertificateRepo } from './repo/certificate.repo.js';
@@ -110,8 +113,9 @@ registerInternalRoutes(
   `console.${config.PLATFORM_BASE_DOMAIN}`,
 );
 
+const kek = fileKekFromConfig(config);
 const certificateRepo = createCertificateRepo(db, {
-  kek: fileKekFromConfig(config),
+  kek,
   platformBaseDomain: config.PLATFORM_BASE_DOMAIN,
 });
 registerCertificateRoutes(app, certificateRepo);
@@ -127,6 +131,17 @@ registerAcmeSettingsRoutes(
   createTermsLookup({ directoryUrlOverride: config.ACME_DIRECTORY_URL }),
   bus,
 );
+
+// Requests and renews certificates in the background once the operator has set the
+// Let's Encrypt account up in the console (G-105).
+const certificateWorker = createCertificateWorker({
+  certs: certificateRepo,
+  settings: acmeSettingsRepo,
+  accounts: createAcmeAccountRepo(db, kek),
+  issuer: createAcmeIssuer(),
+  logger,
+});
+const certificateWorkerDone = certificateWorker.run();
 
 // Keeps a row for every hostname that should have a certificate, worked out from
 // what the database already holds, so no provisioning path has to remember to ask.
@@ -167,12 +182,14 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   relay.stop();
   reconciling = false;
+  certificateWorker.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   await relayLoop;
   void reconcileDone;
+  void certificateWorkerDone;
   await bus.close();
   await db.destroy();
   logger.info('shutdown complete');

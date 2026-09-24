@@ -26,6 +26,7 @@
     "@cuc/http": "workspace:*",
     "@cuc/logger": "workspace:*",
     "@cuc/storage": "workspace:*",
+    "acme-client": "^5.4.0",
     "kysely": "^0.29.5"
   },
   "devDependencies": {
