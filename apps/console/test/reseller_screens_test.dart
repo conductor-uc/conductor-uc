@@ -231,9 +231,29 @@ void main() {
       await openNorthwind(tester);
       expect(find.text('Northwind Telecom'), findsOneWidget);
       expect(find.text('Acme Dental'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Trunks'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'Domains'), findsOneWidget);
       expect(find.widgetWithText(Tab, 'Brand'), findsOneWidget);
     });
+
+    testWidgets(
+      'its Trunks tab does what a reseller can: pick a tenant, see its trunks',
+      (tester) async {
+        await openNorthwind(tester);
+        await tester.tap(find.widgetWithText(Tab, 'Trunks'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Choose a tenant to see and manage its trunks.'),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const ValueKey('trunk-tenant')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Acme Dental').last);
+        await tester.pumpAndSettle();
+        expect(find.text('Primary trunk'), findsOneWidget);
+        expect(find.text('New trunk'), findsOneWidget);
+      },
+    );
 
     testWidgets('its Domains tab has the base domains', (tester) async {
       await openNorthwind(tester);

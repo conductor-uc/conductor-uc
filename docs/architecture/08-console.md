@@ -45,6 +45,8 @@ All design-system widgets take colors and logos from the theme and never embed a
 | Reseller | Tenants · Trunks (per tenant) · Domains · Brand · Users · Audit |
 | Tenant | Dashboard · Users · Extensions · Phone numbers · Call flows · Ring groups · Queues · Schedules · Media · Monitoring · Recordings · Voicemail · Reports · Settings |
 
+The master can do everything a reseller can, for any reseller: a reseller's own page has Tenants, Trunks, Domains and Brand tabs, and the master reaches it from Resellers. (There is no separate master Trunks or Domains entry, since those belong to one reseller.)
+
 Master and reseller users can **enter** a descendant org ("act as tenant"). The shell shows a persistent banner, and every request carries the target org in the path, so no token swap is needed.
 
 Private-data sections are hidden for resellers (H1). The server enforces this independently.
