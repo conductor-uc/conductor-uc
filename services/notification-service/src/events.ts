@@ -7,7 +7,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * import each other's source (05 §1.1) — so a schema change there needs the
  * same change here.
  *
- * Both carry a one-time token, which is a credential (G-55).
+ * The reset and invitation events carry a one-time token, which is a
+ * credential (G-55); the MFA-reset event carries none.
  */
 export const notificationEvents = defineEvents({
   'identity.user.password_reset_requested': {
@@ -19,6 +20,16 @@ export const notificationEvents = defineEvents({
       email: Type.String({ minLength: 1 }),
       token: Type.String({ minLength: 1 }),
       expiresAt: Type.String({ minLength: 1 }),
+    }),
+  },
+  'identity.user.mfa_reset': {
+    schemaVersion: 1,
+    description: "An admin reset a user's two-step verification. Carries no secret.",
+    data: Type.Object({
+      userId: Type.String({ minLength: 1 }),
+      orgId: Type.String({ minLength: 1 }),
+      email: Type.String({ minLength: 1 }),
+      displayName: Type.String({ minLength: 1 }),
     }),
   },
   'identity.invitation.created': {

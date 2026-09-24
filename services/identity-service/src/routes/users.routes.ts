@@ -1,6 +1,7 @@
 import { ProblemError, Type, type Server } from '@cuc/http';
 
 import { type ActorContext, type OrgAccess } from '../authz/org-access.js';
+import type { MfaRepo } from '../repo/mfa.repo.js';
 import type { RoleRepo } from '../repo/role.repo.js';
 import type { UserRepo } from '../repo/user.repo.js';
 
@@ -42,6 +43,7 @@ export function registerUserRoutes(
   users: UserRepo,
   roles: RoleRepo,
   access: OrgAccess,
+  mfa: MfaRepo,
 ): void {
   async function managedOrg(request: {
     context: ActorContext;
@@ -107,6 +109,61 @@ export function registerUserRoutes(
         status: updated.status,
         mfaEnrolled: updated.mfaEnrolled,
         lastLoginAt: updated.lastLoginAt === null ? null : updated.lastLoginAt.toISOString(),
+        roleIds: roleIds.get(userId) ?? [],
+      };
+    },
+  );
+
+  /**
+   * An admin removes a user's authenticator, for a lost phone. The user is
+   * signed out everywhere and asked to enroll a new one at the next sign-in,
+   * and is emailed that it happened. Not for yourself: resetting your own
+   * would end the session you are using, and a lost phone is what another
+   * admin is for.
+   */
+  app.post(
+    '/v1/orgs/:orgId/users/:userId/mfa-reset',
+    {
+      config: { permission: 'user.manage', dataClass: 'config' },
+      schema: { params: UserParamsSchema, response: { 200: UserSchema } },
+    },
+    async (request) => {
+      const orgId = await managedOrg(request);
+      const { userId } = request.params;
+      const { actorId, orgId: actorOrgId } = request.context;
+      if (actorId === undefined || actorOrgId === undefined) {
+        throw ProblemError.unauthorized('Sign in to continue.');
+      }
+      if (userId === actorId) {
+        throw ProblemError.conflict('You cannot reset your own two-step verification.', {
+          code: 'cannot_reset_self',
+        });
+      }
+      const result = await mfa.reset(
+        { ...request.context, actorId, orgId: actorOrgId },
+        orgId,
+        userId,
+      );
+      if (result.outcome === 'not_found') {
+        throw ProblemError.notFound('No such user in this organization.');
+      }
+      if (result.outcome === 'not_enrolled') {
+        throw ProblemError.conflict('That user has not set up two-step verification.', {
+          code: 'mfa_not_enrolled',
+        });
+      }
+      const [user, roleIds] = await Promise.all([
+        users.listByOrg(orgId).then((rows) => rows.find((u) => u.id === userId)),
+        roles.roleIdsByUserIn(orgId),
+      ]);
+      if (user === undefined) throw ProblemError.notFound('No such user in this organization.');
+      return {
+        id: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        status: user.status,
+        mfaEnrolled: user.mfaEnrolled,
+        lastLoginAt: user.lastLoginAt === null ? null : user.lastLoginAt.toISOString(),
         roleIds: roleIds.get(userId) ?? [],
       };
     },

@@ -8,11 +8,27 @@ import 'resource.dart';
 import 'resource_form.dart';
 import 'schedule_fields.dart';
 
+/// An extra button on each row of a table (trunks have an IP list, say).
+typedef RowAction = ({
+  IconData icon,
+  String tooltip,
+  void Function(BuildContext context, WidgetRef ref, Json row) onPressed,
+});
+
 /// A table of one resource with create, edit, and delete.
 class ResourceView extends ConsumerWidget {
-  const ResourceView({super.key, required this.def});
+  const ResourceView({
+    super.key,
+    required this.def,
+    this.rowActions = const [],
+    this.header,
+  });
 
   final ResourceDef def;
+  final List<RowAction> rowActions;
+
+  /// Shown between the page title and the table.
+  final Widget? header;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -37,6 +53,7 @@ class ResourceView extends ConsumerWidget {
               ),
           ],
         ),
+        ?header,
         const SizedBox(height: 16),
         Expanded(
           child: AsyncBody(
@@ -82,6 +99,12 @@ class ResourceView extends ConsumerWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              for (final a in rowActions)
+                IconButton(
+                  tooltip: a.tooltip,
+                  icon: Icon(a.icon),
+                  onPressed: () => a.onPressed(context, ref, row),
+                ),
               if (!def.readOnly && canChange)
                 IconButton(
                   tooltip: 'Edit',
@@ -118,6 +141,9 @@ class ResourceView extends ConsumerWidget {
               ? '—'
               : ids.map((id) => _lookup(ref, f.ref!, id)).join(', '),
         );
+      case FieldKind.textList:
+        final words = [...?(value as List?)];
+        return Text(words.isEmpty ? '—' : words.join(', '));
       case FieldKind.weeklyHours:
         return Text(summarizeRules(value));
       case FieldKind.dateList:

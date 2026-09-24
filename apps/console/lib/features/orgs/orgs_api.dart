@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -90,6 +92,66 @@ class OrgsApi {
     ),
   );
 
+  Future<List<Json>> baseDomains(String resellerId) =>
+      _rows('/v1/resellers/$resellerId/base-domains');
+
+  Future<Json> addBaseDomain(String resellerId, String fqdn) => _body(
+    _dio.post<Object?>(
+      '/v1/resellers/$resellerId/base-domains',
+      data: {'fqdn': fqdn},
+      options: _options,
+    ),
+  );
+
+  /// Asks the service to look for the TXT record; a domain that is not proved
+  /// yet answers 409 `domain_not_verified`.
+  Future<Json> verifyBaseDomain(String resellerId, String domainId) => _body(
+    _dio.post<Object?>(
+      '/v1/resellers/$resellerId/base-domains/$domainId/verify',
+      options: _options,
+    ),
+  );
+
+  /// The tenant's primary domain, or null when none is assigned.
+  Future<Json?> tenantDomain(String tenantId) async {
+    try {
+      return await _body(
+        _dio.get<Object?>('/v1/tenants/$tenantId/domain', options: _options),
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// Uploads a brand image: asks for a presigned URL, sends the bytes to it,
+  /// and returns the storage key to save on the brand.
+  Future<String> uploadBrandAsset(
+    String resellerId, {
+    required String kind,
+    required String contentType,
+    required List<int> bytes,
+  }) async {
+    final ticket = await _body(
+      _dio.post<Object?>(
+        '/v1/resellers/$resellerId/brand/assets',
+        data: {'kind': kind, 'contentType': contentType},
+        options: _options,
+      ),
+    );
+    // The presigned URL carries its own authority: no bearer token, and no
+    // cookies (a credentialed request to the storage host would be refused).
+    await _dio.put<Object?>(
+      '${ticket['uploadUrl']}',
+      data: Uint8List.fromList(bytes),
+      options: Options(
+        headers: {Headers.contentTypeHeader: contentType},
+        extra: {'withCredentials': false},
+      ),
+    );
+    return '${ticket['key']}';
+  }
+
   Future<List<Json>> consoleHostnames(String resellerId) =>
       _rows('/v1/resellers/$resellerId/console-hostnames');
 
@@ -125,6 +187,20 @@ final brandProviderFor = FutureProvider.family<Json?, String>((
   resellerId,
 ) {
   return ref.watch(orgsApiProvider)?.brand(resellerId) ?? Future.value();
+});
+
+final baseDomainsProvider = FutureProvider.family<List<Json>, String>((
+  ref,
+  resellerId,
+) async {
+  return await ref.watch(orgsApiProvider)?.baseDomains(resellerId) ?? const [];
+});
+
+final tenantDomainProvider = FutureProvider.family<Json?, String>((
+  ref,
+  tenantId,
+) {
+  return ref.watch(orgsApiProvider)?.tenantDomain(tenantId) ?? Future.value();
 });
 
 final consoleHostnamesProvider = FutureProvider.family<List<Json>, String>((

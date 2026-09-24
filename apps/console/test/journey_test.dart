@@ -37,6 +37,9 @@ Future<void> signOut(WidgetTester tester) async {
 
 /// The form is taller than the test window.
 Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+  // A focused field scrolls itself back into view; let go of it first.
+  FocusManager.instance.primaryFocus?.unfocus();
+  await tester.pumpAndSettle();
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);

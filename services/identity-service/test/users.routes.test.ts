@@ -38,6 +38,7 @@ describe.skipIf(skipReason !== undefined)('users routes', () => {
       h.users,
       h.roles,
       createOrgAccess({ lineage: () => Promise.resolve(undefined) }),
+      h.mfa,
     );
     await app.ready();
   });

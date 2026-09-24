@@ -57,6 +57,10 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
           );
         case FieldKind.toggle:
           _values[f.key] = value as bool? ?? false;
+        case FieldKind.textList:
+          _controllers[f.key] = TextEditingController(
+            text: [...?(value as List?)].join(', '),
+          );
         case FieldKind.refList:
           _values[f.key] = [...?(value as List?)?.cast<String>()];
         case FieldKind.weeklyHours || FieldKind.dateList:
@@ -97,6 +101,11 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
         case FieldKind.integer:
           final text = _controllers[f.key]!.text.trim();
           value = text.isEmpty ? null : int.parse(text);
+        case FieldKind.textList:
+          value = [
+            for (final w in _controllers[f.key]!.text.split(','))
+              if (w.trim().isNotEmpty) w.trim(),
+          ];
         default:
           value = _values[f.key];
       }
@@ -195,6 +204,15 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
           obscureText: f.secret,
           decoration: InputDecoration(labelText: label, helperText: f.help),
           validator: (v) => _requiredMessage(f, (v ?? '').trim().isEmpty),
+        );
+      case FieldKind.textList:
+        return TextFormField(
+          controller: _controllers[f.key],
+          decoration: InputDecoration(labelText: label, helperText: f.help),
+          validator: (v) => _requiredMessage(
+            f,
+            !(v ?? '').split(',').any((w) => w.trim().isNotEmpty),
+          ),
         );
       case FieldKind.integer:
         return TextFormField(

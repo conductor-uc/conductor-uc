@@ -62,7 +62,20 @@ class DemoPbx {
         },
       ],
       'trunks': [
-        {'id': 'trunk-1', 'name': 'Primary trunk'},
+        {
+          'id': 'trunk-1',
+          'name': 'Primary trunk',
+          'authMode': 'register',
+          'host': 'sip.carrier.example',
+          'port': 5060,
+          'transport': 'udp',
+          'username': 'acme',
+          'fromDomain': null,
+          'codecs': ['PCMU', 'PCMA'],
+          'maxChannels': 20,
+          'callerIdPolicy': null,
+          'status': 'active',
+        },
       ],
       'dids': [
         {
@@ -228,6 +241,108 @@ class DemoPbx {
     'rs-2': [_org('t-4', 'Lakeside Realty', 'lakeside')],
   };
 
+  final _baseDomains = <String, List<Map<String, dynamic>>>{
+    'rs-1': [
+      {
+        'id': 'bd-1',
+        'resellerId': 'rs-1',
+        'fqdn': 'voice.northwind.example',
+        'status': 'active',
+        'verificationRecordName': '_verify.voice.northwind.example',
+        'verifiedAt': '2026-09-01T09:00:00Z',
+      },
+      {
+        'id': 'bd-2',
+        'resellerId': 'rs-1',
+        'fqdn': 'talk.northwind.example',
+        'status': 'pending',
+        'verificationRecordName': '_verify.talk.northwind.example',
+        'verificationToken': 'demo-token-2',
+        'verifiedAt': null,
+      },
+    ],
+  };
+
+  ResponseBody? _domainsAndAssets(RequestOptions options) {
+    final path = options.path;
+    final method = options.method.toUpperCase();
+    // A presigned upload goes to storage, not the API.
+    if (path.startsWith('https://uploads.demo.invalid/')) {
+      return ResponseBody.fromString('', 200);
+    }
+    final domains = RegExp(
+      r'^/v1/resellers/([^/]+)/base-domains(?:/([^/]+)/verify)?$',
+    ).firstMatch(path);
+    if (domains != null) {
+      final id = domains.group(1)!;
+      // Any other reseller (the demo sign-in is one) starts with Northwind's.
+      final list = _baseDomains.putIfAbsent(
+        id,
+        () => [
+          for (final d in _baseDomains['rs-1']!) {...d, 'resellerId': id},
+        ],
+      );
+      final verifyId = domains.group(2);
+      if (verifyId != null) {
+        final row = list.where((d) => d['id'] == verifyId);
+        if (row.isEmpty) return _problem(404, 'No base domain with that id.');
+        final d = row.first;
+        if ('${d['fqdn']}'.contains('unverified')) {
+          return _problem(409, 'The TXT record was not found yet.');
+        }
+        d['status'] = 'active';
+        d.remove('verificationToken');
+        d['verifiedAt'] = DateTime.now().toUtc().toIso8601String();
+        return _json(d);
+      }
+      if (method == 'GET') return _json({'rows': list});
+      final fqdn = '${_body(options)['fqdn']}';
+      if (!fqdn.contains('.')) {
+        return _problem(400, "'$fqdn' is not a valid domain name.");
+      }
+      if (_baseDomains.values.any((l) => l.any((d) => d['fqdn'] == fqdn))) {
+        return _problem(409, '$fqdn is already registered.');
+      }
+      final n = _next++;
+      final row = <String, dynamic>{
+        'id': 'bd-$n',
+        'resellerId': id,
+        'fqdn': fqdn,
+        'status': 'pending',
+        'verificationRecordName': '_verify.$fqdn',
+        'verificationToken': 'demo-token-$n',
+        'verifiedAt': null,
+      };
+      list.add(row);
+      return _json(row, 201);
+    }
+    final tenantDomain = RegExp(r'^/v1/tenants/([^/]+)/domain$')
+        .firstMatch(path);
+    if (tenantDomain != null) {
+      final id = tenantDomain.group(1)!;
+      final tenant = [for (final l in _tenants.values) ...l]
+          .where((t) => t['id'] == id);
+      if (tenant.isEmpty) {
+        return _problem(404, 'No primary domain for that tenant.');
+      }
+      return _json({
+        'id': 'td-$id',
+        'fqdn': '${tenant.first['slug']}.voice.northwind.example',
+        'isPrimary': true,
+      });
+    }
+    final assets = RegExp(r'^/v1/resellers/([^/]+)/brand/assets$')
+        .firstMatch(path);
+    if (assets != null) {
+      final kind = '${_body(options)['kind']}';
+      return _json({
+        'uploadUrl': 'https://uploads.demo.invalid/brand/$kind?signature=demo',
+        'key': 'brand/${assets.group(1)}/$kind-${_next++}',
+      }, 201);
+    }
+    return null;
+  }
+
   final _brands = <String, Map<String, dynamic>>{};
   final _hostnames = <String, List<Map<String, dynamic>>>{};
 
@@ -275,7 +390,7 @@ class DemoPbx {
     'email': email,
     'displayName': name,
     'status': 'active',
-    'mfaEnrolled': id == 'user-1',
+    'mfaEnrolled': id == 'user-1' || id == 'user-2',
     'lastLoginAt': id == 'user-3' ? null : '2026-09-20T15:04:00.000Z',
     'roleIds': roles,
   };
@@ -303,14 +418,31 @@ class DemoPbx {
   ResponseBody? _people(RequestOptions options) {
     final path = options.path;
     final method = options.method.toUpperCase();
-    final users = RegExp(r'^/v1/orgs/([^/]+)/users(?:/([^/]+))?$')
-        .firstMatch(path);
+    final users = RegExp(
+      r'^/v1/orgs/([^/]+)/users(?:/([^/]+))?(?:/(mfa-reset))?$',
+    ).firstMatch(path);
     if (users != null) {
       final id = users.group(2);
       final people = _peopleOf(users.group(1)!);
       if (id == null) return _json({'rows': people});
       final index = people.indexWhere((u) => u['id'] == id);
       if (index < 0) return _problem(404, 'No such user in this organization.');
+      if (users.group(3) != null) {
+        if (id == 'user-1') {
+          return _problem(
+            409,
+            'You cannot reset your own two-step verification.',
+          );
+        }
+        if (people[index]['mfaEnrolled'] != true) {
+          return _problem(
+            409,
+            'That user has not set up two-step verification.',
+          );
+        }
+        people[index] = {...people[index], 'mfaEnrolled': false};
+        return _json(people[index]);
+      }
       final body = _body(options);
       if (body['status'] == 'disabled' && id == 'user-1') {
         return _problem(409, 'You cannot disable your own account.');
@@ -494,6 +626,8 @@ class DemoPbx {
   ResponseBody? handle(RequestOptions options) {
     final orgs = _orgs(options);
     if (orgs != null) return orgs;
+    final infra = _domainsAndAssets(options);
+    if (infra != null) return infra;
     final people = _people(options);
     if (people != null) return people;
     if (options.path.endsWith('/voicemail/mailboxes')) {
@@ -517,6 +651,9 @@ class DemoPbx {
     if (rows == null) return _problem(404, 'No such resource.');
     final method = options.method.toUpperCase();
 
+    if (resource == 'trunks' && id != null && action != null) {
+      return _trunkAction(method, id, action, match.group(4), options.data);
+    }
     if (resource == 'flows' && id != null && action != null) {
       return _flowAction(method, id, action, options.data, match.group(4));
     }
@@ -601,6 +738,8 @@ class DemoPbx {
         if (body.containsKey('pin')) row['pinRequired'] = body['pin'] != null;
         continue;
       }
+      // Never stored or returned, like a real secret.
+      if (f.writeOnly) continue;
       if (body.containsKey(f.key)) {
         row[f.key] = body[f.key];
       } else {
@@ -628,6 +767,46 @@ class DemoPbx {
       (r) => r['id'] != selfId && r[unique] == body[unique],
     );
     return taken ? _problem(409, '${body[unique]} is already in use.') : null;
+  }
+
+  final _trunkIps = <String, List<Map<String, dynamic>>>{
+    'trunk-1': [
+      {'id': 'ip-1', 'cidr': '203.0.113.0/24'},
+    ],
+  };
+
+  ResponseBody _trunkAction(
+    String method,
+    String id,
+    String action,
+    String? ipId,
+    Object? data,
+  ) {
+    final trunk = _rows['trunks']!.where((t) => t['id'] == id);
+    if (trunk.isEmpty) return _problem(404, 'No such trunk.');
+    final ips = _trunkIps.putIfAbsent(id, () => []);
+    switch ((method, action)) {
+      case ('GET', 'ips'):
+        return _json({'rows': ips});
+      case ('POST', 'ips'):
+        final cidr = '${(data is Map ? data : jsonDecode('$data'))['cidr']}';
+        if (!RegExp(r'^[0-9a-fA-F:.]+(/\d{1,3})?$').hasMatch(cidr)) {
+          return _problem(400, "'$cidr' is not a valid address or range.");
+        }
+        final row = {'id': 'ip-${_next++}', 'cidr': cidr};
+        ips.add(row);
+        return _json(row, 201);
+      case ('DELETE', 'ips'):
+        ips.removeWhere((r) => r['id'] == ipId);
+        return ResponseBody.fromString('', 204);
+      case ('GET', 'status'):
+        return _json({
+          'registrationStatus': trunk.first['authMode'] == 'ip'
+              ? 'not_applicable'
+              : 'registered',
+        });
+    }
+    return _problem(405, 'Not supported.');
   }
 
   ResponseBody _flowAction(

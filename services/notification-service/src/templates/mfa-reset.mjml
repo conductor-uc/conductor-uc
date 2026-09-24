@@ -1,0 +1,37 @@
+<mjml>
+  <mj-head>
+    <mj-title>{{ title }}</mj-title>
+    <mj-attributes>
+      <mj-all font-family="Helvetica, Arial, sans-serif" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#fafafa" width="560px">
+    {{> header}}
+    <mj-section background-color="#ffffff" padding="24px">
+      <mj-column>
+        <mj-text font-size="20px" font-weight="600" color="#212121"
+          >Your two-step verification was reset</mj-text
+        >
+        <mj-text font-size="15px" line-height="1.5" color="#424242">
+          Hello {{ name }}, an administrator reset the two-step verification on your account ({{
+            email
+          }}). You have been signed out everywhere. The next time you sign in you will be asked to
+          set up a new authenticator app.
+        </mj-text>
+        <mj-button
+          href="{{{link}}}"
+          background-color="{{primary}}"
+          color="{{onPrimary}}"
+          border-radius="4px"
+          font-size="15px"
+          >Sign in</mj-button
+        >
+        <mj-text font-size="13px" line-height="1.5" color="#616161">
+          If you did not expect this, contact your administrator. Your password has not changed. If
+          the button does not work, copy this address into your browser:<br />{{{link}}}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+    {{> footer}}
+  </mj-body>
+</mjml>

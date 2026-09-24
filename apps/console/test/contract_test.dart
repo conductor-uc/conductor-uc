@@ -31,6 +31,8 @@ Map<String, dynamic> _schema(
 const _notExposed = {
   // Linking an extension to a user belongs with the Users screen.
   'extensions': {'userId'},
+  // A trunk's caller-ID policy is a nested object with no screen yet.
+  'trunks': {'callerIdPolicy'},
 };
 
 void main() {
@@ -90,7 +92,7 @@ void main() {
   });
 
   test('every resource with a page has a list route', () {
-    for (final def in allResources.where((r) => r.key != 'trunks')) {
+    for (final def in allResources) {
       expect(paths, contains('/v1/tenants/{tenantId}/${def.key}'));
     }
   });
@@ -309,6 +311,20 @@ void main() {
         for (final f in userInviteDef.fields.where((f) => f.required)) f.key,
       }, required);
     });
+
+    test(
+      'the two-step reset is a POST on the user with no body, answering a user',
+      () {
+        const reset = '/v1/orgs/{orgId}/users/{userId}/mfa-reset';
+        expect(paths, contains(reset));
+        final post = (paths[reset] as Map)['post'] as Map<String, dynamic>;
+        expect(post.containsKey('requestBody'), isFalse);
+        expect(
+          (_schema(post, response: '200')['properties'] as Map).keys,
+          containsAll(['id', 'mfaEnrolled']),
+        );
+      },
+    );
 
     test('every field the table reads is in the list response', () {
       final list = _schema(

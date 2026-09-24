@@ -112,6 +112,34 @@ describe('renderEmail', () => {
       expect(mail.html).not.toMatch(/<img/i);
     });
   });
+
+  describe('two-step verification reset', () => {
+    const signIn = 'https://portal.acme.example/login';
+    const input = { email: 'sam@example.test', name: 'Sam', link: signIn } as const;
+
+    it('says what happened and links to sign-in, with no expiry line', async () => {
+      const mail = await renderEmail({ template: 'mfa-reset', brand: ACME, ...input });
+      expect(mail.subject).toBe('Your two-step verification was reset');
+      expect(mail.html).toContain('Hello Sam');
+      expect(mail.html).toContain('sam@example.test');
+      expect(mail.html).toContain(signIn);
+      expect(mail.html).not.toContain('works for');
+      expect(mail.text).toContain(signIn);
+      expect(mail.text).toContain('has not changed');
+    });
+
+    it('is neutral without a brand', async () => {
+      const mail = await renderEmail({
+        template: 'mfa-reset',
+        brand: NEUTRAL_BRAND,
+        ...input,
+        link: 'https://console.platform.test/login',
+      });
+      expect(mail.html).not.toContain('Acme');
+      expect(mail.html).not.toMatch(/<img/i);
+      expect(mail.html.toLowerCase()).not.toContain('conductor');
+    });
+  });
 });
 
 describe('validFor', () => {

@@ -1,8 +1,17 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Database } from '@cuc/db';
+import { recordAuditEvent } from '@cuc/audit';
+import type { Database, DbContext } from '@cuc/db';
+import { enqueueEvent } from '@cuc/events';
 
+import { identityEvents } from '../events.js';
 import type { IdentityServiceDb } from '../schema.js';
+
+/** The result of an admin resetting a user's two-step verification. */
+export type MfaResetResult =
+  | { readonly outcome: 'reset' }
+  | { readonly outcome: 'not_found' }
+  | { readonly outcome: 'not_enrolled' };
 
 export interface MfaFactor {
   readonly id: string;
@@ -100,6 +109,67 @@ export function createMfaRepo(db: Database<IdentityServiceDb>) {
           .where('id', '=', userId)
           .execute();
         return true;
+      });
+    },
+
+    /**
+     * An admin removes a user's authenticator (a lost phone). In one
+     * transaction: every factor is deleted, `mfa_enrolled` goes false, every
+     * session is revoked, and the reset is recorded twice, as the
+     * `identity.user.mfa_reset` event notification-service turns into an email
+     * and as an audit event (07 §4: all writes). At the next sign-in the
+     * user is asked to enroll a new authenticator, exactly as a first login.
+     *
+     * Nothing to reset for a user who never enrolled, so that is reported
+     * rather than recorded as a change.
+     */
+    async reset(
+      ctx: DbContext & { readonly actorId: string; readonly orgId: string },
+      orgId: string,
+      userId: string,
+    ): Promise<MfaResetResult> {
+      return db.kysely.transaction().execute(async (trx) => {
+        const row = await trx
+          .selectFrom('users')
+          .select(['email', 'display_name', 'mfa_enrolled', 'version'])
+          .where('id', '=', userId)
+          .where('org_id', '=', orgId)
+          .forUpdate()
+          .executeTakeFirst();
+        if (row === undefined) return { outcome: 'not_found' as const };
+        if (!row.mfa_enrolled) return { outcome: 'not_enrolled' as const };
+
+        const now = new Date();
+        await trx.deleteFrom('mfa_factors').where('user_id', '=', userId).execute();
+        await trx
+          .updateTable('users')
+          .set({ mfa_enrolled: false, updated_at: now, version: row.version + 1 })
+          .where('id', '=', userId)
+          .execute();
+        await trx
+          .updateTable('sessions')
+          .set({ revoked_at: now })
+          .where('user_id', '=', userId)
+          .where('revoked_at', 'is', null)
+          .execute();
+
+        await enqueueEvent(trx, identityEvents, {
+          type: 'identity.user.mfa_reset',
+          data: { userId, orgId, email: row.email, displayName: row.display_name },
+          actor: { type: 'user', id: ctx.actorId, orgId: ctx.orgId },
+          ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
+        });
+        await recordAuditEvent(trx, {
+          actorType: 'user',
+          actorId: ctx.actorId,
+          actorOrgId: ctx.orgId,
+          targetOrgId: orgId,
+          action: 'user.mfa_reset',
+          resource: `user:${userId}`,
+          dataClass: 'config',
+          ...(ctx.requestId === undefined ? {} : { requestId: ctx.requestId }),
+        });
+        return { outcome: 'reset' as const };
       });
     },
   };
