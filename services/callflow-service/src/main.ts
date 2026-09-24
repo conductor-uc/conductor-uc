@@ -61,7 +61,12 @@ const app = await createServer({
   serviceName: config.SERVICE_NAME,
   serviceVersion: config.SERVICE_VERSION,
   logger,
-  context: { trustInternalHeaders: config.TRUST_INTERNAL_HEADERS },
+  context: {
+    trustInternalHeaders: config.TRUST_INTERNAL_HEADERS,
+    ...(config.INTERNAL_HEADER_SIGNING_SECRET === undefined
+      ? {}
+      : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
+  },
 });
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));

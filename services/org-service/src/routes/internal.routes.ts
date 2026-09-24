@@ -25,6 +25,13 @@ const MailBrandResponseSchema = Type.Object({
   /** The reseller's first console hostname, where links in an email should point. */
   consoleHostname: nullableString,
 });
+const HostParamsSchema = Type.Object({ host: Type.String({ minLength: 1, maxLength: 253 }) });
+const SignInScopeResponseSchema = Type.Object({
+  /** The org whose users sign in at this console hostname. */
+  orgId: Type.String(),
+  /** `master` for the unbranded console; `reseller` for a reseller's own hostname. */
+  type: Type.Union([Type.Literal('master'), Type.Literal('reseller')]),
+});
 const LimitsResponseSchema = Type.Object({ limits: Type.Record(Type.String(), Type.Unknown()) });
 
 /**
@@ -46,6 +53,7 @@ export function registerInternalRoutes(
   internalServiceToken: string,
   orgs: OrgRepo,
   brands: BrandRepo,
+  platformConsoleHostname: string,
 ): void {
   app.get(
     '/internal/v1/tenants/:id/domain',
@@ -115,6 +123,40 @@ export function registerInternalRoutes(
         throw ProblemError.notFound('No such tenant.');
       }
       return { country: org.country } satisfies Static<typeof CountryResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/hosts/:host/sign-in-scope` (S3-04, G-56): which org's
+   * users sign in at a console hostname. The platform console hostname is the
+   * master's; a reseller's registered console hostname is that reseller's,
+   * and its tenants' users sign in there too. Anything else is unknown (404),
+   * and the caller falls back to an explicit org id.
+   *
+   * Internal on purpose. The browser never asks: it finds out whether it must
+   * name an org from the sign-in response itself, so there is no public route
+   * that maps hostnames to org ids.
+   */
+  app.get(
+    '/internal/v1/hosts/:host/sign-in-scope',
+    {
+      config: { public: true },
+      schema: { params: HostParamsSchema, response: { 200: SignInScopeResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const host = request.params.host.toLowerCase();
+      if (host === platformConsoleHostname) {
+        const master = await orgs.findMaster();
+        if (master === undefined) throw ProblemError.notFound('No such console hostname.');
+        return { orgId: master.id, type: 'master' as const };
+      }
+      const resellerId = await brands.findResellerIdForHostname(host);
+      if (resellerId === undefined) throw ProblemError.notFound('No such console hostname.');
+      return { orgId: resellerId, type: 'reseller' as const };
     },
   );
 

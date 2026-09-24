@@ -18,6 +18,7 @@ import { createTokenRepo } from './repo/token.repo.js';
 import { createSigningKeyRepo } from './repo/signing-key.repo.js';
 import { createUserRepo } from './repo/user.repo.js';
 import { registerAuditRoutes } from './routes/audit.routes.js';
+import { createOrgClient } from './org-client.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerGrantRoutes } from './routes/grants.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
@@ -133,6 +134,10 @@ registerAuthRoutes(app, authService, {
   cookieSecure: config.COOKIE_SECURE,
   refreshTokenTtlDays: config.REFRESH_TOKEN_TTL_DAYS,
   devExposeTokens: config.DEV_EXPOSE_TOKENS,
+  orgClient: createOrgClient({
+    baseUrl: config.ORG_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
 });
 registerJwksRoute(app, signingKeyRepo, config.SIGNING_KEY_OVERLAP_DAYS);
 registerInternalRoutes(app, userRepo, config.INTERNAL_SERVICE_TOKEN);

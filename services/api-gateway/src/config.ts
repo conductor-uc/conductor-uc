@@ -46,6 +46,8 @@ export const configSchema = Type.Object({
       '/v1/public=org',
       '/v1/resellers=org',
       '/v1/tenants=org',
+      // The brand the signed-in actor's own org is shown (S3-02).
+      '/v1/session=org',
     ],
   }),
 

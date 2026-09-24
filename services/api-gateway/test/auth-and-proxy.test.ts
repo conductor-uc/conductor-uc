@@ -48,6 +48,7 @@ describe('api-gateway: auth + proxy', () => {
           transport: request.headers['x-refresh-transport'] ?? null,
           userAgent: request.headers['user-agent'] ?? null,
           forwardedFor: request.headers['x-forwarded-for'] ?? null,
+          forwardedHost: request.headers['x-forwarded-host'] ?? null,
         };
       });
       fake.post(
@@ -144,6 +145,16 @@ describe('api-gateway: auth + proxy', () => {
       'refresh=new; Path=/v1/auth; HttpOnly',
       'other=1; Path=/',
     ]);
+  });
+
+  it('tells identity-service which hostname the browser used, and ignores a forged one', async () => {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/auth/refresh',
+      headers: { host: 'portal.acme.example', 'x-forwarded-host': 'console.platform.test' },
+      payload: {},
+    });
+    expect(response.json()).toMatchObject({ forwardedHost: 'portal.acme.example' });
   });
 
   it('does not forward cookies outside /v1/auth', async () => {

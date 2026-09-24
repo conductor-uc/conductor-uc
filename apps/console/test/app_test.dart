@@ -28,10 +28,6 @@ ConsoleApi apiReturningLogin(String orgType) {
 
 Future<void> signIn(WidgetTester tester) async {
   await tester.enterText(
-    find.widgetWithText(TextField, 'Organization ID'),
-    'org-1',
-  );
-  await tester.enterText(
     find.widgetWithText(TextField, 'Email'),
     'a@example.test',
   );
@@ -52,13 +48,7 @@ void main() {
         .widgetList<Text>(find.byType(Text))
         .map((t) => t.data)
         .toSet();
-    expect(texts, {
-      'Sign in',
-      'Organization ID',
-      'Email',
-      'Password',
-      'Forgot your password?',
-    });
+    expect(texts, {'Sign in', 'Email', 'Password', 'Forgot your password?'});
     expect(find.byType(Image), findsNothing);
   });
 

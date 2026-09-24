@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:console/app/app.dart';
 import 'package:console/app/brand.dart';
 import 'package:console/app/router.dart';
@@ -25,7 +27,6 @@ Future<void> goTo(WidgetTester tester, String path) async {
 Finder field(String label) => find.widgetWithText(TextField, label);
 
 Future<void> signInStep(WidgetTester tester, String email) async {
-  await tester.enterText(field('Organization ID'), 'demo');
   await tester.enterText(field('Email'), email);
   await tester.enterText(field('Password'), 'pw');
   await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
@@ -261,6 +262,99 @@ void main() {
     });
   });
 
+  group('organization from the hostname (G-56)', () {
+    testWidgets('sign-in asks for no organization, and sends none', (
+      tester,
+    ) async {
+      Object? sent;
+      final dio = Dio()
+        ..httpClientAdapter = FakeAdapter((options) {
+          if (options.path == '/v1/auth/login') sent = options.data;
+          return jsonBody({
+            'status': 'ok',
+            'accessToken': fakeJwt({'org': 'o', 'ot': 'tenant', 'perms': []}),
+            'expiresIn': 600,
+          });
+        });
+      await pumpApp(tester, appWith(api: ConsoleApi(dio: dio)));
+      expect(field('Organization ID'), findsNothing);
+      await signInStep(tester, 'sam@example.test');
+      final body = jsonDecode('$sent') as Map;
+      expect(body.containsKey('orgId'), isFalse);
+      expect(body['email'], 'sam@example.test');
+    });
+
+    testWidgets('a hostname that does not say which organization asks for it', (
+      tester,
+    ) async {
+      await pumpApp(tester, appWith(api: demoApi()));
+      await signInStep(tester, 'nohost@example.test');
+      expect(field('Organization ID'), findsOneWidget);
+      expect(find.text('Enter your organization ID.'), findsOneWidget);
+
+      await tester.enterText(field('Organization ID'), 'demo');
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+      await tester.pumpAndSettle();
+      expect(find.text('Sign in'), findsNothing);
+    });
+
+    testWidgets('an address in two organizations is told so, then works', (
+      tester,
+    ) async {
+      await pumpApp(tester, appWith(api: demoApi()));
+      await signInStep(tester, 'shared@example.test');
+      expect(
+        find.textContaining('used in more than one organization'),
+        findsOneWidget,
+      );
+      expect(field('Organization ID'), findsOneWidget);
+      await tester.enterText(field('Organization ID'), 'demo');
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('used in more than one'), findsNothing);
+    });
+
+    testWidgets('a wrong password does not reveal anything about the address', (
+      tester,
+    ) async {
+      await pumpApp(tester, appWith(api: demoApi()));
+      await tester.enterText(field('Email'), 'shared@example.test');
+      await tester.enterText(field('Password'), 'wrong');
+      await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
+      await tester.pumpAndSettle();
+      expect(find.text('Those details were not recognized.'), findsOneWidget);
+      expect(field('Organization ID'), findsNothing);
+    });
+
+    testWidgets('a link that names the organization fills it in', (
+      tester,
+    ) async {
+      await pumpApp(tester, appWith(api: demoApi()));
+      await goTo(tester, '/reset');
+      await goTo(tester, '/login?org=demo-org');
+      expect(
+        tester.widget<TextField>(field('Organization ID')).controller!.text,
+        'demo-org',
+      );
+    });
+
+    testWidgets(
+      'reset asks for an organization only when the host cannot say',
+      (tester) async {
+        await pumpApp(tester, appWith(api: demoApi()));
+        await goTo(tester, '/reset');
+        await tester.enterText(field('Email'), 'nohost@example.test');
+        await tester.tap(find.text('Send reset link'));
+        await tester.pumpAndSettle();
+        expect(field('Organization ID'), findsOneWidget);
+        await tester.enterText(field('Organization ID'), 'demo');
+        await tester.tap(find.text('Send reset link'));
+        await tester.pumpAndSettle();
+        expect(find.text('Check your email'), findsOneWidget);
+      },
+    );
+  });
+
   group('password reset', () {
     testWidgets('is reachable from sign-in and answers the same for anyone', (
       tester,
@@ -272,12 +366,10 @@ void main() {
 
       await tester.tap(find.text('Send reset link'));
       await tester.pumpAndSettle();
-      expect(
-        find.text('Enter your organization ID and email.'),
-        findsOneWidget,
-      );
+      expect(find.text('Enter your email.'), findsOneWidget);
+      // The hostname says which organization, so none is asked for.
+      expect(field('Organization ID'), findsNothing);
 
-      await tester.enterText(field('Organization ID'), 'demo');
       await tester.enterText(field('Email'), 'nobody@example.test');
       await tester.tap(find.text('Send reset link'));
       await tester.pumpAndSettle();

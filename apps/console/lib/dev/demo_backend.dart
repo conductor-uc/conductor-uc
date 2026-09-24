@@ -67,6 +67,8 @@ class _DemoAdapter implements HttpClientAdapter {
         final request = _body(options);
         if (request['password'] == 'wrong') return _json({}, 401);
         final email = '${request['email']}';
+        final orgRequired = _orgRequired(email, request['orgId']);
+        if (orgRequired != null) return orgRequired;
         _orgType = email.startsWith('master')
             ? 'master'
             : email.startsWith('reseller')
@@ -100,6 +102,12 @@ class _DemoAdapter implements HttpClientAdapter {
         _signedIn = false;
         return ResponseBody.fromString('', 204);
       case '/v1/auth/password-reset':
+        final request = _body(options);
+        // An address this demo cannot place from the hostname alone.
+        if (request['orgId'] == null &&
+            '${request['email']}'.startsWith('nohost')) {
+          return _problem(400, 'org_required', 'Enter your organization ID.');
+        }
         return ResponseBody.fromString('', 202);
       case '/v1/auth/password-reset/confirm':
         final request = _body(options);
@@ -151,6 +159,24 @@ class _DemoAdapter implements HttpClientAdapter {
         }, 201);
     }
     return _json({}, 404);
+  }
+
+  /// What the service says when the hostname does not name the org (an email
+  /// starting `nohost`), or the same email and password are in two orgs
+  /// (`shared`); null once an org id is given, or for everyone else.
+  ResponseBody? _orgRequired(String email, Object? orgId) {
+    if (orgId != null) return null;
+    if (email.startsWith('nohost')) {
+      return _problem(400, 'org_required', 'Enter your organization ID.');
+    }
+    if (email.startsWith('shared')) {
+      return _problem(
+        409,
+        'org_required',
+        'This address is used in more than one organization. Enter your organization ID.',
+      );
+    }
+    return null;
   }
 
   Map<dynamic, dynamic> _body(RequestOptions options) {

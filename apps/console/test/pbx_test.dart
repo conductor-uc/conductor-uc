@@ -8,10 +8,6 @@ import 'support.dart';
 Future<void> openSection(WidgetTester tester, String section) async {
   await pumpApp(tester, appWith(api: demoApi()));
   await tester.enterText(
-    find.widgetWithText(TextField, 'Organization ID'),
-    'demo',
-  );
-  await tester.enterText(
     find.widgetWithText(TextField, 'Email'),
     'tenant@example.test',
   );

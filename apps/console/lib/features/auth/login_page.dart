@@ -8,9 +8,11 @@ import '../../core/session.dart';
 import 'auth_errors.dart';
 import 'auth_scaffold.dart';
 
-/// Password sign-in, the first step of S3-04. Until the gateway resolves the
-/// organization from the hostname, the organization id is typed (G-56); a
-/// link from an invitation or reset can prefill it with `?org=`.
+/// Password sign-in, the first step of S3-04. The organization comes from the
+/// console hostname (G-56), so nothing about it is asked for. The Organization
+/// ID field appears only when the service needs it: this hostname does not say
+/// (a local address, say), or the same email and password belong to more than
+/// one organization. A link from an invitation can fill it in with `?org=`.
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key, this.orgId, this.notice});
 
@@ -29,6 +31,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _password = TextEditingController();
   String? _error;
   bool _busy = false;
+  late bool _askOrg = widget.orgId != null;
 
   @override
   void dispose() {
@@ -49,7 +52,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           .getAuthApi()
           .login(
             loginRequest: LoginRequest(
-              orgId: _org.text.trim(),
+              orgId: _org.text.trim().isEmpty ? null : _org.text.trim(),
               email: _email.text.trim(),
               password: _password.text,
             ),
@@ -86,11 +89,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
           setState(() => _error = 'Could not sign in.');
       }
     } catch (e) {
-      setState(
-        () => _error = isOffline(e)
-            ? 'Could not reach the server.'
-            : 'Those details were not recognized.',
-      );
+      if (problemCode(e) == 'org_required') {
+        setState(() {
+          _askOrg = true;
+          _error =
+              problemDetail(e) ?? 'Enter your organization ID to continue.';
+        });
+      } else {
+        setState(
+          () => _error = isOffline(e)
+              ? 'Could not reach the server.'
+              : 'Those details were not recognized.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -102,10 +113,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       title: 'Sign in',
       children: [
         if (widget.notice != null) FormMessage(widget.notice!),
-        TextField(
-          controller: _org,
-          decoration: const InputDecoration(labelText: 'Organization ID'),
-        ),
+        if (_askOrg)
+          TextField(
+            controller: _org,
+            decoration: const InputDecoration(labelText: 'Organization ID'),
+          ),
         TextField(
           controller: _email,
           autofillHints: const [AutofillHints.username],

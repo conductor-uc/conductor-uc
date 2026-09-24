@@ -53,7 +53,14 @@ describe.skipIf(skipReason !== undefined)('domain-service HTTP routes', () => {
 
     app = await createServer({ serviceName: 'org-service', logger });
     registerDomainRoutes(app, domainsRepo, resolver);
-    registerInternalRoutes(app, domainsRepo, INTERNAL_TOKEN, orgs, createBrandRepo(db));
+    registerInternalRoutes(
+      app,
+      domainsRepo,
+      INTERNAL_TOKEN,
+      orgs,
+      createBrandRepo(db),
+      'console.platform.test',
+    );
     await app.ready();
 
     stop = async () => {

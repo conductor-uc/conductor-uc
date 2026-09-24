@@ -25,6 +25,34 @@ export class InvalidCredentialsError extends Error {
   }
 }
 
+/**
+ * The sign-in names no org and the console hostname does not say which one.
+ * Depends only on the deployment, never on the account, so it says nothing
+ * about who has one.
+ */
+export class OrgRequiredError extends Error {
+  override readonly name = 'OrgRequiredError';
+
+  constructor(
+    message = 'Enter your organization ID.',
+    readonly afterPasswordCheck = false,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Where a sign-in or reset looks for the account: one named org, or every
+ * account with that email under the org a console hostname belongs to.
+ */
+export type OrgTarget =
+  | { readonly kind: 'org'; readonly orgId: string }
+  | {
+      readonly kind: 'scope';
+      readonly orgId: string;
+      readonly type: 'master' | 'reseller';
+    };
+
 export class InvalidMfaCodeError extends Error {
   override readonly name = 'InvalidMfaCodeError';
 
@@ -125,6 +153,17 @@ export function createAuthService(options: AuthServiceOptions) {
     return user.orgType === 'master' || user.orgType === 'reseller';
   }
 
+  async function activeCandidates(where: OrgTarget | string, email: string) {
+    const target: OrgTarget = typeof where === 'string' ? { kind: 'org', orgId: where } : where;
+    const found =
+      target.kind === 'org'
+        ? [await users.findByOrgAndEmail(target.orgId, email)]
+        : await users.findByScopeAndEmail(target, email);
+    return found.filter(
+      (u): u is NonNullable<typeof u> => u !== undefined && u.status === 'active',
+    );
+  }
+
   async function issueTokens(
     user: User,
     session: { sessionId: string; refreshToken: string },
@@ -153,14 +192,28 @@ export function createAuthService(options: AuthServiceOptions) {
      * criterion: "cannot obtain an access token beyond MFA enrollment").
      */
     async login(
-      orgId: string,
+      target: OrgTarget | string,
       email: string,
       password: string,
       meta: RequestMeta,
     ): Promise<LoginResult> {
-      const user = await users.findByOrgAndEmail(orgId, email);
-      if (user === undefined || user.status !== 'active') throw new InvalidCredentialsError();
-      if (!(await verifyPassword(user.passwordHash, password))) throw new InvalidCredentialsError();
+      // At a hostname the same address can exist in several orgs under one
+      // reseller. The password decides which: every candidate is checked, and
+      // only when two accounts accept it is the caller asked to name the org
+      // (which reveals nothing, since the caller has just proved both).
+      const candidates = (await activeCandidates(target, email)).slice(0, 25);
+      const matches = [];
+      for (const candidate of candidates) {
+        if (await verifyPassword(candidate.passwordHash, password)) matches.push(candidate);
+      }
+      if (matches.length > 1) {
+        throw new OrgRequiredError(
+          'This address is used in more than one organization. Enter your organization ID.',
+          true,
+        );
+      }
+      const user = matches[0];
+      if (user === undefined) throw new InvalidCredentialsError();
 
       await users.recordLogin(user.id);
 
@@ -308,13 +361,17 @@ export function createAuthService(options: AuthServiceOptions) {
      */
     async requestPasswordReset(
       ctx: DbContext,
-      orgId: string,
+      target: OrgTarget | string,
       email: string,
-    ): Promise<{ token: string; email: string } | undefined> {
-      const user = await users.findByOrgAndEmail(orgId, email);
-      if (user === undefined || user.status !== 'active') return undefined;
-      const { token } = await tokens.createPasswordReset(ctx, user, passwordResetTtlMinutes);
-      return { token, email: user.email };
+    ): Promise<{ token: string; email: string }[]> {
+      // Every matching account gets its own link, each naming its own org, so
+      // an address shared across orgs needs no org from the requester.
+      const issued = [];
+      for (const user of (await activeCandidates(target, email)).slice(0, 25)) {
+        const { token } = await tokens.createPasswordReset(ctx, user, passwordResetTtlMinutes);
+        issued.push({ token, email: user.email });
+      }
+      return issued;
     },
 
     /**

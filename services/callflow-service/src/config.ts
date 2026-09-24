@@ -1,6 +1,7 @@
 import { Env, Type, baseEnvSchema, loadConfig } from '@cuc/config';
 import { dbEnvSchema } from '@cuc/db';
 import { eventsEnvSchema } from '@cuc/events';
+import { httpEnvSchema } from '@cuc/http';
 
 /**
  * Everything this service reads from the environment.
@@ -13,11 +14,10 @@ export const configSchema = Type.Object({
   ...baseEnvSchema.properties,
   ...dbEnvSchema.properties,
   ...eventsEnvSchema.properties,
-  /**
-   * Only trust the x-internal-* identity headers when this service is reachable
-   * solely through api-gateway, which authenticates the caller and signs them.
-   */
-  TRUST_INTERNAL_HEADERS: Env.bool({ default: false }),
+  // TRUST_INTERNAL_HEADERS and INTERNAL_HEADER_SIGNING_SECRET: the identity
+  // headers are trusted only when this service is reachable solely through
+  // api-gateway, which authenticates the caller and signs them.
+  ...httpEnvSchema.properties,
   /**
    * Shared bearer token this service's own `/internal/v1` routes expect
    * (07 §1's precedent) — must match flow_runner/telephony-config's copy.
