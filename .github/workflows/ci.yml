@@ -41,7 +41,6 @@ env:
   REQUIRE_REDIS_TESTS: '1'
   REQUIRE_SMTP_TESTS: '1'
   TEST_DATABASE_URL: mysql://root:ci@127.0.0.1:3306
-  TEST_NATS_URL: 127.0.0.1:4222
   TEST_S3_URL: http://ci-minio:ci-minio-password@127.0.0.1:9000
   TEST_REDIS_URL: redis://127.0.0.1:6379
   TEST_MAILPIT_URL: http://127.0.0.1:8025
@@ -54,7 +53,7 @@ jobs:
     name: lint, typecheck, test, build
     # Self-hosted like `sip-smoke`: the runner is faster than GitHub-hosted
     # tenancy. It is a long-lived host, not a fresh VM, so anything a step
-    # starts by hand must be removed again (see the NATS/MinIO steps).
+    # starts by hand must be removed again (see the MinIO step).
     runs-on: self-hosted
     timeout-minutes: 20
 
@@ -103,24 +102,31 @@ jobs:
           # more than the tip commit.
           fetch-depth: 0
 
-      - name: Start NATS with JetStream
-        # Not a `services:` entry: JetStream needs the `-js` argument, and a
-        # service container has no way to pass one.
+      - name: Install nats-server
+        # Every suite that needs a bus starts its own JetStream server from this
+        # binary (`packages/testing/src/nats.ts`), on a free port with its own
+        # store. One shared server let two packages' tests, which turbo runs at
+        # the same time, purge each other's `ORG`, `PBX` and `AUDIT` streams: an
+        # event published by one was gone before its consumer pulled it, and the
+        # test waited out its 15 s of retries and failed (G-17). The version
+        # matches the `nats:2.10` line production runs.
         run: |
-          # A previous run on this long-lived runner may have been cancelled
-          # before its cleanup step; a stale container would hold the name.
-          docker rm -f nats >/dev/null 2>&1 || true
-          docker run -d --name nats -p 4222:4222 nats:2.10-alpine -js
-          for _ in $(seq 1 30); do
-            if (exec 3<>/dev/tcp/127.0.0.1/4222) 2>/dev/null; then
-              echo "NATS is accepting connections"
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "NATS did not start in time" >&2
-          docker logs nats >&2
-          exit 1
+          version=v2.10.29
+          sha256=e314da74a83a1d3876db8814c27eb990fe729640fd6452025b441bcede8390da
+          dir="$RUNNER_TOOL_CACHE/nats-server/$version"
+          if [ ! -x "$dir/nats-server" ]; then
+            tmp="$(mktemp -d)"
+            curl -fsSL -o "$tmp/nats.tgz" \
+              "https://github.com/nats-io/nats-server/releases/download/$version/nats-server-$version-linux-amd64.tar.gz"
+            echo "$sha256  $tmp/nats.tgz" | sha256sum -c -
+            tar -xzf "$tmp/nats.tgz" -C "$tmp"
+            mkdir -p "$dir"
+            install -m 0755 "$tmp/nats-server-$version-linux-amd64/nats-server" "$dir/nats-server.new"
+            mv "$dir/nats-server.new" "$dir/nats-server"
+            rm -rf "$tmp"
+          fi
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/nats-server" --version
 
       - name: Start MinIO
         # Not a `services:` entry: the image needs a `server /data` command,
@@ -189,10 +195,12 @@ jobs:
       - name: Console OpenAPI snapshot is current
         # apps/console/api/openapi.json is dumped from the services' own route
         # schemas, and the console's contract test compares its screens against
-        # it. Building the four services first makes this independent of which
-        # packages `--affected` happened to build above.
+        # it. Building every service `dump-openapi.mjs` imports (the six in its
+        # SOURCES list) first makes this independent of which packages
+        # `--affected` happened to build above. Leave one out and the step only
+        # fails on a pull request that does not touch that service.
         run: |
-          pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service --filter=@cuc/trunk-service
+          pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service --filter=@cuc/trunk-service --filter=@cuc/api-gateway
           node apps/console/tool/dump-openapi.mjs
           git diff --exit-code -- apps/console/api/openapi.json
 
@@ -210,18 +218,14 @@ jobs:
         # surface. Runs after build so it sees built artifacts as well as sources.
         run: pnpm brand-leak
 
-      - name: Show NATS logs on failure
-        if: failure()
-        run: docker logs nats || true
-
       - name: Show MinIO logs on failure
         if: failure()
         run: docker logs minio || true
 
-      - name: Remove NATS and MinIO
-        # Not a `services:` entry, so the runner does not clean these up.
+      - name: Remove MinIO
+        # Not a `services:` entry, so the runner does not clean it up.
         if: always()
-        run: docker rm -f nats minio || true
+        run: docker rm -f minio || true
 
   # A separate job, not a step in `check` above, so one slow suite does not
   # hold up the fast feedback loop (real SIP transaction timers over real
