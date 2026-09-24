@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { loadServiceConfig } from '../src/config.js';
 import { buildRouteTable, isPublicPath, resolveRoute } from '../src/routing/route-table.js';
 
 const SERVICES = { identity: 'http://identity:8080', org: 'http://org:8080' };
@@ -68,5 +69,28 @@ describe('isPublicPath', () => {
 
   it('does not match a path that merely shares a prefix string', () => {
     expect(isPublicPath(prefixes, '/v1/authorization')).toBe(false);
+  });
+});
+
+describe('the default routing table', () => {
+  const config = loadServiceConfig({
+    SERVICE_NAME: 'api-gateway',
+    INTERNAL_HEADER_SIGNING_SECRET: 'a-signing-secret-of-enough-length',
+    IDENTITY_SERVICE_URL: SERVICES.identity,
+    ORG_SERVICE_URL: SERVICES.org,
+    REDIS_URL: 'redis://localhost:6379',
+  });
+  const table = buildRouteTable(config.ROUTE_TABLE, SERVICES);
+
+  // Every path the console calls that these two services own.
+  it.each([
+    ['/v1/auth/login', SERVICES.identity],
+    ['/v1/orgs/o1/invitations', SERVICES.identity],
+    ['/v1/public/brand', SERVICES.org],
+    ['/v1/resellers/r1/brand', SERVICES.org],
+    ['/v1/tenants/t1', SERVICES.org],
+    ['/v1/session/brand', SERVICES.org],
+  ])('%s goes to its service', (path, target) => {
+    expect(resolveRoute(table, path)?.target).toBe(target);
   });
 });
