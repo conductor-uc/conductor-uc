@@ -124,7 +124,7 @@ jobs:
         run: |
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=ci-minio -e MINIO_ROOT_PASSWORD=ci-minio-password \
-            quay.io/minio/minio:latest server /data
+            pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data
           for _ in $(seq 1 30); do
             if (exec 3<>/dev/tcp/127.0.0.1/9000) 2>/dev/null; then
               echo "MinIO is accepting connections"

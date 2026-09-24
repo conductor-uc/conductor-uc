@@ -18,8 +18,13 @@ export const S3_URL_ENV = 'TEST_S3_URL';
 /** Matches the MariaDB/NATS helpers: set in CI so a missing server fails the run. */
 export const REQUIRE_S3_ENV = 'REQUIRE_S3_TESTS';
 
-/** Production runs MinIO in dev/compose (S0-05); the container fallback matches it. */
-const MINIO_IMAGE = 'quay.io/minio/minio:latest';
+/**
+ * Production runs MinIO in dev/compose (S0-05); the container fallback matches it.
+ * Upstream stopped serving `quay.io/minio/minio` and `minio/minio`, so this is the
+ * community-maintained `pgsty/minio` build, pinned rather than `latest`. Keep it in
+ * step with `infra/compose/docker-compose.yml` and `.github/workflows/ci.yml`.
+ */
+const MINIO_IMAGE = 'pgsty/minio:RELEASE.2026-08-04T00-00-00Z';
 
 /**
  * Starts an S3-compatible server for integration tests, or reuses one.
