@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/acting.dart';
 import '../../core/session.dart';
+import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart';
 import 'org_defs.dart';
@@ -22,70 +23,56 @@ class OrgsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionProvider)!;
+    final session = ref.watch(sessionProvider);
+    // Signing out clears the session a frame before the router leaves this page.
+    if (session == null) return const SizedBox.shrink();
     final isMaster = session.orgType == OrgType.master;
     final showingResellers = isMaster && resellerId == null;
     final rows = showingResellers
         ? ref.watch(resellersProvider)
         : ref.watch(tenantsProvider(resellerId ?? session.orgId));
-    final textTheme = Theme.of(context).textTheme;
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (isMaster && !showingResellers)
-                IconButton(
+    return PageFrame(
+      children: [
+        PageHeader(
+          title: showingResellers ? 'Resellers' : 'Tenants',
+          leading: isMaster && !showingResellers
+              ? IconButton(
                   tooltip: 'Back to resellers',
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => context.go('/resellers'),
-                ),
-              Expanded(
-                child: Text(
-                  showingResellers ? 'Resellers' : 'Tenants',
-                  style: textTheme.headlineSmall,
-                ),
+                )
+              : null,
+          actions: [
+            FilledButton.icon(
+              onPressed: () => _create(
+                context,
+                ref,
+                showingResellers ? null : resellerId ?? session.orgId,
               ),
-              FilledButton.icon(
-                onPressed: () => _create(
-                  context,
-                  ref,
-                  showingResellers ? null : resellerId ?? session.orgId,
-                ),
-                icon: const Icon(Icons.add),
-                label: Text(showingResellers ? 'New reseller' : 'New tenant'),
+              icon: const Icon(Icons.add),
+              label: Text(showingResellers ? 'New reseller' : 'New tenant'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: AsyncBody(
+            value: rows,
+            emptyText: showingResellers
+                ? 'No resellers yet.'
+                : 'No tenants yet.',
+            builder: (data) => Material(
+              type: MaterialType.transparency,
+              child: ListView(
+                children: [
+                  for (final org in data)
+                    _OrgTile(org: org, isReseller: showingResellers),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: rows.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text(problemMessage(e))),
-              data: (data) => data.isEmpty
-                  ? Center(
-                      child: Text(
-                        showingResellers
-                            ? 'No resellers yet.'
-                            : 'No tenants yet.',
-                      ),
-                    )
-                  : Material(
-                      type: MaterialType.transparency,
-                      child: ListView(
-                        children: [
-                          for (final org in data)
-                            _OrgTile(org: org, isReseller: showingResellers),
-                        ],
-                      ),
-                    ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

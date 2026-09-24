@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
 import type { Storage } from '@cuc/storage';
-import { ProblemError, Type, type Server } from '@cuc/http';
+import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
 import { InsufficientContrastError, InvalidColorError } from '../domain/color.js';
 import { InvalidFqdnError } from '../domain/domain.js';
 import { ConsoleHostnameTakenError, type Brand, type BrandRepo } from '../repo/brand.repo.js';
+import type { OrgRepo } from '../repo/org.repo.js';
 
 const OrgIdParamsSchema = Type.Object({ id: Type.String({ minLength: 1 }) });
 
@@ -82,6 +83,29 @@ function toResponse(brand: Brand): Brand {
   return brand;
 }
 
+/** The brand as a visitor sees it: colors, text, and short-lived asset URLs. */
+async function presentBrand(
+  brand: Brand | undefined,
+  storage: Storage,
+): Promise<Static<typeof PublicBrandSchema>> {
+  if (brand === undefined) return { neutral: true as const };
+  const platform = storage.forPlatform();
+  return {
+    neutral: false as const,
+    displayName: brand.displayName,
+    primaryColor: brand.primaryColor,
+    accentColor: brand.accentColor,
+    logoLightUrl:
+      brand.logoLightKey === null ? null : await platform.presignGet(brand.logoLightKey),
+    logoDarkUrl: brand.logoDarkKey === null ? null : await platform.presignGet(brand.logoDarkKey),
+    faviconUrl: brand.faviconKey === null ? null : await platform.presignGet(brand.faviconKey),
+    supportEmail: brand.supportEmail,
+    supportUrl: brand.supportUrl,
+    supportPhone: brand.supportPhone,
+    legalFooter: brand.legalFooter,
+  };
+}
+
 /**
  * Registers reseller brand CRUD, brand asset upload, console hostname
  * registration, and the public brand-resolution endpoint (S1-04; 02 §5).
@@ -97,6 +121,7 @@ export function registerBrandRoutes(
   repo: BrandRepo,
   storage: Storage,
   platformConsoleHostname: string,
+  orgs: OrgRepo,
 ): void {
   app.put(
     '/v1/resellers/:id/brand',
@@ -203,25 +228,32 @@ export function registerBrandRoutes(
       const resellerId = await repo.findResellerIdForHostname(host);
       if (resellerId === undefined) return { neutral: true as const };
 
-      const brand = await repo.findBrand(resellerId);
-      if (brand === undefined) return { neutral: true as const };
+      return presentBrand(await repo.findBrand(resellerId), storage);
+    },
+  );
 
-      const platform = storage.forPlatform();
-      return {
-        neutral: false as const,
-        displayName: brand.displayName,
-        primaryColor: brand.primaryColor,
-        accentColor: brand.accentColor,
-        logoLightUrl:
-          brand.logoLightKey === null ? null : await platform.presignGet(brand.logoLightKey),
-        logoDarkUrl:
-          brand.logoDarkKey === null ? null : await platform.presignGet(brand.logoDarkKey),
-        faviconUrl: brand.faviconKey === null ? null : await platform.presignGet(brand.faviconKey),
-        supportEmail: brand.supportEmail,
-        supportUrl: brand.supportUrl,
-        supportPhone: brand.supportPhone,
-        legalFooter: brand.legalFooter,
-      };
+  /**
+   * The brand the signed-in actor's own org is presented with (S3-02): a
+   * tenant sees its reseller's, a reseller its own, the master none. The
+   * console re-themes from this after login, when the hostname alone did not
+   * say which brand applies. Reads only the actor's own org, from the verified
+   * request context, so there is no id to guess.
+   */
+  app.get(
+    '/v1/session/brand',
+    {
+      config: { permission: 'org.view', dataClass: 'config' },
+      schema: { response: { 200: PublicBrandSchema } },
+    },
+    async (request) => {
+      const orgId = request.context.orgId;
+      if (orgId === undefined) throw ProblemError.unauthorized('Sign in to continue.');
+      const org = await orgs.findById(orgId);
+      if (org === undefined) throw ProblemError.notFound('No such org.');
+      const resellerId =
+        org.type === 'reseller' ? org.id : org.type === 'tenant' ? org.resellerId : null;
+      if (resellerId === null) return { neutral: true as const };
+      return presentBrand(await repo.findBrand(resellerId), storage);
     },
   );
 }

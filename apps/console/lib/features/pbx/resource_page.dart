@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../widgets/page.dart';
 import 'pbx_api.dart';
 import 'resource.dart';
 import 'resource_form.dart';
@@ -18,60 +19,47 @@ class ResourceView extends ConsumerWidget {
       for (final f in def.fields)
         if (f.showInList) f,
     ];
-    final textTheme = Theme.of(context).textTheme;
-
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text(def.plural, style: textTheme.headlineSmall)),
-              if (!def.readOnly)
-                FilledButton.icon(
-                  onPressed: () => _openForm(context, ref),
-                  icon: const Icon(Icons.add),
-                  label: Text('New ${def.singular.toLowerCase()}'),
-                ),
-            ],
-          ),
-          if (def.blurb != null) ...[
-            const SizedBox(height: 4),
-            Text(def.blurb!, style: textTheme.bodyMedium),
+    return PageFrame(
+      children: [
+        PageHeader(
+          title: def.plural,
+          subtitle: def.blurb,
+          actions: [
+            if (!def.readOnly)
+              FilledButton.icon(
+                onPressed: () => _openForm(context, ref),
+                icon: const Icon(Icons.add),
+                label: Text('New ${def.singular.toLowerCase()}'),
+              ),
           ],
-          const SizedBox(height: 16),
-          Expanded(
-            child: rows.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text(problemMessage(e))),
-              data: (data) => data.isEmpty
-                  ? Center(child: Text('No ${def.plural.toLowerCase()} yet.'))
-                  : SingleChildScrollView(
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            minWidth: MediaQuery.sizeOf(context).width - 320,
-                          ),
-                          child: DataTable(
-                            columns: [
-                              for (final c in columns)
-                                DataColumn(label: Text(c.label)),
-                              const DataColumn(label: Text('')),
-                            ],
-                            rows: [
-                              for (final row in data)
-                                _row(context, ref, row, columns),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: AsyncBody(
+            value: rows,
+            emptyText: 'No ${def.plural.toLowerCase()} yet.',
+            builder: (data) => SingleChildScrollView(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: MediaQuery.sizeOf(context).width - 320,
+                  ),
+                  child: DataTable(
+                    columns: [
+                      for (final c in columns) DataColumn(label: Text(c.label)),
+                      const DataColumn(label: Text('')),
+                    ],
+                    rows: [
+                      for (final row in data) _row(context, ref, row, columns),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 

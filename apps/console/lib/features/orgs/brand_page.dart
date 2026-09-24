@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/brand.dart';
 import '../../core/session.dart';
+import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import 'orgs_api.dart';
 
@@ -188,12 +189,7 @@ class _BrandPageState extends ConsumerState<BrandPage> {
                     if (_error != null)
                       Align(
                         alignment: Alignment.centerLeft,
-                        child: Text(
-                          _error!,
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.error,
-                          ),
-                        ),
+                        child: ErrorText(_error!),
                       ),
                     if (_status != null)
                       Align(

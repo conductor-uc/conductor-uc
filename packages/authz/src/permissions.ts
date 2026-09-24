@@ -32,7 +32,14 @@ import type { DataClass, Permission } from './types.js';
  * so a reseller can read it without H1 blocking them the way `cdr.read`
  * already does (docs/decisions.md's C-1 entry has the full resolution).
  */
+/**
+ * `org.view` is not in 07 §3.3 either: S3-02 needs a permission for "read the
+ * brand my own org is presented with" (the console re-themes after login), and
+ * every signed-in actor needs it, so every built-in role carries it. It reads
+ * no tenant records; it is `config` only because the catalog has no lower class.
+ */
 export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
+  'org.view': 'config',
   'reseller.create': 'config',
   'reseller.manage': 'config',
   'tenant.create': 'config',

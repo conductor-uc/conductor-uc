@@ -50,6 +50,19 @@ class _DemoAdapter implements HttpClientAdapter {
                 }
               : {'neutral': true},
         );
+      case '/v1/session/brand':
+        // A reseller or tenant user is presented with the reseller's brand.
+        return _json(
+          _orgType == 'master'
+              ? {'neutral': true}
+              : {
+                  'neutral': false,
+                  'displayName': 'Sample Reseller',
+                  'primaryColor': '#4a148c',
+                  'accentColor': '#ffe082',
+                  'legalFooter': 'Sample Reseller Ltd.',
+                },
+        );
       case '/v1/auth/login':
         final request = _body(options);
         if (request['password'] == 'wrong') return _json({}, 401);

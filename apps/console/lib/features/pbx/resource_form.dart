@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../widgets/page.dart';
 import 'pbx_api.dart';
 import 'resource.dart';
 
@@ -150,12 +151,7 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
+                    child: ErrorText(_error!),
                   ),
               ],
             ),

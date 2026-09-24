@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../app/brand.dart';
+import '../../app/session_brand.dart';
 import '../../core/acting.dart';
 import '../../core/session.dart';
 import '../../widgets/brand_header.dart';
@@ -18,7 +18,7 @@ class ShellPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
-    final brand = ref.watch(brandProvider);
+    final brand = ref.watch(effectiveBrandProvider);
     final acting = ref.watch(actingProvider);
     final sections = session == null
         ? const <Section>[]

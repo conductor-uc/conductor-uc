@@ -2,6 +2,6 @@
 /// the Dart VM. The console itself only ever runs on the web.
 void setDocumentTitle(String title) {}
 
-void setDocumentFavicon(String url) {}
+void setDocumentFavicon(String? url) {}
 
 String currentHost() => 'localhost';

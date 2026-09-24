@@ -153,6 +153,29 @@ void main() {
       },
     );
 
+    test('the session brand route answers with the public brand shape', () {
+      expect(paths, contains('/v1/session/brand'));
+      final brand = _schema(
+        (paths['/v1/session/brand'] as Map)['get'] as Map<String, dynamic>,
+        response: '200',
+      );
+      final shapes = [
+        for (final s in (brand['anyOf'] ?? brand['oneOf']) as List)
+          ((s as Map)['properties'] as Map).keys.toSet(),
+      ];
+      expect(
+        shapes.expand((k) => k).toSet(),
+        containsAll([
+          'neutral',
+          'displayName',
+          'primaryColor',
+          'accentColor',
+          'logoLightUrl',
+          'faviconUrl',
+        ]),
+      );
+    });
+
     test('console hostname rows carry what the brand page reads', () {
       final list = _schema(
         ((paths['/v1/resellers/{id}/console-hostnames'] as Map)['get'])

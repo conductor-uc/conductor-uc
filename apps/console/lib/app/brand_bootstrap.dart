@@ -13,6 +13,5 @@ Future<Brand> bootstrapBrand() async {
 
 void applyBrandToDocument(Brand brand) {
   setDocumentTitle(brand.displayName ?? 'Console');
-  final favicon = brand.faviconUrl;
-  if (favicon != null) setDocumentFavicon(favicon);
+  setDocumentFavicon(brand.faviconUrl);
 }
