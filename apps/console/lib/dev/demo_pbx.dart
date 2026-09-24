@@ -420,6 +420,25 @@ class DemoPbx {
   /// entered through "act as".
   List<Map<String, dynamic>> _peopleOf(String orgId) {
     if (orgId == 'demo-org') return _users;
+    if (orgId.startsWith('rs-')) {
+      return _otherPeople.putIfAbsent(
+        orgId,
+        () => [
+          _user(
+            '$orgId-user-1',
+            'admin@reseller.example.test',
+            'Morgan Reseller',
+            ['reseller_admin'],
+          ),
+          _user(
+            '$orgId-user-2',
+            'help@reseller.example.test',
+            'Casey Support',
+            ['reseller_support'],
+          ),
+        ],
+      );
+    }
     return _otherPeople.putIfAbsent(
       orgId,
       () => [

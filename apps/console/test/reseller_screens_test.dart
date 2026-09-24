@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
+import 'users_test.dart' show inRow, tapIn;
 
 Future<void> signInAndOpen(
   WidgetTester tester,
@@ -254,6 +255,51 @@ void main() {
         expect(find.text('New trunk'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'its People tab lists the reseller\'s own logins, not a tenant\'s',
+      (tester) async {
+        await openNorthwind(tester);
+        await tester.tap(find.widgetWithText(Tab, 'People'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text(
+            'People who can sign in to Northwind Telecom. Invite someone by email, then give them a role.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Morgan Reseller'), findsOneWidget);
+        expect(find.text('Casey Support'), findsOneWidget);
+        expect(find.text('Riley Owner'), findsNothing);
+        expect(
+          inRow(
+            tester,
+            'admin@reseller.example.test',
+            find.text('Administrator'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('a reseller login can be disabled from the People tab', (
+      tester,
+    ) async {
+      await openNorthwind(tester);
+      await tester.tap(find.widgetWithText(Tab, 'People'));
+      await tester.pumpAndSettle();
+      await tapIn(
+        tester,
+        'help@reseller.example.test',
+        find.byTooltip('Disable'),
+      );
+      await tester.tap(find.widgetWithText(FilledButton, 'Disable'));
+      await tester.pumpAndSettle();
+      expect(
+        inRow(tester, 'help@reseller.example.test', find.text('Disabled')),
+        findsOneWidget,
+      );
+    });
 
     testWidgets('its Domains tab has the base domains', (tester) async {
       await openNorthwind(tester);

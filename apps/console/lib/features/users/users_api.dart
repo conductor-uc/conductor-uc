@@ -167,20 +167,65 @@ class UsersApi {
   }
 }
 
-/// Whose people the Users screen shows: the tenant entered through "act as",
-/// else the signed-in user's own organization.
-final usersApiProvider = Provider<UsersApi?>((ref) {
+/// One organization whose people are shown: its id and what kind it is (which
+/// decides the roles it can be given). Equal targets share one loaded list.
+class UsersTarget {
+  const UsersTarget(this.orgId, this.orgType);
+
+  /// A reseller's own people, for the master looking in from the reseller's page.
+  const UsersTarget.reseller(String id) : this(id, OrgType.reseller);
+
+  final String orgId;
+  final OrgType orgType;
+
+  @override
+  bool operator ==(Object other) =>
+      other is UsersTarget && other.orgId == orgId && other.orgType == orgType;
+
+  @override
+  int get hashCode => Object.hash(orgId, orgType);
+}
+
+/// Whose people the Users screen shows by default: the tenant entered through
+/// "act as", else the signed-in user's own organization.
+final usersTargetProvider = Provider<UsersTarget?>((ref) {
   final session = ref.watch(sessionProvider);
   if (session == null) return null;
   final tenant = ref.watch(actingProvider);
+  return tenant == null
+      ? UsersTarget(session.orgId, session.orgType)
+      : UsersTarget(tenant.id, OrgType.tenant);
+});
+
+final usersApiForProvider = Provider.family<UsersApi?, UsersTarget>((
+  ref,
+  target,
+) {
+  final session = ref.watch(sessionProvider);
+  if (session == null) return null;
   return UsersApi(
     ref.watch(apiProvider).dio,
     session.accessToken,
-    tenant?.id ?? session.orgId,
-    tenant == null ? session.orgType : OrgType.tenant,
+    target.orgId,
+    target.orgType,
   );
 });
 
+final usersForProvider = FutureProvider.family<List<Json>, UsersTarget>((
+  ref,
+  target,
+) async {
+  return await ref.watch(usersApiForProvider(target))?.list() ?? const [];
+});
+
+final usersApiProvider = Provider<UsersApi?>((ref) {
+  final target = ref.watch(usersTargetProvider);
+  return target == null ? null : ref.watch(usersApiForProvider(target));
+});
+
 final usersProvider = FutureProvider<List<Json>>((ref) async {
-  return await ref.watch(usersApiProvider)?.list() ?? const [];
+  final target = ref.watch(usersTargetProvider);
+  return target == null
+      ? const []
+      : await ref.watch(usersForProvider(target).future);
 });

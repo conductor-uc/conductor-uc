@@ -9,26 +9,40 @@ import '../pbx/resource_form.dart';
 import 'users_api.dart';
 
 /// The people in an organization: invite, name, role, and whether they can
-/// sign in. The signed-in user's own, or the tenant they have entered.
+/// sign in. The signed-in user's own, or the tenant they have entered, or, when
+/// [org] is given, that organization's (the master looking in on a reseller).
 class UsersPage extends ConsumerWidget {
-  const UsersPage({super.key});
+  const UsersPage({super.key, this.org, this.orgName, this.embedded = false});
+
+  /// Whose people to show. Null means the signed-in user's own, or the tenant
+  /// entered through "act as".
+  final UsersTarget? org;
+
+  /// Names [org] in the subtitle.
+  final String? orgName;
+
+  /// Inside another page that already has the title and the way back.
+  final bool embedded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     if (session == null) return const SizedBox.shrink();
     final acting = ref.watch(actingProvider);
-    final rows = ref.watch(usersProvider);
+    final target = org ?? ref.watch(usersTargetProvider);
+    if (target == null) return const SizedBox.shrink();
+    final rows = ref.watch(usersForProvider(target));
+    final name = orgName ?? acting?.name;
     return PageFrame(
       children: [
         PageHeader(
-          title: 'Users',
-          subtitle: acting == null
+          title: embedded ? 'People' : 'Users',
+          subtitle: name == null
               ? 'People who can sign in. Invite someone by email, then give them a role.'
-              : "People who can sign in to ${acting.name}. Invite someone by email, then give them a role.",
+              : "People who can sign in to $name. Invite someone by email, then give them a role.",
           actions: [
             FilledButton.icon(
-              onPressed: () => _invite(context, ref),
+              onPressed: () => _invite(context, ref, target),
               icon: const Icon(Icons.person_add_alt_outlined),
               label: const Text('Invite user'),
             ),
@@ -57,7 +71,8 @@ class UsersPage extends ConsumerWidget {
                       DataColumn(label: Text('')),
                     ],
                     rows: [
-                      for (final u in data) _row(context, ref, session, u),
+                      for (final u in data)
+                        _row(context, ref, session, target, u),
                     ],
                   ),
                 ),
@@ -69,7 +84,13 @@ class UsersPage extends ConsumerWidget {
     );
   }
 
-  DataRow _row(BuildContext context, WidgetRef ref, Session session, Json u) {
+  DataRow _row(
+    BuildContext context,
+    WidgetRef ref,
+    Session session,
+    UsersTarget target,
+    Json u,
+  ) {
     final mine = u['id'] == session.userId;
     final disabled = u['status'] == 'disabled';
     final role = u['role'] as String?;
@@ -91,13 +112,13 @@ class UsersPage extends ConsumerWidget {
               IconButton(
                 tooltip: 'Edit',
                 icon: const Icon(Icons.edit_outlined),
-                onPressed: () => _edit(context, ref, session, u),
+                onPressed: () => _edit(context, ref, target, u),
               ),
               if (!mine && u['mfaEnrolled'] == true)
                 IconButton(
                   tooltip: 'Reset two-step verification',
                   icon: const Icon(Icons.phonelink_erase_outlined),
-                  onPressed: () => _confirmResetMfa(context, ref, u),
+                  onPressed: () => _confirmResetMfa(context, ref, target, u),
                 ),
               if (!mine)
                 IconButton(
@@ -106,8 +127,8 @@ class UsersPage extends ConsumerWidget {
                     disabled ? Icons.lock_open_outlined : Icons.block_outlined,
                   ),
                   onPressed: () => disabled
-                      ? _setStatus(context, ref, u, 'active')
-                      : _confirmDisable(context, ref, u),
+                      ? _setStatus(context, ref, target, u, 'active')
+                      : _confirmDisable(context, ref, target, u),
                 ),
             ],
           ),
@@ -126,10 +147,10 @@ class UsersPage extends ConsumerWidget {
   Future<void> _edit(
     BuildContext context,
     WidgetRef ref,
-    Session session,
+    UsersTarget target,
     Json user,
   ) async {
-    final api = ref.read(usersApiProvider);
+    final api = ref.read(usersApiForProvider(target));
     if (api == null) return;
     final saved = await showDialog<Json>(
       context: context,
@@ -139,11 +160,15 @@ class UsersPage extends ConsumerWidget {
         save: (_, body) => api.update(user, body),
       ),
     );
-    if (saved != null) ref.invalidate(usersProvider);
+    if (saved != null) ref.invalidate(usersForProvider(target));
   }
 
-  Future<void> _invite(BuildContext context, WidgetRef ref) async {
-    final api = ref.read(usersApiProvider);
+  Future<void> _invite(
+    BuildContext context,
+    WidgetRef ref,
+    UsersTarget target,
+  ) async {
+    final api = ref.read(usersApiForProvider(target));
     if (api == null) return;
     final sent = await showDialog<Json>(
       context: context,
@@ -161,6 +186,7 @@ class UsersPage extends ConsumerWidget {
   Future<void> _confirmDisable(
     BuildContext context,
     WidgetRef ref,
+    UsersTarget target,
     Json user,
   ) async {
     final ok = await showDialog<bool>(
@@ -183,13 +209,14 @@ class UsersPage extends ConsumerWidget {
       ),
     );
     if (ok == true && context.mounted) {
-      await _setStatus(context, ref, user, 'disabled');
+      await _setStatus(context, ref, target, user, 'disabled');
     }
   }
 
   Future<void> _confirmResetMfa(
     BuildContext context,
     WidgetRef ref,
+    UsersTarget target,
     Json user,
   ) async {
     final ok = await showDialog<bool>(
@@ -214,12 +241,12 @@ class UsersPage extends ConsumerWidget {
       ),
     );
     if (ok != true || !context.mounted) return;
-    final api = ref.read(usersApiProvider);
+    final api = ref.read(usersApiForProvider(target));
     if (api == null) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
       await api.resetMfa(user);
-      ref.invalidate(usersProvider);
+      ref.invalidate(usersForProvider(target));
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -235,14 +262,15 @@ class UsersPage extends ConsumerWidget {
   Future<void> _setStatus(
     BuildContext context,
     WidgetRef ref,
+    UsersTarget target,
     Json user,
     String status,
   ) async {
-    final api = ref.read(usersApiProvider);
+    final api = ref.read(usersApiForProvider(target));
     if (api == null) return;
     try {
       await api.update(user, {'status': status});
-      ref.invalidate(usersProvider);
+      ref.invalidate(usersForProvider(target));
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context)
