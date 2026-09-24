@@ -7,6 +7,7 @@ import '../pbx/pbx_api.dart';
 import '../trunks/trunks_page.dart';
 import '../users/users_api.dart';
 import '../users/users_page.dart';
+import '../certificates/certificates_page.dart';
 import 'brand_page.dart';
 import 'domains_panel.dart';
 import 'orgs_api.dart';
@@ -46,7 +47,7 @@ class _Detail extends ConsumerWidget {
     final suspended = reseller['status'] != 'active';
     final id = '${reseller['id']}';
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -84,6 +85,7 @@ class _Detail extends ConsumerWidget {
                 Tab(text: 'People'),
                 Tab(text: 'Trunks'),
                 Tab(text: 'Domains'),
+                Tab(text: 'Certificates'),
                 Tab(text: 'Brand'),
               ],
             ),
@@ -101,6 +103,7 @@ class _Detail extends ConsumerWidget {
                     padding: const EdgeInsets.only(top: 16),
                     child: Column(children: [BaseDomainsPanel(resellerId: id)]),
                   ),
+                  CertificatesPanel(resellerId: id),
                   BrandPage(resellerId: id),
                 ],
               ),

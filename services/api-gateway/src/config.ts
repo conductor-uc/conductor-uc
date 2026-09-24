@@ -59,6 +59,9 @@ export const configSchema = Type.Object({
       '/v1/tenants=org',
       // The brand the signed-in actor's own org is shown (S3-02).
       '/v1/session=org',
+      // The platform's Let's Encrypt settings and its own certificates (G-105).
+      '/v1/platform/acme-settings=org',
+      '/v1/platform/certificates=org',
       // pbx-config-service
       // Desk phones fetching their settings (public; they send Basic credentials).
       '/v1/public/provision=pbx',

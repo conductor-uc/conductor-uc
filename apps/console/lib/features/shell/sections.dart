@@ -61,6 +61,12 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       Icons.monitor_heart_outlined,
       requires: ['analytics.view'],
     ),
+    Section(
+      '/certificates',
+      'Certificates',
+      Icons.verified_user_outlined,
+      requires: ['domain.manage'],
+    ),
     _audit,
     _users,
   ],

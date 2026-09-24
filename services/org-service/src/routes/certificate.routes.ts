@@ -39,16 +39,11 @@ function bearerToken(header: string | undefined): string | undefined {
 }
 
 /**
- * The TLS certificates the platform keeps (G-105): what state each is in, for the
- * console; and, service to service, the SIP proxy a tenant connects to, a
- * certificate with its key for the consumers that serve it, and the answer to an
- * ACME HTTP challenge for the edge to serve on port 80.
+ * What the console shows about the TLS certificates the platform keeps (G-105):
+ * what state each is in, and why one is failing. The service-to-service routes
+ * are registered separately, so they are not in the console's API description.
  */
-export function registerCertificateRoutes(
-  app: Server,
-  certs: CertificateRepo,
-  internalServiceToken: string,
-): void {
+export function registerCertificateRoutes(app: Server, certs: CertificateRepo): void {
   app.get(
     '/v1/resellers/:id/certificates',
     {
@@ -79,9 +74,18 @@ export function registerCertificateRoutes(
       return { rows: (await certs.list({ resellerId: null })).map(toResponse) };
     },
   );
+}
 
-  // ---- service to service ------------------------------------------------
-
+/**
+ * Service to service (bearer token): the SIP proxy a tenant connects to, a
+ * certificate with its key for the consumers that serve it, and the answer to an
+ * ACME HTTP challenge for the edge to serve on port 80.
+ */
+export function registerCertificateInternalRoutes(
+  app: Server,
+  certs: CertificateRepo,
+  internalServiceToken: string,
+): void {
   function requireInternal(header: string | undefined): void {
     const presented = bearerToken(header);
     if (presented === undefined || !secretEquals(internalServiceToken, presented)) {

@@ -8,6 +8,8 @@ export type BaseDomainStatus = 'pending' | 'active';
 export type CertificatePurpose = 'sip' | 'console';
 /** `pending` until first issued, `active` while a usable certificate is held, `failed` after an attempt that has not yet succeeded. */
 export type CertificateStatus = 'pending' | 'active' | 'failed';
+/** Which Let's Encrypt: the real one, or the staging one whose certificates no client trusts. */
+export type AcmeDirectory = 'production' | 'staging';
 
 /**
  * This service's own schema (05 §1.1). No cross-schema joins.
@@ -115,6 +117,21 @@ export interface OrgServiceDb extends EventTables {
     /** Bumped each time a new certificate is stored, so a consumer can tell it changed. */
     version: number;
     created_at: Date;
+    updated_at: Date;
+  };
+
+  /**
+   * The platform's Let's Encrypt settings (G-105), one row (`id` 1). Set in the
+   * console. The terms agreement is per directory and records who gave it.
+   */
+  acme_settings: {
+    id: number;
+    contact_email: string | null;
+    directory: AcmeDirectory;
+    terms_agreed_directory: AcmeDirectory | null;
+    terms_agreed_at: Date | null;
+    terms_agreed_by: string | null;
+    terms_url: string | null;
     updated_at: Date;
   };
 

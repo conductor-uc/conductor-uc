@@ -8,13 +8,19 @@ import { storageFromConfig } from '@cuc/storage';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { nodeDnsResolver } from './dns-resolver.js';
+import { createTermsLookup } from './acme-terms.js';
 import { createIdentityClient } from './identity-client.js';
+import { createAcmeSettingsRepo } from './repo/acme-settings.repo.js';
 import { createBrandRepo } from './repo/brand.repo.js';
 import { createCertificateRepo } from './repo/certificate.repo.js';
 import { createDomainRepo } from './repo/domain.repo.js';
 import { createOrgRepo } from './repo/org.repo.js';
+import { registerAcmeSettingsRoutes } from './routes/acme-settings.routes.js';
 import { registerBrandRoutes } from './routes/brand.routes.js';
-import { registerCertificateRoutes } from './routes/certificate.routes.js';
+import {
+  registerCertificateInternalRoutes,
+  registerCertificateRoutes,
+} from './routes/certificate.routes.js';
 import { registerDomainRoutes } from './routes/domain.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerOrgRoutes } from './routes/org.routes.js';
@@ -108,7 +114,19 @@ const certificateRepo = createCertificateRepo(db, {
   kek: fileKekFromConfig(config),
   platformBaseDomain: config.PLATFORM_BASE_DOMAIN,
 });
-registerCertificateRoutes(app, certificateRepo, config.INTERNAL_SERVICE_TOKEN);
+registerCertificateRoutes(app, certificateRepo);
+registerCertificateInternalRoutes(app, certificateRepo, config.INTERNAL_SERVICE_TOKEN);
+
+// The Let's Encrypt account and agreement, set in the console (G-105).
+const acmeSettingsRepo = createAcmeSettingsRepo(db, {
+  directoryUrlOverride: config.ACME_DIRECTORY_URL,
+});
+registerAcmeSettingsRoutes(
+  app,
+  acmeSettingsRepo,
+  createTermsLookup({ directoryUrlOverride: config.ACME_DIRECTORY_URL }),
+  bus,
+);
 
 // Keeps a row for every hostname that should have a certificate, worked out from
 // what the database already holds, so no provisioning path has to remember to ask.
