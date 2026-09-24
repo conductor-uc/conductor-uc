@@ -64,6 +64,32 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
     }
   }
 
+  Future<void> _confirmReset() async {
+    final why = await showDialog<String>(
+      context: context,
+      builder: (_) => const _ResetPasswordDialog(),
+    );
+    if (why == null || !mounted) return;
+    final api = ref.read(pbxApiProvider);
+    if (api == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final got = await api.resetSipPassword('${widget.extension['id']}', why);
+      if (!mounted) return;
+      setState(() {
+        _revealed = got;
+        _error = null;
+      });
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Password reset. Enter the new one in the phone.'),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final canReveal = ref.watch(canProvider('secret.reveal'));
@@ -126,7 +152,17 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
   Widget _password(bool canReveal) {
     final revealed = _revealed;
     if (revealed != null) {
-      return _Line('Password', '${revealed['password']}', secret: true);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _Line('Password', '${revealed['password']}', secret: true),
+          TextButton.icon(
+            onPressed: _confirmReset,
+            icon: const Icon(Icons.autorenew),
+            label: const Text('Reset password'),
+          ),
+        ],
+      );
     }
     if (!canReveal) {
       return const Padding(
@@ -141,10 +177,20 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
         alignment: Alignment.centerLeft,
         child: Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: OutlinedButton.icon(
-            onPressed: () => setState(() => _asking = true),
-            icon: const Icon(Icons.visibility_outlined),
-            label: const Text('Reveal password'),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: () => setState(() => _asking = true),
+                icon: const Icon(Icons.visibility_outlined),
+                label: const Text('Reveal password'),
+              ),
+              TextButton.icon(
+                onPressed: _confirmReset,
+                icon: const Icon(Icons.autorenew),
+                label: const Text('Reset password'),
+              ),
+            ],
           ),
         ),
       );
@@ -221,6 +267,64 @@ class _Line extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Asks why, then pops with the reason (or null when cancelled). It owns its
+/// text controller so it outlives the dialog's closing animation.
+class _ResetPasswordDialog extends StatefulWidget {
+  const _ResetPasswordDialog();
+
+  @override
+  State<_ResetPasswordDialog> createState() => _ResetPasswordDialogState();
+}
+
+class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
+  final _reason = TextEditingController();
+
+  @override
+  void dispose() {
+    _reason.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Reset this password?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'The extension gets a new password. The phone using it stops '
+            'working until you enter the new one.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _reason,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Why are you resetting it?',
+              helperText: 'Recorded in the audit log along with your name.',
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _reason.text.trim().isEmpty
+              ? null
+              : () => Navigator.of(context).pop(_reason.text.trim()),
+          child: const Text('Reset'),
+        ),
+      ],
     );
   }
 }

@@ -248,4 +248,49 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
       return revealed;
     },
   );
+
+  app.post(
+    '/v1/tenants/:tenantId/extensions/:id/reset-password',
+    {
+      // Returns the new secret, so it needs the same permission as reveal.
+      config: { permission: 'secret.reveal', dataClass: 'secret' },
+      schema: {
+        params: ExtensionParamsSchema,
+        body: RevealBodySchema,
+        response: { 200: RevealResponseSchema },
+      },
+    },
+    async (request) => {
+      const { actorId, actorType, orgId } = request.context;
+      if (actorId === undefined || actorType === undefined || orgId === undefined) {
+        throw ProblemError.unauthorized(
+          'An identified actor is required to reset a SIP credential.',
+        );
+      }
+
+      let reset;
+      try {
+        reset = await extensions.resetPassword(ctxFor(request), request.params.id);
+      } catch (error) {
+        throw toProblem(error);
+      }
+
+      // The change is already committed with its event, so a failure to
+      // publish this audit record does not undo it; it surfaces as an error.
+      await publishAuditEvent(bus, {
+        actorType,
+        actorId,
+        actorOrgId: orgId,
+        targetOrgId: request.params.tenantId,
+        action: 'extension.credential.reset',
+        resource: request.params.id,
+        dataClass: 'secret',
+        ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
+        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        requestId: request.context.requestId,
+      });
+
+      return reset;
+    },
+  );
 }

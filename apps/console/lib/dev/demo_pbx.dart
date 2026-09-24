@@ -452,6 +452,9 @@ class DemoPbx {
     );
   }
 
+  /// Passwords set by a reset, by extension id; the rest keep their first one.
+  final _sipPasswords = <String, String>{};
+
   /// Where a phone registers, and an extension's SIP login. The demo has no
   /// real edge; the values only need to look like what the service returns.
   ResponseBody? _phone(RequestOptions options) {
@@ -467,16 +470,20 @@ class DemoPbx {
         'realm': realm,
       });
     }
-    final reveal = RegExp(r'^/v1/tenants/([^/]+)/extensions/([^/]+)/reveal$')
-        .firstMatch(path);
+    final reveal = RegExp(
+      r'^/v1/tenants/([^/]+)/extensions/([^/]+)/(reveal|reset-password)$',
+    ).firstMatch(path);
     if (method == 'POST' && reveal != null) {
-      final found = _rows['extensions']!.where(
-        (r) => r['id'] == reveal.group(2),
-      );
+      final id = reveal.group(2)!;
+      final found = _rows['extensions']!.where((r) => r['id'] == id);
       if (found.isEmpty) return _problem(404, 'Not found.');
+      final number = '${found.first['number']}';
+      if (reveal.group(3) == 'reset-password') {
+        _sipPasswords[id] = 'demo-$number-reset-${_next++}';
+      }
       return _json({
-        'username': '${found.first['number']}',
-        'password': 'demo-${found.first['number']}-secret',
+        'username': number,
+        'password': _sipPasswords[id] ?? 'demo-$number-secret',
         'realm': 'demo.voice.northwind.example',
       });
     }

@@ -360,6 +360,112 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
     });
   });
 
+  describe('POST /v1/tenants/:tenantId/extensions/:id/reset-password', () => {
+    async function seedExtension(tenantId: string): Promise<{ id: string }> {
+      h.domains.realms[tenantId] = 'tenant-a.platform.test';
+      return app
+        .inject({
+          method: 'POST',
+          url: `/v1/tenants/${tenantId}/extensions`,
+          headers: actorHeaders(tenantId),
+          payload: {
+            number: '101',
+            displayName: 'A',
+            emergencyLocationId: (
+              await h.emergencyLocations.create(
+                { tenantId },
+                {
+                  label: 'Test Location',
+                  addressLine1: '123 Main St',
+                  city: 'Springfield',
+                  state: 'IL',
+                  postalCode: '62701',
+                  country: 'US',
+                },
+              )
+            ).id,
+          },
+        })
+        .then((r) => r.json<{ id: string }>());
+    }
+
+    it('returns a new password, which is what a later reveal returns, and publishes an audit event', async () => {
+      const tenantId = crypto.randomUUID();
+      const created = await seedExtension(tenantId);
+      const first = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenantId}/extensions/${created.id}/reveal`,
+        headers: actorHeaders(tenantId),
+        payload: {},
+      });
+      bus.published.length = 0;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenantId}/extensions/${created.id}/reset-password`,
+        headers: actorHeaders(tenantId),
+        payload: { reason: 'phone was lost' },
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      const body: { username: string; password: string; realm: string } = response.json();
+      expect(body.username).toBe('101');
+      expect(body.realm).toBe('tenant-a.platform.test');
+      expect(body.password).not.toBe(first.json<{ password: string }>().password);
+
+      const later = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenantId}/extensions/${created.id}/reveal`,
+        headers: actorHeaders(tenantId),
+        payload: {},
+      });
+      expect(later.json<{ password: string }>().password).toBe(body.password);
+
+      expect(bus.published[0]).toMatchObject({
+        type: 'audit.event.recorded',
+        actor: { type: 'user', id: 'user-1', orgId: tenantId },
+        data: {
+          action: 'extension.credential.reset',
+          resource: created.id,
+          dataClass: 'secret',
+          targetOrgId: tenantId,
+          reason: 'phone was lost',
+        },
+      });
+    });
+
+    it('rejects a reset with no identified actor, and changes nothing', async () => {
+      const tenantId = crypto.randomUUID();
+      const created = await seedExtension(tenantId);
+      const before = await h.extensions.reveal({ tenantId }, created.id);
+      bus.published.length = 0;
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenantId}/extensions/${created.id}/reset-password`,
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(bus.published).toHaveLength(0);
+      expect((await h.extensions.reveal({ tenantId }, created.id)).password).toBe(before.password);
+    });
+
+    it('404s resetting a nonexistent extension, without publishing an audit event', async () => {
+      const tenantId = crypto.randomUUID();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenantId}/extensions/${crypto.randomUUID()}/reset-password`,
+        headers: actorHeaders(tenantId),
+        payload: {},
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(bus.published).toHaveLength(0);
+    });
+  });
+
   describe('POST /v1/tenants/:tenantId/extensions/:id/reveal', () => {
     it('returns the plaintext credential and publishes an audit event', async () => {
       const tenantId = crypto.randomUUID();

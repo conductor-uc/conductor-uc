@@ -114,6 +114,17 @@ class PbxApi {
     return (response.data as Map).cast<String, dynamic>();
   }
 
+  /// Gives an extension a new SIP password and returns it (once). The old one
+  /// stops working; the change is audited with [reason].
+  Future<Json> resetSipPassword(String extensionId, String reason) async {
+    final response = await _dio.post<Object?>(
+      _path('extensions', extensionId, 'reset-password'),
+      data: {'reason': reason},
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   /// A call to an action or sub-resource, such as `flows/{id}/publish`.
   Future<Object?> call(
     String method,
