@@ -610,6 +610,7 @@ class DemoPbx {
         'tlsPort': 5061,
         'transports': ['udp', 'tcp', 'tls'],
         'realm': realm,
+        'outboundProxy': 'sip.voice.northwind.example',
       });
     }
     final issue = RegExp(

@@ -139,7 +139,7 @@ const sipEdge = {
   tlsPort: config.SIP_PUBLIC_TLS_PORT,
   transports: parseSipTransports(config.SIP_PUBLIC_TRANSPORTS),
 };
-registerSipEndpointRoutes(app, orgClient.primaryDomain, sipEdge);
+registerSipEndpointRoutes(app, orgClient.primaryDomain, sipEdge, orgClient.sipProxy);
 registerDeviceRoutes(app, deviceRepo, bus, {
   ...(config.PROVISIONING_BASE_URL === undefined
     ? {}
@@ -153,6 +153,7 @@ registerProvisionRoutes(app, deviceRepo, extensionRepo, orgClient.primaryDomain,
   ...(globalProvisioningCredential === undefined
     ? {}
     : { globalCredential: globalProvisioningCredential }),
+  sipProxy: orgClient.sipProxy,
 });
 registerDidRoutes(app, didRepo);
 registerEmergencyLocationRoutes(app, emergencyLocationRepo);

@@ -124,7 +124,13 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
                     'open its web page and look for the account or SIP settings.',
                   ),
                   const SizedBox(height: 16),
-                  _Line('Server', '${e['server']}'),
+                  if (e['outboundProxy'] != null) ...[
+                    // Phones connect to the proxy, which has a certificate they
+                    // can verify, and still register to and log in as the domain.
+                    _Line('Outbound proxy', '${e['outboundProxy']}'),
+                    _Line('Server / registrar', '${e['server']}'),
+                  ] else
+                    _Line('Server', '${e['server']}'),
                   _Line('Port', '${e['port']}'),
                   if (e['tlsPort'] != null)
                     _Line('TLS port', '${e['tlsPort']}'),
