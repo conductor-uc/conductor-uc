@@ -1104,6 +1104,36 @@ export async function dockerCurlJson(
 }
 
 /**
+ * GETs a URL from inside the compose network and returns the body as text —
+ * for a presigned download address (S3-11's CDR export), whose host (`minio`,
+ * `STORAGE_ENDPOINT`) only resolves there, the same reasoning
+ * `dockerCurlUpload` gives for the upload direction.
+ */
+export async function dockerCurlText(url: string): Promise<{ status: number; text: string }> {
+  const env = sipTestEnv();
+  const { stdout } = await execFileAsync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      env.network,
+      'curlimages/curl:latest',
+      '-s',
+      url,
+      '-w',
+      '\n%{http_code}',
+    ],
+    { maxBuffer: 16 * 1024 * 1024 },
+  );
+  const lastNewline = stdout.lastIndexOf('\n');
+  return {
+    status: Number(stdout.slice(lastNewline + 1).trim()),
+    text: stdout.slice(0, lastNewline),
+  };
+}
+
+/**
  * Uploads a local file's real bytes to a presigned PUT URL (S2-07) — a
  * presigned URL's own host (`minio`, `STORAGE_ENDPOINT`) only resolves on
  * the compose network, the same "cannot reach it from the host" reasoning
