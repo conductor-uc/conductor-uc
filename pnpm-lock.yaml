@@ -880,6 +880,9 @@ importers:
       '@cuc/callflow-service':
         specifier: workspace:*
         version: link:../../services/callflow-service
+      '@cuc/cdr-service':
+        specifier: workspace:*
+        version: link:../../services/cdr-service
       '@cuc/http':
         specifier: workspace:*
         version: link:../../packages/http
@@ -892,6 +895,15 @@ importers:
       '@cuc/org-service':
         specifier: workspace:*
         version: link:../../services/org-service
+      '@cuc/pbx-config-service':
+        specifier: workspace:*
+        version: link:../../services/pbx-config-service
+      '@cuc/trunk-service':
+        specifier: workspace:*
+        version: link:../../services/trunk-service
+      '@cuc/voicemail-service':
+        specifier: workspace:*
+        version: link:../../services/voicemail-service
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
