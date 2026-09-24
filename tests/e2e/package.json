@@ -18,10 +18,14 @@
     "@cuc/api-gateway": "workspace:*",
     "@cuc/callflow-ir": "workspace:*",
     "@cuc/callflow-service": "workspace:*",
+    "@cuc/cdr-service": "workspace:*",
     "@cuc/http": "workspace:*",
     "@cuc/identity-service": "workspace:*",
     "@cuc/notification-service": "workspace:*",
     "@cuc/org-service": "workspace:*",
+    "@cuc/pbx-config-service": "workspace:*",
+    "@cuc/trunk-service": "workspace:*",
+    "@cuc/voicemail-service": "workspace:*",
     "typescript": "~5.9.3",
     "vitest": "^5.0.0"
   }
