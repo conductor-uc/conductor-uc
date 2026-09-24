@@ -469,6 +469,90 @@ class DemoPbx {
   /// Passwords set by a reset, by extension id; the rest keep their first one.
   final _sipPasswords = <String, String>{};
 
+  /// The platform's Let's Encrypt settings, as the operator last saved them.
+  final _acme = <String, dynamic>{
+    'contactEmail': null,
+    'directory': 'production',
+    'termsUrl': 'https://letsencrypt.org/repository/',
+    'termsAgreed': false,
+    'termsAgreedAt': null,
+    'ready': false,
+  };
+
+  /// Certificates: the platform's own, and a reseller's (one working, one failing).
+  ResponseBody? _certificates(RequestOptions options) {
+    final path = options.path;
+    final method = options.method.toUpperCase();
+    if (path == '/v1/platform/acme-settings') {
+      if (method == 'GET') return _json(_acme);
+      if (method == 'PUT') {
+        final body = _body(options);
+        final email = '${body['contactEmail'] ?? ''}'.trim();
+        if (email.isNotEmpty &&
+            !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(email)) {
+          return _problem(
+            400,
+            'Enter one email address, such as certs@example.com.',
+          );
+        }
+        final agree = body['agreeToTerms'] == true;
+        final wasAgreed =
+            _acme['termsAgreed'] == true &&
+            _acme['directory'] == body['directory'];
+        _acme['contactEmail'] = email.isEmpty ? null : email;
+        _acme['directory'] = body['directory'];
+        _acme['termsAgreed'] = agree;
+        _acme['termsAgreedAt'] = !agree
+            ? null
+            : wasAgreed
+            ? _acme['termsAgreedAt']
+            : '2026-09-24T12:00:00.000Z';
+        _acme['ready'] = email.isNotEmpty && agree;
+        return _json(_acme);
+      }
+    }
+    if (method == 'GET' && path == '/v1/platform/certificates') {
+      return _json({
+        'rows': [
+          _cert('console.platform.example', 'console', 'active'),
+          _cert('sip.platform.example', 'sip', 'active'),
+        ],
+      });
+    }
+    if (method == 'GET' &&
+        RegExp(r'^/v1/resellers/[^/]+/certificates$').hasMatch(path)) {
+      return _json({
+        'rows': [
+          _cert(
+            'sip.voice.northwind.example',
+            'sip',
+            'failed',
+            lastError:
+                'DNS lookup for sip.voice.northwind.example found no address.',
+          ),
+          _cert('portal.northwind.example', 'console', 'active'),
+        ],
+      });
+    }
+    return null;
+  }
+
+  static Map<String, dynamic> _cert(
+    String fqdn,
+    String purpose,
+    String status, {
+    String? lastError,
+  }) => {
+    'fqdn': fqdn,
+    'purpose': purpose,
+    'status': status,
+    'notBefore': status == 'active' ? '2026-08-01T00:00:00.000Z' : null,
+    'notAfter': status == 'active' ? '2026-10-30T00:00:00.000Z' : null,
+    'lastError': lastError,
+    'attempts': status == 'failed' ? 3 : 0,
+    'nextAttemptAt': '2026-09-25T00:00:00.000Z',
+  };
+
   /// Where a phone registers, and an extension's SIP login. The demo has no
   /// real edge; the values only need to look like what the service returns.
   ResponseBody? _phone(RequestOptions options) {
@@ -834,6 +918,8 @@ class DemoPbx {
     if (infra != null) return infra;
     final people = _people(options);
     if (people != null) return people;
+    final certs = _certificates(options);
+    if (certs != null) return certs;
     final phone = _phone(options);
     if (phone != null) return phone;
     if (options.path.endsWith('/voicemail/mailboxes')) {

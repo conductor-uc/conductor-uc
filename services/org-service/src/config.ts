@@ -31,6 +31,12 @@ export const configSchema = Type.Object({
    */
   PLATFORM_BASE_DOMAIN: Env.string(),
   /**
+   * Overrides the ACME server the certificate worker talks to, for a deployment
+   * that runs its own (and for tests against Pebble). Leave unset in production:
+   * the operator chooses Let's Encrypt production or staging in the console.
+   */
+  ACME_DIRECTORY_URL: Env.optional(Env.url()),
+  /**
    * Shared bearer token identity-service's `/internal/v1` routes expect
    * (07 §1's precedent) — must match that service's own INTERNAL_SERVICE_TOKEN.
    */

@@ -70,6 +70,9 @@ const _masterAdmin = [
   'tenant.manage',
   'tenant.suspend',
   'brand.manage',
+  // master_admin holds every permission; this is the one the certificate
+  // settings use.
+  'domain.manage',
   'user.manage',
   'analytics.view',
   'audit.read',

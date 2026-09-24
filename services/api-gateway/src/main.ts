@@ -1,6 +1,7 @@
 import { redactConfig } from '@cuc/config';
 import { createLogger } from '@cuc/logger';
 
+import { createChallengeLookup } from './acme-challenge.js';
 import { buildApp } from './app.js';
 import { createHttpsRedirect } from './http-redirect.js';
 import { loadServiceConfig, configSchema } from './config.js';
@@ -25,7 +26,13 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
 const redirect =
   config.HTTP_REDIRECT_PORT === undefined
     ? undefined
-    : createHttpsRedirect({ httpsPort: config.HTTP_PORT });
+    : createHttpsRedirect({
+        httpsPort: config.HTTP_PORT,
+        challenge: createChallengeLookup({
+          orgServiceUrl: config.ORG_SERVICE_URL,
+          internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+        }),
+      });
 if (redirect !== undefined && config.HTTP_REDIRECT_PORT !== undefined) {
   redirect.listen(config.HTTP_REDIRECT_PORT, config.HTTP_HOST);
   logger.info({ port: config.HTTP_REDIRECT_PORT }, 'redirecting plain HTTP to HTTPS');

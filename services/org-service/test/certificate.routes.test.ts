@@ -8,7 +8,10 @@ import { databaseOrSkipReason, silentLogger, startTestDatabase } from '@cuc/test
 
 import { createCertificateRepo, type CertificateRepo } from '../src/repo/certificate.repo.js';
 import { createOrgRepo, type OrgRepo } from '../src/repo/org.repo.js';
-import { registerCertificateRoutes } from '../src/routes/certificate.routes.js';
+import {
+  registerCertificateInternalRoutes,
+  registerCertificateRoutes,
+} from '../src/routes/certificate.routes.js';
 import type { OrgServiceDb } from '../src/schema.js';
 import { migrations } from '../migrations/index.js';
 import { makeCertificate } from './certs.js';
@@ -50,7 +53,8 @@ describe.skipIf(skipReason !== undefined)('certificate routes', () => {
       logger,
       context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
     });
-    registerCertificateRoutes(app, certs, TOKEN);
+    registerCertificateRoutes(app, certs);
+    registerCertificateInternalRoutes(app, certs, TOKEN);
     await app.ready();
     stop = async () => {
       await app.close();

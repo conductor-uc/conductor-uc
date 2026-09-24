@@ -4229,6 +4229,408 @@
         ]
       }
     },
+    "/v1/resellers/{id}/certificates": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "fqdn",
+                          "purpose",
+                          "status",
+                          "notBefore",
+                          "notAfter",
+                          "lastError",
+                          "attempts",
+                          "nextAttemptAt"
+                        ],
+                        "properties": {
+                          "fqdn": {
+                            "type": "string"
+                          },
+                          "purpose": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "sip"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "console"
+                                ]
+                              }
+                            ]
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pending"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "active"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "failed"
+                                ]
+                              }
+                            ]
+                          },
+                          "notBefore": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "notAfter": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastError": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "attempts": {
+                            "type": "integer"
+                          },
+                          "nextAttemptAt": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listResellerCertificates",
+        "tags": [
+          "Resellers"
+        ]
+      }
+    },
+    "/v1/platform/certificates": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "fqdn",
+                          "purpose",
+                          "status",
+                          "notBefore",
+                          "notAfter",
+                          "lastError",
+                          "attempts",
+                          "nextAttemptAt"
+                        ],
+                        "properties": {
+                          "fqdn": {
+                            "type": "string"
+                          },
+                          "purpose": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "sip"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "console"
+                                ]
+                              }
+                            ]
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pending"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "active"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "failed"
+                                ]
+                              }
+                            ]
+                          },
+                          "notBefore": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "notAfter": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastError": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "attempts": {
+                            "type": "integer"
+                          },
+                          "nextAttemptAt": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listPlatformCertificates",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/platform/acme-settings": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "contactEmail",
+                    "directory",
+                    "termsUrl",
+                    "termsAgreed",
+                    "termsAgreedAt",
+                    "ready"
+                  ],
+                  "properties": {
+                    "contactEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "production"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "staging"
+                          ]
+                        }
+                      ]
+                    },
+                    "termsUrl": {
+                      "type": "string"
+                    },
+                    "termsAgreed": {
+                      "type": "boolean"
+                    },
+                    "termsAgreedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ready": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getAcmeSettings",
+        "tags": [
+          "Platform"
+        ]
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "contactEmail",
+                  "directory",
+                  "agreeToTerms"
+                ],
+                "properties": {
+                  "contactEmail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 254
+                  },
+                  "directory": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "production"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "staging"
+                        ]
+                      }
+                    ]
+                  },
+                  "agreeToTerms": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "contactEmail",
+                    "directory",
+                    "termsUrl",
+                    "termsAgreed",
+                    "termsAgreedAt",
+                    "ready"
+                  ],
+                  "properties": {
+                    "contactEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "production"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "staging"
+                          ]
+                        }
+                      ]
+                    },
+                    "termsUrl": {
+                      "type": "string"
+                    },
+                    "termsAgreed": {
+                      "type": "boolean"
+                    },
+                    "termsAgreedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "ready": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveAcmeSettings",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
     "/v1/tenants/{tenantId}/trunks": {
       "get": {
         "parameters": [

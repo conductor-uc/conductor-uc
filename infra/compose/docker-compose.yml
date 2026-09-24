@@ -697,6 +697,9 @@ services:
       # serve phone provisioning (which carries a SIP password) over plain HTTP.
       # A laptop runs plain HTTP, so dev turns both off; production sets
       # TLS_CERT_FILE / TLS_KEY_FILE (or TLS_CERT_DIR) and leaves them on.
+      # G-105: lets the gateway ask org-service for the answer to a certificate
+      # authority's HTTP challenge.
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       REQUIRE_HTTPS_FOR_PROVISIONING: ${REQUIRE_HTTPS_FOR_PROVISIONING:-false}
       HSTS_MAX_AGE_SECONDS: ${HSTS_MAX_AGE_SECONDS:-0}
 

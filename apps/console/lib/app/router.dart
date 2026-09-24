@@ -25,6 +25,7 @@ import '../features/audit/audit_page.dart';
 import '../features/platform/platform_health_page.dart';
 import '../features/shell/notice_pages.dart';
 import '../features/shell/sections.dart';
+import '../features/certificates/certificates_page.dart';
 import '../features/users/users_page.dart';
 import '../features/shell/shell_page.dart';
 
@@ -132,6 +133,7 @@ Widget _pageFor(Section section) {
   if (section.path == '/call-flows') return const FlowsPage();
   if (section.path == '/brand') return const BrandPage();
   if (section.path == '/users') return const UsersPage();
+  if (section.path == '/certificates') return const CertificatesPage();
   if (section.path == '/media') return const MediaPage();
   if (section.path == '/dashboard') return const DashboardPage();
   if (section.path == '/audit') return const AuditPage();
