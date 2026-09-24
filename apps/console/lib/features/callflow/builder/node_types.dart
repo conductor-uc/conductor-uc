@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../canvas/canvas.dart';
 import '../../pbx/pbx_api.dart' show Json;
+import '../../pbx/resource.dart' show commonTimezones;
 
 enum ConfigKind { ref, integer, text, timezone, flowEntry }
 
@@ -221,30 +222,7 @@ FlowNodeType? flowNodeType(String type) {
   return null;
 }
 
-const timezones = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Phoenix',
-  'America/Anchorage',
-  'Pacific/Honolulu',
-  'America/Toronto',
-  'America/Sao_Paulo',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Madrid',
-  'Europe/Athens',
-  'Africa/Johannesburg',
-  'Asia/Dubai',
-  'Asia/Kolkata',
-  'Asia/Singapore',
-  'Asia/Tokyo',
-  'Australia/Sydney',
-  'Pacific/Auckland',
-];
+const timezones = commonTimezones;
 
 String portLabel(String id) => switch (id) {
   'timeout' => 'No input',

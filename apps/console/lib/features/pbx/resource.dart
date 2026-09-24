@@ -17,6 +17,12 @@ enum FieldKind {
 
   /// An id whose resource depends on another field's value ([Field.refByField]).
   dynamicRef,
+
+  /// A list of weekly open windows: days, and from when to when.
+  weeklyHours,
+
+  /// A list of dates, each with an optional name.
+  dateList,
 }
 
 /// Whether a field appears when creating, when editing, or both.
@@ -31,6 +37,7 @@ class Field {
     this.kind, {
     this.required = false,
     this.choices = const [],
+    this.choiceLabels = const {},
     this.ref,
     this.refByField,
     this.refMap = const {},
@@ -50,6 +57,9 @@ class Field {
   final FieldKind kind;
   final bool required;
   final List<String> choices;
+
+  /// What to show for a choice whose stored value reads badly.
+  final Map<String, String> choiceLabels;
 
   /// The resource whose rows a [FieldKind.ref] or [FieldKind.refList] picks from.
   final String? ref;
@@ -412,6 +422,73 @@ const conferenceRoomsDef = ResourceDef(
   ],
 );
 
+/// Time zones offered where a form asks for one. The service accepts any IANA
+/// name; these are the common ones.
+const commonTimezones = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Phoenix',
+  'America/Anchorage',
+  'Pacific/Honolulu',
+  'America/Toronto',
+  'America/Sao_Paulo',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Madrid',
+  'Europe/Athens',
+  'Africa/Johannesburg',
+  'Asia/Dubai',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'Pacific/Auckland',
+];
+
+const schedulesDef = ResourceDef(
+  key: 'schedules',
+  singular: 'Schedule',
+  plural: 'Schedules',
+  icon: Icons.schedule_outlined,
+  blurb: 'Open hours and holidays, to route calls differently after hours.',
+  fields: [
+    Field('label', 'Name', FieldKind.text, required: true, showInList: true),
+    Field(
+      'timezone',
+      'Time zone',
+      FieldKind.choice,
+      required: true,
+      choices: commonTimezones,
+      initial: 'UTC',
+      showInList: true,
+    ),
+    Field(
+      'rules',
+      'Open hours',
+      FieldKind.weeklyHours,
+      showInList: true,
+      initial: [
+        {
+          'days': [1, 2, 3, 4, 5],
+          'start': '09:00',
+          'end': '17:00',
+        },
+      ],
+    ),
+    Field(
+      'holidays',
+      'Holidays',
+      FieldKind.dateList,
+      showInList: true,
+      initial: <Map<String, dynamic>>[],
+    ),
+  ],
+);
+
 const parkingLotsDef = ResourceDef(
   key: 'parking-lots',
   singular: 'Parking lot',
@@ -528,6 +605,7 @@ const allResources = <ResourceDef>[
   agentsDef,
   conferenceRoomsDef,
   parkingLotsDef,
+  schedulesDef,
   emergencyLocationsDef,
   mediaAssetsDef,
   trunksDef,

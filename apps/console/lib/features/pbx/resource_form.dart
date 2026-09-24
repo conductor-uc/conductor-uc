@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../widgets/page.dart';
 import 'pbx_api.dart';
 import 'resource.dart';
+import 'schedule_fields.dart';
 
 /// Create or edit one row of [def], drawn from its fields. Pops the saved row
 /// (the service's response) when a change was saved, and null on cancel.
@@ -58,11 +59,22 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
           _values[f.key] = value as bool? ?? false;
         case FieldKind.refList:
           _values[f.key] = [...?(value as List?)?.cast<String>()];
+        case FieldKind.weeklyHours || FieldKind.dateList:
+          // Deep copies: the editors change these in place.
+          _values[f.key] = [
+            for (final r in (value as List?) ?? const [])
+              _copy((r as Map).cast<String, dynamic>()),
+          ];
         case FieldKind.choice || FieldKind.ref || FieldKind.dynamicRef:
           _values[f.key] = value as String?;
       }
     }
   }
+
+  static Json _copy(Json m) => {
+    for (final e in m.entries)
+      e.key: e.value is List ? [...(e.value as List)] : e.value,
+  };
 
   @override
   void dispose() {
@@ -210,7 +222,7 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
         return _dropdown(
           f,
           label,
-          [for (final c in f.choices) (c, c)],
+          [for (final c in f.choices) (c, f.choiceLabels[c] ?? c)],
           onChanged: (v) => setState(() {
             _values[f.key] = v;
             // A dependent destination id no longer applies to the new type.
@@ -241,7 +253,50 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
         );
       case FieldKind.refList:
         return _refChecklist(f, label);
+      case FieldKind.weeklyHours:
+        return _listField(
+          f,
+          rulesError,
+          (initial, onChanged, error) => WeeklyHoursEditor(
+            initial: initial,
+            onChanged: onChanged,
+            errorText: error,
+          ),
+        );
+      case FieldKind.dateList:
+        return _listField(
+          f,
+          holidaysError,
+          (initial, onChanged, error) => DateListEditor(
+            initial: initial,
+            onChanged: onChanged,
+            errorText: error,
+          ),
+        );
     }
+  }
+
+  /// A list edited by its own widget, checked by [check] when saving.
+  Widget _listField(
+    Field f,
+    String? Function(List<Json>) check,
+    Widget Function(
+      List<Json> initial,
+      void Function(List<Json>) onChanged,
+      String? error,
+    )
+    editor,
+  ) {
+    final initial = (_values[f.key] as List).cast<Json>();
+    return FormField<List<Json>>(
+      key: ValueKey('list-${f.key}'),
+      initialValue: initial,
+      validator: (v) => check(v ?? const []),
+      builder: (state) => editor(initial, (next) {
+        _values[f.key] = next;
+        state.didChange(next);
+      }, state.errorText),
+    );
   }
 
   Widget _dropdown(

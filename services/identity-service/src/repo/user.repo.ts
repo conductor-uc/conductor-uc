@@ -20,6 +20,11 @@ export interface User {
   readonly mfaEnrolled: boolean;
 }
 
+/** A user as the users screen lists them. */
+export interface UserListing extends User {
+  readonly lastLoginAt: Date | null;
+}
+
 /** Carries the hash too — only for the login path, never returned from the API. */
 export interface UserWithHash extends User {
   readonly passwordHash: string;
@@ -152,6 +157,77 @@ export function createUserRepo(db: Database<IdentityServiceDb>) {
           displayName: input.displayName,
           status: 'active',
           mfaEnrolled: false,
+        };
+      });
+    },
+
+    /** Everyone in one org, by email, for the users screen. */
+    listByOrg: async (orgId: string): Promise<UserListing[]> => {
+      const rows = await users
+        .selectFrom('users')
+        .selectAll()
+        .where('org_id', '=', orgId)
+        .orderBy('email', 'asc')
+        .execute();
+      return rows.map((row) => ({ ...toUser(row), lastLoginAt: row.last_login_at }));
+    },
+
+    /**
+     * Changes a user's display name or status, and publishes
+     * `identity.user.updated`. Disabling also revokes every session the user
+     * has, in the same transaction: a disabled user must not stay signed in.
+     * Undefined when no user with that id is in `orgId`.
+     */
+    async update(
+      ctx: DbContext,
+      orgId: string,
+      userId: string,
+      changes: { displayName?: string; status?: UserStatus },
+    ): Promise<UserListing | undefined> {
+      return users.transaction().execute(async (trx) => {
+        const row = await trx
+          .selectFrom('users')
+          .selectAll()
+          .where('id', '=', userId)
+          .where('org_id', '=', orgId)
+          .forUpdate()
+          .executeTakeFirst();
+        if (row === undefined) return undefined;
+
+        const now = new Date();
+        const status = changes.status ?? row.status;
+        const displayName = changes.displayName ?? row.display_name;
+        await trx
+          .updateTable('users')
+          .set({
+            display_name: displayName,
+            status,
+            updated_at: now,
+            version: row.version + 1,
+          })
+          .where('id', '=', userId)
+          .execute();
+        if (status === 'disabled' && row.status !== 'disabled') {
+          await trx
+            .updateTable('sessions')
+            .set({ revoked_at: now })
+            .where('user_id', '=', userId)
+            .where('revoked_at', 'is', null)
+            .execute();
+        }
+
+        await enqueueEvent(trx, identityEvents, {
+          type: 'identity.user.updated',
+          data: { userId, orgId, status },
+          ...(ctx.actorId === undefined || ctx.orgId === undefined
+            ? {}
+            : { actor: { type: 'user', id: ctx.actorId, orgId: ctx.orgId } }),
+          ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
+        });
+
+        return {
+          ...toUser({ ...row, display_name: displayName, status }),
+          lastLoginAt: row.last_login_at,
         };
       });
     },

@@ -27,6 +27,7 @@ import { createQueueRepo, type QueueRepo } from '../src/repo/queue.repo.js';
 import { createAgentRepo, type AgentRepo } from '../src/repo/agent.repo.js';
 import { createQueueTierRepo, type QueueTierRepo } from '../src/repo/queue-tier.repo.js';
 import { createParkingLotRepo, type ParkingLotRepo } from '../src/repo/parking-lot.repo.js';
+import { createScheduleRepo, type ScheduleRepo } from '../src/repo/schedule.repo.js';
 import {
   createConferenceRoomRepo,
   type ConferenceRoomRepo,
@@ -49,6 +50,7 @@ export interface Harness {
   readonly agents: AgentRepo;
   readonly queueTiers: QueueTierRepo;
   readonly parkingLots: ParkingLotRepo;
+  readonly schedules: ScheduleRepo;
   readonly conferenceRooms: ConferenceRoomRepo;
   readonly domains: FakeTenantDomains;
   readonly trunks: FakeTrunkLookup;
@@ -127,6 +129,7 @@ export async function startHarness(): Promise<Harness> {
   const agents = createAgentRepo(db);
   const queueTiers = createQueueTierRepo(db);
   const parkingLots = createParkingLotRepo(db);
+  const schedules = createScheduleRepo(db);
   const conferenceRooms = createConferenceRoomRepo(db, kek);
 
   return {
@@ -142,6 +145,7 @@ export async function startHarness(): Promise<Harness> {
     agents,
     queueTiers,
     parkingLots,
+    schedules,
     conferenceRooms,
     domains,
     trunks,
@@ -187,6 +191,7 @@ export async function resetSchema(db: Database<PbxConfigServiceDb>): Promise<voi
   await db.kysely.deleteFrom('queues').execute();
   await db.kysely.deleteFrom('agents').execute();
   await db.kysely.deleteFrom('parking_lots').execute();
+  await db.kysely.deleteFrom('schedules').execute();
   await db.kysely.deleteFrom('conference_rooms').execute();
   await db.kysely.deleteFrom('sip_credentials').execute();
   await db.kysely.deleteFrom('extensions').execute();

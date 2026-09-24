@@ -139,6 +139,21 @@ export const pbxEvents = defineEvents({
       agentId: Type.String({ minLength: 1 }),
     }),
   },
+  'pbx.schedule.created': {
+    schemaVersion: 1,
+    description: 'A schedule (open hours) was created.',
+    data: Type.Object({ scheduleId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.schedule.updated': {
+    schemaVersion: 1,
+    description: "A schedule's time zone, weekly windows, or holidays changed.",
+    data: Type.Object({ scheduleId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.schedule.deleted': {
+    schemaVersion: 1,
+    description: 'A schedule was deleted.',
+    data: Type.Object({ scheduleId: Type.String({ minLength: 1 }) }),
+  },
   'pbx.parking_lot.created': {
     schemaVersion: 1,
     description: 'A parking lot was created.',

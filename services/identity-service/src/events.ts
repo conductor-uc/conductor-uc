@@ -20,6 +20,17 @@ export const identityEvents = defineEvents({
       email: Type.String({ minLength: 1 }),
     }),
   },
+  'identity.user.updated': {
+    schemaVersion: 1,
+    description:
+      "A user's display name or status changed. A user who was disabled has had every " +
+      'session revoked.',
+    data: Type.Object({
+      userId: Type.String({ minLength: 1 }),
+      orgId: Type.String({ minLength: 1 }),
+      status: Type.Union([Type.Literal('active'), Type.Literal('disabled')]),
+    }),
+  },
   'identity.user.password_reset_requested': {
     schemaVersion: 1,
     description:

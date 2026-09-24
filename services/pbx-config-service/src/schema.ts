@@ -217,6 +217,23 @@ export interface PbxConfigServiceDb extends EventTables {
     version: number;
   };
   /**
+   * A schedule (S3-08; 05 §3.3): open hours as weekly windows plus holiday
+   * dates, evaluated in `timezone`. `rules` and `holidays` hold what
+   * `domain/schedule.ts` validates, as parsed JSON or JSON text depending on
+   * the driver.
+   */
+  schedules: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    timezone: string;
+    rules: unknown;
+    holidays: unknown;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
+  /**
    * A conference room (S2-15; `mod_conference`). `pin_enc` is envelope-
    * encrypted (07 §5) — null means no PIN required. `video` records intent
    * only; see `008_add_conference_rooms.ts`'s own comment on why it has no
