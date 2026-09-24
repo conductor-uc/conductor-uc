@@ -144,8 +144,8 @@ export function validFor(expiresAt: Date, now = new Date()): string {
 /** Caller ID is set by whoever placed the call, so it is untrusted text: no control characters, and short. */
 function cleanCaller(value: string | null): string | null {
   if (value === null) return null;
-  // eslint-disable-next-line no-control-regex
   const cleaned = value
+    // eslint-disable-next-line no-control-regex
     .replace(/[\u0000-\u001f\u007f<>]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
