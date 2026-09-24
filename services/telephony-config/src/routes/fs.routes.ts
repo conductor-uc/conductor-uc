@@ -104,11 +104,25 @@ const AffinityParamsSchema = Type.Object({
   resourceId: Type.String({ minLength: 1 }),
 });
 
-/** `/fs/media/:tenantId/:assetId/:rate` (S2-07) — `rate` names which transcoded variant, not a raw Hz value FS would need to parse. */
+/**
+ * `/fs/media/:tenantId/:assetId/:rate` (S2-07) — `rate` names which transcoded variant, not a raw Hz value FS would need to parse.
+ *
+ * The `.wav` forms are what the URLs FS is given actually use (S3-11, found
+ * live: `mod_http_cache` keeps the URL's own extension on the file it writes,
+ * and FS chooses a file format from that extension — with none, the download
+ * succeeds and then "Failed to open HTTP cache file", so a `menu` prompt
+ * timed out instantly). The bare forms stay accepted for any URL already out
+ * there.
+ */
 const MediaParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
   assetId: Type.String({ minLength: 1 }),
-  rate: Type.Union([Type.Literal('8k'), Type.Literal('16k')]),
+  rate: Type.Union([
+    Type.Literal('8k'),
+    Type.Literal('16k'),
+    Type.Literal('8k.wav'),
+    Type.Literal('16k.wav'),
+  ]),
 });
 
 /** `/fs/voicemail/...` (S2-16) — the Lua voicemail app's own params shapes. */
@@ -392,7 +406,7 @@ export function registerFsRoutes(
    */
   function mohUrlFor(tenantId: string, mediaAssetId: string): string {
     const base = selfUrl.replace(/^(https?:\/\/)/, `$1fs-node:${fsXmlCurlToken}@`);
-    return `http_cache://${base}/fs/media/${tenantId}/${mediaAssetId}/8k`;
+    return `http_cache://${base}/fs/media/${tenantId}/${mediaAssetId}/8k.wav`;
   }
 
   /**
@@ -1290,7 +1304,7 @@ export function registerFsRoutes(
         return '';
       }
 
-      const variantKey = rate === '8k' ? asset.variant8kKey : asset.variant16kKey;
+      const variantKey = rate.startsWith('8k') ? asset.variant8kKey : asset.variant16kKey;
       if (variantKey === null) {
         // Unreachable in practice — `complete` (pbx-config-service) only
         // ever sets both variant keys together with `status: 'ready'` — but

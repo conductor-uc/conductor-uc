@@ -113,7 +113,7 @@ describe.skipIf(skipReason !== undefined)('S2-07 media asset playback', () => {
     const uas = startBackgroundUas('carrier_answer.xml', UAS_CONTAINER, 5095);
     await uas.ready();
 
-    const mediaUrl = `http_cache://${TELEPHONY_CONFIG_TARGET}/fs/media/${tenantId}/${asset.id}/8k`;
+    const mediaUrl = `http_cache://${TELEPHONY_CONFIG_TARGET}/fs/media/${tenantId}/${asset.id}/8k.wav`;
     // Confirmed live (G-36): this node has only an `internal` Sofia
     // profile (`fs_cli sofia status`) — 03 §1's "FS accepts calls only
     // from OpenSIPs, over one internal-facing profile" — there is no
