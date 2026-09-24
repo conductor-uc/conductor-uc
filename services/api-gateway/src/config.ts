@@ -28,16 +28,25 @@ export const configSchema = Type.Object({
   IDENTITY_SERVICE_URL: Env.url(),
   /** Base URL for org-service, e.g. http://org-service:8080. */
   ORG_SERVICE_URL: Env.url(),
+  /** The services behind the tenant routes (G-60). */
+  PBX_CONFIG_SERVICE_URL: Env.url(),
+  CALLFLOW_SERVICE_URL: Env.url(),
+  VOICEMAIL_SERVICE_URL: Env.url(),
+  CDR_SERVICE_URL: Env.url(),
+  TRUNK_SERVICE_URL: Env.url(),
 
   /**
    * The routing table (06, api-gateway): which downstream service owns which
-   * public path prefix. Each entry is `prefix=service`, `service` one of
-   * `identity` or `org`. Configurable rather than hardcoded so a later stage
-   * can add prefixes (or repoint one) without a code change — same reasoning
-   * as `PLATFORM_BASE_DOMAIN` being deployment config, not a constant.
+   * public path. Each entry is `pattern=service`, `service` one of `identity`,
+   * `org`, `pbx`, `callflow`, `voicemail`, `cdr` or `trunk`. A pattern is a
+   * path prefix whose segments are literals or `*` (any one segment), so
+   * `/v1/tenants/*` + `/flows` can go to callflow-service while `/v1/tenants`
+   * alone still belongs to org-service (G-60). Configurable rather than
+   * hardcoded so a later stage can add or repoint a route without a code
+   * change.
    *
-   * Order does not matter: prefixes are matched longest-first regardless of
-   * how they are listed here.
+   * Order does not matter: the most specific pattern wins (more literal
+   * segments, then longer), however they are listed here.
    */
   ROUTE_TABLE: Env.list({
     default: [
@@ -45,9 +54,34 @@ export const configSchema = Type.Object({
       '/v1/orgs=identity',
       '/v1/public=org',
       '/v1/resellers=org',
+      // Everything under a tenant that no more specific pattern claims (the
+      // tenant itself, its domain, suspend and resume) is org-service's.
       '/v1/tenants=org',
       // The brand the signed-in actor's own org is shown (S3-02).
       '/v1/session=org',
+      // pbx-config-service
+      '/v1/tenants/*/extensions=pbx',
+      '/v1/tenants/*/dids=pbx',
+      '/v1/tenants/*/ring-groups=pbx',
+      '/v1/tenants/*/queues=pbx',
+      '/v1/tenants/*/agents=pbx',
+      '/v1/tenants/*/conference-rooms=pbx',
+      '/v1/tenants/*/parking-lots=pbx',
+      '/v1/tenants/*/emergency-locations=pbx',
+      '/v1/tenants/*/media-assets=pbx',
+      '/v1/tenants/*/schedules=pbx',
+      // callflow-service
+      '/v1/tenants/*/flows=callflow',
+      // voicemail-service
+      '/v1/tenants/*/voicemail=voicemail',
+      // cdr-service
+      '/v1/tenants/*/cdrs=cdr',
+      '/v1/tenants/*/cdr-exports=cdr',
+      '/v1/tenants/*/billing-records=cdr',
+      // trunk-service
+      '/v1/tenants/*/trunks=trunk',
+      '/v1/tenants/*/outbound-routes=trunk',
+      '/v1/tenants/*/emergency-route=trunk',
     ],
   }),
 

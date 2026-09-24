@@ -87,6 +87,11 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
   const table = buildRouteTable(config.ROUTE_TABLE, {
     identity: config.IDENTITY_SERVICE_URL,
     org: config.ORG_SERVICE_URL,
+    pbx: config.PBX_CONFIG_SERVICE_URL,
+    callflow: config.CALLFLOW_SERVICE_URL,
+    voicemail: config.VOICEMAIL_SERVICE_URL,
+    cdr: config.CDR_SERVICE_URL,
+    trunk: config.TRUNK_SERVICE_URL,
   });
 
   registerProxy(app, {
