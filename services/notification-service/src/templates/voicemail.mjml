@@ -11,10 +11,7 @@
       <mj-column>
         <mj-text font-size="20px" font-weight="600" color="#212121">New voicemail</mj-text>
         <mj-text font-size="15px" line-height="1.6" color="#424242">
-          <b>From:</b> {{ caller }}{{#if callerName}}{{#if callerNumber}} ({{ callerNumber }}){{/if
-
-
-          }}{{/if}}<br />
+          <b>From:</b> {{ callerLine }}<br />
           <b>Received:</b> {{ receivedAt }}<br />
           {{#if duration}}<b>Length:</b> {{ duration }}<br />{{/if}}
         </mj-text>

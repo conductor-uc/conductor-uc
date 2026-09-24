@@ -180,6 +180,8 @@ function voicemailContext(
       callerName: name,
       callerNumber: number,
       caller,
+      // The name with the number after it when both are known, otherwise whichever there is.
+      callerLine: name !== null && number !== null ? `${name} (${number})` : caller,
       receivedAt: formatReceivedAt(summary.receivedAt),
       duration: formatDuration(summary.durationMs),
       audioAttached: summary.audio === 'attached',
