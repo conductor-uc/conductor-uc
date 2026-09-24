@@ -587,7 +587,9 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
 
   // ---- what this journey cannot walk yet ---------------------------------
 
-  it.todo(
-    '5. a SIPp carrier call traverses the flow into voicemail: needs the FreeSWITCH and OpenSIPs compose stack (tests/sip), and a published flow reachable from a DID',
-  );
+  // Step 5, the SIPp carrier call through a published flow into voicemail, is
+  // tests/sip/test/call_flow.test.ts: it needs the FreeSWITCH and OpenSIPs
+  // compose stack, which this suite does not start.
+  // Step 6 is walked above against an empty list; the live call's own CDR is
+  // asserted in that same tests/sip test.
 });

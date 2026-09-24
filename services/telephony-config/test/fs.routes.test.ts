@@ -1538,6 +1538,27 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(response.rawPayload).toEqual(wav8k);
     });
 
+    it.each([
+      ['8k.wav', 'fake 8k wav bytes'],
+      ['16k.wav', 'fake 16k wav bytes'],
+    ])('serves the %s URL form FreeSWITCH is given (S3-11)', async (rate, bytes) => {
+      const tenantId = crypto.randomUUID();
+      const assetId = await seedReadyAsset(
+        tenantId,
+        Buffer.from('fake 8k wav bytes'),
+        Buffer.from('fake 16k wav bytes'),
+      );
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/media/${tenantId}/${assetId}/${rate}`,
+        headers: { authorization: BASIC_AUTH },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.rawPayload).toEqual(Buffer.from(bytes));
+    });
+
     it('serves the 16k variant bytes for a ready asset', async () => {
       const tenantId = crypto.randomUUID();
       const wav8k = Buffer.from('fake 8k wav bytes');

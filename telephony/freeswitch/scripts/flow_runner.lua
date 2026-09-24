@@ -28,6 +28,10 @@ this task's own best-effort reasoning against FreeSWITCH's documented
 surface, not something confirmed against a real FreeSWITCH 1.10.12 node.
 Issue #44 (S2-20, the M2 backend SIP regression suite) is where this gets its
 first live proof.
+
+S3-11 (G-101): `tests/sip/test/call_flow.test.ts` now runs a published flow live
+— the IR fetch, `menu` (prompt, DTMF, port lookup), `voicemail` and `hangup`.
+The other node types above are still unproven.
 --]]
 
 -- S2-20 (G-43): loaded from mod_lua's own compiled-in default script
@@ -121,7 +125,7 @@ for the 16 kHz variant would only make FreeSWITCH resample it back down.
 --]]
 local function mediaUrl(assetId)
   local base = configUrl():gsub("^(https?://)", "%1fs-node:" .. configToken() .. "@")
-  return "http_cache://" .. base .. "/fs/media/" .. tenantId .. "/" .. assetId .. "/8k"
+  return "http_cache://" .. base .. "/fs/media/" .. tenantId .. "/" .. assetId .. "/8k.wav"
 end
 
 -- ---------------------------------------------------------------------------
