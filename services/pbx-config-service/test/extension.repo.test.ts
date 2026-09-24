@@ -96,6 +96,78 @@ describe.skipIf(skipReason !== undefined)('extension repo', () => {
     expect(row.secret_enc).not.toContain(revealed.password);
   });
 
+  it('resetting the password replaces the secret and digests, keeps the realm, and queues a re-projection', async () => {
+    const tenantId = crypto.randomUUID();
+    h.domains.realms[tenantId] = 'tenant-a.platform.test';
+    const created = await h.extensions.create(ctxFor(tenantId), {
+      number: '101',
+      displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(tenantId), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
+    });
+    const before = await h.extensions.reveal(ctxFor(tenantId), created.id);
+
+    const reset = await h.extensions.resetPassword(ctxFor(tenantId), created.id);
+
+    expect(reset.password).not.toBe(before.password);
+    expect(reset.username).toBe('101');
+    expect(reset.realm).toBe('tenant-a.platform.test');
+    // What the phone must now use is what is stored and what OpenSIPs hashes against.
+    const after = await h.extensions.reveal(ctxFor(tenantId), created.id);
+    expect(after.password).toBe(reset.password);
+    const expected = computeSipDigest(reset.username, reset.realm, reset.password);
+    const row = await h.db.kysely
+      .selectFrom('sip_credentials')
+      .selectAll()
+      .where('extension_id', '=', created.id)
+      .executeTakeFirstOrThrow();
+    expect(row.ha1).toBe(expected.ha1);
+    expect(row.ha1b).toBe(expected.ha1b);
+    expect(computeSipDigest('101', 'tenant-a.platform.test', before.password).ha1).not.toBe(
+      row.ha1,
+    );
+
+    // telephony-config re-projects the subscriber on this event.
+    const outboxRows = await h.db.kysely.selectFrom('outbox').selectAll().execute();
+    expect(
+      outboxRows.filter((r) => r.type === 'pbx.extension.updated').length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it('cannot reset the password of an extension in another tenant', async () => {
+    const owner = crypto.randomUUID();
+    const other = crypto.randomUUID();
+    h.domains.realms[owner] = 'owner.platform.test';
+    const created = await h.extensions.create(ctxFor(owner), {
+      number: '101',
+      displayName: 'Front Desk',
+      emergencyLocationId: (
+        await h.emergencyLocations.create(ctxFor(owner), {
+          label: 'Test Location',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          state: 'IL',
+          postalCode: '62701',
+          country: 'US',
+        })
+      ).id,
+    });
+
+    await expect(h.extensions.resetPassword(ctxFor(other), created.id)).rejects.toBeInstanceOf(
+      ExtensionNotFoundError,
+    );
+    const still = await h.extensions.reveal(ctxFor(owner), created.id);
+    expect(still.password.length).toBeGreaterThan(0);
+  });
+
   it("the revealed credential's HA1 matches what OpenSIPs would compute", async () => {
     const tenantId = crypto.randomUUID();
     h.domains.realms[tenantId] = 'tenant-a.platform.test';

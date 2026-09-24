@@ -90,6 +90,37 @@ void main() {
     );
   });
 
+  testWidgets('resetting the password needs a reason and shows the new one', (
+    tester,
+  ) async {
+    await openSection(tester, 'Extensions');
+    await tapIn(tester, '102', find.byTooltip('Connect a phone'));
+    await tester.tap(find.widgetWithText(TextButton, 'Reset password'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reset this password?'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Reset'))
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Why are you resetting it?'),
+      'Phone was lost',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('demo-102-reset-'), findsOneWidget);
+    expect(find.text('demo-102-secret'), findsNothing);
+    expect(
+      find.text('Password reset. Enter the new one in the phone.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
     'someone who cannot reveal secrets still gets the server details',
     (tester) async {
@@ -108,6 +139,7 @@ void main() {
         find.widgetWithText(OutlinedButton, 'Reveal password'),
         findsNothing,
       );
+      expect(find.widgetWithText(TextButton, 'Reset password'), findsNothing);
       expect(
         find.text('The password is shown only to people allowed to reveal it.'),
         findsOneWidget,

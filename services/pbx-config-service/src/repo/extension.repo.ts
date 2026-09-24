@@ -421,6 +421,58 @@ export function createExtensionRepo(
     },
 
     /**
+     * Replaces an extension's SIP password with a new random one and returns it.
+     * The old password stops working the moment OpenSIPs picks up the change,
+     * which the `pbx.extension.updated` event queued in the same transaction
+     * makes telephony-config project (it re-reads the credential's digests).
+     *
+     * The realm and username are kept as stored. Only the secret and the two
+     * digests derived from it change. Auditing is the route's job, as for
+     * `reveal`.
+     */
+    async resetPassword(ctx: DbContext, extensionId: string): Promise<RevealedCredential> {
+      const { tenantId } = requireTenant(ctx);
+      const credential = await db
+        .scoped(ctx)
+        .selectFrom('sip_credentials')
+        .selectAll()
+        .where('extension_id', '=', extensionId)
+        .executeTakeFirst();
+      if (credential === undefined) {
+        throw new ExtensionNotFoundError(`No extension with id '${extensionId}'.`);
+      }
+
+      const password = generateSipPassword();
+      const digest = computeSipDigest(credential.username, credential.realm, password);
+      const secretEnc = await encrypt(kek, password, associatedData(tenantId, credential.id));
+
+      await db.scoped(ctx).transaction(async (trx, raw) => {
+        await trx
+          .updateTable('sip_credentials')
+          .set({
+            secret_enc: secretEnc,
+            ha1: digest.ha1,
+            ha1b: digest.ha1b,
+            updated_at: new Date(),
+          })
+          .where('id', '=', credential.id)
+          .execute();
+
+        await enqueueEvent(raw, pbxEvents, {
+          type: 'pbx.extension.updated',
+          data: { extensionId },
+          orgContext: { tenantId },
+          ...(ctx.actorId === undefined || ctx.orgId === undefined
+            ? {}
+            : { actor: { type: 'user', id: ctx.actorId, orgId: ctx.orgId } }),
+          ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
+        });
+      });
+
+      return { username: credential.username, password, realm: credential.realm };
+    },
+
+    /**
      * The digest material for one extension's credential — what
      * telephony-config's `GET /internal/v1/tenants/:tenantId/extensions/:id`
      * (S1-12) returns to project into OpenSIPs' `subscriber` table. Unlike
