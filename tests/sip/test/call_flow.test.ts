@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   dockerCurlJson,
+  dockerCurlText,
   dockerCurlUpload,
   seedFixtures,
   sipInfraOrSkipReason,
@@ -188,7 +189,8 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         expect(messages.status, JSON.stringify(messages.json)).toBe(200);
         expect((messages.json as { rows: unknown[] }).rows.length).toBeGreaterThanOrEqual(1);
 
-        // The call leaves a CDR for the tenant (the export itself is walked in tests/e2e).
+        // The call leaves a CDR for the tenant, and step 6 of the journey: the
+        // tenant exports it. (tests/e2e only starts an export over an empty list.)
         let cdrRows: unknown[] = [];
         for (let attempt = 0; attempt < 15 && cdrRows.length === 0; attempt += 1) {
           const cdrs = await dockerCurlJson(
@@ -200,6 +202,39 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
           if (cdrRows.length === 0) await new Promise((resolve) => setTimeout(resolve, 1000));
         }
         expect(cdrRows.length).toBeGreaterThanOrEqual(1);
+        const cdrId = (cdrRows[0] as { id: string }).id;
+
+        const now = Date.now();
+        const created = await dockerCurlJson(
+          'POST',
+          `${CDR_SERVICE_URL}/v1/tenants/${tenantId}/cdr-exports`,
+          {
+            from: new Date(now - 3_600_000).toISOString(),
+            to: new Date(now + 3_600_000).toISOString(),
+          },
+        );
+        expect(created.status, JSON.stringify(created.json)).toBe(201);
+        const exportId = (created.json as { id: string }).id;
+
+        let downloadUrl: string | null = null;
+        for (let attempt = 0; attempt < 30 && downloadUrl === null; attempt += 1) {
+          const polled = await dockerCurlJson(
+            'GET',
+            `${CDR_SERVICE_URL}/v1/tenants/${tenantId}/cdr-exports/${exportId}`,
+          );
+          expect(polled.status, JSON.stringify(polled.json)).toBe(200);
+          const state = polled.json as { status: string; downloadUrl: string | null };
+          expect(state.status, JSON.stringify(polled.json)).not.toBe('failed');
+          downloadUrl = state.downloadUrl;
+          if (downloadUrl === null) await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        expect(downloadUrl, 'the export never became ready').not.toBeNull();
+
+        const csv = await dockerCurlText(downloadUrl as string);
+        expect(csv.status, csv.text).toBe(200);
+        const lines = csv.text.trim().split('\n');
+        expect(lines[0]).toMatch(/^id,callUuid,direction,/);
+        expect(lines.slice(1).some((line) => line.startsWith(`${cdrId},`))).toBe(true);
       } finally {
         if (didId !== undefined) {
           await dockerCurlJson(
