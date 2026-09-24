@@ -5,7 +5,13 @@ import { requireTenant } from '@cuc/db';
 import { decryptString, encrypt, secretEquals, type KekProvider } from '@cuc/crypto';
 import type { Storage } from '@cuc/storage';
 
-import { validateExtensionId, validatePin } from '../domain/mailbox.js';
+import {
+  validateEmailSettings,
+  validateExtensionId,
+  validatePin,
+  type EmailAfter,
+  type EmailSettings,
+} from '../domain/mailbox.js';
 import type { VoicemailServiceDb } from '../schema.js';
 
 export interface Mailbox {
@@ -14,6 +20,10 @@ export interface Mailbox {
   readonly extensionId: string;
   readonly greetingStatus: 'none' | 'pending' | 'ready';
   readonly greetingObjectKey: string | null;
+  /** Where new-message emails go; null means none. Personal data: never log it. */
+  readonly notifyEmail: string | null;
+  readonly emailAttachAudio: boolean;
+  readonly emailAfter: EmailAfter;
 }
 
 export interface CreateMailboxInput {
@@ -35,6 +45,9 @@ const COLUMNS = [
   'extension_id as extensionId',
   'greeting_status as greetingStatus',
   'greeting_object_key as greetingObjectKey',
+  'notify_email as notifyEmail',
+  'email_attach_audio as emailAttachAudio',
+  'email_after as emailAfter',
 ] as const;
 
 function toMailbox(row: {
@@ -43,8 +56,16 @@ function toMailbox(row: {
   extensionId: string;
   greetingStatus: string;
   greetingObjectKey: string | null;
+  notifyEmail: string | null;
+  emailAttachAudio: boolean | number;
+  emailAfter: string;
 }): Mailbox {
-  return { ...row, greetingStatus: row.greetingStatus as Mailbox['greetingStatus'] };
+  return {
+    ...row,
+    greetingStatus: row.greetingStatus as Mailbox['greetingStatus'],
+    emailAttachAudio: Boolean(row.emailAttachAudio),
+    emailAfter: row.emailAfter as EmailAfter,
+  };
 }
 
 /** Every mailbox's own greeting lives under this prefix (05 §4-style layout: `voicemail/{mailboxId}/...`). */
@@ -137,6 +158,9 @@ export function createMailboxRepo(
           pin_enc: pinEnc,
           greeting_status: 'none',
           greeting_object_key: null,
+          notify_email: null,
+          email_attach_audio: false,
+          email_after: 'keep',
           created_at: now,
           updated_at: now,
           version: 1,
@@ -149,7 +173,45 @@ export function createMailboxRepo(
         extensionId,
         greetingStatus: 'none',
         greetingObjectKey: null,
+        notifyEmail: null,
+        emailAttachAudio: false,
+        emailAfter: 'keep',
       };
+    },
+
+    /** Replaces the mailbox's voicemail-to-email settings (S5-07). */
+    async updateEmailSettings(
+      ctx: DbContext,
+      id: string,
+      input: { notifyEmail: string | null; attachAudio: boolean; afterEmail: string },
+    ): Promise<Mailbox> {
+      const settings: EmailSettings = validateEmailSettings(input);
+      const existing = await db
+        .scoped(ctx)
+        .selectFrom('mailboxes')
+        .select(COLUMNS)
+        .where('id', '=', id)
+        .executeTakeFirst();
+      if (existing === undefined) throw new MailboxNotFoundError(`No mailbox with id '${id}'.`);
+
+      await db
+        .scoped(ctx)
+        .updateTable('mailboxes')
+        .set({
+          notify_email: settings.notifyEmail,
+          email_attach_audio: settings.attachAudio,
+          email_after: settings.afterEmail,
+          updated_at: new Date(),
+        })
+        .where('id', '=', id)
+        .execute();
+
+      return toMailbox({
+        ...existing,
+        notifyEmail: settings.notifyEmail,
+        emailAttachAudio: settings.attachAudio,
+        emailAfter: settings.afterEmail,
+      });
     },
 
     async resetPin(ctx: DbContext, id: string, pin: string): Promise<void> {

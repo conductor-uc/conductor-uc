@@ -19,6 +19,8 @@ import { createCertificateRepo } from './repo/certificate.repo.js';
 import { createDomainRepo } from './repo/domain.repo.js';
 import { createOrgRepo } from './repo/org.repo.js';
 import { registerAcmeSettingsRoutes } from './routes/acme-settings.routes.js';
+import { createPlatformNetworkRepo } from './repo/platform-network.repo.js';
+import { registerNetworkRoutes } from './routes/network.routes.js';
 import { registerBrandRoutes } from './routes/brand.routes.js';
 import {
   registerCertificateInternalRoutes,
@@ -131,6 +133,9 @@ registerAcmeSettingsRoutes(
   createTermsLookup({ directoryUrlOverride: config.ACME_DIRECTORY_URL }),
   bus,
 );
+
+// The platform's public address, and the DNS records resellers publish for it.
+registerNetworkRoutes(app, createPlatformNetworkRepo(db), certificateRepo, bus);
 
 // Requests and renews certificates in the background once the operator has set the
 // Let's Encrypt account up in the console (G-105).

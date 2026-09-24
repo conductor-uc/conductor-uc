@@ -15,7 +15,9 @@ import '../features/callflow/flows_page.dart';
 import '../features/media/media_page.dart';
 import '../features/orgs/domains_panel.dart';
 import '../features/orgs/reseller_page.dart';
+import '../features/trunks/outbound_routes_page.dart';
 import '../features/trunks/trunks_page.dart';
+import '../features/cdr/call_records_page.dart';
 import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
 import '../features/pbx/resource.dart';
@@ -27,6 +29,7 @@ import '../features/shell/notice_pages.dart';
 import '../features/shell/sections.dart';
 import '../features/certificates/certificates_page.dart';
 import '../features/users/users_page.dart';
+import '../features/voicemail/voicemail_page.dart';
 import '../features/shell/shell_page.dart';
 
 /// Each top-level section is its own route (08 §1), so deep links work and a
@@ -135,10 +138,13 @@ Widget _pageFor(Section section) {
   if (section.path == '/users') return const UsersPage();
   if (section.path == '/certificates') return const CertificatesPage();
   if (section.path == '/media') return const MediaPage();
+  if (section.path == '/voicemail') return const VoicemailPage();
   if (section.path == '/dashboard') return const DashboardPage();
   if (section.path == '/audit') return const AuditPage();
   if (section.path == '/platform-health') return const PlatformHealthPage();
   if (section.path == '/trunks') return const TrunksPage();
+  if (section.path == '/outbound-routes') return const OutboundRoutesPage();
+  if (section.path == '/call-records') return const CallRecordsPage();
   if (section.path == '/domains') return const DomainsPage();
   if (section.path == '/resellers' || section.path == '/tenants') {
     return const OrgsPage();

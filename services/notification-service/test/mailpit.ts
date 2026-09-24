@@ -32,6 +32,13 @@ export interface CaughtEmail {
   readonly subject: string;
   readonly html: string;
   readonly text: string;
+  readonly attachments: readonly CaughtAttachment[];
+}
+
+export interface CaughtAttachment {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly content: Buffer;
 }
 
 interface Summary {
@@ -45,6 +52,7 @@ interface Full {
   Subject: string;
   HTML: string;
   Text: string;
+  Attachments?: { PartID: string; FileName: string; ContentType: string }[];
 }
 
 export async function clearMailbox(): Promise<void> {
@@ -71,6 +79,17 @@ export async function emailsTo(recipient: string, waitMs = 3000): Promise<Caught
             subject: full.Subject,
             html: full.HTML,
             text: full.Text,
+            attachments: await Promise.all(
+              (full.Attachments ?? []).map(async (a) => ({
+                filename: a.FileName,
+                contentType: a.ContentType,
+                content: Buffer.from(
+                  await (
+                    await fetch(`${MAILPIT_URL}/api/v1/message/${m.ID}/part/${a.PartID}`)
+                  ).arrayBuffer(),
+                ),
+              })),
+            ),
           };
         }),
       );

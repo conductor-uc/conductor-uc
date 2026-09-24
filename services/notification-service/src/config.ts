@@ -17,6 +17,15 @@ export const configSchema = Type.Object({
   ORG_SERVICE_URL: Env.url(),
   INTERNAL_SERVICE_TOKEN: Env.secret(),
 
+  /** voicemail-service: mailbox email settings, message details and audio for voicemail-to-email (S5-07). */
+  VOICEMAIL_SERVICE_URL: Env.url(),
+  /**
+   * The largest recording attached to a voicemail email, in bytes. A longer one
+   * is sent without the audio and says so. Many relays refuse a message over
+   * 10 to 25 MB, and base64 adds a third.
+   */
+  VOICEMAIL_MAX_ATTACHMENT_BYTES: Env.int({ minimum: 1, default: 10_000_000 }),
+
   /** The SMTP relay every email goes out through. */
   SMTP_HOST: Env.string(),
   SMTP_PORT: Env.int({ minimum: 1, maximum: 65_535, default: 587 }),

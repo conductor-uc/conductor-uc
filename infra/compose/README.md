@@ -1,8 +1,8 @@
 # Local dev stack (S0-05)
 
-MariaDB 11.4, Redis, NATS (JetStream), MinIO, and Mailpit — the infra every
-service needs locally. Telephony (FreeSWITCH, OpenSIPs) is added in S1
-(S1-10/S1-11), once those images exist.
+The infra every service needs locally (MariaDB 11.4, Redis, NATS with JetStream,
+MinIO, Mailpit), the telephony tier (two FreeSWITCH nodes and OpenSIPs), and the
+Node services the SIP scenarios and the console need, behind api-gateway.
 
 ## Quickstart
 
@@ -24,16 +24,73 @@ seconds on a laptop.
 
 ## What's running
 
-| Service | Purpose | Default port(s) |
+Infrastructure:
+
+| Service | Purpose | Default host port(s) |
 |---|---|---|
-| MariaDB 11.4 | System of record (05 §1) | `3306` |
-| Redis | Ephemeral call-state/affinity/rate-limit store (05 §1, not built into any service yet) | `6379` |
-| NATS (JetStream) | Domain event bus + outbox relay target (D-004) | `4222` (client), `8222` (monitoring/health) |
-| MinIO | S3-compatible object store for `@cuc/storage` (S0-10, not built yet) | `9000` (API), `9001` (console) |
-| Mailpit | SMTP catcher + web UI, for `notification-service` (S1) | `1025` (SMTP), `8025` (web UI) |
+| MariaDB 11.4 | System of record (05 §1) | `3306` (`MARIADB_PORT`) |
+| Redis | Rate limits, call-ownership registry, affinity leases, FreeSWITCH `limit` backend | `6379` (`REDIS_PORT`) |
+| NATS (JetStream) | Domain event bus + outbox relay target (D-004) | `4222` (`NATS_PORT`), `8222` (`NATS_MONITOR_PORT`) |
+| MinIO | S3-compatible object store for `@cuc/storage` | `9000` (`MINIO_API_PORT`), `9001` (`MINIO_CONSOLE_PORT`) |
+| Mailpit | SMTP catcher + web UI, for `notification-service` | `1025` (`MAILPIT_SMTP_PORT`), `8025` (`MAILPIT_UI_PORT`) |
+
+Telephony and edge:
+
+| Service | Purpose | Default host port(s) |
+|---|---|---|
+| OpenSIPs | SIP edge: registrar, trunks, load balancing (03 §2) | `5060/udp`, `5060/tcp` (`OPENSIPS_SIP_PORT`), `5061/tcp` SIP over TLS (`OPENSIPS_TLS_PORT`); MI HTTP on `8888` inside the network only |
+| FreeSWITCH, FreeSWITCH-2 | Two identical stateless media nodes (`FS_NODE_ID`, `FS_NODE_ID_2`) | none published: reached only through OpenSIPs' dispatcher |
+| api-gateway | The one public HTTP entry point: token check, routing, rate limits | `8080` (`GATEWAY_PORT`), plain HTTP |
+
+Node services (each on `8080` inside the network, none published; reach them through the gateway): `org-service`, `identity-service`, `pbx-config-service`, `trunk-service`, `telephony-config`, `media-worker`, `call-control`, `callflow-service`, `voicemail-service`, `cdr-service`, `notification-service`.
+
+Named volumes: `mariadb-data`, `redis-data`, `nats-data`, `minio-data`, `mailpit-data`, and `opensips-tls` (the development self-signed certificate).
 
 Override any port in `.env` if something on your machine already owns it —
 `docker-compose.yml` reads every value through a `${VAR:-default}` fallback.
+
+## Environment variables
+
+Every variable below has a development default in `docker-compose.yml`; those
+marked "in `.env.example`" are also listed there. Others can be added to `.env`.
+The defaults are for a laptop only.
+
+| Variable | Default | Used by | Meaning |
+|---|---|---|---|
+| `INTERNAL_HEADER_SIGNING_SECRET` | dev value (in `.env.example`) | gateway, services | The gateway signs who is calling; every service verifies with the same secret |
+| `INTERNAL_SERVICE_TOKEN` | dev value | services, gateway | Service-to-service token for internal routes (the gateway uses it only to fetch ACME challenge answers from org-service; telephony-config uses it to fetch certificates) |
+| `CRYPTO_KEKS`, `CRYPTO_KEK_CURRENT` | dev key, `1` | org, pbx-config, trunk, identity, ... | Envelope-encryption key set. Dev-only key: production uses a KMS. org-service uses it for certificate private keys and the ACME account key |
+| `PLATFORM_BASE_DOMAIN` | `platform.test` (org-service), `local.test` (notification-service) | org-service, notification-service | The platform base domain. Determines `sip.<domain>` and the console hostname |
+| `PLATFORM_NOREPLY_ADDRESS`, `CONSOLE_LINK_SCHEME`, `CONSOLE_URL_OVERRIDE` | `noreply@local.test`, `http`, empty | notification-service | Email sender and where links in emails point (`CONSOLE_URL_OVERRIDE` in `.env.example`, commented) |
+| `OPENSIPS_TLS_ENABLED` | `true` | opensips | Turn on the 5061 listener; certificates come from the `tls_mgm` table (kept there by telephony-config) |
+| `OPENSIPS_TLS_CERT_FILE`, `OPENSIPS_TLS_KEY_FILE` | `/etc/opensips/tls/cert.pem`, `.../key.pem` | opensips | Fallback default certificate for names the database has none for. Setting the cert also turns TLS on |
+| `OPENSIPS_TLS_DEV_SELF_SIGNED` | `true` | opensips | Make a self-signed certificate at first start if the file is missing. Leave off in production |
+| `OPENSIPS_TLS_DEV_NAMES` | `platform.test,*.platform.test` | opensips | Names on that self-signed certificate |
+| `OPENSIPS_TLS_PORT` | `5061` | opensips | TLS listen port (host and container) |
+| `SIP_PUBLIC_TRANSPORTS` | `udp,tcp,tls` | pbx-config-service | Transports offered to phones, most preferred first. TLS is last in dev because its certificate is self-signed; production puts `tls` first. (`SIP_PUBLIC_PORT` 5060 and `SIP_PUBLIC_TLS_PORT` 5061 are code defaults, not set here.) |
+| `PROVISIONING_BASE_URL` | `http://localhost:8080` | pbx-config-service | Address phones fetch their settings from (the gateway's public address). Unset means provisioning URLs are reported as null |
+| `PROVISIONING_USERNAME`, `PROVISIONING_PASSWORD` | `phones`, `dev-provisioning-password` | pbx-config-service | Platform-wide HTTP Basic credential for phone provisioning (set together) |
+| `REQUIRE_HTTPS_FOR_PROVISIONING` | `false` | api-gateway | Refuse provisioning over plain HTTP. Code default is `true`; dev turns it off |
+| `HSTS_MAX_AGE_SECONDS` | `0` | api-gateway | HSTS off in dev (code default one year) |
+| `FS_*`, `TELEPHONY_CONFIG_URL`, `CDR_SERVICE_URL`, `FS_CDR_INGEST_TOKEN`, `OPENSIPS_*` (other) | see `.env.example` | freeswitch, opensips | Node identity, ACLs, event-socket and xml_curl tokens, dispatcher destinations |
+
+**Not set by this compose file**, all api-gateway settings that production needs:
+`TLS_CERT_FILE`/`TLS_KEY_FILE`, `TLS_CERT_DIR`, `TLS_FROM_ORG_SERVICE`,
+`HTTP_REDIRECT_PORT` (port 80, ACME HTTP-01 and HTTP-to-HTTPS redirect),
+`CONSOLE_DIR`, `CONSOLE_CONNECT_SOURCES`, `CONSOLE_HOSTNAMES`. The dev gateway
+speaks plain HTTP only, publishes only `8080`, and does not host the console
+(development uses `tests/e2e`). org-service's `ACME_DIRECTORY_URL`
+is also unset, so nothing issues a certificate in this stack until the ACME
+settings are saved in the console; the dev OpenSIPs certificate is self-signed.
+
+### Certificates in this stack
+
+OpenSIPs starts with a self-signed file certificate. Real ones reach it from
+the database: org-service issues them, publishes `org.certificate.issued`,
+telephony-config writes `tls_mgm` rows and calls `tls_reload`. Nothing needs a
+restart. `*.platform.test` is not publicly resolvable, so a real ACME request
+for it cannot succeed here; tests use Pebble instead (`services/org-service`,
+skipped without Docker).
 
 ## Database bootstrap
 

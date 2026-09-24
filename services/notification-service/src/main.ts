@@ -6,9 +6,11 @@ import { createLogger } from '@cuc/logger';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { createIdentityConsumer } from './consumers/identity.consumer.js';
+import { createVoicemailConsumer } from './consumers/voicemail.consumer.js';
 import { createMailer } from './mailer.js';
 import { createOrgClient } from './org-client.js';
 import type { NotificationServiceDb } from './schema.js';
+import { createVoicemailClient } from './voicemail-client.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -53,25 +55,34 @@ const mailer = createMailer({
   fromAddress: config.PLATFORM_NOREPLY_ADDRESS,
 });
 
-const consumer = createIdentityConsumer(
+const orgClient = createOrgClient({
+  baseUrl: config.ORG_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+const linkOptions = {
+  defaultConsoleBase: `${config.CONSOLE_LINK_SCHEME}://console.${config.PLATFORM_BASE_DOMAIN}`,
+  linkScheme: config.CONSOLE_LINK_SCHEME,
+  ...(config.CONSOLE_URL_OVERRIDE === undefined
+    ? {}
+    : { consoleUrlOverride: config.CONSOLE_URL_OVERRIDE }),
+};
+
+const consumer = createIdentityConsumer(db, bus, logger, orgClient, mailer, linkOptions);
+const voicemailConsumer = createVoicemailConsumer(
   db,
   bus,
   logger,
-  createOrgClient({
-    baseUrl: config.ORG_SERVICE_URL,
+  orgClient,
+  createVoicemailClient({
+    baseUrl: config.VOICEMAIL_SERVICE_URL,
     internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
   }),
   mailer,
-  {
-    defaultConsoleBase: `${config.CONSOLE_LINK_SCHEME}://console.${config.PLATFORM_BASE_DOMAIN}`,
-    linkScheme: config.CONSOLE_LINK_SCHEME,
-    ...(config.CONSOLE_URL_OVERRIDE === undefined
-      ? {}
-      : { consoleUrlOverride: config.CONSOLE_URL_OVERRIDE }),
-  },
+  { ...linkOptions, maxAttachmentBytes: config.VOICEMAIL_MAX_ATTACHMENT_BYTES },
 );
 await consumer.ensure();
-const consumerLoop = consumer.run();
+await voicemailConsumer.ensure();
+const consumerLoop = Promise.all([consumer.run(), voicemailConsumer.run()]);
 
 // No routes of its own: this service only consumes events. The server exists
 // for the health and readiness endpoints.
@@ -91,6 +102,7 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   consumer.stop();
+  voicemailConsumer.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),

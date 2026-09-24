@@ -1,6 +1,8 @@
 import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
+import type { Storage } from '@cuc/storage';
+
 import { MailboxNotFoundError, type MailboxRepo } from '../repo/mailbox.repo.js';
 import { MessageNotFoundError, type MessageRepo } from '../repo/message.repo.js';
 
@@ -23,6 +25,11 @@ const MailboxResponseSchema = Type.Object({
   extensionId: Type.String(),
   greetingStatus: Type.String(),
   greetingObjectKey: Type.Union([Type.String(), Type.Null()]),
+  notifyEmail: Type.Union([Type.String(), Type.Null()]),
+  emailAttachAudio: Type.Boolean(),
+  emailAfter: Type.String(),
+  /** Ready, unread messages: what a message-waiting indicator needs. */
+  unreadCount: Type.Number(),
 });
 const VerifyPinBodySchema = Type.Object({ pin: Type.String({ minLength: 1 }) });
 const VerifyPinResponseSchema = Type.Object({ valid: Type.Boolean() });
@@ -43,6 +50,10 @@ const MessageResponseSchema = Type.Object({
   id: Type.String(),
   status: Type.String(),
   objectKey: Type.String(),
+  callerIdName: Type.Union([Type.String(), Type.Null()]),
+  callerIdNumber: Type.Union([Type.String(), Type.Null()]),
+  durationMs: Type.Union([Type.Number(), Type.Null()]),
+  sizeBytes: Type.Union([Type.Number(), Type.Null()]),
   isRead: Type.Boolean(),
   createdAt: Type.String(),
 });
@@ -71,6 +82,7 @@ export function registerInternalRoutes(
   mailboxes: MailboxRepo,
   messages: MessageRepo,
   internalServiceToken: string,
+  storage: Storage,
 ): void {
   function requireToken(request: { headers: { authorization?: string | undefined } }): void {
     const presented = bearerToken(request.headers.authorization);
@@ -79,23 +91,53 @@ export function registerInternalRoutes(
     }
   }
 
-  function toMailboxResponse(mailbox: {
-    id: string;
-    extensionId: string;
-    greetingStatus: string;
-    greetingObjectKey: string | null;
-  }): Static<typeof MailboxResponseSchema> {
-    return mailbox;
+  async function toMailboxResponse(
+    tenantId: string,
+    mailbox: {
+      id: string;
+      extensionId: string;
+      greetingStatus: string;
+      greetingObjectKey: string | null;
+      notifyEmail: string | null;
+      emailAttachAudio: boolean;
+      emailAfter: string;
+    },
+  ): Promise<Static<typeof MailboxResponseSchema>> {
+    const ready = await messages.listReady({ tenantId }, mailbox.id);
+    return {
+      id: mailbox.id,
+      extensionId: mailbox.extensionId,
+      greetingStatus: mailbox.greetingStatus,
+      greetingObjectKey: mailbox.greetingObjectKey,
+      notifyEmail: mailbox.notifyEmail,
+      emailAttachAudio: mailbox.emailAttachAudio,
+      emailAfter: mailbox.emailAfter,
+      unreadCount: ready.filter((m) => !m.isRead).length,
+    };
   }
 
   function toMessageResponse(message: {
     id: string;
     status: string;
     objectKey: string;
+    callerIdName: string | null;
+    callerIdNumber: string | null;
+    durationMs: number | null;
+    sizeBytes: number | null;
     isRead: boolean;
     createdAt: Date;
   }): Static<typeof MessageResponseSchema> {
-    return { ...message, createdAt: message.createdAt.toISOString() };
+    return {
+      id: message.id,
+      status: message.status,
+      objectKey: message.objectKey,
+      callerIdName: message.callerIdName,
+      callerIdNumber: message.callerIdNumber,
+      durationMs: message.durationMs,
+      sizeBytes: message.sizeBytes,
+      isRead: message.isRead,
+      createdAt: message.createdAt.toISOString(),
+    };
   }
 
   app.get(
@@ -109,7 +151,7 @@ export function registerInternalRoutes(
       const { tenantId, extensionId } = request.params;
       const mailbox = await mailboxes.findByExtensionId({ tenantId }, extensionId);
       if (mailbox === undefined) throw ProblemError.notFound('That extension has no mailbox.');
-      return toMailboxResponse(mailbox);
+      return toMailboxResponse(tenantId, mailbox);
     },
   );
 
@@ -124,7 +166,7 @@ export function registerInternalRoutes(
       const { tenantId, id } = request.params;
       const mailbox = await mailboxes.findById({ tenantId }, id);
       if (mailbox === undefined) throw ProblemError.notFound('No mailbox with that id.');
-      return toMailboxResponse(mailbox);
+      return toMailboxResponse(tenantId, mailbox);
     },
   );
 
@@ -253,6 +295,27 @@ export function registerInternalRoutes(
     },
   );
 
+  /**
+   * The recording's bytes (S5-07: what voicemail-to-email attaches). Server-side
+   * read through this service's own storage, so no other service holds bucket
+   * credentials. The caller checks `sizeBytes` first; nothing here is logged.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/voicemail/mailboxes/:id/messages/:messageId/audio',
+    { config: { public: true }, schema: { params: MessageParamsSchema } },
+    async (request, reply) => {
+      requireToken(request);
+      const { tenantId, id, messageId } = request.params;
+      const message = await messages.findById({ tenantId }, messageId);
+      if (message === undefined || message.mailboxId !== id || message.status !== 'ready') {
+        throw ProblemError.notFound('No ready message with that id in that mailbox.');
+      }
+      const bytes = await storage.forTenant(tenantId).getObject(message.objectKey);
+      reply.type('audio/wav');
+      return bytes;
+    },
+  );
+
   app.post(
     '/internal/v1/tenants/:tenantId/voicemail/mailboxes/:id/messages/:messageId/mark-read',
     {
@@ -326,7 +389,7 @@ export function registerInternalRoutes(
           { tenantId: request.params.tenantId },
           request.params.id,
         );
-        return toMailboxResponse(mailbox);
+        return toMailboxResponse(request.params.tenantId, mailbox);
       } catch (error) {
         if (error instanceof MailboxNotFoundError) throw ProblemError.notFound(error.message);
         throw error;

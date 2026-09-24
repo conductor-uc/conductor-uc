@@ -219,4 +219,131 @@ describe.skipIf(skipReason !== undefined)('mailbox HTTP routes', () => {
     });
     expect(deleted.statusCode).toBe(204);
   });
+  it('defaults to no email, then saves and returns the email settings (S5-07)', async () => {
+    const tenantId = crypto.randomUUID();
+    const created = await app.inject({
+      method: 'POST',
+      url: `/v1/tenants/${tenantId}/voicemail/mailboxes`,
+      headers: actorHeaders(tenantId),
+      payload: { extensionId: crypto.randomUUID(), pin: '1234' },
+    });
+    expect(created.json()).toMatchObject({
+      notifyEmail: null,
+      emailAttachAudio: false,
+      emailAfter: 'keep',
+    });
+    const { id }: { id: string } = created.json();
+
+    const saved = await app.inject({
+      method: 'PUT',
+      url: `/v1/tenants/${tenantId}/voicemail/mailboxes/${id}/email-settings`,
+      headers: actorHeaders(tenantId),
+      payload: { notifyEmail: ' Owner@Example.test ', attachAudio: true, afterEmail: 'mark_read' },
+    });
+    expect(saved.statusCode, JSON.stringify(saved.json())).toBe(200);
+    expect(saved.json()).toMatchObject({
+      notifyEmail: 'Owner@Example.test',
+      emailAttachAudio: true,
+      emailAfter: 'mark_read',
+    });
+
+    const got = await app.inject({
+      method: 'GET',
+      url: `/v1/tenants/${tenantId}/voicemail/mailboxes/${id}`,
+      headers: actorHeaders(tenantId),
+    });
+    expect(got.json()).toMatchObject({
+      notifyEmail: 'Owner@Example.test',
+      emailAfter: 'mark_read',
+    });
+
+    const cleared = await app.inject({
+      method: 'PUT',
+      url: `/v1/tenants/${tenantId}/voicemail/mailboxes/${id}/email-settings`,
+      headers: actorHeaders(tenantId),
+      payload: { notifyEmail: '', attachAudio: false, afterEmail: 'keep' },
+    });
+    expect(cleared.json()).toMatchObject({ notifyEmail: null });
+  });
+
+  it('400s malformed email settings', async () => {
+    const tenantId = crypto.randomUUID();
+    const mailbox = await h.mailboxes.create(
+      { tenantId },
+      { extensionId: crypto.randomUUID(), pin: '1234' },
+    );
+    const url = `/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/email-settings`;
+    const bad: unknown[] = [
+      { notifyEmail: 'not-an-address', attachAudio: false, afterEmail: 'keep' },
+      { notifyEmail: 'a@example.test, b@example.test', attachAudio: false, afterEmail: 'keep' },
+      {
+        notifyEmail: 'a@example.test\r\nBcc: x@example.test',
+        attachAudio: false,
+        afterEmail: 'keep',
+      },
+      { notifyEmail: 'a@example.test', attachAudio: false, afterEmail: 'delete' },
+      { notifyEmail: 'a@example.test', attachAudio: false, afterEmail: 'archive' },
+      { notifyEmail: 'a@example.test', afterEmail: 'keep' },
+    ];
+    for (const payload of bad) {
+      const response = await app.inject({
+        method: 'PUT',
+        url,
+        headers: actorHeaders(tenantId),
+        payload: payload as object,
+      });
+      expect(response.statusCode, JSON.stringify(payload)).toBe(400);
+    }
+  });
+
+  it('404s settings for a mailbox in another tenant, and leaves it unchanged', async () => {
+    const tenantA = crypto.randomUUID();
+    const tenantB = crypto.randomUUID();
+    const mailbox = await h.mailboxes.create(
+      { tenantId: tenantA },
+      { extensionId: crypto.randomUUID(), pin: '1234' },
+    );
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/v1/tenants/${tenantB}/voicemail/mailboxes/${mailbox.id}/email-settings`,
+      headers: actorHeaders(tenantB),
+      payload: { notifyEmail: 'x@example.test', attachAudio: true, afterEmail: 'keep' },
+    });
+    expect(response.statusCode).toBe(404);
+    const after = await h.mailboxes.findById({ tenantId: tenantA }, mailbox.id);
+    expect(after?.notifyEmail).toBeNull();
+  });
+
+  it('H1: a reseller cannot read or change voicemail settings, messages or play URLs', async () => {
+    const tenantId = crypto.randomUUID();
+    const mailbox = await h.mailboxes.create(
+      { tenantId },
+      { extensionId: crypto.randomUUID(), pin: '1234' },
+    );
+    const reseller = signInternalHeaders(TEST_INTERNAL_SECRET, {
+      actorId: 'reseller-user',
+      actorType: 'user',
+      orgId: 'reseller-1',
+      orgType: 'reseller',
+      tenantId,
+    });
+    const base = `/v1/tenants/${tenantId}/voicemail/mailboxes`;
+    const attempts: { method: 'GET' | 'PUT' | 'POST'; url: string; payload?: object }[] = [
+      { method: 'GET', url: base },
+      { method: 'GET', url: `${base}/${mailbox.id}` },
+      { method: 'GET', url: `${base}/${mailbox.id}/messages` },
+      {
+        method: 'PUT',
+        url: `${base}/${mailbox.id}/email-settings`,
+        payload: { notifyEmail: 'spy@example.test', attachAudio: true, afterEmail: 'keep' },
+      },
+      { method: 'POST', url: `${base}/${mailbox.id}/reset-pin`, payload: { pin: '9999' } },
+    ];
+    for (const attempt of attempts) {
+      const response = await app.inject({ ...attempt, headers: reseller });
+      expect(response.statusCode, `${attempt.method} ${attempt.url}`).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'reseller_private_data_denied' });
+    }
+    expect((await h.mailboxes.findById({ tenantId }, mailbox.id))?.notifyEmail).toBeNull();
+  });
 });

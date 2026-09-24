@@ -62,6 +62,7 @@ export const configSchema = Type.Object({
       // The platform's Let's Encrypt settings and its own certificates (G-105).
       '/v1/platform/acme-settings=org',
       '/v1/platform/certificates=org',
+      '/v1/platform/network-settings=org',
       // pbx-config-service
       // Desk phones fetching their settings (public; they send Basic credentials).
       '/v1/public/provision=pbx',

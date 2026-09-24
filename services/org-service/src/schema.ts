@@ -135,6 +135,17 @@ export interface OrgServiceDb extends EventTables {
     updated_at: Date;
   };
 
+  /**
+   * Where the platform is reached from the internet (G-105), one row (`id` 1),
+   * set in the console. An IP address or a hostname; resellers are told to point
+   * their names at it.
+   */
+  platform_network: {
+    id: number;
+    public_address: string | null;
+    updated_at: Date;
+  };
+
   /** The answer to an HTTP-01 challenge, served by the edge on port 80 until it expires. */
   acme_challenges: {
     token: string;

@@ -189,7 +189,9 @@ class ResourceView extends ConsumerWidget {
       case FieldKind.dateList:
         return Text(summarizeHolidays(value));
       default:
-        return Text(value == null ? '—' : '$value');
+        return Text(
+          value == null || value == '' ? (f.emptyLabel ?? '—') : '$value',
+        );
     }
   }
 

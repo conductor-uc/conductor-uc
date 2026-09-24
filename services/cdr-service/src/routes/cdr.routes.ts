@@ -17,6 +17,7 @@ const CdrListQuerySchema = Type.Object({
   to: Type.Optional(Type.String()),
   direction: Type.Optional(Type.Union(CDR_DIRECTIONS.map((value) => Type.Literal(value)))),
   did: Type.Optional(Type.String()),
+  number: Type.Optional(Type.String({ minLength: 1 })),
   cursor: Type.Optional(Type.String()),
   limit: Type.Optional(Type.Number({ minimum: 1, maximum: 200 })),
 });
@@ -150,6 +151,7 @@ export function registerCdrRoutes(
         ...(query.to === undefined ? {} : { to: new Date(query.to) }),
         ...(query.direction === undefined ? {} : { direction: query.direction }),
         ...(query.did === undefined ? {} : { did: query.did }),
+        ...(query.number === undefined ? {} : { number: query.number }),
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         ...(query.limit === undefined ? {} : { limit: query.limit }),
       });

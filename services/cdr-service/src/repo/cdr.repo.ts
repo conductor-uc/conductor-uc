@@ -42,6 +42,8 @@ export interface CdrListFilter {
   readonly to?: Date;
   readonly direction?: CdrDirection;
   readonly did?: string;
+  /** Calls to, from or dialed as this number (an extension number or an E.164 number), exact match. */
+  readonly number?: string;
   readonly limit?: number;
   /** Opaque, from a previous page's `nextCursor` — {@link encodeCursor}/{@link decodeCursor}. */
   readonly cursor?: string;
@@ -259,6 +261,16 @@ export function createCdrRepo(db: Database<CdrServiceDb>) {
       if (filter.to !== undefined) query = query.where('start_at', '<=', filter.to);
       if (filter.direction !== undefined) query = query.where('direction', '=', filter.direction);
       if (filter.did !== undefined) query = query.where('did', '=', filter.did);
+      if (filter.number !== undefined) {
+        const number = filter.number;
+        query = query.where((eb) =>
+          eb.or([
+            eb('from_number', '=', number),
+            eb('to_number', '=', number),
+            eb('dialed_number', '=', number),
+          ]),
+        );
+      }
       if (filter.cursor !== undefined) {
         const { startAt, id } = decodeCursor(filter.cursor);
         query = query.where((eb) =>

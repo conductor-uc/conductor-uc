@@ -97,7 +97,7 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
       switch (f.kind) {
         case FieldKind.text:
           final text = _controllers[f.key]!.text.trim();
-          value = text.isEmpty ? null : text;
+          value = text.isEmpty ? (f.allowEmpty ? '' : null) : text;
         case FieldKind.integer:
           final text = _controllers[f.key]!.text.trim();
           value = text.isEmpty ? null : int.parse(text);
@@ -203,7 +203,9 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
           controller: _controllers[f.key],
           obscureText: f.secret,
           decoration: InputDecoration(labelText: label, helperText: f.help),
-          validator: (v) => _requiredMessage(f, (v ?? '').trim().isEmpty),
+          validator: (v) => f.allowEmpty
+              ? null
+              : _requiredMessage(f, (v ?? '').trim().isEmpty),
         );
       case FieldKind.textList:
         return TextFormField(

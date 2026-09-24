@@ -47,6 +47,10 @@ These are summaries, not DDL. Migrations live in each service (`services/<svc>/m
 | `tenant_domains` | `id`, `tenant_id`, `fqdn` (unique), `is_primary` |
 | `brands` | `reseller_id` (PK), fields per [02 §5.4](02-tenancy-and-branding.md#54-reseller-brand-fields), asset IDs |
 | `console_hostnames` | `fqdn` (PK), `reseller_id`, `tls_status` |
+| `tls_certificates` | `fqdn` (PK), `purpose` (console or SIP proxy), `reseller_id`, `status`, `certificate_pem`, `private_key_enc` (envelope-encrypted), `not_before`, `not_after`, `attempts`, `next_attempt_at`, `last_error`, `version` |
+| `acme_challenges` | `token` (PK), `fqdn`, `key_authorization`, `expires_at` (HTTP-01 answers) |
+| `acme_settings` | One row: `contact_email`, `directory` (production/staging), terms agreement (`terms_agreed_directory`, `terms_agreed_at`, `terms_agreed_by`, `terms_url`) |
+| `acme_accounts` | The ACME account per directory: `account_key_enc` (encrypted), `account_url` |
 | `outbox` | Standard outbox (see §5) |
 
 Constraint: a DB check constraint plus a service invariant guarantee that `type=tenant` implies the parent is a reseller, and `type=reseller` implies the parent is the master. A unique partial index guarantees a single master.
@@ -164,7 +168,7 @@ Principal event consumers:
 
 | Consumer | Consumes |
 |---|---|
-| telephony-config | `org.tenant.*`, `org.domain.*`, `pbx.*`, `trunk.*`, `callflow.flow.published`, `recording.policy.*` |
+| telephony-config | `org.tenant.*`, `org.domain.*`, `org.certificate.issued` (SIP proxy certificates only), `pbx.*`, `trunk.*`, `callflow.flow.published`, `recording.policy.*` |
 | call-control | `pbx.queue.*`, `pbx.conference.*`, `org.tenant.suspended` (tear down calls) |
 | cdr-service | `call.lost` |
 | chat-service | `identity.user.*`, `org.tenant.*` |

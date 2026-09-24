@@ -29,6 +29,7 @@ const SOURCES = [
   ['org-service', 'domain', 'registerDomainRoutes', 2],
   ['org-service', 'certificate', 'registerCertificateRoutes', 1],
   ['org-service', 'acme-settings', 'registerAcmeSettingsRoutes', 3],
+  ['org-service', 'network', 'registerNetworkRoutes', 3],
   ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
   ['pbx-config-service', 'extension', 'registerExtensionRoutes', 2],
   ['pbx-config-service', 'sip-endpoint', 'registerSipEndpointRoutes', 2],
@@ -45,6 +46,10 @@ const SOURCES = [
   ['pbx-config-service', 'call-handling', 'registerCallHandlingRoutes', 2],
   ['callflow-service', 'flow', 'registerFlowRoutes', 1],
   ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
+  ['voicemail-service', 'mailbox', 'registerMailboxRoutes', 3],
+  ['trunk-service', 'outbound-route', 'registerOutboundRouteRoutes', 1],
+  ['trunk-service', 'emergency-route', 'registerEmergencyRouteRoutes', 1],
+  ['cdr-service', 'cdr', 'registerCdrRoutes', 3],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
   ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
@@ -95,10 +100,18 @@ const OVERRIDES = {
   'get /v1/resellers/{id}/certificates': 'listResellerCertificates',
   'get /v1/platform/acme-settings': 'getAcmeSettings',
   'put /v1/platform/acme-settings': 'saveAcmeSettings',
+  'get /v1/platform/network-settings': 'getNetworkSettings',
+  'put /v1/platform/network-settings': 'saveNetworkSettings',
+  'get /v1/resellers/{id}/dns-records': 'listResellerDnsRecords',
   'get /v1/tenants/{tenantId}/flows/{id}/versions/{versionNumber}': 'getFlowVersion',
   'get /v1/tenants/{tenantId}/extensions/{extensionId}/call-handling': 'getCallHandling',
   'put /v1/tenants/{tenantId}/extensions/{extensionId}/call-handling': 'saveCallHandling',
   'post /v1/resellers/{id}/brand/assets': 'uploadBrandAsset',
+  'put /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/email-settings': 'saveMailboxEmailSettings',
+  'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/reset-pin': 'resetMailboxPin',
+  'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/presign': 'presignMailboxGreeting',
+  'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/complete': 'completeMailboxGreeting',
+  'get /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/messages/{messageId}/play-url': 'getMessagePlayUrl',
 };
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };
 

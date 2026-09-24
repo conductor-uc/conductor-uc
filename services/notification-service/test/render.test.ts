@@ -184,3 +184,93 @@ describe('the link', () => {
     }
   });
 });
+
+describe('renderEmail: voicemail (S5-07)', () => {
+  const summary = {
+    callerName: 'Pat Caller',
+    callerNumber: '+15005550123',
+    receivedAt: new Date('2026-09-24T19:20:30.000Z'),
+    durationMs: 65_000,
+    audio: 'attached',
+  } as const;
+  const input = {
+    template: 'voicemail',
+    email: 'owner@example.test',
+    link: 'https://portal.acme.example/voicemail',
+    voicemail: summary,
+  } as const;
+
+  it('carries the reseller brand plus caller, time, length and the attachment note', async () => {
+    const mail = await renderEmail({ ...input, brand: ACME });
+    expect(mail.subject).toBe('New voicemail from Pat Caller');
+    for (const part of [mail.html, mail.text]) {
+      expect(part).toContain('Acme Voice');
+      expect(part).toContain('Pat Caller');
+      expect(part).toContain('+15005550123');
+      expect(part).toContain('Thu, 24 Sep 2026 19:20 UTC');
+      expect(part).toContain('1:05');
+      expect(part).toContain('https://portal.acme.example/voicemail');
+    }
+    expect(mail.html).toContain('#4a148c');
+    expect(mail.text).toContain('The recording is attached');
+  });
+
+  it('is neutral without a brand, and never names the platform', async () => {
+    const mail = await renderEmail({ ...input, brand: NEUTRAL_BRAND });
+    expect(mail.html).not.toContain('Acme');
+    expect(mail.html).not.toMatch(/<img/i);
+    expect(mail.html).toContain('#455a64');
+    expect(mail.text.trimStart().startsWith('New voicemail')).toBe(true);
+    for (const part of [mail.subject, mail.html, mail.text]) {
+      expect(part.toLowerCase()).not.toContain('conductor');
+    }
+  });
+
+  it('says so when the recording was too large to attach, and not when it was simply not asked for', async () => {
+    const tooLarge = await renderEmail({
+      ...input,
+      brand: ACME,
+      voicemail: { ...summary, audio: 'too_large' },
+    });
+    expect(tooLarge.html).toContain('too large to attach');
+    expect(tooLarge.text).toContain('too large to attach');
+    expect(tooLarge.text).not.toContain('is attached');
+
+    const none = await renderEmail({
+      ...input,
+      brand: ACME,
+      voicemail: { ...summary, audio: 'not_requested' },
+    });
+    expect(none.html).not.toContain('too large');
+    expect(none.html).not.toContain('attached');
+  });
+
+  it('handles an unknown caller and a missing length', async () => {
+    const mail = await renderEmail({
+      ...input,
+      brand: NEUTRAL_BRAND,
+      voicemail: { ...summary, callerName: null, callerNumber: null, durationMs: null },
+    });
+    expect(mail.subject).toBe('New voicemail from an unknown caller');
+    expect(mail.html).not.toContain('Length:');
+  });
+
+  it('cannot be tricked by a hostile caller name: markup is escaped, control characters and header breaks removed', async () => {
+    const mail = await renderEmail({
+      ...input,
+      brand: ACME,
+      voicemail: {
+        ...summary,
+        callerName: '<script>alert(1)</script>\r\nBcc: victim@example.test',
+      },
+    });
+    expect(mail.html).not.toContain('<script>');
+    expect(mail.subject).not.toMatch(/[\r\n]/);
+    expect(mail.subject).not.toContain('<');
+  });
+
+  it('refuses to render without a summary', async () => {
+    const { voicemail: _omitted, ...withoutSummary } = input;
+    await expect(renderEmail({ ...withoutSummary, brand: ACME })).rejects.toThrow(/summary/);
+  });
+});

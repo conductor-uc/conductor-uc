@@ -4631,6 +4631,192 @@
         ]
       }
     },
+    "/v1/platform/network-settings": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "publicAddress"
+                  ],
+                  "properties": {
+                    "publicAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getNetworkSettings",
+        "tags": [
+          "Platform"
+        ]
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "publicAddress"
+                ],
+                "properties": {
+                  "publicAddress": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "publicAddress"
+                  ],
+                  "properties": {
+                    "publicAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveNetworkSettings",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/resellers/{id}/dns-records": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "publicAddress",
+                    "rows"
+                  ],
+                  "properties": {
+                    "publicAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "type",
+                          "value",
+                          "purpose"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "A"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "AAAA"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "CNAME"
+                                ]
+                              }
+                            ]
+                          },
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "purpose": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "sip"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "console"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listResellerDnsRecords",
+        "tags": [
+          "Resellers"
+        ]
+      }
+    },
     "/v1/tenants/{tenantId}/trunks": {
       "get": {
         "parameters": [
@@ -13753,6 +13939,2071 @@
         "operationId": "rollbackFlow",
         "tags": [
           "Flows"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/voicemail/mailboxes": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "extensionId",
+                          "greetingStatus",
+                          "unreadCount",
+                          "notifyEmail",
+                          "emailAttachAudio",
+                          "emailAfter"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "extensionId": {
+                            "type": "string"
+                          },
+                          "greetingStatus": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "none"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pending"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ready"
+                                ]
+                              }
+                            ]
+                          },
+                          "unreadCount": {
+                            "type": "number"
+                          },
+                          "notifyEmail": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "emailAttachAudio": {
+                            "type": "boolean"
+                          },
+                          "emailAfter": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "keep"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "mark_read"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "delete"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listMailboxes",
+        "tags": [
+          "Voicemail"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "extensionId",
+                  "pin"
+                ],
+                "properties": {
+                  "extensionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "pin": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "greetingStatus",
+                    "unreadCount",
+                    "notifyEmail",
+                    "emailAttachAudio",
+                    "emailAfter"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "greetingStatus": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "none"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready"
+                          ]
+                        }
+                      ]
+                    },
+                    "unreadCount": {
+                      "type": "number"
+                    },
+                    "notifyEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "emailAttachAudio": {
+                      "type": "boolean"
+                    },
+                    "emailAfter": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "keep"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "mark_read"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "delete"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createMailboxe",
+        "tags": [
+          "Voicemail"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/voicemail/mailboxes/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "greetingStatus",
+                    "unreadCount",
+                    "notifyEmail",
+                    "emailAttachAudio",
+                    "emailAfter"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "greetingStatus": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "none"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready"
+                          ]
+                        }
+                      ]
+                    },
+                    "unreadCount": {
+                      "type": "number"
+                    },
+                    "notifyEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "emailAttachAudio": {
+                      "type": "boolean"
+                    },
+                    "emailAfter": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "keep"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "mark_read"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "delete"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getMailboxe",
+        "tags": [
+          "Voicemail"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteMailboxe",
+        "tags": [
+          "Voicemail"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/voicemail/mailboxes/{id}/reset-pin": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "pin"
+                ],
+                "properties": {
+                  "pin": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "resetMailboxPin",
+        "tags": [
+          "Voicemail"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/voicemail/mailboxes/{id}/email-settings": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "notifyEmail",
+                  "attachAudio",
+                  "afterEmail"
+                ],
+                "properties": {
+                  "notifyEmail": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 254
+                  },
+                  "attachAudio": {
+                    "type": "boolean"
+                  },
+                  "afterEmail": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "keep"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "mark_read"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "delete"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "greetingStatus",
+                    "unreadCount",
+                    "notifyEmail",
+                    "emailAttachAudio",
+                    "emailAfter"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "greetingStatus": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "none"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready"
+                          ]
+                        }
+                      ]
+                    },
+                    "unreadCount": {
+                      "type": "number"
+                    },
+                    "notifyEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "emailAttachAudio": {
+                      "type": "boolean"
+                    },
+                    "emailAfter": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "keep"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "mark_read"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "delete"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveMailboxEmailSettings",
+        "tags": [
+          "Voicemail"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/presign": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "uploadUrl",
+                    "objectKey"
+                  ],
+                  "properties": {
+                    "uploadUrl": {
+                      "type": "string"
+                    },
+                    "objectKey": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "presignMailboxGreeting",
+        "tags": [
+          "Voicemail"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/complete": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "greetingStatus",
+                    "unreadCount",
+                    "notifyEmail",
+                    "emailAttachAudio",
+                    "emailAfter"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "greetingStatus": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "none"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready"
+                          ]
+                        }
+                      ]
+                    },
+                    "unreadCount": {
+                      "type": "number"
+                    },
+                    "notifyEmail": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "emailAttachAudio": {
+                      "type": "boolean"
+                    },
+                    "emailAfter": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "keep"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "mark_read"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "delete"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "completeMailboxGreeting",
+        "tags": [
+          "Voicemail"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/voicemail/mailboxes/{id}/messages": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "status",
+                          "callerIdName",
+                          "callerIdNumber",
+                          "durationMs",
+                          "isRead",
+                          "createdAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pending"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ready"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "failed"
+                                ]
+                              }
+                            ]
+                          },
+                          "callerIdName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "callerIdNumber": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "durationMs": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "isRead": {
+                            "type": "boolean"
+                          },
+                          "createdAt": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listMessages",
+        "tags": [
+          "Voicemail"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/voicemail/mailboxes/{id}/messages/{messageId}/play-url": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "messageId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "url"
+                  ],
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getMessagePlayUrl",
+        "tags": [
+          "Voicemail"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/voicemail/mailboxes/{id}/messages/{messageId}": {
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "messageId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteMessage",
+        "tags": [
+          "Voicemail"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/outbound-routes": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "priority",
+                          "pattern",
+                          "trunkIds",
+                          "strip",
+                          "prepend"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "priority": {
+                            "type": "integer"
+                          },
+                          "pattern": {
+                            "type": "string"
+                          },
+                          "trunkIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "strip": {
+                            "type": "integer"
+                          },
+                          "prepend": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listOutboundRoutes",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "priority",
+                  "pattern",
+                  "trunkIds"
+                ],
+                "properties": {
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "pattern": {
+                    "type": "string"
+                  },
+                  "trunkIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  },
+                  "strip": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "prepend": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "priority",
+                    "pattern",
+                    "trunkIds",
+                    "strip",
+                    "prepend"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "priority": {
+                      "type": "integer"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "trunkIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "strip": {
+                      "type": "integer"
+                    },
+                    "prepend": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createOutboundRoute",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/outbound-routes/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "priority",
+                    "pattern",
+                    "trunkIds",
+                    "strip",
+                    "prepend"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "priority": {
+                      "type": "integer"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "trunkIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "strip": {
+                      "type": "integer"
+                    },
+                    "prepend": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getOutboundRoute",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "pattern": {
+                    "type": "string"
+                  },
+                  "trunkIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  },
+                  "strip": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "prepend": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "priority",
+                    "pattern",
+                    "trunkIds",
+                    "strip",
+                    "prepend"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "priority": {
+                      "type": "integer"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "trunkIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "strip": {
+                      "type": "integer"
+                    },
+                    "prepend": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateOutboundRoute",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteOutboundRoute",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/emergency-route": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "trunkId",
+                    "numbers"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "trunkId": {
+                      "type": "string"
+                    },
+                    "numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listEmergencyRoute",
+        "tags": [
+          "EmergencyRoute"
+        ]
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "trunkId",
+                  "numbers"
+                ],
+                "properties": {
+                  "trunkId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "numbers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "trunkId",
+                    "numbers"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "trunkId": {
+                      "type": "string"
+                    },
+                    "numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveEmergencyRoute",
+        "tags": [
+          "EmergencyRoute"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteEmergencyRoute",
+        "tags": [
+          "EmergencyRoute"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/cdrs": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "inbound"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "outbound"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "internal"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "direction",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "did",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "number",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "direction",
+                          "startAt",
+                          "answerAt",
+                          "endAt",
+                          "durationSec",
+                          "billableSec",
+                          "fromNumber",
+                          "fromName",
+                          "toNumber",
+                          "dialedNumber",
+                          "did",
+                          "trunkId",
+                          "extensionIds",
+                          "disposition",
+                          "hangupCause",
+                          "hangupBy",
+                          "queueId",
+                          "flowId",
+                          "recordingIds"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "direction": {
+                            "type": "string"
+                          },
+                          "startAt": {
+                            "type": "string"
+                          },
+                          "answerAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "endAt": {
+                            "type": "string"
+                          },
+                          "durationSec": {
+                            "type": "number"
+                          },
+                          "billableSec": {
+                            "type": "number"
+                          },
+                          "fromNumber": {
+                            "type": "string"
+                          },
+                          "fromName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "toNumber": {
+                            "type": "string"
+                          },
+                          "dialedNumber": {
+                            "type": "string"
+                          },
+                          "did": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "trunkId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "extensionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "disposition": {
+                            "type": "string"
+                          },
+                          "hangupCause": {
+                            "type": "string"
+                          },
+                          "hangupBy": {
+                            "type": "string"
+                          },
+                          "queueId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "flowId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "recordingIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listCdrs",
+        "tags": [
+          "Cdrs"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/cdrs/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "direction",
+                    "startAt",
+                    "answerAt",
+                    "endAt",
+                    "durationSec",
+                    "billableSec",
+                    "fromNumber",
+                    "fromName",
+                    "toNumber",
+                    "dialedNumber",
+                    "did",
+                    "trunkId",
+                    "extensionIds",
+                    "disposition",
+                    "hangupCause",
+                    "hangupBy",
+                    "queueId",
+                    "flowId",
+                    "recordingIds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "direction": {
+                      "type": "string"
+                    },
+                    "startAt": {
+                      "type": "string"
+                    },
+                    "answerAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "endAt": {
+                      "type": "string"
+                    },
+                    "durationSec": {
+                      "type": "number"
+                    },
+                    "billableSec": {
+                      "type": "number"
+                    },
+                    "fromNumber": {
+                      "type": "string"
+                    },
+                    "fromName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "toNumber": {
+                      "type": "string"
+                    },
+                    "dialedNumber": {
+                      "type": "string"
+                    },
+                    "did": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "trunkId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "extensionIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "disposition": {
+                      "type": "string"
+                    },
+                    "hangupCause": {
+                      "type": "string"
+                    },
+                    "hangupBy": {
+                      "type": "string"
+                    },
+                    "queueId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "flowId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "recordingIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getCdr",
+        "tags": [
+          "Cdrs"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/cdr-exports": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "from",
+                  "to"
+                ],
+                "properties": {
+                  "from": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "to": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status",
+                    "fromAt",
+                    "toAt",
+                    "downloadUrl",
+                    "errorMessage"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "fromAt": {
+                      "type": "string"
+                    },
+                    "toAt": {
+                      "type": "string"
+                    },
+                    "downloadUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "errorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createCdrExport",
+        "tags": [
+          "CdrExports"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/cdr-exports/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status",
+                    "fromAt",
+                    "toAt",
+                    "downloadUrl",
+                    "errorMessage"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "fromAt": {
+                      "type": "string"
+                    },
+                    "toAt": {
+                      "type": "string"
+                    },
+                    "downloadUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "errorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getCdrExport",
+        "tags": [
+          "CdrExports"
         ]
       }
     },
