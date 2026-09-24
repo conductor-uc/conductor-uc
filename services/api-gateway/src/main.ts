@@ -2,6 +2,7 @@ import { redactConfig } from '@cuc/config';
 import { createLogger } from '@cuc/logger';
 
 import { buildApp } from './app.js';
+import { createHttpsRedirect } from './http-redirect.js';
 import { loadServiceConfig, configSchema } from './config.js';
 import { createRedisClient } from './rate-limit/redis-client.js';
 
@@ -20,6 +21,16 @@ const app = await buildApp({ config, redis, logger });
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
 
+// Browsers that arrive on plain HTTP are sent to HTTPS.
+const redirect =
+  config.HTTP_REDIRECT_PORT === undefined
+    ? undefined
+    : createHttpsRedirect({ httpsPort: config.HTTP_PORT });
+if (redirect !== undefined && config.HTTP_REDIRECT_PORT !== undefined) {
+  redirect.listen(config.HTTP_REDIRECT_PORT, config.HTTP_HOST);
+  logger.info({ port: config.HTTP_REDIRECT_PORT }, 'redirecting plain HTTP to HTTPS');
+}
+
 /**
  * SIGTERM drains in-flight HTTP requests before closing Redis — the gateway
  * holds no other durable connection (no DB, no bus: it has neither business
@@ -27,6 +38,7 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
  */
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
+  redirect?.close();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),

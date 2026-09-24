@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import fastifySwagger from '@fastify/swagger';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import { createLogger, withContext, type Logger } from '@cuc/logger';
+import type { ServerOptions as HttpsServerOptions } from 'node:https';
 import Fastify, { LogController, type FastifyServerOptions } from 'fastify';
 
 import { registerHardRules } from './authz.js';
@@ -42,6 +43,11 @@ export interface CreateServerOptions {
   readonly context?: ContextOptions;
   /** Behind api-gateway this should be true so client IPs are correct. */
   readonly trustProxy?: boolean;
+  /**
+   * Serve HTTPS with these Node TLS options instead of plain HTTP. Only the edge
+   * (api-gateway) sets this; the services behind it stay on the private network.
+   */
+  readonly https?: HttpsServerOptions;
   /** Escape hatch for Fastify options this factory does not cover. */
   readonly fastify?: Partial<FastifyServerOptions>;
 }
@@ -102,6 +108,7 @@ export async function createServer(options: CreateServerOptions): Promise<Server
       disableRequestLogging: false,
     }),
     trustProxy,
+    ...(options.https === undefined ? {} : { https: options.https }),
     ajv: { customOptions: { allErrors: true, removeAdditional: false, coerceTypes: false } },
     ...options.fastify,
   }).withTypeProvider<TypeBoxTypeProvider>() as Server;

@@ -132,6 +132,25 @@ export const configSchema = Type.Object({
    * Empty is valid: a deployment with no console traffic yet needs no origin
    * allowed.
    */
+  /**
+   * Serve HTTPS. `TLS_CERT_FILE` and `TLS_KEY_FILE` are the certificate presented
+   * when a client names no host, or one there is no certificate for (set both or
+   * neither). `TLS_CERT_DIR` holds a certificate per hostname, chosen by the name
+   * the client asks for: see `tls.ts`. With none of the three the gateway speaks
+   * plain HTTP, for development and behind a proxy that terminates TLS.
+   */
+  TLS_CERT_FILE: Env.optional(Env.string()),
+  TLS_KEY_FILE: Env.optional(Env.string()),
+  TLS_CERT_DIR: Env.optional(Env.string()),
+  /** When set, a plain-HTTP listener on this port redirects browsers to HTTPS. */
+  HTTP_REDIRECT_PORT: Env.optional(Env.port()),
+  /** How long browsers are told to insist on HTTPS. 0 leaves the header off. */
+  HSTS_MAX_AGE_SECONDS: Env.int({ minimum: 0, default: 31_536_000 }),
+  /**
+   * Refuse to serve phone provisioning over plain HTTP: the settings hold the
+   * extension's SIP password. Development over http://localhost turns it off.
+   */
+  REQUIRE_HTTPS_FOR_PROVISIONING: Env.bool({ default: true }),
   CONSOLE_HOSTNAMES: Env.list({ default: [] }),
 });
 

@@ -197,7 +197,7 @@ describe('api-gateway: auth + proxy', () => {
     const ok = await app.inject({
       method: 'GET',
       url: '/v1/public/provision/yealink/001565aabbcc.cfg',
-      headers: { authorization: 'Basic cGhvbmU6cHc=' },
+      headers: { authorization: 'Basic cGhvbmU6cHc=', 'x-forwarded-proto': 'https' },
     });
     expect(ok.statusCode).toBe(200);
     expect(ok.headers['content-type']).toContain('text/plain');
@@ -206,6 +206,7 @@ describe('api-gateway: auth + proxy', () => {
     const challenge = await app.inject({
       method: 'GET',
       url: '/v1/public/provision/yealink/001565aabbcc.cfg',
+      headers: { 'x-forwarded-proto': 'https' },
     });
     expect(challenge.statusCode).toBe(401);
     expect(challenge.headers['www-authenticate']).toBe('Basic realm="provisioning"');
