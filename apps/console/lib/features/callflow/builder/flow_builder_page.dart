@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../canvas/canvas.dart';
+import '../../../core/permissions.dart';
 import '../../../widgets/page.dart';
 import '../../pbx/pbx_api.dart';
 import 'flow_graph.dart';
@@ -500,7 +501,8 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
         const SizedBox(width: 8),
         OutlinedButton(onPressed: _validate, child: const Text('Validate')),
         const SizedBox(width: 8),
-        FilledButton(onPressed: _publish, child: const Text('Publish')),
+        if (ref.watch(canProvider('callflow.publish')))
+          FilledButton(onPressed: _publish, child: const Text('Publish')),
       ],
     );
   }
@@ -562,6 +564,7 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
               versions: _versions,
               currentVersionId: _flow?['currentPublishedVersionId'] as String?,
               onRollback: _rollback,
+              canRollback: ref.watch(canProvider('callflow.publish')),
               onOpenAsDraft: _openAsDraft,
             ),
           },

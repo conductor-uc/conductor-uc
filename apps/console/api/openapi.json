@@ -1142,6 +1142,201 @@
         ]
       }
     },
+    "/v1/orgs/{orgId}/audit-events": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,2}$"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "orgId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "at",
+                          "actorType",
+                          "actorId",
+                          "actorOrgId",
+                          "targetOrgId",
+                          "action",
+                          "resource",
+                          "dataClass",
+                          "reason",
+                          "ip",
+                          "requestId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "at": {
+                            "type": "string"
+                          },
+                          "actorType": {
+                            "type": "string"
+                          },
+                          "actorId": {
+                            "type": "string"
+                          },
+                          "actorOrgId": {
+                            "type": "string"
+                          },
+                          "targetOrgId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "action": {
+                            "type": "string"
+                          },
+                          "resource": {
+                            "type": "string"
+                          },
+                          "dataClass": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "ip": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "requestId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listAuditEvents",
+        "tags": [
+          "Orgs"
+        ]
+      }
+    },
+    "/v1/orgs/{orgId}/me": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "orgId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "userId",
+                    "orgId",
+                    "orgType",
+                    "roleIds",
+                    "permissions"
+                  ],
+                  "properties": {
+                    "userId": {
+                      "type": "string"
+                    },
+                    "orgId": {
+                      "type": "string"
+                    },
+                    "orgType": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "master"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "reseller"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        }
+                      ]
+                    },
+                    "roleIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "permissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getMyAccess",
+        "tags": [
+          "Orgs"
+        ]
+      }
+    },
     "/v1/resellers/{id}/brand": {
       "put": {
         "requestBody": {
@@ -11290,6 +11485,90 @@
         "operationId": "rollbackFlow",
         "tags": [
           "Flows"
+        ]
+      }
+    },
+    "/v1/platform/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "checkedAt",
+                    "services"
+                  ],
+                  "properties": {
+                    "checkedAt": {
+                      "type": "string"
+                    },
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "status",
+                          "latencyMs",
+                          "version",
+                          "failing"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "up"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "degraded"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "down"
+                                ]
+                              }
+                            ]
+                          },
+                          "latencyMs": {
+                            "type": "number"
+                          },
+                          "version": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "failing": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getPlatformHealth",
+        "tags": [
+          "Platform"
         ]
       }
     }

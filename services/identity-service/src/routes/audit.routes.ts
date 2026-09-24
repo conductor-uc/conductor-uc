@@ -1,5 +1,6 @@
 import { ProblemError, Type, type Server } from '@cuc/http';
 
+import type { OrgAccess } from '../authz/org-access.js';
 import type { AuditRepo } from '../repo/audit.repo.js';
 
 const OrgParamsSchema = Type.Object({ orgId: Type.String({ minLength: 1 }) });
@@ -35,8 +36,11 @@ const AuditEventSchema = Type.Object({
  * `audit.read` and are entitled to their own org's trail. The real
  * visibility rule is enforced in the query (`AuditRepo.listForOrg`), not by
  * this declaration.
+ *
+ * Which org's trail may be read is checked with [OrgAccess] (S3-05): the
+ * actor's own, or one beneath them.
  */
-export function registerAuditRoutes(app: Server, repo: AuditRepo): void {
+export function registerAuditRoutes(app: Server, repo: AuditRepo, access: OrgAccess): void {
   app.get(
     '/v1/orgs/:orgId/audit-events',
     {
@@ -52,7 +56,9 @@ export function registerAuditRoutes(app: Server, repo: AuditRepo): void {
       if (limit !== undefined && limit > 500) {
         throw ProblemError.badRequest('limit must be at most 500.');
       }
-      const events = await repo.listForOrg(request.params.orgId, limit);
+      // Own org, or (master, reseller) one beneath the actor: never anyone else's.
+      const org = await access.resolve(request.context, request.params.orgId);
+      const events = await repo.listForOrg(org.orgId, limit);
       return {
         rows: events.map((event) => ({ ...event, at: event.at.toISOString() })),
       };

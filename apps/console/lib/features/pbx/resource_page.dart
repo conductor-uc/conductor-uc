@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import 'pbx_api.dart';
 import 'resource.dart';
@@ -32,6 +33,8 @@ class ResourceView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final rows = ref.watch(rowsProvider(def.key));
+    // Without the permission to change these, the page is for reading.
+    final canChange = ref.watch(canProvider(def.permission));
     final columns = [
       for (final f in def.fields)
         if (f.showInList) f,
@@ -42,7 +45,7 @@ class ResourceView extends ConsumerWidget {
           title: def.plural,
           subtitle: def.blurb,
           actions: [
-            if (!def.readOnly)
+            if (!def.readOnly && canChange)
               FilledButton.icon(
                 onPressed: () => _openForm(context, ref),
                 icon: const Icon(Icons.add),
@@ -69,7 +72,8 @@ class ResourceView extends ConsumerWidget {
                       const DataColumn(label: Text('')),
                     ],
                     rows: [
-                      for (final row in data) _row(context, ref, row, columns),
+                      for (final row in data)
+                        _row(context, ref, row, columns, canChange),
                     ],
                   ),
                 ),
@@ -86,6 +90,7 @@ class ResourceView extends ConsumerWidget {
     WidgetRef ref,
     Json row,
     List<Field> columns,
+    bool canChange,
   ) {
     return DataRow(
       cells: [
@@ -100,17 +105,18 @@ class ResourceView extends ConsumerWidget {
                   icon: Icon(a.icon),
                   onPressed: () => a.onPressed(context, ref, row),
                 ),
-              if (!def.readOnly)
+              if (!def.readOnly && canChange)
                 IconButton(
                   tooltip: 'Edit',
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: () => _openForm(context, ref, row),
                 ),
-              IconButton(
-                tooltip: 'Delete',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => _confirmDelete(context, ref, row),
-              ),
+              if (canChange)
+                IconButton(
+                  tooltip: 'Delete',
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () => _confirmDelete(context, ref, row),
+                ),
             ],
           ),
         ),

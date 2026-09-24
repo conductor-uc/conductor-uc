@@ -56,6 +56,7 @@ void main() {
       await pumpApp(tester, appWith(api: api));
       await submitSignIn(tester, 'master@example.test');
       expect(navItem('Resellers'), findsOneWidget);
+      await openNav(tester, 'Resellers');
       await tester.tap(find.text('New reseller'));
       await tester.pumpAndSettle();
       await tester.enterText(field('Short name *'), 'summit');

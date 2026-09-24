@@ -5,6 +5,7 @@ import type { Redis } from 'ioredis';
 import { createAccessTokenVerifier } from './auth/access-token-verifier.js';
 import { registerAuthentication } from './auth/authenticate.js';
 import { registerCors } from './cors.js';
+import { registerPlatformHealth } from './platform-health.js';
 import { createRateLimiter } from './rate-limit/limiter.js';
 import { registerRateLimit } from './rate-limit/hooks.js';
 import { registerProxy } from './routing/proxy.js';
@@ -92,6 +93,21 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     voicemail: config.VOICEMAIL_SERVICE_URL,
     cdr: config.CDR_SERVICE_URL,
     trunk: config.TRUNK_SERVICE_URL,
+  });
+
+  // Served here rather than proxied: it asks every service, so no one service
+  // owns it. Registered before the proxy's `/v1/*`, and a specific route wins.
+  registerPlatformHealth(app, {
+    timeoutMs: 2_000,
+    targets: [
+      { name: 'identity-service', url: config.IDENTITY_SERVICE_URL },
+      { name: 'org-service', url: config.ORG_SERVICE_URL },
+      { name: 'pbx-config-service', url: config.PBX_CONFIG_SERVICE_URL },
+      { name: 'callflow-service', url: config.CALLFLOW_SERVICE_URL },
+      { name: 'voicemail-service', url: config.VOICEMAIL_SERVICE_URL },
+      { name: 'cdr-service', url: config.CDR_SERVICE_URL },
+      { name: 'trunk-service', url: config.TRUNK_SERVICE_URL },
+    ],
   });
 
   registerProxy(app, {

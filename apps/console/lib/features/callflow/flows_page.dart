@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 
@@ -26,11 +27,12 @@ class FlowsPage extends ConsumerWidget {
           title: 'Call flows',
           subtitle: 'Menus, time-of-day routing, and other call handling a number can point at.',
           actions: [
-            FilledButton.icon(
-              onPressed: () => _create(context, ref),
-              icon: const Icon(Icons.add),
-              label: const Text('New call flow'),
-            ),
+            if (ref.watch(canProvider('callflow.edit')))
+              FilledButton.icon(
+                onPressed: () => _create(context, ref),
+                icon: const Icon(Icons.add),
+                label: const Text('New call flow'),
+              ),
           ],
         ),
         const SizedBox(height: 16),
