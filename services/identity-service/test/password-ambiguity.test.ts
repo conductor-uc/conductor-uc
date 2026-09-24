@@ -36,7 +36,7 @@ describe.skipIf(skipReason !== undefined)('two accounts must not share email and
       context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
     });
     registerAuthRoutes(app, h.auth, { cookieSecure: true, refreshTokenTtlDays: 30 });
-    registerInternalRoutes(app, h.users, INTERNAL_TOKEN);
+    registerInternalRoutes(app, h.users, h.roles, INTERNAL_TOKEN);
     await app.ready();
   });
 
@@ -51,6 +51,7 @@ describe.skipIf(skipReason !== undefined)('two accounts must not share email and
       'mfa_factors',
       'password_reset_tokens',
       'invitations',
+      'role_assignments',
       'users',
       'outbox',
     ] as const) {

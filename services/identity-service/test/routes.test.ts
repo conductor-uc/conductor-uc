@@ -39,7 +39,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     });
     registerAuthRoutes(app, h.auth);
     registerJwksRoute(app, createSigningKeyRepoFrom(h), TEST_TTL.signingKeyOverlapDays);
-    registerInternalRoutes(app, h.users, INTERNAL_TOKEN);
+    registerInternalRoutes(app, h.users, h.roles, INTERNAL_TOKEN);
     registerRoleRoutes(
       app,
       h.roles,
@@ -58,10 +58,10 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
   afterEach(async () => {
     await h.db.kysely.deleteFrom('sessions').execute();
     await h.db.kysely.deleteFrom('mfa_factors').execute();
+    await h.db.kysely.deleteFrom('role_assignments').execute();
     await h.db.kysely.deleteFrom('users').execute();
     await h.db.kysely.deleteFrom('outbox').execute();
     await h.db.kysely.deleteFrom('grants').execute();
-    await h.db.kysely.deleteFrom('role_assignments').execute();
     await h.db.kysely.deleteFrom('role_permissions').execute();
     await h.db.kysely.deleteFrom('roles').execute();
   });
@@ -225,6 +225,15 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       expect(response.statusCode).toBe(201);
       expect(response.json()).toMatchObject({ orgId, email: 'admin@example.com' });
       expect(response.json()).not.toHaveProperty('passwordHash');
+    });
+
+    it("gives the new person their org type's built-in admin role", async () => {
+      for (const orgType of ['master', 'reseller', 'tenant'] as const) {
+        const orgId = crypto.randomUUID();
+        await createUserViaInternal(app, orgId, orgType);
+        const userId = await userIdFor(h, orgId, 'admin@example.com');
+        expect(await h.roles.roleIdsFor(userId)).toEqual([`${orgType}_admin`]);
+      }
     });
 
     it('rejects a duplicate email in the same org with 409', async () => {

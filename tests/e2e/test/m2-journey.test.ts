@@ -149,6 +149,16 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
     await signIn(master, stack.masterOrgId, MASTER_EMAIL, MASTER_PASSWORD, secrets);
   });
 
+  it('1. the master, made by bootstrap, has the master admin role: the console shows it something', async () => {
+    const me = await master.call<{ roleIds: string[]; permissions: string[] }>(
+      'GET',
+      `/v1/orgs/${stack.masterOrgId}/me`,
+    );
+    expect(me.status).toBe(200);
+    expect(me.json.roleIds).toEqual(['master_admin']);
+    expect(me.json.permissions).toContain('reseller.manage');
+  });
+
   it('1. the master creates a reseller', async () => {
     const r = await master.call<{ id: string }>('POST', '/v1/resellers', {
       slug: 'acme',
@@ -163,6 +173,12 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
 
   it('2. the reseller signs in, brands the console, registers its hostname, and the public brand follows', async () => {
     await signIn(reseller, resellerId, 'boss@acme.test', resellerPassword, secrets);
+    const me = await reseller.call<{ roleIds: string[]; permissions: string[] }>(
+      'GET',
+      `/v1/orgs/${resellerId}/me`,
+    );
+    expect(me.json.roleIds).toEqual(['reseller_admin']);
+    expect(me.json.permissions).toContain('tenant.create');
 
     const weak = await reseller.call('PUT', `/v1/resellers/${resellerId}/brand`, {
       primaryColor: '#4a148c',

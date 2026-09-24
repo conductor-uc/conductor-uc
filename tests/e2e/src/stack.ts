@@ -1,6 +1,8 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -12,7 +14,18 @@ import {
   type TestS3Handle,
 } from '@cuc/testing';
 
-const REPO = fileURLToPath(new URL('../../../', import.meta.url));
+/** The repository root: the nearest parent with the workspace file (this file runs from `src` under vitest and from `dist/src` when built). */
+function repoRoot(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  while (!existsSync(join(dir, 'pnpm-workspace.yaml'))) {
+    const parent = dirname(dir);
+    if (parent === dir) throw new Error('pnpm-workspace.yaml not found above the e2e package');
+    dir = parent;
+  }
+  return `${dir}/`;
+}
+
+const REPO = repoRoot();
 
 /** Where the real services listen, and what the test needs to know about them. */
 export interface Stack {

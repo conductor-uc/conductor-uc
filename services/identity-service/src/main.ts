@@ -145,8 +145,8 @@ registerAuthRoutes(app, authService, {
   orgClient,
 });
 registerJwksRoute(app, signingKeyRepo, config.SIGNING_KEY_OVERLAP_DAYS);
-registerInternalRoutes(app, userRepo, config.INTERNAL_SERVICE_TOKEN);
 const roleRepo = createRoleRepo(db);
+registerInternalRoutes(app, userRepo, roleRepo, config.INTERNAL_SERVICE_TOKEN);
 registerRoleRoutes(app, roleRepo, orgAccess, userRepo);
 registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo);
 const grantRepo = createGrantRepo(db);

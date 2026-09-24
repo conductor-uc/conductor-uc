@@ -2,6 +2,7 @@ import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server } from '@cuc/http';
 
 import { assertPasswordDistinct, PasswordInUseError } from '../auth/ambiguity.js';
+import type { RoleRepo } from '../repo/role.repo.js';
 import { EmailTakenError, type UserRepo } from '../repo/user.repo.js';
 
 const AdminUserBodySchema = Type.Object({
@@ -29,6 +30,7 @@ const AdminUserParamsSchema = Type.Object({ orgId: Type.String({ minLength: 1 })
 export function registerInternalRoutes(
   app: Server,
   users: UserRepo,
+  roles: RoleRepo,
   internalServiceToken: string,
 ): void {
   app.post(
@@ -62,6 +64,10 @@ export function registerInternalRoutes(
           displayName: request.body.displayName,
           password: request.body.password,
         });
+        // The first person of an org has to be able to do something: give them
+        // the org's built-in admin role. Without it `/me` lists no permissions
+        // and the console shows nothing. Assigning is idempotent.
+        await roles.assignRole(user.id, `${request.body.orgType}_admin`, request.params.orgId);
         return reply.status(201).send({
           id: user.id,
           orgId: user.orgId,
