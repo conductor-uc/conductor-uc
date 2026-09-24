@@ -65,6 +65,43 @@ void main() {
     );
   });
 
+  testWidgets('resetting two-step verification asks first, then clears it', (
+    tester,
+  ) async {
+    await openSection(tester, 'Users');
+    // Only someone else who has set one up can be reset: not you, and not
+    // Dana, who has not.
+    final reset = find.byTooltip('Reset two-step verification');
+    expect(inRow(tester, 'admin@example.test', reset), findsNothing);
+    expect(inRow(tester, 'dana@example.test', reset), findsNothing);
+    expect(inRow(tester, 'sam@example.test', reset), findsOneWidget);
+
+    await tapIn(tester, 'sam@example.test', reset);
+    expect(
+      find.text('Reset two-step verification for Sam Support?'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('We email them'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Two-step verification reset for Sam Support.'),
+      findsOneWidget,
+    );
+    // There is now nothing left to reset.
+    expect(inRow(tester, 'sam@example.test', reset), findsNothing);
+  });
+
+  testWidgets('cancelling the reset changes nothing', (tester) async {
+    await openSection(tester, 'Users');
+    final reset = find.byTooltip('Reset two-step verification');
+    await tapIn(tester, 'sam@example.test', reset);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(inRow(tester, 'sam@example.test', reset), findsOneWidget);
+  });
+
   testWidgets('invites someone by email', (tester) async {
     await openSection(tester, 'Users');
     await tester.tap(find.text('Invite user'));

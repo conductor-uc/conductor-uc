@@ -275,7 +275,7 @@ class DemoPbx {
     'email': email,
     'displayName': name,
     'status': 'active',
-    'mfaEnrolled': id == 'user-1',
+    'mfaEnrolled': id == 'user-1' || id == 'user-2',
     'lastLoginAt': id == 'user-3' ? null : '2026-09-20T15:04:00.000Z',
     'roleIds': roles,
   };
@@ -303,14 +303,31 @@ class DemoPbx {
   ResponseBody? _people(RequestOptions options) {
     final path = options.path;
     final method = options.method.toUpperCase();
-    final users = RegExp(r'^/v1/orgs/([^/]+)/users(?:/([^/]+))?$')
-        .firstMatch(path);
+    final users = RegExp(
+      r'^/v1/orgs/([^/]+)/users(?:/([^/]+))?(?:/(mfa-reset))?$',
+    ).firstMatch(path);
     if (users != null) {
       final id = users.group(2);
       final people = _peopleOf(users.group(1)!);
       if (id == null) return _json({'rows': people});
       final index = people.indexWhere((u) => u['id'] == id);
       if (index < 0) return _problem(404, 'No such user in this organization.');
+      if (users.group(3) != null) {
+        if (id == 'user-1') {
+          return _problem(
+            409,
+            'You cannot reset your own two-step verification.',
+          );
+        }
+        if (people[index]['mfaEnrolled'] != true) {
+          return _problem(
+            409,
+            'That user has not set up two-step verification.',
+          );
+        }
+        people[index] = {...people[index], 'mfaEnrolled': false};
+        return _json(people[index]);
+      }
       final body = _body(options);
       if (body['status'] == 'disabled' && id == 'user-1') {
         return _problem(409, 'You cannot disable your own account.');

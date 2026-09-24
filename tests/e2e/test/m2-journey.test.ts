@@ -276,6 +276,51 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
     expect(`${mail?.HTML ?? ''}${mail?.Text ?? ''}`).not.toMatch(/conductor/i);
   });
 
+  it('2. the master resets the reseller admin’s two-step verification: signed out, emailed, and asked to enroll again', async () => {
+    const people = await master.call<{ rows: { id: string; email: string }[] }>(
+      'GET',
+      `/v1/orgs/${resellerId}/users`,
+    );
+    expect(people.status, people.text).toBe(200);
+    const boss = people.json.rows.find((u) => u.email === 'boss@acme.test');
+    expect(boss).toBeDefined();
+    const oldSecret = secrets.get('boss@acme.test') ?? '';
+    expect(oldSecret).not.toBe('');
+
+    const done = await master.call<{ mfaEnrolled: boolean }>(
+      'POST',
+      `/v1/orgs/${resellerId}/users/${boss?.id ?? ''}/mfa-reset`,
+      {},
+    );
+    expect(done.status, done.text).toBe(200);
+    expect(done.json.mfaEnrolled).toBe(false);
+
+    // Their session ends: the refresh cookie no longer works.
+    const stale = await reseller.call('POST', '/v1/auth/refresh', {}, { auth: false });
+    expect(stale.status).toBe(401);
+
+    // They are told, in their reseller's brand, with a link to sign in and no token.
+    const [mail] = await mailTo(stack.mail, 'boss@acme.test');
+    expect(mail).toBeDefined();
+    expect(mail?.HTML).toContain('Acme Voice');
+    expect(mail?.HTML).toContain('/login');
+    expect(mail?.HTML).not.toContain('token=');
+    expect(mail?.From.Name).toBe('Acme Voice');
+
+    // The next sign-in enrolls a new authenticator, and a new secret is issued.
+    reseller.jar.clear();
+    await signIn(reseller, resellerId, 'boss@acme.test', resellerPassword, secrets);
+    expect(secrets.get('boss@acme.test')).not.toBe(oldSecret);
+
+    // Nobody resets their own.
+    const self = await reseller.call(
+      'POST',
+      `/v1/orgs/${resellerId}/users/${boss?.id ?? ''}/mfa-reset`,
+      {},
+    );
+    expect(self.status).toBe(409);
+  });
+
   /** Calls one of the tenant's routes through the gateway as its admin. */
   function tenant<T = Record<string, unknown>>(method: string, path: string, body?: unknown) {
     return tenantAdmin.call<T>(method, `/v1/tenants/${tenantId}${path}`, body);

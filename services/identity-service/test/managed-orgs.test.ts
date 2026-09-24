@@ -67,7 +67,7 @@ describe.skipIf(skipReason !== undefined)('managing the users of orgs beneath yo
       refreshTokenTtlDays: 30,
       orgClient: { ...orgClient, signInScope: () => Promise.resolve(undefined) },
     });
-    registerUserRoutes(app, h.users, h.roles, access);
+    registerUserRoutes(app, h.users, h.roles, access, h.mfa);
     registerRoleRoutes(app, h.roles, access, h.users);
     await app.ready();
   });

@@ -273,6 +273,61 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
     expect(mail!.html).toContain('7 days');
   });
 
+  async function publishMfaReset(orgId: string, email: string): Promise<void> {
+    await bus.publish({
+      id: crypto.randomUUID(),
+      type: 'identity.user.mfa_reset',
+      schemaVersion: notificationEvents.contract('identity.user.mfa_reset').schemaVersion,
+      occurredAt: new Date(Date.now() - 3 * 24 * 60 * 60_000).toISOString(),
+      orgContext: {},
+      data: { userId: crypto.randomUUID(), orgId, email, displayName: 'Rae Okafor' },
+    });
+  }
+
+  it("tells a reseller's user their two-step verification was reset, in the reseller's brand", async () => {
+    brands.set('tenant-a', ACME);
+    const to = `r-${crypto.randomUUID()}@example.test`;
+    await publishMfaReset('tenant-a', to);
+    await drain();
+
+    const [mail] = await emailsTo(to);
+    expect(mail).toBeDefined();
+    expect(mail!.subject).toBe('Your two-step verification was reset');
+    // The sender is still the platform address (G-57); the name is the reseller's.
+    expect(mail!.from).toEqual({ name: 'Acme Voice', address: NOREPLY });
+    expect(mail!.html).toContain('Hello Rae Okafor');
+    expect(mail!.html).toContain('Acme Voice Ltd.');
+    // It links to the sign-in page, and carries no token.
+    expect(mail!.html).toContain('https://portal.acme.example/login');
+    expect(mail!.html).not.toContain('token=');
+    expect(mail!.text).toContain('https://portal.acme.example/login');
+    expect(mail!.text).not.toContain('token=');
+  });
+
+  it('a master-tier user gets the same notice with no branding at all', async () => {
+    brands.set('master', NEUTRAL);
+    const to = `m-${crypto.randomUUID()}@example.test`;
+    await publishMfaReset('master', to);
+    await drain();
+
+    const [mail] = await emailsTo(to);
+    expect(mail).toBeDefined();
+    expect(mail!.from).toEqual({ name: '', address: NOREPLY });
+    expect(mail!.html).not.toMatch(/<img/i);
+    expect(mail!.html.toLowerCase()).not.toContain('conductor');
+    expect(mail!.text.toLowerCase()).not.toContain('conductor');
+    expect(mail!.html).toContain('https://console.platform.test/login');
+  });
+
+  it('sends the notice however late it arrives (there is no link to go stale)', async () => {
+    brands.set('tenant-a', ACME);
+    const to = `late-${crypto.randomUUID()}@example.test`;
+    // `publishMfaReset` stamps the event three days ago.
+    await publishMfaReset('tenant-a', to);
+    await drain();
+    expect(await emailsTo(to)).toHaveLength(1);
+  });
+
   it('still sends, neutral, when org-service does not know the org', async () => {
     const to = `u-${crypto.randomUUID()}@example.test`;
     await publishReset('gone-org', to, 'tok-u');
