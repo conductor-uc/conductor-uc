@@ -10,16 +10,20 @@ import '../pbx/resource_page.dart';
 
 /// A reseller's trunks screen. Trunks belong to the tenants they serve, so the
 /// page works on one tenant at a time: pick it, then add, edit, and remove its
-/// trunks and manage each one's IP allowlist.
+/// trunks and manage each one's IP allowlist. The master reaches it from a
+/// reseller's own page, which passes that reseller as [resellerId]; a reseller
+/// sees its own.
 class TrunksPage extends ConsumerWidget {
-  const TrunksPage({super.key});
+  const TrunksPage({super.key, this.resellerId});
+
+  final String? resellerId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     if (session == null) return const SizedBox.shrink();
     final picked = ref.watch(tenantIdProvider);
-    final picker = _TenantPicker(resellerId: session.orgId);
+    final picker = _TenantPicker(resellerId: resellerId ?? session.orgId);
     if (picked == null) {
       return PageFrame(
         children: [
