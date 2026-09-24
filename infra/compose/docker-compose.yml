@@ -248,6 +248,9 @@ services:
       NATS_SERVERS: nats://nats:4222
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
+      # G-60: these services sit behind api-gateway, which signs who is calling.
+      TRUST_INTERNAL_HEADERS: 'true'
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       # Unreachable on purpose (see the note above) — org-service's own
       # config still requires a syntactically valid URL to boot.
       IDENTITY_SERVICE_URL: http://127.0.0.1:1
@@ -285,6 +288,9 @@ services:
       NATS_SERVERS: nats://nats:4222
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
+      # G-60: these services sit behind api-gateway, which signs who is calling.
+      TRUST_INTERNAL_HEADERS: 'true'
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       ORG_SERVICE_URL: http://org-service:8080
       TRUNK_SERVICE_URL: http://trunk-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
@@ -321,6 +327,9 @@ services:
       NATS_SERVERS: nats://nats:4222
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
+      # G-60: these services sit behind api-gateway, which signs who is calling.
+      TRUST_INTERNAL_HEADERS: 'true'
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       ORG_SERVICE_URL: http://org-service:8080
       TELEPHONY_CONFIG_URL: http://telephony-config:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
@@ -502,6 +511,9 @@ services:
       NATS_SERVERS: nats://nats:4222
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
+      # G-60: these services sit behind api-gateway, which signs who is calling.
+      TRUST_INTERNAL_HEADERS: 'true'
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
 
   voicemail-service:
@@ -526,6 +538,9 @@ services:
       NATS_SERVERS: nats://nats:4222
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
+      # G-60: these services sit behind api-gateway, which signs who is calling.
+      TRUST_INTERNAL_HEADERS: 'true'
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
@@ -558,6 +573,9 @@ services:
       NATS_SERVERS: nats://nats:4222
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
+      # G-60: these services sit behind api-gateway, which signs who is calling.
+      TRUST_INTERNAL_HEADERS: 'true'
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       ORG_SERVICE_URL: ${ORG_SERVICE_URL:-http://org-service:8080}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # `mod_json_cdr`'s own shared token (`telephony/freeswitch/conf/vars.xml`'s
@@ -575,6 +593,79 @@ services:
   # through Mailpit. Links point at the console at CONSOLE_URL_OVERRIDE when set
   # (a local `flutter run` or a served build), otherwise at
   # https://console.$PLATFORM_BASE_DOMAIN.
+  identity-service:
+    # G-60: signs users in and issues the access tokens api-gateway verifies.
+    build:
+      context: ../..
+      dockerfile: services/identity-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      org-service:
+        condition: service_started
+    environment:
+      SERVICE_NAME: identity-service
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: identity_service
+      DB_PASSWORD: ${IDENTITY_SERVICE_DB_PASSWORD:-dev-identity-password}
+      DB_NAME: identity_service
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      TRUST_INTERNAL_HEADERS: 'true'
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
+      ORG_SERVICE_URL: http://org-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
+      CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
+      CRYPTO_KEK_CURRENT: '1'
+      # Plain HTTP on a laptop: a browser would refuse a Secure cookie.
+      COOKIE_SECURE: 'false'
+
+  api-gateway:
+    # G-60: the one public entry point. Verifies the access token, then sends
+    # each path to the service that owns it (ROUTE_TABLE, most specific first).
+    build:
+      context: ../..
+      dockerfile: services/api-gateway/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      identity-service:
+        condition: service_started
+      org-service:
+        condition: service_started
+      pbx-config-service:
+        condition: service_started
+      callflow-service:
+        condition: service_started
+      voicemail-service:
+        condition: service_started
+      cdr-service:
+        condition: service_started
+      trunk-service:
+        condition: service_started
+    ports:
+      - '${GATEWAY_PORT:-8080}:8080'
+    environment:
+      SERVICE_NAME: api-gateway
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
+      REDIS_URL: redis://redis:6379
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+      ORG_SERVICE_URL: http://org-service:8080
+      PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
+      CALLFLOW_SERVICE_URL: http://callflow-service:8080
+      VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
+      CDR_SERVICE_URL: http://cdr-service:8080
+      TRUNK_SERVICE_URL: http://trunk-service:8080
+
   notification-service:
     build:
       context: ../..

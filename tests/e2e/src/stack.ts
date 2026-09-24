@@ -123,8 +123,10 @@ function dbEnv(handle: TestDatabaseHandle): Record<string, string> {
  * stack runs them, and makes the master org and its first admin the way an
  * operator does (the bootstrap CLI, then identity's internal API).
  *
- * The gateway fronts identity and org only (see `docs/decisions.md` G-60), so
- * callflow-service is started beside it and called directly.
+ * Everything a browser calls goes through the gateway, which routes each path
+ * to the service that owns it (G-60): identity, org, pbx-config, trunk,
+ * callflow, voicemail and cdr all run here, with telephony-config left out
+ * (nothing in this journey needs a media node).
  */
 export async function startStack(): Promise<Stack> {
   const cleanups: (() => Promise<void>)[] = [];
@@ -155,6 +157,10 @@ export async function startStack(): Promise<Stack> {
     const orgDb = await startTestDatabase();
     const notificationDb = await startTestDatabase();
     const callflowDb = await startTestDatabase();
+    const pbxDb = await startTestDatabase();
+    const trunkDb = await startTestDatabase();
+    const voicemailDb = await startTestDatabase();
+    const cdrDb = await startTestDatabase();
     const nats: TestNatsHandle = await startTestNats();
     const s3: TestS3Handle = await startTestS3();
     cleanups.push(
@@ -162,6 +168,10 @@ export async function startStack(): Promise<Stack> {
       () => orgDb.stop(),
       () => notificationDb.stop(),
       () => callflowDb.stop(),
+      () => pbxDb.stop(),
+      () => trunkDb.stop(),
+      () => voicemailDb.stop(),
+      () => cdrDb.stop(),
       () => nats.stop(),
       () => s3.stop(),
     );
@@ -174,6 +184,10 @@ export async function startStack(): Promise<Stack> {
       org: await freePort(),
       notification: await freePort(),
       callflow: await freePort(),
+      pbx: await freePort(),
+      trunk: await freePort(),
+      voicemail: await freePort(),
+      cdr: await freePort(),
       gateway: await freePort(),
     };
     const url = (port: number) => `http://127.0.0.1:${String(port)}`;
@@ -212,6 +226,9 @@ export async function startStack(): Promise<Stack> {
       ...common,
       ...dbEnv(identityDb),
       HTTP_PORT: String(ports.identity),
+      // Asked which org a console hostname belongs to (G-56/G-61); org-service
+      // starts just after, and identity only calls it when a request needs it.
+      ORG_SERVICE_URL: url(ports.org),
       INTERNAL_HEADER_SIGNING_SECRET: headerSecret,
       COOKIE_SECURE: 'false',
       TRUST_INTERNAL_HEADERS: 'true',
@@ -268,11 +285,69 @@ export async function startStack(): Promise<Stack> {
     });
     running.push(callflow);
 
+    const storage = {
+      STORAGE_MODE: 'bucket-per-tenant',
+      STORAGE_BUCKET_PREFIX: orgEnv.STORAGE_BUCKET_PREFIX,
+      STORAGE_ENDPOINT: s3.endpoint,
+      STORAGE_REGION: s3.region,
+      STORAGE_ACCESS_KEY_ID: s3.accessKeyId,
+      STORAGE_SECRET_ACCESS_KEY: s3.secretAccessKey,
+      STORAGE_FORCE_PATH_STYLE: String(s3.forcePathStyle),
+    };
+    const behindGateway = {
+      TRUST_INTERNAL_HEADERS: 'true',
+      INTERNAL_HEADER_SIGNING_SECRET: headerSecret,
+    };
+    // Telephony is not part of this journey: trunk-service only needs a
+    // syntactically valid address for the service that projects to media nodes.
+    const trunk = launch('trunk-service', 'services/trunk-service/dist/src/main.js', {
+      ...common,
+      ...dbEnv(trunkDb),
+      ...behindGateway,
+      HTTP_PORT: String(ports.trunk),
+      ORG_SERVICE_URL: url(ports.org),
+      TELEPHONY_CONFIG_URL: 'http://127.0.0.1:1',
+    });
+    running.push(trunk);
+    const pbx = launch('pbx-config-service', 'services/pbx-config-service/dist/src/main.js', {
+      ...common,
+      ...dbEnv(pbxDb),
+      ...storage,
+      ...behindGateway,
+      HTTP_PORT: String(ports.pbx),
+      ORG_SERVICE_URL: url(ports.org),
+      TRUNK_SERVICE_URL: url(ports.trunk),
+    });
+    running.push(pbx);
+    const voicemail = launch('voicemail-service', 'services/voicemail-service/dist/src/main.js', {
+      ...common,
+      ...dbEnv(voicemailDb),
+      ...storage,
+      ...behindGateway,
+      HTTP_PORT: String(ports.voicemail),
+    });
+    running.push(voicemail);
+    const cdr = launch('cdr-service', 'services/cdr-service/dist/src/main.js', {
+      ...common,
+      ...dbEnv(cdrDb),
+      ...storage,
+      ...behindGateway,
+      HTTP_PORT: String(ports.cdr),
+      ORG_SERVICE_URL: url(ports.org),
+      FS_CDR_INGEST_TOKEN: `e2e-${randomBytes(8).toString('hex')}`,
+    });
+    running.push(cdr);
+
     const gateway = launch('api-gateway', 'services/api-gateway/dist/src/main.js', {
       ...common,
       HTTP_PORT: String(ports.gateway),
       IDENTITY_SERVICE_URL: url(ports.identity),
       ORG_SERVICE_URL: url(ports.org),
+      PBX_CONFIG_SERVICE_URL: url(ports.pbx),
+      CALLFLOW_SERVICE_URL: url(ports.callflow),
+      VOICEMAIL_SERVICE_URL: url(ports.voicemail),
+      CDR_SERVICE_URL: url(ports.cdr),
+      TRUNK_SERVICE_URL: url(ports.trunk),
       REDIS_URL,
       INTERNAL_HEADER_SIGNING_SECRET: headerSecret,
     });
@@ -282,6 +357,10 @@ export async function startStack(): Promise<Stack> {
       untilHealthy(org, url(ports.org)),
       untilHealthy(notification, url(ports.notification)),
       untilHealthy(callflow, url(ports.callflow)),
+      untilHealthy(trunk, url(ports.trunk)),
+      untilHealthy(pbx, url(ports.pbx)),
+      untilHealthy(voicemail, url(ports.voicemail)),
+      untilHealthy(cdr, url(ports.cdr)),
       untilHealthy(gateway, url(ports.gateway)),
     ]);
 
