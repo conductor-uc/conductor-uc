@@ -20,6 +20,7 @@ class Session {
     required this.orgId,
     required this.orgType,
     required this.permissions,
+    this.userId = '',
   });
 
   factory Session.fromTokens(Tokens tokens) {
@@ -33,6 +34,7 @@ class Session {
         orElse: () => OrgType.tenant,
       ),
       permissions: [...?(claims['perms'] as List?)?.cast<String>()],
+      userId: claims['sub'] as String? ?? '',
     );
   }
 
@@ -41,6 +43,9 @@ class Session {
   final String orgId;
   final OrgType orgType;
   final List<String> permissions;
+
+  /// The signed-in user (`sub`), so screens can tell which row is them.
+  final String userId;
 }
 
 /// The unverified payload of a JWT.

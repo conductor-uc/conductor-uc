@@ -3,7 +3,9 @@ import 'dart:io';
 
 import 'package:console/features/orgs/brand_page.dart';
 import 'package:console/features/orgs/org_defs.dart';
+import 'package:console/core/session.dart';
 import 'package:console/features/pbx/resource.dart';
+import 'package:console/features/users/users_api.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -248,5 +250,136 @@ void main() {
         );
       }
     }
+  });
+
+  group('users', () {
+    Map<String, dynamic> body(String path, String method) =>
+        _schema((paths[path] as Map)[method] as Map<String, dynamic>);
+    Set<String> props(String path, String method) =>
+        (body(path, method)['properties'] as Map).keys.cast<String>().toSet();
+
+    const users = '/v1/orgs/{orgId}/users';
+    const one = '/v1/orgs/{orgId}/users/{userId}';
+
+    test('the edit form sends what the update route takes, and the role goes through assignments', () {
+      final def = userEditDef(OrgType.tenant);
+      expect(
+        {for (final f in def.fields) f.key}.difference({'role'}),
+        props(one, 'patch'),
+      );
+      expect(paths, contains('/v1/orgs/{orgId}/roles/{roleId}/assignments'));
+      final assign =
+          (paths['/v1/orgs/{orgId}/roles/{roleId}/assignments'] as Map);
+      expect(assign.keys, containsAll(['post', 'delete']));
+    });
+
+    test('the access choices are the statuses the service knows', () {
+      final status =
+          ((body(one, 'patch')['properties'] as Map)['status'] as Map);
+      final values = {
+        for (final v in (status['anyOf'] ?? status['oneOf']) as List)
+          ...((v as Map)['enum'] as List),
+      };
+      final def = userEditDef(OrgType.tenant);
+      expect(
+        def.fields.firstWhere((f) => f.key == 'status').choices.toSet(),
+        values,
+      );
+    });
+
+    test('required fields match', () {
+      final required = {...?(body(one, 'patch')['required'] as List?)};
+      expect(required, isEmpty);
+      final def = userEditDef(OrgType.tenant);
+      expect(
+        def.fields.where((f) => f.required).map((f) => f.key),
+        containsAll(['displayName', 'status']),
+      );
+    });
+
+    test('the invite form is exactly the invitation body', () {
+      final invite = '/v1/orgs/{orgId}/invitations';
+      expect({
+        for (final f in userInviteDef.fields) f.key,
+      }, props(invite, 'post'));
+      final required = {
+        ...(body(invite, 'post')['required'] as List).cast<String>(),
+      };
+      expect({
+        for (final f in userInviteDef.fields.where((f) => f.required)) f.key,
+      }, required);
+    });
+
+    test('every field the table reads is in the list response', () {
+      final list = _schema(
+        (paths[users] as Map)['get'] as Map<String, dynamic>,
+        response: '200',
+      );
+      final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll([
+          'id',
+          'email',
+          'displayName',
+          'status',
+          'mfaEnrolled',
+          'lastLoginAt',
+          'roleIds',
+        ]),
+      );
+    });
+
+    test('every role offered is a built-in role of that kind of org', () {
+      // The role names live in @cuc/authz; this is the console's copy of the
+      // built-in ids (07 §3.3), so a rename there shows up here.
+      const builtIn = {
+        'master_admin',
+        'master_support',
+        'reseller_admin',
+        'reseller_support',
+        'tenant_admin',
+        'tenant_supervisor',
+        'tenant_user',
+      };
+      for (final roles in rolesByOrgType.values) {
+        expect(builtIn, containsAll(roles));
+      }
+      expect(roleLabels.keys.toSet(), builtIn);
+    });
+  });
+
+  group('schedule field shapes', () {
+    test('a window and a holiday have the properties the editors send', () {
+      final post = _schema(
+        (paths['/v1/tenants/{tenantId}/schedules'] as Map)['post']
+            as Map<String, dynamic>,
+      );
+      final properties = post['properties'] as Map;
+      final rule =
+          ((properties['rules'] as Map)['items'] as Map)['properties'] as Map;
+      expect(rule.keys, {'days', 'start', 'end'});
+      final holiday =
+          ((properties['holidays'] as Map)['items'] as Map)['properties']
+              as Map;
+      expect(holiday.keys, {'date', 'label'});
+      final days = (rule['days'] as Map)['items'] as Map;
+      expect(days['minimum'], 0);
+      expect(days['maximum'], 6);
+    });
+
+    test(
+      'the time zone choices are all valid IANA names the service would take',
+      () {
+        // Every entry is a canonical `Area/Place` name or UTC.
+        for (final z in commonTimezones) {
+          expect(
+            z == 'UTC' || RegExp(r'^[A-Z][A-Za-z_]+/[A-Za-z_]+$').hasMatch(z),
+            isTrue,
+            reason: z,
+          );
+        }
+      },
+    );
   });
 }

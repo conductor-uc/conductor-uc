@@ -18,6 +18,7 @@ import { createQueueRepo } from './repo/queue.repo.js';
 import { createAgentRepo } from './repo/agent.repo.js';
 import { createQueueTierRepo } from './repo/queue-tier.repo.js';
 import { createParkingLotRepo } from './repo/parking-lot.repo.js';
+import { createScheduleRepo } from './repo/schedule.repo.js';
 import { createConferenceRoomRepo } from './repo/conference-room.repo.js';
 import { registerDidRoutes } from './routes/did.routes.js';
 import { registerEmergencyLocationRoutes } from './routes/emergency-location.routes.js';
@@ -28,6 +29,7 @@ import { registerRingGroupRoutes } from './routes/ring-group.routes.js';
 import { registerQueueRoutes } from './routes/queue.routes.js';
 import { registerAgentRoutes } from './routes/agent.routes.js';
 import { registerParkingLotRoutes } from './routes/parking-lot.routes.js';
+import { registerScheduleRoutes } from './routes/schedule.routes.js';
 import { registerConferenceRoomRoutes } from './routes/conference-room.routes.js';
 import type { PbxConfigServiceDb } from './schema.js';
 import { createTrunkClient } from './trunk-client.js';
@@ -98,6 +100,7 @@ const queueRepo = createQueueRepo(db);
 const agentRepo = createAgentRepo(db);
 const queueTierRepo = createQueueTierRepo(db);
 const parkingLotRepo = createParkingLotRepo(db);
+const scheduleRepo = createScheduleRepo(db);
 const conferenceRoomRepo = createConferenceRoomRepo(db, kek);
 
 const domainConsumer = createDomainConsumer(db, bus, logger, extensionRepo);
@@ -131,6 +134,7 @@ registerRingGroupRoutes(app, ringGroupRepo);
 registerQueueRoutes(app, queueRepo, queueTierRepo);
 registerAgentRoutes(app, agentRepo);
 registerParkingLotRoutes(app, parkingLotRepo);
+registerScheduleRoutes(app, scheduleRepo);
 registerConferenceRoomRoutes(app, conferenceRoomRepo);
 registerInternalRoutes(
   app,

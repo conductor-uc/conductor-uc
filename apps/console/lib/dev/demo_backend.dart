@@ -191,6 +191,7 @@ class _DemoAdapter implements HttpClientAdapter {
     final tokens = {
       'accessToken': _jwt({
         'org': 'demo-org',
+        'sub': 'user-1',
         'ot': _orgType,
         'perms': <String>[],
       }),

@@ -5,6 +5,7 @@ import '../../widgets/page.dart';
 import 'pbx_api.dart';
 import 'resource.dart';
 import 'resource_form.dart';
+import 'schedule_fields.dart';
 
 /// A table of one resource with create, edit, and delete.
 class ResourceView extends ConsumerWidget {
@@ -111,6 +112,10 @@ class ResourceView extends ConsumerWidget {
               ? '—'
               : ids.map((id) => _lookup(ref, f.ref!, id)).join(', '),
         );
+      case FieldKind.weeklyHours:
+        return Text(summarizeRules(value));
+      case FieldKind.dateList:
+        return Text(summarizeHolidays(value));
       default:
         return Text(value == null ? '—' : '$value');
     }

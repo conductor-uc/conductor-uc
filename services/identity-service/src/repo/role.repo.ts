@@ -134,6 +134,20 @@ export function createRoleRepo(db: Database<IdentityServiceDb>) {
         .execute();
     },
 
+    /** The role ids held in one org, by user id, for the users screen. */
+    async roleIdsByUserIn(scopeOrgId: string): Promise<Map<string, string[]>> {
+      const rows = await kysely
+        .selectFrom('role_assignments')
+        .select(['user_id', 'role_id'])
+        .where('scope_org_id', '=', scopeOrgId)
+        .execute();
+      const byUser = new Map<string, string[]>();
+      for (const row of rows) {
+        byUser.set(row.user_id, [...(byUser.get(row.user_id) ?? []), row.role_id]);
+      }
+      return byUser;
+    },
+
     /** Every role id assigned to `userId`, in any scope. What `Actor.roleIds` is built from. */
     async roleIdsFor(userId: string): Promise<string[]> {
       const rows = await kysely

@@ -24,6 +24,7 @@ import { registerGrantRoutes } from './routes/grants.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerJwksRoute } from './routes/jwks.routes.js';
 import { registerRoleRoutes } from './routes/roles.routes.js';
+import { registerUserRoutes } from './routes/users.routes.js';
 import type { IdentityServiceDb } from './schema.js';
 
 const config = loadServiceConfig();
@@ -140,7 +141,9 @@ registerAuthRoutes(app, authService, {
 });
 registerJwksRoute(app, signingKeyRepo, config.SIGNING_KEY_OVERLAP_DAYS);
 registerInternalRoutes(app, userRepo, config.INTERNAL_SERVICE_TOKEN);
-registerRoleRoutes(app, createRoleRepo(db));
+const roleRepo = createRoleRepo(db);
+registerRoleRoutes(app, roleRepo);
+registerUserRoutes(app, userRepo, roleRepo);
 registerGrantRoutes(app, createGrantRepo(db));
 registerAuditRoutes(app, auditRepo);
 

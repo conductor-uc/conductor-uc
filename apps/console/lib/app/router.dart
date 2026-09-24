@@ -15,6 +15,7 @@ import '../features/orgs/orgs_page.dart';
 import '../features/pbx/resource.dart';
 import '../features/pbx/resource_page.dart';
 import '../features/shell/sections.dart';
+import '../features/users/users_page.dart';
 import '../features/shell/shell_page.dart';
 
 /// Each top-level section is its own route (08 §1), so deep links work and a
@@ -104,6 +105,7 @@ Widget _pageFor(Section section) {
   if (defs != null) return ResourcePage(defs: defs);
   if (section.path == '/call-flows') return const FlowsPage();
   if (section.path == '/brand') return const BrandPage();
+  if (section.path == '/users') return const UsersPage();
   if (section.path == '/resellers' || section.path == '/tenants') {
     return const OrgsPage();
   }
@@ -117,6 +119,7 @@ const _pbxPages = <String, List<ResourceDef>>{
   '/queues': [queuesDef, agentsDef],
   '/conference-rooms': [conferenceRoomsDef],
   '/parking-lots': [parkingLotsDef],
+  '/schedules': [schedulesDef],
   '/media': [mediaAssetsDef],
   '/settings': [emergencyLocationsDef],
 };

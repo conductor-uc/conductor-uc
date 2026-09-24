@@ -95,6 +95,29 @@ class DemoPbx {
           'returnDestinationId': null,
         },
       ],
+      'schedules': [
+        {
+          'id': 'sch-1',
+          'label': 'Office hours',
+          'timezone': 'America/Chicago',
+          'rules': [
+            {
+              'days': [1, 2, 3, 4, 5],
+              'start': '09:00',
+              'end': '17:00',
+            },
+            {
+              'days': [6],
+              'start': '10:00',
+              'end': '14:00',
+            },
+          ],
+          'holidays': [
+            {'date': '2026-12-25', 'label': 'Christmas Day'},
+            {'date': '2027-01-01'},
+          ],
+        },
+      ],
       'media-assets': [
         _media('media-1', 'prompt', 'Welcome greeting'),
         _media('media-2', 'moh', 'Hold music'),
@@ -222,6 +245,82 @@ class DemoPbx {
       for (final t in list) {
         if (t['id'] == id) return t;
       }
+    }
+    return null;
+  }
+
+  /// The signed-in org's users, invitations, and role assignments. `user-1`
+  /// is the person signed in.
+  final _users = <Map<String, dynamic>>[
+    _user('user-1', 'admin@example.test', 'Alex Admin', ['tenant_admin']),
+    _user('user-2', 'sam@example.test', 'Sam Support', ['tenant_user']),
+    _user('user-3', 'dana@example.test', 'Dana Diaz', []),
+  ];
+
+  static Map<String, dynamic> _user(
+    String id,
+    String email,
+    String name,
+    List<String> roles,
+  ) => {
+    'id': id,
+    'email': email,
+    'displayName': name,
+    'status': 'active',
+    'mfaEnrolled': id == 'user-1',
+    'lastLoginAt': id == 'user-3' ? null : '2026-09-20T15:04:00.000Z',
+    'roleIds': roles,
+  };
+
+  ResponseBody? _people(RequestOptions options) {
+    final path = options.path;
+    final method = options.method.toUpperCase();
+    final users = RegExp(r'^/v1/orgs/([^/]+)/users(?:/([^/]+))?$')
+        .firstMatch(path);
+    if (users != null) {
+      final id = users.group(2);
+      if (id == null) return _json({'rows': _users});
+      final index = _users.indexWhere((u) => u['id'] == id);
+      if (index < 0) return _problem(404, 'No such user in this organization.');
+      final body = _body(options);
+      if (body['status'] == 'disabled' && id == 'user-1') {
+        return _problem(409, 'You cannot disable your own account.');
+      }
+      _users[index] = {
+        ..._users[index],
+        for (final k in const ['displayName', 'status'])
+          if (body.containsKey(k)) k: body[k],
+      };
+      return _json(_users[index]);
+    }
+    final invite = RegExp(r'^/v1/orgs/([^/]+)/invitations$').firstMatch(path);
+    if (invite != null && method == 'POST') {
+      final body = _body(options);
+      final email = '${body['email']}'.toLowerCase();
+      if (_users.any((u) => u['email'] == email)) {
+        return _problem(409, 'That email already has an account.');
+      }
+      return _json({
+        'id': 'inv-${_next++}',
+        'email': email,
+        'expiresAt': '2026-10-01T00:00:00.000Z',
+      }, 201);
+    }
+    final assign = RegExp(r'^/v1/orgs/([^/]+)/roles/([^/]+)/assignments$')
+        .firstMatch(path);
+    if (assign != null) {
+      final body = _body(options);
+      final index = _users.indexWhere((u) => u['id'] == body['userId']);
+      if (index < 0) return _problem(404, 'No such user in this organization.');
+      final roles = [...(_users[index]['roleIds'] as List).cast<String>()];
+      final role = assign.group(2)!;
+      if (method == 'DELETE') {
+        roles.remove(role);
+      } else if (!roles.contains(role)) {
+        roles.add(role);
+      }
+      _users[index] = {..._users[index], 'roleIds': roles};
+      return ResponseBody.fromString('', 204);
     }
     return null;
   }
@@ -363,6 +462,8 @@ class DemoPbx {
   ResponseBody? handle(RequestOptions options) {
     final orgs = _orgs(options);
     if (orgs != null) return orgs;
+    final people = _people(options);
+    if (people != null) return people;
     if (options.path.endsWith('/voicemail/mailboxes')) {
       return _json({
         'rows': [
