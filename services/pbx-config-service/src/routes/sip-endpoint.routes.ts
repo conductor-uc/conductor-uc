@@ -1,6 +1,6 @@
 import { ProblemError, Type, type Server } from '@cuc/http';
 
-import type { TenantDomainLookup } from '../org-client.js';
+import { activeSipProxy, type SipProxyLookup, type TenantDomainLookup } from '../org-client.js';
 
 const TenantParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
 
@@ -42,6 +42,12 @@ const SipEndpointSchema = Type.Object({
   tlsPort: Type.Union([Type.Integer(), Type.Null()]),
   transports: Type.Array(Type.String()),
   realm: Type.String(),
+  /**
+   * Set when the tenant's phones should connect to a proxy of their own and keep
+   * `server` as the domain they log in to (an outbound proxy). Null until the
+   * proxy has a certificate, when phones connect to the server directly.
+   */
+  outboundProxy: Type.Union([Type.String(), Type.Null()]),
 });
 
 /**
@@ -58,6 +64,7 @@ export function registerSipEndpointRoutes(
   app: Server,
   primaryDomain: TenantDomainLookup,
   edge: SipEdgeConfig,
+  sipProxy?: SipProxyLookup,
 ): void {
   app.get(
     '/v1/tenants/:tenantId/sip-endpoint',
@@ -78,6 +85,7 @@ export function registerSipEndpointRoutes(
         tlsPort: edge.transports.includes('tls') ? edge.tlsPort : null,
         transports: [...edge.transports],
         realm: domain,
+        outboundProxy: (await activeSipProxy(sipProxy, request.params.tenantId)) ?? null,
       };
     },
   );
