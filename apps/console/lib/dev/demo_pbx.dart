@@ -132,8 +132,8 @@ class DemoPbx {
         },
       ],
       'media-assets': [
-        _media('media-1', 'prompt', 'Welcome greeting'),
-        _media('media-2', 'moh', 'Hold music'),
+        _mediaRow('media-1', 'prompt', 'Welcome greeting'),
+        _mediaRow('media-2', 'moh', 'Hold music'),
       ],
       'flows': [
         {
@@ -207,19 +207,37 @@ class DemoPbx {
     'emergencyLocationId': 'loc-1',
   };
 
-  static Map<String, dynamic> _media(String id, String kind, String label) => {
-    'id': id,
-    'kind': kind,
-    'label': label,
-    'status': 'ready',
-    'contentType': 'audio/wav',
-    'durationMs': 4200,
-    'sha256': null,
-    'sizeBytes': 90000,
-    'errorMessage': null,
-  };
+  static Map<String, dynamic> _mediaRow(String id, String kind, String label) =>
+      {
+        'id': id,
+        'kind': kind,
+        'label': label,
+        'status': 'ready',
+        'contentType': 'audio/wav',
+        'durationMs': 4200,
+        'sha256': null,
+        'sizeBytes': 90000,
+        'errorMessage': null,
+      };
 
   final _rows = <String, List<Map<String, dynamic>>>{};
+
+  /// Queue tiers by queue id.
+  final _queueTiers = <String, List<Map<String, dynamic>>>{
+    'q-1': [
+      {
+        'id': 'tier-1',
+        'queueId': 'q-1',
+        'agentId': 'ag-1',
+        'level': 1,
+        'position': 1,
+      },
+    ],
+  };
+
+  /// Recordings still being converted, and how many more lists until each is
+  /// done. A name containing "bad" fails, so both outcomes can be seen.
+  final _converting = <String, int>{};
   final _versions = <String, List<Map<String, dynamic>>>{};
   var _next = 100;
 
@@ -623,6 +641,102 @@ class DemoPbx {
   }
 
   /// Null when [options] is not a tenant route.
+  static final _mediaRoute = RegExp(
+    r'^/v1/tenants/[^/]+/media-assets(?:/([^/]+)/finalize)?$',
+  );
+
+  /// Uploading a recording: an address to send the bytes to, then a finalize
+  /// that starts a short "processing" before the recording is ready (or fails).
+  ResponseBody? _media(RequestOptions options) {
+    final match = _mediaRoute.firstMatch(options.path);
+    if (match == null) return null;
+    final method = options.method.toUpperCase();
+    final rows = _rows['media-assets']!;
+    final id = match.group(1);
+    if (method == 'POST' && id == null) {
+      final body = _body(options);
+      final asset = {
+        ..._mediaRow('media-${_next++}', '${body['kind']}', '${body['label']}'),
+        'status': 'pending',
+        'contentType': body['contentType'],
+        'durationMs': null,
+        'sizeBytes': null,
+      };
+      rows.add(asset);
+      return _json({
+        'asset': asset,
+        'uploadUrl': 'https://storage.demo.invalid/upload/${asset['id']}',
+      }, 201);
+    }
+    if (method == 'POST' && id != null) {
+      final asset = rows.where((r) => r['id'] == id);
+      if (asset.isEmpty) return _problem(404, 'Not found.');
+      asset.first['status'] = 'processing';
+      _converting[id] = 3;
+      return _json(asset.first);
+    }
+    if (method == 'GET' && id == null) {
+      // Each look at the list moves conversions along.
+      for (final row in rows) {
+        final left = _converting[row['id']];
+        if (left == null) continue;
+        if (left > 1) {
+          _converting['${row['id']}'] = left - 1;
+          continue;
+        }
+        _converting.remove(row['id']);
+        final bad = '${row['label']}'.toLowerCase().contains('bad');
+        row['status'] = bad ? 'failed' : 'ready';
+        row['errorMessage'] = bad ? 'The audio could not be read.' : null;
+        row['durationMs'] = bad ? null : 3200;
+        row['sizeBytes'] = bad ? null : 51200;
+      }
+    }
+    return null;
+  }
+
+  static final _tierRoute = RegExp(
+    r'^/v1/tenants/[^/]+/queues/([^/]+)/tiers(?:/([^/]+))?$',
+  );
+
+  ResponseBody? _tiers(RequestOptions options) {
+    final match = _tierRoute.firstMatch(options.path);
+    if (match == null) return null;
+    final tiers = _queueTiers.putIfAbsent(match.group(1)!, () => []);
+    final id = match.group(2);
+    final method = options.method.toUpperCase();
+    if (method == 'GET') return _json({'rows': tiers});
+    if (method == 'POST') {
+      final body = _body(options);
+      if (tiers.any((t) => t['agentId'] == body['agentId'])) {
+        return _problem(409, 'That agent is already in this queue.');
+      }
+      final tier = {
+        'id': 'tier-${_next++}',
+        'queueId': match.group(1),
+        'agentId': body['agentId'],
+        'level': body['level'] ?? 1,
+        'position': body['position'] ?? 1,
+      };
+      tiers.add(tier);
+      return _json(tier, 201);
+    }
+    final index = tiers.indexWhere((t) => t['id'] == id);
+    if (index < 0) return _problem(404, 'Not found.');
+    if (method == 'PATCH') {
+      final body = _body(options);
+      for (final k in const ['level', 'position']) {
+        if (body[k] != null) tiers[index][k] = body[k];
+      }
+      return _json(tiers[index]);
+    }
+    if (method == 'DELETE') {
+      tiers.removeAt(index);
+      return ResponseBody.fromString('', 204);
+    }
+    return _problem(405, 'Not supported.');
+  }
+
   ResponseBody? handle(RequestOptions options) {
     final orgs = _orgs(options);
     if (orgs != null) return orgs;
@@ -642,6 +756,10 @@ class DemoPbx {
         ],
       });
     }
+    final media = _media(options);
+    if (media != null) return media;
+    final tiers = _tiers(options);
+    if (tiers != null) return tiers;
     final match = _route.firstMatch(options.path);
     if (match == null) return null;
     final resource = match.group(1)!;

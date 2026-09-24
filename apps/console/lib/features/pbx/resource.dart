@@ -53,6 +53,7 @@ class Field {
     this.scope = FieldScope.both,
     this.secret = false,
     this.nullable = true,
+    this.status = false,
   });
 
   final String key;
@@ -86,6 +87,9 @@ class Field {
   /// Whether the service accepts null to clear it. When false, an empty value
   /// on edit is left out of the request rather than sent as null.
   final bool nullable;
+
+  /// Shown in the table as a status chip (a processing state), not plain text.
+  final bool status;
 
   bool inScope({required bool editing}) =>
       scope == FieldScope.both ||
@@ -213,7 +217,14 @@ const didsDef = ResourceDef(
       showInList: true,
       help: 'E.164, for example +14155550100.',
     ),
-    Field('trunkId', 'Trunk', FieldKind.ref, required: true, ref: 'trunks'),
+    Field(
+      'trunkId',
+      'Trunk',
+      FieldKind.ref,
+      required: true,
+      ref: 'trunks',
+      showInList: true,
+    ),
     Field(
       'destinationType',
       'Rings',
@@ -584,12 +595,12 @@ const mediaAssetsDef = ResourceDef(
   singular: 'Media file',
   plural: 'Media',
   icon: Icons.library_music_outlined,
-  blurb: 'Prompts, hold music, and greetings. Upload arrives with the media screens.',
+  blurb: 'Prompts, hold music, and greetings. Upload a recording and it is checked and converted before it can be used.',
   readOnly: true,
   fields: [
     Field('label', 'Name', FieldKind.text, showInList: true),
     Field('kind', 'Kind', FieldKind.text, showInList: true),
-    Field('status', 'Status', FieldKind.text, showInList: true),
+    Field('status', 'Status', FieldKind.text, showInList: true, status: true),
     Field('contentType', 'Type', FieldKind.text, showInList: true),
   ],
 );

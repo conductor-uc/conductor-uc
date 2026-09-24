@@ -35,11 +35,11 @@ class TrunksPage extends ConsumerWidget {
       key: ValueKey(picked),
       def: trunksDef,
       header: Padding(padding: const EdgeInsets.only(top: 12), child: picker),
-      rowActions: [
-        (
-          icon: Icons.lan_outlined,
+      rowActions: (context, ref, row) => [
+        IconButton(
           tooltip: 'IP addresses and status',
-          onPressed: (context, ref, row) => showDialog<void>(
+          icon: const Icon(Icons.lan_outlined),
+          onPressed: () => showDialog<void>(
             context: context,
             builder: (_) => TrunkIpsDialog(trunk: row),
           ),
