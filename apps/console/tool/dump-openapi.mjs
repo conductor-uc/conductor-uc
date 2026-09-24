@@ -29,6 +29,7 @@ const SOURCES = [
   ['org-service', 'domain', 'registerDomainRoutes', 2],
   ['org-service', 'certificate', 'registerCertificateRoutes', 1],
   ['org-service', 'acme-settings', 'registerAcmeSettingsRoutes', 3],
+  ['org-service', 'network', 'registerNetworkRoutes', 3],
   ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
   ['pbx-config-service', 'extension', 'registerExtensionRoutes', 2],
   ['pbx-config-service', 'sip-endpoint', 'registerSipEndpointRoutes', 2],
@@ -94,6 +95,9 @@ const OVERRIDES = {
   'get /v1/resellers/{id}/certificates': 'listResellerCertificates',
   'get /v1/platform/acme-settings': 'getAcmeSettings',
   'put /v1/platform/acme-settings': 'saveAcmeSettings',
+  'get /v1/platform/network-settings': 'getNetworkSettings',
+  'put /v1/platform/network-settings': 'saveNetworkSettings',
+  'get /v1/resellers/{id}/dns-records': 'listResellerDnsRecords',
   'get /v1/tenants/{tenantId}/flows/{id}/versions/{versionNumber}': 'getFlowVersion',
   'post /v1/resellers/{id}/brand/assets': 'uploadBrandAsset',
 };
