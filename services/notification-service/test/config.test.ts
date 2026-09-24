@@ -11,6 +11,7 @@ const REQUIRED = {
   DB_NAME: 'notification_service',
   NATS_SERVERS: 'nats://nats:4222',
   ORG_SERVICE_URL: 'http://org-service:8080',
+  VOICEMAIL_SERVICE_URL: 'http://voicemail-service:8080',
   INTERNAL_SERVICE_TOKEN: 'token',
   SMTP_HOST: 'mail',
   PLATFORM_NOREPLY_ADDRESS: 'noreply@platform.test',
@@ -27,6 +28,7 @@ describe('loadServiceConfig', () => {
     expect(config.SMTP_PASSWORD).toBeUndefined();
     expect(config.CONSOLE_URL_OVERRIDE).toBeUndefined();
     expect(config.CONSOLE_LINK_SCHEME).toBe('https');
+    expect(config.VOICEMAIL_MAX_ATTACHMENT_BYTES).toBe(10_000_000);
   });
 
   it('takes SMTP credentials and a console override when given', () => {

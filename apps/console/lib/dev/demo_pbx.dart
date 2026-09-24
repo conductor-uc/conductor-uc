@@ -1243,6 +1243,154 @@ class DemoPbx {
     return _problem(405, 'Not supported.');
   }
 
+  /// Mailboxes, keyed by id, and their messages. Seeded lazily so the
+  /// extensions they point at exist.
+  late final List<Map<String, dynamic>> _mailboxes = [
+    {
+      'id': 'mb-1',
+      'extensionId': 'ext-1',
+      'greetingStatus': 'none',
+      'notifyEmail': 'alice@acme-dental.example',
+      'emailAttachAudio': true,
+      'emailAfter': 'mark_read',
+    },
+    {
+      'id': 'mb-2',
+      'extensionId': 'ext-2',
+      'greetingStatus': 'ready',
+      'notifyEmail': null,
+      'emailAttachAudio': false,
+      'emailAfter': 'keep',
+    },
+  ];
+
+  late final Map<String, List<Map<String, dynamic>>> _messages = {
+    'mb-1': [
+      _message('vm-1', 'Pat Caller', '+15005550123', 42000, false, 2),
+      _message('vm-2', null, '+15005550188', 8000, false, 26),
+      _message('vm-3', 'Dr. Lee', '+15005550199', 95000, true, 50),
+    ],
+    'mb-2': <Map<String, dynamic>>[],
+  };
+
+  static Map<String, dynamic> _message(
+    String id,
+    String? name,
+    String? number,
+    int durationMs,
+    bool isRead,
+    int hoursAgo,
+  ) => {
+    'id': id,
+    'status': 'ready',
+    'callerIdName': name,
+    'callerIdNumber': number,
+    'durationMs': durationMs,
+    'isRead': isRead,
+    'createdAt': DateTime.utc(
+      2026,
+      9,
+      24,
+      19,
+      20,
+    ).subtract(Duration(hours: hoursAgo)).toIso8601String(),
+  };
+
+  static final _voicemailRoute = RegExp(
+    r'^/v1/tenants/[^/]+/voicemail/mailboxes(?:/([^/]+))?(?:/([^/]+))?(?:/([^/]+))?(?:/([^/]+))?$',
+  );
+  static final _emailAddress = RegExp(r'^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$');
+
+  Map<String, dynamic> _mailboxView(Map<String, dynamic> box) => {
+    ...box,
+    'unreadCount': (_messages[box['id']] ?? const [])
+        .where((m) => m['isRead'] != true)
+        .length,
+  };
+
+  /// The voicemail API (`voicemail-service`): mailboxes, their messages,
+  /// presigned play addresses, PIN reset and the email settings.
+  ResponseBody? _voicemail(RequestOptions options) {
+    final match = _voicemailRoute.firstMatch(options.path);
+    if (match == null) return null;
+    final method = options.method.toUpperCase();
+    final id = match.group(1);
+    if (id == null) {
+      return method == 'GET'
+          ? _json({
+              'rows': [for (final b in _mailboxes) _mailboxView(b)],
+            })
+          : _problem(405, 'Not supported.');
+    }
+    final index = _mailboxes.indexWhere((b) => b['id'] == id);
+    if (index < 0) return _problem(404, 'No mailbox with that id.');
+    final box = _mailboxes[index];
+    final part = match.group(2);
+    if (part == null) {
+      return method == 'GET'
+          ? _json(_mailboxView(box))
+          : _problem(405, 'Not supported.');
+    }
+    final messages = _messages.putIfAbsent(id, () => []);
+    if (part == 'email-settings' && method == 'PUT') {
+      final body = _body(options);
+      final address = ('${body['notifyEmail'] ?? ''}').trim();
+      final attach = body['attachAudio'] == true;
+      final after = '${body['afterEmail']}';
+      if (address.isNotEmpty && !_emailAddress.hasMatch(address)) {
+        return _problem(
+          400,
+          'notifyEmail must be a single valid email address.',
+        );
+      }
+      if (!const ['keep', 'mark_read', 'delete'].contains(after)) {
+        return _problem(
+          400,
+          "afterEmail must be 'keep', 'mark_read' or 'delete'.",
+        );
+      }
+      if (after == 'delete' && !attach) {
+        return _problem(
+          400,
+          "afterEmail 'delete' requires attachAudio: the email is then the only copy.",
+        );
+      }
+      box['notifyEmail'] = address.isEmpty ? null : address;
+      box['emailAttachAudio'] = attach;
+      box['emailAfter'] = after;
+      return _json(_mailboxView(box));
+    }
+    if (part == 'reset-pin' && method == 'POST') {
+      final pin = '${_body(options)['pin']}';
+      if (!RegExp(r'^\d{4,8}$').hasMatch(pin)) {
+        return _problem(400, 'PIN must be 4 to 8 digits.');
+      }
+      return ResponseBody.fromString('', 204);
+    }
+    if (part == 'messages') {
+      final messageId = match.group(3);
+      if (messageId == null) {
+        return method == 'GET'
+            ? _json({'rows': messages})
+            : _problem(405, 'Not supported.');
+      }
+      final at = messages.indexWhere((m) => m['id'] == messageId);
+      if (at < 0) {
+        return _problem(404, 'No message with that id in that mailbox.');
+      }
+      if (match.group(4) == 'play-url' && method == 'GET') {
+        return _json({
+          'url': 'https://storage.demo.invalid/voicemail/$messageId.wav',
+        });
+      }
+      if (match.group(4) == null && method == 'DELETE') {
+        messages.removeAt(at);
+        return ResponseBody.fromString('', 204);
+      }
+    }
+    return _problem(405, 'Not supported.');
+  }
+
   ResponseBody? handle(RequestOptions options) {
     final orgs = _orgs(options);
     if (orgs != null) return orgs;
@@ -1254,18 +1402,8 @@ class DemoPbx {
     if (certs != null) return certs;
     final phone = _phone(options);
     if (phone != null) return phone;
-    if (options.path.endsWith('/voicemail/mailboxes')) {
-      return _json({
-        'rows': [
-          {
-            'id': 'mb-1',
-            'extensionId': _rows['extensions']!.first['id'],
-            'greetingStatus': 'none',
-            'unreadCount': 0,
-          },
-        ],
-      });
-    }
+    final voicemail = _voicemail(options);
+    if (voicemail != null) return voicemail;
     final media = _media(options);
     if (media != null) return media;
     final routing = _routing(options);

@@ -2,8 +2,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
  * Event contracts this service consumes (06: notification-service "consumes
- * the events listed in 05 §5"; today, the two identity ones that need an
- * email). Copied from identity-service rather than imported — services do not
+ * the events listed in 05 §5"; the identity ones that need an
+ * email, and voicemail-service's new-message event). Copied from identity-service rather than imported — services do not
  * import each other's source (05 §1.1) — so a schema change there needs the
  * same change here.
  *
@@ -44,6 +44,15 @@ export const notificationEvents = defineEvents({
       displayName: Type.String({ minLength: 1 }),
       token: Type.String({ minLength: 1 }),
       expiresAt: Type.String({ minLength: 1 }),
+    }),
+  },
+  'voicemail.message.created': {
+    schemaVersion: 1,
+    description:
+      'A voicemail message finished uploading. Thin by design: the caller, time and audio are private-class data, so the consumer reads them from voicemail-service.',
+    data: Type.Object({
+      messageId: Type.String({ minLength: 1 }),
+      mailboxId: Type.String({ minLength: 1 }),
     }),
   },
 });

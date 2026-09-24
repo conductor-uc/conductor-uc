@@ -280,6 +280,7 @@ export async function startStack(): Promise<Stack> {
         ...dbEnv(notificationDb),
         HTTP_PORT: String(ports.notification),
         ORG_SERVICE_URL: url(ports.org),
+        VOICEMAIL_SERVICE_URL: url(ports.voicemail),
         SMTP_HOST,
         SMTP_PORT,
         PLATFORM_NOREPLY_ADDRESS: `noreply@${platformBaseDomain}`,

@@ -7,6 +7,7 @@ import 'package:console/features/orgs/org_defs.dart';
 import 'package:console/core/session.dart';
 import 'package:console/features/pbx/resource.dart';
 import 'package:console/features/users/users_api.dart';
+import 'package:console/features/voicemail/voicemail_api.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
 
@@ -111,6 +112,83 @@ void main() {
         reason: path,
       );
     }
+  });
+
+  group('voicemail (S5-07)', () {
+    const base = '/v1/tenants/{tenantId}/voicemail/mailboxes';
+
+    Set<String> keys(Map<String, dynamic> schema) =>
+        (schema['properties'] as Map).keys.cast<String>().toSet();
+
+    test(
+      'the email settings the page sends are exactly what the service takes',
+      () {
+        final body = _schema(
+          (paths['$base/{id}/email-settings'] as Map)['put']
+              as Map<String, dynamic>,
+        );
+        expect(keys(body), const EmailSettings().toJson().keys.toSet());
+        expect(body['required'], containsAll(keys(body)));
+        final choices = {
+          for (final u
+              in ((body['properties'] as Map)['afterEmail'] as Map)['anyOf']
+                  as List)
+            ((u as Map)['enum'] as List).single as String,
+        };
+        expect(emailAfterChoices.keys.toSet(), choices);
+      },
+    );
+
+    test('a mailbox carries the fields the voicemail screen reads', () {
+      final list = _schema(
+        (paths[base] as Map)['get'] as Map<String, dynamic>,
+        response: '200',
+      );
+      final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll([
+          'id',
+          'extensionId',
+          'greetingStatus',
+          'unreadCount',
+          'notifyEmail',
+          'emailAttachAudio',
+          'emailAfter',
+        ]),
+      );
+    });
+
+    test('a message carries the fields the voicemail screen reads', () {
+      final list = _schema(
+        (paths['$base/{id}/messages'] as Map)['get'] as Map<String, dynamic>,
+        response: '200',
+      );
+      final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll([
+          'id',
+          'callerIdName',
+          'callerIdNumber',
+          'durationMs',
+          'isRead',
+          'createdAt',
+        ]),
+      );
+    });
+
+    test('play, delete and PIN reset are routes the service has', () {
+      expect(paths, contains('$base/{id}/messages/{messageId}/play-url'));
+      expect(
+        (paths['$base/{id}/messages/{messageId}'] as Map),
+        contains('delete'),
+      );
+      final pin = _schema(
+        (paths['$base/{id}/reset-pin'] as Map)['post'] as Map<String, dynamic>,
+      );
+      expect(keys(pin), {'pin'});
+    });
   });
 
   group('org forms', () {

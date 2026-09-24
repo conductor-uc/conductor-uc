@@ -7,6 +7,13 @@ export interface OutgoingEmail {
   readonly subject: string;
   readonly html: string;
   readonly text: string;
+  readonly attachments?: readonly EmailAttachment[];
+}
+
+export interface EmailAttachment {
+  readonly filename: string;
+  readonly content: Buffer;
+  readonly contentType: string;
 }
 
 export interface Mailer {
@@ -57,6 +64,15 @@ export function createMailer(options: MailerOptions): Mailer {
         subject: email.subject,
         html: email.html,
         text: email.text,
+        ...(email.attachments === undefined
+          ? {}
+          : {
+              attachments: email.attachments.map((a) => ({
+                filename: a.filename,
+                content: a.content,
+                contentType: a.contentType,
+              })),
+            }),
       });
     },
     close: () => transport.close(),

@@ -15,7 +15,7 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
   beforeAll(async () => {
     h = await startHarness();
     app = await createServer({ serviceName: 'voicemail-service', logger: h.logger });
-    registerInternalRoutes(app, h.mailboxes, h.messages, TOKEN);
+    registerInternalRoutes(app, h.mailboxes, h.messages, TOKEN, h.storage);
     await app.ready();
   });
 
@@ -190,5 +190,75 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
     });
     expect(completed.statusCode).toBe(200);
     expect(completed.json()).toMatchObject({ greetingStatus: 'ready' });
+  });
+  it('exposes the email settings, unread count, and message details a notifier needs (S5-07)', async () => {
+    const tenantId = crypto.randomUUID();
+    const mailbox = await h.mailboxes.create(
+      { tenantId },
+      { extensionId: crypto.randomUUID(), pin: '1234' },
+    );
+    await h.mailboxes.updateEmailSettings({ tenantId }, mailbox.id, {
+      notifyEmail: 'owner@example.test',
+      attachAudio: true,
+      afterEmail: 'mark_read',
+    });
+    const { message, uploadUrl } = await h.messages.create({ tenantId }, mailbox.id, {
+      callerIdName: 'Pat',
+      callerIdNumber: '+15005550002',
+    });
+    await fetch(uploadUrl, { method: 'PUT', body: 'wav-bytes' });
+    await h.messages.complete({ tenantId }, message.id, { durationMs: 7000, sizeBytes: 9 });
+
+    const box = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}`,
+      headers: authHeader(),
+    });
+    expect(box.json()).toMatchObject({
+      notifyEmail: 'owner@example.test',
+      emailAttachAudio: true,
+      emailAfter: 'mark_read',
+      unreadCount: 1,
+    });
+
+    const single = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages/${message.id}`,
+      headers: authHeader(),
+    });
+    expect(single.json()).toMatchObject({
+      callerIdName: 'Pat',
+      callerIdNumber: '+15005550002',
+      durationMs: 7000,
+      sizeBytes: 9,
+    });
+  });
+
+  it('serves the recording bytes, only with a token and only within its own tenant', async () => {
+    const tenantId = crypto.randomUUID();
+    const mailbox = await h.mailboxes.create(
+      { tenantId },
+      { extensionId: crypto.randomUUID(), pin: '1234' },
+    );
+    const { message, uploadUrl } = await h.messages.create({ tenantId }, mailbox.id, {});
+    await fetch(uploadUrl, { method: 'PUT', body: 'wav-bytes' });
+    const url = `/internal/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages/${message.id}/audio`;
+
+    // Still pending: not readable yet.
+    expect((await app.inject({ method: 'GET', url, headers: authHeader() })).statusCode).toBe(404);
+    await h.messages.complete({ tenantId }, message.id, { durationMs: 1, sizeBytes: 9 });
+
+    expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+    const ok = await app.inject({ method: 'GET', url, headers: authHeader() });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.body).toBe('wav-bytes');
+
+    const other = crypto.randomUUID();
+    const crossTenant = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${other}/voicemail/mailboxes/${mailbox.id}/messages/${message.id}/audio`,
+      headers: authHeader(),
+    });
+    expect(crossTenant.statusCode).toBe(404);
   });
 });

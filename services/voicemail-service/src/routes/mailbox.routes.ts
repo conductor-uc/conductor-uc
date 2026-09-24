@@ -2,7 +2,11 @@ import type { DbContext } from '@cuc/db';
 import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 import type { Storage } from '@cuc/storage';
 
-import { InvalidExtensionIdError, InvalidPinError } from '../domain/mailbox.js';
+import {
+  InvalidEmailSettingsError,
+  InvalidExtensionIdError,
+  InvalidPinError,
+} from '../domain/mailbox.js';
 import {
   MailboxAlreadyExistsError,
   MailboxNotFoundError,
@@ -21,6 +25,12 @@ const MessageParamsSchema = Type.Object({
   messageId: Type.String({ minLength: 1 }),
 });
 
+const EmailAfterSchema = Type.Union([
+  Type.Literal('keep'),
+  Type.Literal('mark_read'),
+  Type.Literal('delete'),
+]);
+
 const MailboxSchema = Type.Object({
   id: Type.String(),
   extensionId: Type.String(),
@@ -30,6 +40,10 @@ const MailboxSchema = Type.Object({
     Type.Literal('ready'),
   ]),
   unreadCount: Type.Number(),
+  /** Voicemail-to-email (S5-07). Null address means no email. */
+  notifyEmail: Type.Union([Type.String(), Type.Null()]),
+  emailAttachAudio: Type.Boolean(),
+  emailAfter: EmailAfterSchema,
 });
 type MailboxResponse = Static<typeof MailboxSchema>;
 
@@ -47,6 +61,11 @@ const CreateMailboxBodySchema = Type.Object({
   extensionId: Type.String({ minLength: 1 }),
   pin: Type.String({ minLength: 1 }),
 });
+const EmailSettingsBodySchema = Type.Object({
+  notifyEmail: Type.Union([Type.String({ maxLength: 254 }), Type.Null()]),
+  attachAudio: Type.Boolean(),
+  afterEmail: EmailAfterSchema,
+});
 const ResetPinBodySchema = Type.Object({ pin: Type.String({ minLength: 1 }) });
 
 function ctxFor(request: {
@@ -59,6 +78,7 @@ function ctxFor(request: {
 function toProblem(error: unknown): ProblemError {
   if (error instanceof InvalidExtensionIdError) return ProblemError.badRequest(error.message);
   if (error instanceof InvalidPinError) return ProblemError.badRequest(error.message);
+  if (error instanceof InvalidEmailSettingsError) return ProblemError.badRequest(error.message);
   if (error instanceof MailboxAlreadyExistsError) {
     return ProblemError.conflict(error.message, { code: 'mailbox_already_exists' });
   }
@@ -88,7 +108,14 @@ export function registerMailboxRoutes(
 ): void {
   async function toResponse(
     ctx: DbContext,
-    mailbox: { id: string; extensionId: string; greetingStatus: string },
+    mailbox: {
+      id: string;
+      extensionId: string;
+      greetingStatus: string;
+      notifyEmail: string | null;
+      emailAttachAudio: boolean;
+      emailAfter: MailboxResponse['emailAfter'];
+    },
   ): Promise<MailboxResponse> {
     const ready = await messages.listReady(ctx, mailbox.id);
     return {
@@ -96,6 +123,9 @@ export function registerMailboxRoutes(
       extensionId: mailbox.extensionId,
       greetingStatus: mailbox.greetingStatus as MailboxResponse['greetingStatus'],
       unreadCount: ready.filter((m) => !m.isRead).length,
+      notifyEmail: mailbox.notifyEmail,
+      emailAttachAudio: mailbox.emailAttachAudio,
+      emailAfter: mailbox.emailAfter,
     };
   }
 
@@ -163,6 +193,30 @@ export function registerMailboxRoutes(
         throw toProblem(error);
       }
       return reply.status(204).send();
+    },
+  );
+
+  /** Replaces the mailbox's voicemail-to-email settings (S5-07). The address is private-class data, like the messages it announces. */
+  app.put(
+    '/v1/tenants/:tenantId/voicemail/mailboxes/:id/email-settings',
+    {
+      config: { permission: 'voicemail.access', dataClass: 'private' },
+      schema: {
+        params: MailboxParamsSchema,
+        body: EmailSettingsBodySchema,
+        response: { 200: MailboxSchema },
+      },
+    },
+    async (request) => {
+      try {
+        const ctx = ctxFor(request);
+        return toResponse(
+          ctx,
+          await mailboxes.updateEmailSettings(ctx, request.params.id, request.body),
+        );
+      } catch (error) {
+        throw toProblem(error);
+      }
     },
   );
 

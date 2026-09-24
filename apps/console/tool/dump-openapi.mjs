@@ -44,6 +44,8 @@ const SOURCES = [
   ['pbx-config-service', 'conference-room', 'registerConferenceRoomRoutes', 1],
   ['pbx-config-service', 'schedule', 'registerScheduleRoutes', 1],
   ['callflow-service', 'flow', 'registerFlowRoutes', 1],
+  ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
+  ['voicemail-service', 'mailbox', 'registerMailboxRoutes', 3],
   ['trunk-service', 'outbound-route', 'registerOutboundRouteRoutes', 1],
   ['trunk-service', 'emergency-route', 'registerEmergencyRouteRoutes', 1],
   ['cdr-service', 'cdr', 'registerCdrRoutes', 3],
@@ -102,6 +104,11 @@ const OVERRIDES = {
   'get /v1/resellers/{id}/dns-records': 'listResellerDnsRecords',
   'get /v1/tenants/{tenantId}/flows/{id}/versions/{versionNumber}': 'getFlowVersion',
   'post /v1/resellers/{id}/brand/assets': 'uploadBrandAsset',
+  'put /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/email-settings': 'saveMailboxEmailSettings',
+  'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/reset-pin': 'resetMailboxPin',
+  'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/presign': 'presignMailboxGreeting',
+  'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/complete': 'completeMailboxGreeting',
+  'get /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/messages/{messageId}/play-url': 'getMessagePlayUrl',
 };
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };
 

@@ -82,7 +82,7 @@ app.addReadinessCheck('outbox', async () => {
 });
 
 registerMailboxRoutes(app, mailboxRepo, messageRepo, storage);
-registerInternalRoutes(app, mailboxRepo, messageRepo, config.INTERNAL_SERVICE_TOKEN);
+registerInternalRoutes(app, mailboxRepo, messageRepo, config.INTERNAL_SERVICE_TOKEN, storage);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
