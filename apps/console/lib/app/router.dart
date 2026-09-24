@@ -15,7 +15,9 @@ import '../features/callflow/flows_page.dart';
 import '../features/media/media_page.dart';
 import '../features/orgs/domains_panel.dart';
 import '../features/orgs/reseller_page.dart';
+import '../features/trunks/outbound_routes_page.dart';
 import '../features/trunks/trunks_page.dart';
+import '../features/cdr/call_records_page.dart';
 import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
 import '../features/pbx/resource.dart';
@@ -139,6 +141,8 @@ Widget _pageFor(Section section) {
   if (section.path == '/audit') return const AuditPage();
   if (section.path == '/platform-health') return const PlatformHealthPage();
   if (section.path == '/trunks') return const TrunksPage();
+  if (section.path == '/outbound-routes') return const OutboundRoutesPage();
+  if (section.path == '/call-records') return const CallRecordsPage();
   if (section.path == '/domains') return const DomainsPage();
   if (section.path == '/resellers' || section.path == '/tenants') {
     return const OrgsPage();

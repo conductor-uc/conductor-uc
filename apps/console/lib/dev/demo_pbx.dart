@@ -90,6 +90,38 @@ class DemoPbx {
           'callerIdPolicy': null,
           'status': 'active',
         },
+        {
+          'id': 'trunk-2',
+          'name': 'Overflow trunk',
+          'authMode': 'ip',
+          'host': 'overflow.carrier.example',
+          'port': 5060,
+          'transport': 'udp',
+          'username': null,
+          'fromDomain': null,
+          'codecs': ['PCMU'],
+          'maxChannels': null,
+          'callerIdPolicy': null,
+          'status': 'active',
+        },
+      ],
+      'outbound-routes': [
+        {
+          'id': 'or-1',
+          'priority': 10,
+          'pattern': '+1',
+          'trunkIds': ['trunk-1'],
+          'strip': 0,
+          'prepend': null,
+        },
+        {
+          'id': 'or-2',
+          'priority': 100,
+          'pattern': '',
+          'trunkIds': ['trunk-1', 'trunk-2'],
+          'strip': 0,
+          'prepend': null,
+        },
       ],
       'dids': [
         {
@@ -870,6 +902,262 @@ class DemoPbx {
     return null;
   }
 
+  /// Outbound routes and the emergency route, with the service's own checks.
+  ResponseBody? _routing(RequestOptions options) {
+    final method = options.method.toUpperCase();
+    final emergency = RegExp(r'^/v1/tenants/[^/]+/emergency-route$')
+        .hasMatch(options.path);
+    if (emergency) {
+      switch (method) {
+        case 'GET':
+          return _emergencyRoute == null
+              ? _problem(404, 'No emergency route for this tenant.')
+              : _json(_emergencyRoute!);
+        case 'PUT':
+          final body = _body(options);
+          final numbers = [
+            for (final n in (body['numbers'] as List? ?? const [])) '$n'.trim(),
+          ];
+          if (numbers.isEmpty) {
+            return _problem(400, 'At least one emergency number is required.');
+          }
+          for (final n in numbers) {
+            if (!RegExp(r'^\d{2,6}$').hasMatch(n)) {
+              return _problem(
+                400,
+                "'$n' is not a valid emergency number: digits only, no country code or prefix.",
+              );
+            }
+          }
+          if (numbers.toSet().length != numbers.length) {
+            return _problem(400, 'A number is listed more than once.');
+          }
+          if (!_rows['trunks']!.any((t) => t['id'] == body['trunkId'])) {
+            return _problem(400, 'No such trunk.');
+          }
+          _emergencyRoute = {
+            'id': _emergencyRoute?['id'] ?? 'er-1',
+            'trunkId': body['trunkId'],
+            'numbers': numbers,
+          };
+          return _json(_emergencyRoute!);
+        case 'DELETE':
+          if (_emergencyRoute == null) {
+            return _problem(404, 'No emergency route for this tenant.');
+          }
+          _emergencyRoute = null;
+          return ResponseBody.fromString('', 204);
+      }
+      return _problem(405, 'Not supported.');
+    }
+    final match = RegExp(r'^/v1/tenants/[^/]+/outbound-routes(?:/([^/]+))?$')
+        .firstMatch(options.path);
+    if (match == null) return null;
+    final rows = _rows['outbound-routes']!;
+    final id = match.group(1);
+    if (method == 'GET' && id == null) {
+      final sorted = [
+        ...rows,
+      ]..sort((a, b) => (a['priority'] as int).compareTo(b['priority'] as int));
+      return _json({'rows': sorted});
+    }
+    if (method == 'POST' && id == null) {
+      final body = _body(options);
+      final row = {
+        'id': 'or-${_next++}',
+        'priority': null,
+        'pattern': null,
+        'trunkIds': null,
+        'strip': 0,
+        'prepend': null,
+      };
+      return _saveRoute(rows, row, body, created: true);
+    }
+    final index = rows.indexWhere((r) => r['id'] == id);
+    if (index < 0) return _problem(404, 'No outbound route with that id.');
+    switch (method) {
+      case 'GET':
+        return _json(rows[index]);
+      case 'PATCH':
+        return _saveRoute(rows, rows[index], _body(options));
+      case 'DELETE':
+        rows.removeAt(index);
+        return ResponseBody.fromString('', 204);
+    }
+    return _problem(405, 'Not supported.');
+  }
+
+  ResponseBody _saveRoute(
+    List<Map<String, dynamic>> rows,
+    Map<String, dynamic> row,
+    Map<String, dynamic> body, {
+    bool created = false,
+  }) {
+    final next = {...row, for (final k in body.keys) k: body[k]};
+    final pattern = '${next['pattern'] ?? ''}'.trim();
+    if (!RegExp(r'^(\+\d*)?$').hasMatch(pattern)) {
+      return _problem(
+        400,
+        "'$pattern' is not a valid outbound route pattern: an E.164 prefix (e.g. '+1', '+44') or empty for catch-all.",
+      );
+    }
+    final trunks = [...(next['trunkIds'] as List? ?? const [])];
+    if (trunks.isEmpty) return _problem(400, 'At least one trunk is required.');
+    if (trunks.toSet().length != trunks.length) {
+      return _problem(400, 'A trunk is listed more than once.');
+    }
+    final priority = next['priority'];
+    if (priority is! int || priority < 0) {
+      return _problem(400, 'priority must be a non-negative integer.');
+    }
+    next['pattern'] = pattern;
+    if (next['prepend'] == '') next['prepend'] = null;
+    row
+      ..clear()
+      ..addAll(next);
+    if (created) rows.add(row);
+    return _json(row, created ? 201 : 200);
+  }
+
+  Map<String, dynamic>? _emergencyRoute;
+
+  /// Call records (a fixed set, newest first, so paging and filters can be
+  /// seen) and their CSV exports.
+  ResponseBody? _calls(RequestOptions options) {
+    final method = options.method.toUpperCase();
+    final path = options.path;
+    final one = RegExp(r'^/v1/tenants/[^/]+/cdrs/([^/]+)$').firstMatch(path);
+    if (one != null && method == 'GET') {
+      final found = _cdrs.where((c) => c['id'] == one.group(1));
+      return found.isEmpty
+          ? _problem(404, 'No CDR with that id.')
+          : _json(found.first);
+    }
+    if (RegExp(r'^/v1/tenants/[^/]+/cdrs$').hasMatch(path) && method == 'GET') {
+      final q = options.queryParameters;
+      final from = q['from'] == null ? null : DateTime.parse('${q['from']}');
+      final to = q['to'] == null ? null : DateTime.parse('${q['to']}');
+      final limit = int.tryParse('${q['limit'] ?? 50}') ?? 50;
+      final after = q['cursor'] == null ? -1 : int.parse('${q['cursor']}');
+      final matching = [
+        for (final (i, c) in _cdrs.indexed)
+          if (i > after &&
+              (from == null ||
+                  !DateTime.parse('${c['startAt']}').isBefore(from)) &&
+              (to == null || !DateTime.parse('${c['startAt']}').isAfter(to)) &&
+              (q['direction'] == null || c['direction'] == q['direction']) &&
+              (q['did'] == null || c['did'] == q['did']) &&
+              (q['number'] == null ||
+                  c['fromNumber'] == q['number'] ||
+                  c['toNumber'] == q['number'] ||
+                  c['dialedNumber'] == q['number']))
+            (i, c),
+      ];
+      final page = matching.take(limit).toList();
+      final more = matching.length > page.length;
+      return _json({
+        'rows': [for (final (_, c) in page) c],
+        'nextCursor': more ? '${page.last.$1}' : null,
+      });
+    }
+    if (RegExp(r'^/v1/tenants/[^/]+/cdr-exports$').hasMatch(path) &&
+        method == 'POST') {
+      final body = _body(options);
+      final from = DateTime.tryParse('${body['from']}');
+      final to = DateTime.tryParse('${body['to']}');
+      if (from == null || to == null) {
+        return _problem(400, 'from and to must be valid RFC 3339 timestamps.');
+      }
+      if (!to.isAfter(from)) return _problem(400, 'to must be after from.');
+      if (to.difference(from).inDays > 366) {
+        return _problem(400, 'from/to cannot span more than 366 days.');
+      }
+      final export = {
+        'id': 'exp-${_next++}',
+        'status': 'pending',
+        'fromAt': from.toUtc().toIso8601String(),
+        'toAt': to.toUtc().toIso8601String(),
+        'downloadUrl': null,
+        'errorMessage': null,
+      };
+      _exports['${export['id']}'] = export;
+      return _json(export, 201);
+    }
+    final exp = RegExp(r'^/v1/tenants/[^/]+/cdr-exports/([^/]+)$')
+        .firstMatch(path);
+    if (exp != null && method == 'GET') {
+      final export = _exports[exp.group(1)];
+      if (export == null) return _problem(404, 'No CDR export with that id.');
+      // Each look moves it along: pending, processing, then ready. A range
+      // from before 2020 fails, so that outcome can be seen too.
+      if (export['status'] == 'pending') {
+        export['status'] = 'processing';
+      } else if (export['status'] == 'processing') {
+        final old = DateTime.parse('${export['fromAt']}').year < 2020;
+        export['status'] = old ? 'failed' : 'ready';
+        export['errorMessage'] = old ? 'The file could not be written.' : null;
+        export['downloadUrl'] = old
+            ? null
+            : 'https://storage.demo.invalid/exports/${export['id']}.csv';
+      }
+      return _json(export);
+    }
+    return null;
+  }
+
+  final _exports = <String, Map<String, dynamic>>{};
+
+  /// 65 calls, one every three hours back from 2026-09-24, so the list spans
+  /// two pages.
+  late final List<Map<String, dynamic>> _cdrs = [
+    for (var i = 0; i < 65; i++) _cdr(i),
+  ];
+
+  static Map<String, dynamic> _cdr(int i) {
+    final start = DateTime.utc(2026, 9, 24, 9).subtract(Duration(hours: 3 * i));
+    final kind = i % 3; // 0 inbound, 1 outbound, 2 internal
+    final answered = i % 5 != 4;
+    final duration = answered ? 30 + (i * 37) % 600 : 0;
+    final ext = 101 + i % 3;
+    final direction = ['inbound', 'outbound', 'internal'][kind];
+    return {
+      'id': 'cdr-${i + 1}',
+      'direction': direction,
+      'startAt': start.toIso8601String(),
+      'answerAt': answered
+          ? start.add(const Duration(seconds: 4)).toIso8601String()
+          : null,
+      'endAt': start.add(Duration(seconds: duration + 6)).toIso8601String(),
+      'durationSec': duration + 6,
+      'billableSec': duration,
+      'fromNumber': switch (kind) {
+        0 => '+1415555${(1000 + i).toString()}',
+        1 => '$ext',
+        _ => '$ext',
+      },
+      'fromName': kind == 1 || kind == 2 ? 'Ext $ext' : null,
+      'toNumber': switch (kind) {
+        0 => '$ext',
+        1 => '+1212555${(2000 + i).toString()}',
+        _ => '${101 + (i + 1) % 3}',
+      },
+      'dialedNumber': switch (kind) {
+        0 => '+14155550100',
+        1 => '+1212555${(2000 + i).toString()}',
+        _ => '${101 + (i + 1) % 3}',
+      },
+      'did': kind == 0 ? '+14155550100' : null,
+      'trunkId': kind == 2 ? null : 'trunk-1',
+      'extensionIds': ['ext-${ext - 100}'],
+      'disposition': answered ? 'answered' : (kind == 1 ? 'busy' : 'no_answer'),
+      'hangupCause': answered ? 'NORMAL_CLEARING' : 'NO_ANSWER',
+      'hangupBy': answered ? 'caller' : 'system',
+      'queueId': null,
+      'flowId': kind == 0 ? 'flow-1' : null,
+      'recordingIds': <String>[],
+    };
+  }
+
   static final _tierRoute = RegExp(
     r'^/v1/tenants/[^/]+/queues/([^/]+)/tiers(?:/([^/]+))?$',
   );
@@ -937,6 +1225,10 @@ class DemoPbx {
     }
     final media = _media(options);
     if (media != null) return media;
+    final routing = _routing(options);
+    if (routing != null) return routing;
+    final calls = _calls(options);
+    if (calls != null) return calls;
     final tiers = _tiers(options);
     if (tiers != null) return tiers;
     final match = _route.firstMatch(options.path);

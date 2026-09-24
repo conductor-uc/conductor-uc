@@ -133,6 +133,12 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       requires: ['group.manage'],
     ),
     Section(
+      '/outbound-routes',
+      'Outbound routes',
+      Icons.call_made_outlined,
+      requires: ['trunk.manage', 'emergency_route.manage'],
+    ),
+    Section(
       '/queues',
       'Queues',
       Icons.queue_outlined,
@@ -181,6 +187,13 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       Icons.voicemail_outlined,
       privateData: true,
       requires: ['voicemail.access'],
+    ),
+    Section(
+      '/call-records',
+      'Call records',
+      Icons.history_outlined,
+      privateData: true,
+      requires: ['cdr.read'],
     ),
     Section(
       '/reports',

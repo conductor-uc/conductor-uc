@@ -12598,6 +12598,1097 @@
         ]
       }
     },
+    "/v1/tenants/{tenantId}/outbound-routes": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "priority",
+                          "pattern",
+                          "trunkIds",
+                          "strip",
+                          "prepend"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "priority": {
+                            "type": "integer"
+                          },
+                          "pattern": {
+                            "type": "string"
+                          },
+                          "trunkIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "strip": {
+                            "type": "integer"
+                          },
+                          "prepend": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listOutboundRoutes",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "priority",
+                  "pattern",
+                  "trunkIds"
+                ],
+                "properties": {
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "pattern": {
+                    "type": "string"
+                  },
+                  "trunkIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  },
+                  "strip": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "prepend": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "priority",
+                    "pattern",
+                    "trunkIds",
+                    "strip",
+                    "prepend"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "priority": {
+                      "type": "integer"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "trunkIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "strip": {
+                      "type": "integer"
+                    },
+                    "prepend": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createOutboundRoute",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/outbound-routes/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "priority",
+                    "pattern",
+                    "trunkIds",
+                    "strip",
+                    "prepend"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "priority": {
+                      "type": "integer"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "trunkIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "strip": {
+                      "type": "integer"
+                    },
+                    "prepend": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getOutboundRoute",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "priority": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "pattern": {
+                    "type": "string"
+                  },
+                  "trunkIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  },
+                  "strip": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "prepend": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "priority",
+                    "pattern",
+                    "trunkIds",
+                    "strip",
+                    "prepend"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "priority": {
+                      "type": "integer"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "trunkIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "strip": {
+                      "type": "integer"
+                    },
+                    "prepend": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateOutboundRoute",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteOutboundRoute",
+        "tags": [
+          "OutboundRoutes"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/emergency-route": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "trunkId",
+                    "numbers"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "trunkId": {
+                      "type": "string"
+                    },
+                    "numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listEmergencyRoute",
+        "tags": [
+          "EmergencyRoute"
+        ]
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "trunkId",
+                  "numbers"
+                ],
+                "properties": {
+                  "trunkId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "numbers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "minItems": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "trunkId",
+                    "numbers"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "trunkId": {
+                      "type": "string"
+                    },
+                    "numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveEmergencyRoute",
+        "tags": [
+          "EmergencyRoute"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteEmergencyRoute",
+        "tags": [
+          "EmergencyRoute"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/cdrs": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "inbound"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "outbound"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "internal"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "direction",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "did",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "number",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 1,
+              "maximum": 200
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "direction",
+                          "startAt",
+                          "answerAt",
+                          "endAt",
+                          "durationSec",
+                          "billableSec",
+                          "fromNumber",
+                          "fromName",
+                          "toNumber",
+                          "dialedNumber",
+                          "did",
+                          "trunkId",
+                          "extensionIds",
+                          "disposition",
+                          "hangupCause",
+                          "hangupBy",
+                          "queueId",
+                          "flowId",
+                          "recordingIds"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "direction": {
+                            "type": "string"
+                          },
+                          "startAt": {
+                            "type": "string"
+                          },
+                          "answerAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "endAt": {
+                            "type": "string"
+                          },
+                          "durationSec": {
+                            "type": "number"
+                          },
+                          "billableSec": {
+                            "type": "number"
+                          },
+                          "fromNumber": {
+                            "type": "string"
+                          },
+                          "fromName": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "toNumber": {
+                            "type": "string"
+                          },
+                          "dialedNumber": {
+                            "type": "string"
+                          },
+                          "did": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "trunkId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "extensionIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "disposition": {
+                            "type": "string"
+                          },
+                          "hangupCause": {
+                            "type": "string"
+                          },
+                          "hangupBy": {
+                            "type": "string"
+                          },
+                          "queueId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "flowId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "recordingIds": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listCdrs",
+        "tags": [
+          "Cdrs"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/cdrs/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "direction",
+                    "startAt",
+                    "answerAt",
+                    "endAt",
+                    "durationSec",
+                    "billableSec",
+                    "fromNumber",
+                    "fromName",
+                    "toNumber",
+                    "dialedNumber",
+                    "did",
+                    "trunkId",
+                    "extensionIds",
+                    "disposition",
+                    "hangupCause",
+                    "hangupBy",
+                    "queueId",
+                    "flowId",
+                    "recordingIds"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "direction": {
+                      "type": "string"
+                    },
+                    "startAt": {
+                      "type": "string"
+                    },
+                    "answerAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "endAt": {
+                      "type": "string"
+                    },
+                    "durationSec": {
+                      "type": "number"
+                    },
+                    "billableSec": {
+                      "type": "number"
+                    },
+                    "fromNumber": {
+                      "type": "string"
+                    },
+                    "fromName": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "toNumber": {
+                      "type": "string"
+                    },
+                    "dialedNumber": {
+                      "type": "string"
+                    },
+                    "did": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "trunkId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "extensionIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "disposition": {
+                      "type": "string"
+                    },
+                    "hangupCause": {
+                      "type": "string"
+                    },
+                    "hangupBy": {
+                      "type": "string"
+                    },
+                    "queueId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "flowId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "recordingIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getCdr",
+        "tags": [
+          "Cdrs"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/cdr-exports": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "from",
+                  "to"
+                ],
+                "properties": {
+                  "from": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "to": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status",
+                    "fromAt",
+                    "toAt",
+                    "downloadUrl",
+                    "errorMessage"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "fromAt": {
+                      "type": "string"
+                    },
+                    "toAt": {
+                      "type": "string"
+                    },
+                    "downloadUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "errorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createCdrExport",
+        "tags": [
+          "CdrExports"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/cdr-exports/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status",
+                    "fromAt",
+                    "toAt",
+                    "downloadUrl",
+                    "errorMessage"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "fromAt": {
+                      "type": "string"
+                    },
+                    "toAt": {
+                      "type": "string"
+                    },
+                    "downloadUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "errorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getCdrExport",
+        "tags": [
+          "CdrExports"
+        ]
+      }
+    },
     "/v1/platform/health": {
       "get": {
         "responses": {

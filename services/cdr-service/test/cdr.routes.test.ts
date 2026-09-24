@@ -99,6 +99,20 @@ describe.skipIf(skipReason !== undefined)('cdr HTTP routes', () => {
     expect(got.json()).toMatchObject({ id: created.id, disposition: 'answered' });
   });
 
+  it('filters the list by number', async () => {
+    await h.cdrs.ingest(sample({ fromNumber: '101', toNumber: '102', dialedNumber: '102' }), null);
+    await h.cdrs.ingest(sample({ fromNumber: '103', toNumber: '104', dialedNumber: '104' }), null);
+
+    const filtered = await app.inject({
+      method: 'GET',
+      url: `/v1/tenants/tenant-a/cdrs?number=104`,
+      headers: tenantHeaders('tenant-a'),
+    });
+    expect(filtered.statusCode).toBe(200);
+    const body: { rows: { toNumber: string }[] } = filtered.json();
+    expect(body.rows.map((r) => r.toNumber)).toEqual(['104']);
+  });
+
   it('404s getting an unknown CDR', async () => {
     const response = await app.inject({
       method: 'GET',

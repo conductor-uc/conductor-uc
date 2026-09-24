@@ -85,12 +85,17 @@ const _masterAdmin = [
 ///
 /// - `limited@...` is a tenant who can change extensions and see presence only.
 /// - `editor@...` is a tenant who can edit call flows but not publish them.
+/// - `reader@...` is a tenant who can read call records but not export them.
+/// - `routes@...` is a tenant who can change outbound routes but not the
+///   emergency route.
 /// - `noperm@...` is a tenant whose permission lookup fails.
 List<String>? demoPermissions(String orgType, String email) {
   if (email.startsWith('noperm')) return null;
   if (email.startsWith('limited')) {
     return const ['org.view', 'extension.manage', 'monitor.presence'];
   }
+  if (email.startsWith('reader')) return const ['org.view', 'cdr.read'];
+  if (email.startsWith('routes')) return const ['org.view', 'trunk.manage'];
   if (email.startsWith('editor')) return const ['org.view', 'callflow.edit'];
   return switch (orgType) {
     'master' => [

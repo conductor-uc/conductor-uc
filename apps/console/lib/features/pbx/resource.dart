@@ -54,6 +54,8 @@ class Field {
     this.secret = false,
     this.nullable = true,
     this.status = false,
+    this.allowEmpty = false,
+    this.emptyLabel,
   });
 
   final String key;
@@ -90,6 +92,13 @@ class Field {
 
   /// Shown in the table as a status chip (a processing state), not plain text.
   final bool status;
+
+  /// A required text whose empty value is meaningful (sent as an empty string,
+  /// not left out): a catch-all pattern.
+  final bool allowEmpty;
+
+  /// What the table shows for an empty value instead of a dash.
+  final String? emptyLabel;
 
   bool inScope({required bool editing}) =>
       scope == FieldScope.both ||
@@ -681,6 +690,74 @@ const trunksDef = ResourceDef(
   ],
 );
 
+/// How a tenant's outbound calls pick a trunk: the first route, lowest
+/// priority number first, whose prefix the dialed number starts with. The
+/// service lists them in that order, so changing the priority reorders them.
+const outboundRoutesDef = ResourceDef(
+  key: 'outbound-routes',
+  permission: 'trunk.manage',
+  singular: 'Outbound route',
+  plural: 'Outbound routes',
+  icon: Icons.call_made_outlined,
+  blurb: 'Which trunks carry outgoing calls. The lowest priority number is tried first.',
+  title: _outboundRouteTitle,
+  fields: [
+    Field(
+      'priority',
+      'Priority',
+      FieldKind.integer,
+      required: true,
+      min: 0,
+      initial: 10,
+      showInList: true,
+      help: 'Lower numbers are tried first.',
+    ),
+    Field(
+      'pattern',
+      'Number prefix',
+      FieldKind.text,
+      required: true,
+      allowEmpty: true,
+      emptyLabel: 'Everything else',
+      showInList: true,
+      help: "Starts with +, such as +1 or +44. Leave empty for all other numbers.",
+    ),
+    Field(
+      'trunkIds',
+      'Trunks',
+      FieldKind.refList,
+      required: true,
+      ref: 'trunks',
+      showInList: true,
+      help: 'At least one.',
+    ),
+    Field(
+      'strip',
+      'Digits to remove',
+      FieldKind.integer,
+      min: 0,
+      initial: 0,
+      nullable: false,
+      showInList: true,
+      help: 'Taken off the front of the number before dialing.',
+    ),
+    Field(
+      'prepend',
+      'Digits to add',
+      FieldKind.text,
+      showInList: true,
+      help: 'Put on the front of the number before dialing.',
+    ),
+  ],
+);
+
+String _outboundRouteTitle(Map<String, dynamic> row) {
+  final pattern = row['pattern'];
+  return pattern is String && pattern.isNotEmpty
+      ? 'Calls to $pattern'
+      : 'All other outgoing calls';
+}
+
 /// Callflows are listed by their own page; the definition exists so other
 /// resources can pick a flow as a destination.
 const flowsDef = ResourceDef(
@@ -747,6 +824,7 @@ const allResources = <ResourceDef>[
   emergencyLocationsDef,
   mediaAssetsDef,
   trunksDef,
+  outboundRoutesDef,
   flowsDef,
 ];
 
