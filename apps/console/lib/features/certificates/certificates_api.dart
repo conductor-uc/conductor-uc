@@ -44,6 +44,27 @@ class CertificatesApi {
     ),
   );
 
+  /// Where the platform is reached from the internet (the operator's alone).
+  Future<Json> networkSettings() => _object(
+    _dio.get<Object?>('/v1/platform/network-settings', options: _options),
+  );
+
+  Future<Json> savePublicAddress(String? publicAddress) => _object(
+    _dio.put<Object?>(
+      '/v1/platform/network-settings',
+      data: {'publicAddress': publicAddress},
+      options: _options,
+    ),
+  );
+
+  /// The DNS records a reseller publishes, one per name a certificate is kept for.
+  Future<Json> resellerDnsRecords(String resellerId) => _object(
+    _dio.get<Object?>(
+      '/v1/resellers/$resellerId/dns-records',
+      options: _options,
+    ),
+  );
+
   Future<List<Json>> platformCertificates() =>
       _rows('/v1/platform/certificates');
 
@@ -76,4 +97,17 @@ final resellerCertificatesProvider = FutureProvider.autoDispose
               .watch(certificatesApiProvider)
               ?.resellerCertificates(resellerId) ??
           const [];
+    });
+
+final networkSettingsProvider = FutureProvider.autoDispose<Json>((ref) async {
+  final api = ref.watch(certificatesApiProvider);
+  if (api == null) throw StateError('Not signed in.');
+  return api.networkSettings();
+});
+
+final resellerDnsRecordsProvider = FutureProvider.autoDispose
+    .family<Json, String>((ref, resellerId) async {
+      final api = ref.watch(certificatesApiProvider);
+      if (api == null) throw StateError('Not signed in.');
+      return api.resellerDnsRecords(resellerId);
     });

@@ -120,6 +120,8 @@ sequenceDiagram
   O-->>P: 200 OK (contact stored in usrloc, cluster-shared)
 ```
 
+A phone may connect to a **SIP proxy hostname** (`sip.<reseller base domain>`, or `sip.<platform base domain>` for direct tenants) as an outbound proxy while it registers to, and authenticates against, the tenant's domain above. The proxy name only decides which TLS certificate the phone sees; see [03 §2.3](03-signaling-and-media.md#23-sip-over-tls).
+
 ### 4.2 Inbound call from a tenant trunk
 
 ```mermaid

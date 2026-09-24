@@ -46,6 +46,22 @@ Every service:
 - Rate limits per IP, per user, and per API key (Redis).
 - Hosts the WebSocket hub for live events (presence, active calls, wallboards). It subscribes to NATS and filters each message by the subscriber's permissions.
 - Handles CORS for the console hostnames, which are known from `console_hostnames`.
+- Serves **HTTPS** when given a certificate (see the table below), sets security headers on every response, and can host the built console from its own origin.
+- Answers the certificate authority's ACME HTTP-01 challenge on the plain-HTTP port, fetching the answer from org-service.
+
+| Setting | Effect |
+|---|---|
+| `TLS_CERT_FILE` + `TLS_KEY_FILE` (both or neither) | Default certificate, for a client that names no host or one with no certificate. TLS 1.2 minimum. |
+| `TLS_CERT_DIR` | One certificate per hostname chosen by SNI: `<dir>/<hostname>/fullchain.pem` + `privkey.pem`, wildcard in `_.<domain>`. Renewed files are picked up within a minute. |
+| `TLS_FROM_ORG_SERVICE` (needs `INTERNAL_SERVICE_TOKEN`) | Console hostnames' certificates come from org-service (console-purpose certificates only), cached in memory and rechecked at most once a minute per name. Files in `TLS_CERT_DIR` win. |
+| `HTTP_REDIRECT_PORT` | Plain-HTTP listener (port 80 in production): answers `/.well-known/acme-challenge/<token>` from org-service, redirects everything else with 308 to HTTPS. |
+| `HSTS_MAX_AGE_SECONDS` | Default one year; 0 turns `Strict-Transport-Security` off. Sent only when the request arrived over HTTPS. |
+| `REQUIRE_HTTPS_FOR_PROVISIONING` | Default on: phone provisioning over plain HTTP gets a 403 (the file carries a SIP password). Development over `http://localhost` turns it off. |
+| `CONSOLE_DIR`, `CONSOLE_CONNECT_SOURCES` | Serve the built Flutter web console (`flutter build web --release --no-web-resources-cdn`) under a strict Content-Security-Policy; other origins the console may call (the object store) are listed in `CONSOLE_CONNECT_SOURCES`. Unknown extension-less paths get `index.html`. |
+
+Responses carry `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy` and `Permissions-Policy`; API responses are `Cache-Control: no-store`. Route table entries added for certificates and provisioning: `/v1/platform/acme-settings`, `/v1/platform/certificates` (org), `/v1/public/provision`, `/v1/tenants/*/devices`, `/v1/tenants/*/sip-endpoint` (pbx).
+
+The WebSocket hub listed above is not present in `services/api-gateway/src` at the time of writing.
 
 **Must not** contain business logic or authorization decisions beyond authentication and coarse route-level checks. Services authorize.
 
@@ -62,11 +78,15 @@ Every service:
 - `POST /v1/tenants/{id}:suspend` and `:resume`
 - `POST /v1/resellers/{id}/base-domains` and `:verify`
 - `PUT /v1/resellers/{id}/brand`
+- `GET /v1/resellers/{id}/certificates` and `GET /v1/platform/certificates` (`domain.manage`; status and last error per hostname)
+- `GET/PUT /v1/platform/acme-settings` (`domain.manage`; contact address, production or staging, agreement to the CA's terms)
 - `GET /v1/public/brand?host=` (unauthenticated; returns reseller brand or `{"neutral": true}`)
 
-**Events:** `org.reseller.created|updated|suspended|resumed|deleted`, `org.tenant.*` (same verbs), `org.domain.added|removed`, `org.brand.updated`.
+**Events:** `org.reseller.created|updated|suspended|resumed|deleted`, `org.tenant.*` (same verbs), `org.domain.added|removed`, `org.brand.updated`, `org.certificate.issued` (a certificate was issued or renewed; carries no key).
 
-**Depends on:** identity-service (creating the initial admin user for a new reseller or tenant), storage (brand assets).
+**Certificates (G-105):** also owns the TLS certificate lifecycle (tables `tls_certificates`, `acme_challenges`, `acme_accounts`, `acme_settings`; overview in [02 §3.1](02-tenancy-and-branding.md#31-tls-certificates)). A reconciler (startup and every 5 minutes) decides which hostnames need one; a background worker (`certificate-worker`, `acme-issuer`) requests them from Let's Encrypt over HTTP-01 once the console's ACME settings are complete. `ACME_DIRECTORY_URL` points it at another ACME server (tests use Pebble). Private keys are envelope-encrypted with `CRYPTO_KEKS`. Internal routes (service token): `GET /internal/v1/tenants/{id}/sip-proxy` (the proxy hostname for a tenant), `GET /internal/v1/certificates` and `/{fqdn}` (chain and key, for consumers), `GET /internal/v1/acme/challenges/{token}`.
+
+**Depends on:** identity-service (creating the initial admin user for a new reseller or tenant), storage (brand assets), Let's Encrypt (or `ACME_DIRECTORY_URL`).
 
 ## identity-service
 
@@ -89,9 +109,20 @@ Every service:
 
 **Owns:** extensions, SIP credentials, devices, DIDs, ring and hunt groups, queues and agents, parking lots, conference rooms, schedules, media assets, emergency locations.
 
-**Public API:** `/v1/tenants/{t}/extensions`, `/dids`, `/ring-groups`, `/queues`, `/parking-lots`, `/conference-rooms`, `/schedules`, `/media-assets` (upload via presigned URL, then `:finalize`, which transcodes to 8 kHz/16 kHz WAV).
+**Public API:** `/v1/tenants/{t}/extensions`, `/devices`, `/sip-endpoint`, `/dids`, `/ring-groups`, `/queues`, `/parking-lots`, `/conference-rooms`, `/schedules`, `/media-assets` (upload via presigned URL, then `:finalize`, which transcodes to 8 kHz/16 kHz WAV).
 
 **Events:** `pbx.{entity}.created|updated|deleted` for each entity above.
+
+**Phone setup (G-102, G-103, G-105):**
+
+| Route | Purpose |
+|---|---|
+| `GET /v1/tenants/{t}/sip-endpoint` (`extension.manage`) | What a phone is told: `server` and `realm` (the tenant's primary domain; 409 if none), `port`/`tlsPort`, `transports`, and `outboundProxy` (the tenant's SIP proxy hostname from org-service, only once its certificate is active, otherwise null). |
+| `/v1/tenants/{t}/devices` (`extension.manage`) | A Yealink phone by MAC (unique across all tenants) and the extension it registers as. |
+| `POST .../devices/{id}/provisioning-credentials` (`secret.reveal`, audited) | Per-device password, shown once; only its SHA-256 is kept. |
+| `GET /v1/public/provision/yealink/{file}` (public; authenticates itself) | `<mac>.cfg` and the model-wide file. HTTP Basic with either the platform-wide credential (`PROVISIONING_USERNAME` + `PROVISIONING_PASSWORD`, set together) or the device's own; every failure is the same 401. The file sets account 1, the transport, and the outbound proxy (or turns it off), and asks the phone to refetch every 1440 minutes. |
+
+Settings: `SIP_PUBLIC_PORT` (5060), `SIP_PUBLIC_TLS_PORT` (5061), `SIP_PUBLIC_TRANSPORTS` (code default `udp,tcp`; compose sets `udp,tcp,tls`; put `tls` first in production), `PROVISIONING_BASE_URL` (unset: provisioning URLs are null). The platform-wide credential does not isolate one tenant's phones from another's (a MAC is not a secret); see G-103. Only Yealink is supported.
 
 **Notes:**
 
@@ -105,7 +136,8 @@ Every service:
 **Interfaces:**
 
 - `POST /fs/directory`, `/fs/dialplan`, `/fs/configuration`, reachable only from FS nodes (network ACL + shared token). See [03 §3.1](03-signaling-and-media.md#31-xml_curl-endpoints-telephony-config).
-- OpenSIPs projection: `domain`, `subscriber`, `address`, `dr_gateways`, `dr_rules`, `dr_groups`, `registrant`, `dispatcher`, plus MI reload calls.
+- OpenSIPs projection: `domain`, `subscriber`, `address`, `dr_gateways`, `dr_rules`, `dr_groups`, `registrant`, `dispatcher`, `tls_mgm`, plus MI reload calls.
+- **Certificates:** `certificate-sync` consumes `org.certificate.issued` and runs a periodic reconcile. Each active SIP proxy certificate becomes a `tls_mgm` server row named for its hostname; the platform's own is also the `default` row. It then calls `tls_reload`. Needs `ORG_SERVICE_URL` and `INTERNAL_SERVICE_TOKEN` to fetch the material. See [03 §2.3](03-signaling-and-media.md#23-sip-over-tls).
 
 **Consumes:** see [05 §5](05-data-architecture.md#5-events).
 
@@ -266,5 +298,7 @@ Consumes CDR and call/queue events to build aggregate tables: calls per hour, an
 Tenant-level analytics are private. Resellers get only aggregate usage metrics (counts and minutes per tenant), subject to D-013.
 
 ## provisioning-service (Stage 8)
+
+**Not built as a separate service.** Yealink auto-provisioning is currently served by pbx-config-service (see its section above); this service is the planned home for multi-vendor provisioning.
 
 Serves per-MAC configuration for Yealink, Polycom, Snom, and Grandstream over HTTPS. A phone authenticates with HTTP Basic, using either its own per-device credential or a platform-wide credential (G-103 records the trade-off). Templates are brand-neutral, with reseller branding optional (for example, a phone display logo).

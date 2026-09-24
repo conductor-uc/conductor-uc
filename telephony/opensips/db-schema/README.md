@@ -24,7 +24,10 @@ Covers: `standard` (the `version` bookkeeping table), `usrloc`, `auth_db`,
 separate schema file for either). `tls_mgm` (G-105): the TLS certificates OpenSIPs presents, one row per SIP proxy
 hostname, chosen by the name a client asks for (SNI) and reloaded with the MI
 command `tls_reload`. Its `type` column is 1 for a *client* domain and 2 for a
-*server* domain, which is the opposite of what one would guess. No `clusterer` —
+*server* domain, which is the opposite of what one would guess. telephony-config's
+`certificate-sync` writes one server row per proxy hostname plus a `default` row
+(the platform's own certificate), with the private key in clear because that is
+how the module loads it from the database; keep access to this schema narrow. No `clusterer` —
 see `../opensips.cfg.template` for why this deployment does not load it yet.
 
 S1-12 (telephony-config) is the only thing that ever *writes* to this

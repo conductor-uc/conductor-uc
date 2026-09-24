@@ -4631,6 +4631,192 @@
         ]
       }
     },
+    "/v1/platform/network-settings": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "publicAddress"
+                  ],
+                  "properties": {
+                    "publicAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getNetworkSettings",
+        "tags": [
+          "Platform"
+        ]
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "publicAddress"
+                ],
+                "properties": {
+                  "publicAddress": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "publicAddress"
+                  ],
+                  "properties": {
+                    "publicAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveNetworkSettings",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
+    "/v1/resellers/{id}/dns-records": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "publicAddress",
+                    "rows"
+                  ],
+                  "properties": {
+                    "publicAddress": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "name",
+                          "type",
+                          "value",
+                          "purpose"
+                        ],
+                        "properties": {
+                          "name": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "A"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "AAAA"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "CNAME"
+                                ]
+                              }
+                            ]
+                          },
+                          "value": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "purpose": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "sip"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "console"
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listResellerDnsRecords",
+        "tags": [
+          "Resellers"
+        ]
+      }
+    },
     "/v1/tenants/{tenantId}/trunks": {
       "get": {
         "parameters": [
