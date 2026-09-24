@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
 import '../../widgets/page.dart';
+import 'call_handling_dialog.dart';
 import 'connect_phone_dialog.dart';
 import 'pbx_api.dart';
 import 'provisioning_dialog.dart';
@@ -296,6 +297,15 @@ class ResourcePage extends ConsumerWidget {
         ),
       ],
       'extensions' => (context, ref, row) => [
+        if (ref.watch(canProvider(def.permission)))
+          IconButton(
+            tooltip: 'Call handling',
+            icon: const Icon(Icons.call_split_outlined),
+            onPressed: () => showDialog<bool>(
+              context: context,
+              builder: (_) => CallHandlingDialog(extension: row),
+            ),
+          ),
         IconButton(
           tooltip: 'Connect a phone',
           icon: const Icon(Icons.phone_in_talk_outlined),

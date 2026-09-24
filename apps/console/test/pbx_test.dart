@@ -289,6 +289,9 @@ void main() {
 
   testWidgets('editing an extension updates its row', (tester) async {
     await openSection(tester, 'Extensions');
+    // The row has more buttons now, so Edit can be off screen.
+    await tester.ensureVisible(find.byTooltip('Edit').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Edit').first);
     await tester.pumpAndSettle();
     await tester.enterText(field('Name *'), 'Alice K.');

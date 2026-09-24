@@ -42,6 +42,7 @@ const SOURCES = [
   ['pbx-config-service', 'parking-lot', 'registerParkingLotRoutes', 1],
   ['pbx-config-service', 'conference-room', 'registerConferenceRoomRoutes', 1],
   ['pbx-config-service', 'schedule', 'registerScheduleRoutes', 1],
+  ['pbx-config-service', 'call-handling', 'registerCallHandlingRoutes', 2],
   ['callflow-service', 'flow', 'registerFlowRoutes', 1],
   ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
@@ -95,6 +96,8 @@ const OVERRIDES = {
   'get /v1/platform/acme-settings': 'getAcmeSettings',
   'put /v1/platform/acme-settings': 'saveAcmeSettings',
   'get /v1/tenants/{tenantId}/flows/{id}/versions/{versionNumber}': 'getFlowVersion',
+  'get /v1/tenants/{tenantId}/extensions/{extensionId}/call-handling': 'getCallHandling',
+  'put /v1/tenants/{tenantId}/extensions/{extensionId}/call-handling': 'saveCallHandling',
   'post /v1/resellers/{id}/brand/assets': 'uploadBrandAsset',
 };
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };
