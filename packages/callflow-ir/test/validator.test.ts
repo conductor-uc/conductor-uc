@@ -78,11 +78,40 @@ describe('validateGraph', () => {
     expect(validateGraph(g).some((i) => i.kind === 'bad_reference')).toBe(true);
   });
 
+  it('flags a time_condition saved with a time zone and no schedule', () => {
+    const g = graph(
+      [
+        { id: 't', type: 'time_condition', config: { timezone: 'UTC' } },
+        { id: 'h', type: 'hangup', config: {} },
+      ],
+      [
+        { from: 't', port: 'match', to: 'h' },
+        { from: 't', port: 'noMatch', to: 'h' },
+      ],
+    );
+    const issues = validateGraph(g);
+    expect(issues.map((i) => `${i.kind}:${i.nodeId}`)).toEqual(['invalid_config:t']);
+  });
+
+  it('does not flag a time_condition that has a schedule', () => {
+    const g = graph(
+      [
+        { id: 't', type: 'time_condition', config: { scheduleId: 's' } },
+        { id: 'h', type: 'hangup', config: {} },
+      ],
+      [
+        { from: 't', port: 'match', to: 'h' },
+        { from: 't', port: 'noMatch', to: 'h' },
+      ],
+    );
+    expect(validateGraph(g)).toEqual([]);
+  });
+
   describe('missing_port, one per MVP node type', () => {
     const cases: [NodeInput['type'], unknown][] = [
       ['play', { mediaAssetId: 'm1' }],
       ['menu', { promptMediaAssetId: 'm1', timeoutSeconds: 5, maxInvalidAttempts: 3 }],
-      ['time_condition', { timezone: 'UTC' }],
+      ['time_condition', { scheduleId: 's1' }],
       ['extension', { extensionId: 'e1', ringSeconds: 20 }],
       ['ring_group', { ringGroupId: 'rg1' }],
       ['queue', { queueId: 'q1' }],

@@ -18,7 +18,7 @@ function fullGraph(): FlowGraphInput {
         config: { promptMediaAssetId: 'greeting', timeoutSeconds: 5, maxInvalidAttempts: 3 },
       },
       { id: 'play1', type: 'play', config: { mediaAssetId: 'hours' } },
-      { id: 'tc1', type: 'time_condition', config: { timezone: 'America/Chicago' } },
+      { id: 'tc1', type: 'time_condition', config: { scheduleId: 'sched-hours' } },
       { id: 'ext1', type: 'extension', config: { extensionId: 'ext-100', ringSeconds: 20 } },
       { id: 'rg1', type: 'ring_group', config: { ringGroupId: 'rg-sales' } },
       { id: 'q1', type: 'queue', config: { queueId: 'q-support' } },
@@ -113,5 +113,57 @@ describe('compileGraph', () => {
     };
 
     expect(() => compileGraph(invalid)).toThrow(CompileError);
+  });
+
+  describe('time_condition', () => {
+    function withTimeCondition(config: unknown): FlowGraphInput {
+      return {
+        entryPoints: { main: 'tc' },
+        nodes: [
+          { id: 'tc', type: 'time_condition', config },
+          { id: 'open', type: 'hangup', config: {} },
+          { id: 'closed', type: 'hangup', config: {} },
+        ],
+        edges: [
+          { from: 'tc', port: 'match', to: 'open' },
+          { from: 'tc', port: 'noMatch', to: 'closed' },
+        ],
+      };
+    }
+
+    it('keeps the schedule id in the IR, not the schedule itself', () => {
+      const ir = compileGraph(withTimeCondition({ scheduleId: 'sched-1' }));
+      expect(ir.nodes['tc']).toMatchObject({ config: { scheduleId: 'sched-1' } });
+      expect(JSON.stringify(ir)).not.toContain('timezone');
+    });
+
+    it('refuses a draft saved with a time zone and no schedule, and says why', () => {
+      const attempt = () => compileGraph(withTimeCondition({ timezone: 'America/Chicago' }));
+      expect(attempt).toThrow(CompileError);
+      try {
+        attempt();
+      } catch (error) {
+        const issues = (error as CompileError).issues;
+        expect(issues).toHaveLength(1);
+        expect(issues[0]).toMatchObject({ kind: 'invalid_config', nodeId: 'tc' });
+        expect(issues[0]?.message).toContain('Choose a schedule');
+      }
+    });
+
+    it('refuses a time condition with no schedule id at all', () => {
+      expect(() => compileGraph(withTimeCondition({}))).toThrow(CompileError);
+      expect(() => compileGraph(withTimeCondition({ scheduleId: '' }))).toThrow(CompileError);
+    });
+
+    it('ignores the editor layout, which never reaches the IR', () => {
+      const graph = withTimeCondition({ scheduleId: 's' });
+      const positioned: FlowGraphInput = {
+        ...graph,
+        nodes: graph.nodes.map((n) => ({ ...n, position: { x: 1, y: 2 }, openPorts: ['1'] })),
+      };
+      const ir = compileGraph(positioned);
+      expect(JSON.stringify(ir)).not.toContain('position');
+      expect(JSON.stringify(ir)).not.toContain('openPorts');
+    });
   });
 });

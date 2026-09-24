@@ -107,3 +107,57 @@ function isRealDate(value: string): boolean {
   const parsed = new Date(`${value}T00:00:00Z`);
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value);
 }
+
+const WEEKDAYS: Readonly<Record<string, number>> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+/** The wall-clock date, weekday, and time in `timezone` at the instant `at`. */
+function localTime(
+  timezone: string,
+  at: Date,
+): { readonly date: string; readonly day: number; readonly time: string } {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(at);
+  const get = (type: string): string => parts.find((p) => p.type === type)?.value ?? '';
+  return {
+    date: `${get('year')}-${get('month')}-${get('day')}`,
+    day: WEEKDAYS[get('weekday')] ?? 0,
+    time: `${get('hour')}:${get('minute')}`,
+  };
+}
+
+/**
+ * Whether a schedule is open at the instant `at` (S3-10, G-59): the local
+ * date in the schedule's own time zone is not a holiday, and the local
+ * weekday and time fall inside one of its weekly windows. A window includes
+ * its start and excludes its end. With no windows there is nothing open.
+ */
+export function isScheduleOpen(
+  schedule: {
+    readonly timezone: string;
+    readonly rules: readonly ScheduleRule[];
+    readonly holidays: readonly ScheduleHoliday[];
+  },
+  at: Date,
+): boolean {
+  const local = localTime(schedule.timezone, at);
+  if (schedule.holidays.some((h) => h.date === local.date)) return false;
+  return schedule.rules.some(
+    (r) => r.days.includes(local.day) && local.time >= r.start && local.time < r.end,
+  );
+}

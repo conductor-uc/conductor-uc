@@ -121,7 +121,22 @@ List<FlowIssue> validateFlow(FlowGraph graph) {
         );
       }
     }
+    // Saved before schedules existed: a time zone and no schedule.
+    final legacy =
+        node.type == 'time_condition' &&
+        node.config.containsKey('timezone') &&
+        !node.config.containsKey('scheduleId');
+    if (legacy) {
+      issues.add(
+        FlowIssue(
+          'invalid_config',
+          "Node '${node.id}' (time_condition) was saved with a time zone and no schedule. Choose a schedule for it.",
+          node.id,
+        ),
+      );
+    }
     for (final field in type.fields) {
+      if (legacy) break;
       final v = node.config[field.key];
       if (v == null || (v is String && v.trim().isEmpty)) {
         issues.add(

@@ -24,6 +24,7 @@ import { registerDidRoutes } from './routes/did.routes.js';
 import { registerEmergencyLocationRoutes } from './routes/emergency-location.routes.js';
 import { registerExtensionRoutes } from './routes/extension.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
+import { registerScheduleInternalRoutes } from './routes/schedule-internal.routes.js';
 import { registerMediaAssetRoutes } from './routes/media-asset.routes.js';
 import { registerRingGroupRoutes } from './routes/ring-group.routes.js';
 import { registerQueueRoutes } from './routes/queue.routes.js';
@@ -150,6 +151,7 @@ registerInternalRoutes(
   conferenceRoomRepo,
   config.INTERNAL_SERVICE_TOKEN,
 );
+registerScheduleInternalRoutes(app, scheduleRepo, config.INTERNAL_SERVICE_TOKEN);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

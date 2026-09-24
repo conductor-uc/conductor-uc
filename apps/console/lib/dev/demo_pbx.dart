@@ -164,10 +164,18 @@ class DemoPbx {
         'type': 'voicemail',
         'config': {'mailboxId': 'mb-1'},
       },
+      {
+        'id': 'hours',
+        'type': 'time_condition',
+        'config': {'scheduleId': 'sch-1'},
+      },
       {'id': 'bye', 'type': 'hangup', 'config': {}},
     ],
     'edges': [
       {'from': 'greet', 'port': '1', 'to': 'sales'},
+      {'from': 'greet', 'port': '2', 'to': 'hours'},
+      {'from': 'hours', 'port': 'match', 'to': 'sales'},
+      {'from': 'hours', 'port': 'noMatch', 'to': 'mail'},
       {'from': 'greet', 'port': 'timeout', 'to': 'bye'},
       {'from': 'greet', 'port': 'invalid', 'to': 'bye'},
       {'from': 'sales', 'port': 'noAnswer', 'to': 'mail'},

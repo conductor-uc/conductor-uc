@@ -201,6 +201,13 @@ export interface PbxConfigClient {
    * this only ever sees the boolean result.
    */
   verifyConferencePin(tenantId: string, conferenceRoomId: string, pin: string): Promise<boolean>;
+  /**
+   * Whether a schedule is open right now (S3-10, G-59), evaluated by
+   * pbx-config-service in the schedule's own time zone on every call, never
+   * cached here (an edit to the hours or holidays applies to the next call).
+   * Undefined when the schedule does not exist in that tenant (a 404).
+   */
+  isScheduleOpen(tenantId: string, scheduleId: string): Promise<boolean | undefined>;
 }
 
 export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfigClient {
@@ -496,6 +503,31 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
 
       const body = (await response.json()) as { valid: boolean };
       return body.valid;
+    },
+
+    async isScheduleOpen(tenantId: string, scheduleId: string): Promise<boolean | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/schedules/${encodeURIComponent(scheduleId)}/open`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the schedule lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      const body = (await response.json()) as { open: boolean };
+      return body.open;
     },
   };
 }

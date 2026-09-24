@@ -34,6 +34,44 @@ Future<void> select(WidgetTester tester, String label) async {
 }
 
 void main() {
+  testWidgets('a time condition picks a schedule, and shows its name', (
+    tester,
+  ) async {
+    await openBuilder(tester);
+    // The step's own line names the schedule, not its id.
+    expect(
+      find.descendant(
+        of: find.byType(NodeHeader),
+        matching: find.text('Office hours'),
+      ),
+      findsOneWidget,
+    );
+    await select(tester, 'Time condition');
+    expect(
+      find.widgetWithText(DropdownButtonFormField<String>, 'Schedule'),
+      findsOneWidget,
+    );
+    expect(find.text('Time zone'), findsNothing);
+    expect(find.text('Open'), findsOneWidget);
+    expect(find.text('Closed'), findsOneWidget);
+  });
+
+  testWidgets('a new time condition has no schedule yet, and says so', (
+    tester,
+  ) async {
+    await openSection(tester, 'Call flows');
+    await tester.tap(find.text('New call flow'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'Old');
+    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
+    await tester.pumpAndSettle();
+    await addStep(tester, 'time_condition');
+    // A fresh one has no schedule yet: the step says so, and it is a problem.
+    expect(find.text('Not set'), findsOneWidget);
+    expect(find.byKey(const ValueKey('problem-count')), findsOneWidget);
+    await letSave(tester);
+  });
+
   testWidgets('golden: the builder with a flow open', (tester) async {
     await openBuilder(tester);
     await select(tester, 'Menu');
@@ -139,18 +177,18 @@ void main() {
       await openBuilder(tester);
       await select(tester, 'Menu');
       expect(find.text('Press 1'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('digit-3')));
+      await tester.pumpAndSettle();
+      expect(find.text('Press 3'), findsOneWidget);
+
+      // Key 2 led to the time condition; without it that step is unreachable.
       await tester.tap(find.byKey(const ValueKey('digit-2')));
       await tester.pumpAndSettle();
-      expect(find.text('Press 2'), findsOneWidget);
-
-      // Key 1 led to the ring group; without it that step is unreachable.
-      await tester.tap(find.byKey(const ValueKey('digit-1')));
-      await tester.pumpAndSettle();
-      expect(find.text('Press 1'), findsNothing);
+      expect(find.text('Press 2'), findsNothing);
       expect(find.byKey(const ValueKey('problem-count')), findsOneWidget);
       await tester.tap(find.byTooltip('Undo'));
       await tester.pumpAndSettle();
-      expect(find.text('Press 1'), findsOneWidget);
+      expect(find.text('Press 2'), findsOneWidget);
       expect(find.byKey(const ValueKey('problem-count')), findsNothing);
       await letSave(tester);
     },
