@@ -163,6 +163,7 @@ describe.skipIf(skipReason !== undefined)('certificate routes', () => {
       for (const url of [
         `/internal/v1/tenants/${crypto.randomUUID()}/sip-proxy`,
         '/internal/v1/certificates/sip.platform.test',
+        '/internal/v1/certificates?purpose=sip',
         '/internal/v1/acme/challenges/abc',
       ]) {
         expect((await app.inject({ method: 'GET', url })).statusCode, url).toBe(401);
@@ -234,6 +235,39 @@ describe.skipIf(skipReason !== undefined)('certificate routes', () => {
         certificate: c.certificate,
         privateKey: c.key,
       });
+    });
+
+    it('lists the held certificates without their keys, for a consumer to compare against', async () => {
+      await certs.reconcileWanted();
+      const c = makeCertificate(['sip.platform.test']);
+      await certs.storeIssued({
+        fqdn: 'sip.platform.test',
+        certificatePem: c.certificate,
+        privateKeyPem: c.key,
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: '/internal/v1/certificates?purpose=sip',
+        headers: bearer,
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json<{ rows: unknown[] }>().rows).toEqual([
+        expect.objectContaining({
+          fqdn: 'sip.platform.test',
+          purpose: 'sip',
+          resellerId: null,
+          version: 1,
+        }),
+      ]);
+      expect(response.body).not.toContain('PRIVATE KEY');
+      const bad = await app.inject({
+        method: 'GET',
+        url: '/internal/v1/certificates?purpose=other',
+        headers: bearer,
+      });
+      expect(bad.statusCode).toBe(400);
     });
 
     it('serves the answer to an HTTP challenge while it is valid', async () => {

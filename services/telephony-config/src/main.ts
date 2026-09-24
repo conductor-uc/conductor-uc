@@ -10,6 +10,7 @@ import { Redis } from 'ioredis';
 import { createCallflowClient } from './callflow-client.js';
 import { createCallControlClient } from './call-control-client.js';
 import { configSchema, loadServiceConfig } from './config.js';
+import { createCertificateConsumer } from './consumers/certificate.consumer.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
 import { createPbxConsumer } from './consumers/pbx.consumer.js';
 import { createTrunkConsumer } from './consumers/trunk.consumer.js';
@@ -20,6 +21,7 @@ import { createPbxConfigClient } from './pbx-config-client.js';
 import { createProjection } from './projection.js';
 import { createOpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
 import { createReadModelRepo } from './repo/read-model.repo.js';
+import { createCertificateSync, startCertificateSync } from './certificate-sync.js';
 import { createReconciler } from './reconcile.js';
 import { registerFsRoutes } from './routes/fs.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
@@ -146,6 +148,18 @@ const orgConsumer = createOrgConsumer(db, bus, logger, readModel, projection, or
 await orgConsumer.ensure();
 const orgConsumerLoop = orgConsumer.run();
 
+// SIP proxy certificates from org-service into OpenSIPs' `tls_mgm` (G-105): as each is
+// issued, and on a timer that repairs anything missed.
+const certificateSync = createCertificateSync(orgClient, opensipsProjection, miClient, logger);
+const certificateConsumer = createCertificateConsumer(db, bus, logger, certificateSync);
+await certificateConsumer.ensure();
+const certificateConsumerLoop = certificateConsumer.run();
+const certificateSyncTimer = startCertificateSync(
+  certificateSync,
+  logger,
+  config.RECONCILE_INTERVAL_MS,
+);
+
 const pbxConsumer = createPbxConsumer(db, bus, logger, projection);
 await pbxConsumer.ensure();
 const pbxConsumerLoop = pbxConsumer.run();
@@ -220,6 +234,8 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   reconciler.stop();
   orgConsumer.stop();
+  certificateConsumer.stop();
+  certificateSyncTimer.stop();
   pbxConsumer.stop();
   trunkConsumer.stop();
   relay.stop();
@@ -228,6 +244,7 @@ async function shutdown(signal: string): Promise<void> {
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   await orgConsumerLoop;
+  await certificateConsumerLoop;
   await pbxConsumerLoop;
   await trunkConsumerLoop;
   await relayLoop;

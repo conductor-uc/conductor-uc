@@ -19,10 +19,13 @@ from a fresh `opensips/opensips:<version>` image after installing
 
 Covers: `standard` (the `version` bookkeeping table), `usrloc`, `auth_db`,
 `domain`, `permissions`, `dispatcher`, `drouting`, `registrant`
-(uac_registrant), `dialog`, and `presence` (also backs
+(uac_registrant), `dialog`, `tls_mgm`, and `presence` (also backs
 `presence_dialoginfo`/`pua_dialoginfo` — they reuse its tables, there is no
-separate schema file for either). No `tls_mgm` or `clusterer` — see
-`../opensips.cfg.template` for why this deployment loads neither module yet.
+separate schema file for either). `tls_mgm` (G-105): the TLS certificates OpenSIPs presents, one row per SIP proxy
+hostname, chosen by the name a client asks for (SNI) and reloaded with the MI
+command `tls_reload`. Its `type` column is 1 for a *client* domain and 2 for a
+*server* domain, which is the opposite of what one would guess. No `clusterer` —
+see `../opensips.cfg.template` for why this deployment does not load it yet.
 
 S1-12 (telephony-config) is the only thing that ever *writes* to this
 schema at runtime (03 §2's projection pattern) — this task only provisions

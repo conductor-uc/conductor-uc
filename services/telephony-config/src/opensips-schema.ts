@@ -33,6 +33,26 @@ import type { Generated } from 'kysely';
  * place.
  */
 export interface OpenSipsDb {
+  /**
+   * OpenSIPs' `tls_mgm` table (G-105): the TLS certificates it presents, one row per
+   * SIP proxy hostname, chosen by the name a client asks for (SNI). `type` is 2 for a
+   * *server* domain (1 is a client domain: the opposite of what one would guess, found
+   * against a real OpenSIPs). `certificate` and `private_key` are PEM text, in the
+   * clear, because that is how OpenSIPs loads them from the database.
+   */
+  tls_mgm: {
+    id: Generated<number>;
+    domain: string;
+    match_ip_address: string | null;
+    match_sip_domain: string | null;
+    type: number;
+    method: string | null;
+    verify_cert: number | null;
+    require_cert: number | null;
+    certificate: string | null;
+    private_key: string | null;
+    cipher_list: string | null;
+  };
   domain: {
     id: Generated<number>;
     domain: string;

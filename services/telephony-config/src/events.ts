@@ -42,6 +42,18 @@ export const telephonyEvents = defineEvents({
     description: 'A suspended tenant was returned to active.',
     data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
   },
+  'org.certificate.issued': {
+    schemaVersion: 1,
+    description:
+      'A TLS certificate was issued or renewed for a hostname (G-105). Carries no key: a ' +
+      'consumer that needs the certificate and key asks org-service for them.',
+    data: Type.Object({
+      fqdn: Type.String({ minLength: 1 }),
+      purpose: Type.Union([Type.Literal('sip'), Type.Literal('console')]),
+      resellerId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      version: Type.Integer({ minimum: 1 }),
+    }),
+  },
   'org.domain.added': {
     schemaVersion: 1,
     description:

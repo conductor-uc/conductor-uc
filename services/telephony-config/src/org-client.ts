@@ -40,6 +40,31 @@ export interface OrgClient {
    * lookup it can't complete at all should fail closed.
    */
   findLimits(tenantId: string): Promise<Record<string, unknown> | undefined>;
+  /**
+   * The active SIP proxy certificates, without their keys, each with a fingerprint
+   * (`GET /internal/v1/certificates?purpose=sip`, G-105). What `certificate-sync.ts`
+   * compares against what is in OpenSIPs, so a key is only fetched for one that differs.
+   */
+  listSipCertificates(): Promise<SipCertificateSummary[]>;
+  /** A certificate and its key (`GET /internal/v1/certificates/:fqdn`), or undefined while none is held. */
+  findCertificate(fqdn: string): Promise<SipCertificateMaterial | undefined>;
+}
+
+export interface SipCertificateSummary {
+  readonly fqdn: string;
+  /** Null for the platform's own proxy, which is also OpenSIPs' default. */
+  readonly resellerId: string | null;
+  readonly version: number;
+  /** SHA-256 (hex) of the certificate PEM. */
+  readonly fingerprint: string;
+}
+
+export interface SipCertificateMaterial {
+  readonly fqdn: string;
+  readonly resellerId: string | null;
+  readonly version: number;
+  readonly certificate: string;
+  readonly privateKey: string;
 }
 
 export function createOrgClient(options: OrgClientOptions): OrgClient {
@@ -95,6 +120,49 @@ export function createOrgClient(options: OrgClientOptions): OrgClient {
 
       const body = (await response.json()) as { limits: Record<string, unknown> };
       return body.limits;
+    },
+
+    async listSipCertificates(): Promise<SipCertificateSummary[]> {
+      let response: Response;
+      try {
+        response = await fetchImpl(`${baseUrl}/internal/v1/certificates?purpose=sip`, {
+          headers: { authorization: `Bearer ${options.internalServiceToken}` },
+        });
+      } catch (error) {
+        throw new OrgClientError(
+          `Could not reach org-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (!response.ok) {
+        throw new OrgClientError(
+          `org-service rejected the certificate list (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+      const body = (await response.json()) as { rows: SipCertificateSummary[] };
+      return body.rows;
+    },
+
+    async findCertificate(fqdn: string): Promise<SipCertificateMaterial | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/certificates/${encodeURIComponent(fqdn)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new OrgClientError(
+          `Could not reach org-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new OrgClientError(
+          `org-service rejected the certificate lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+      return (await response.json()) as SipCertificateMaterial;
     },
   };
 }

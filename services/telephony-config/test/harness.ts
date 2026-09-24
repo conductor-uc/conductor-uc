@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createAffinityRegistry, type AffinityRegistry } from '@cuc/affinity';
 import { createDatabase, migrateToLatest, type Database } from '@cuc/db';
 import type { Bus } from '@cuc/events';
@@ -245,6 +246,11 @@ function fakeTrunkConfigClient(): FakeTrunkConfigClient {
 export interface FakeOrgClient extends OrgClient {
   countries: Record<string, string>;
   limits: Record<string, Record<string, unknown>>;
+  /** The certificates org-service "holds", by hostname — set per test. */
+  certificates: Record<
+    string,
+    { resellerId: string | null; version: number; certificate: string; privateKey: string }
+  >;
 }
 
 /** A tenant-country/limits lookup whose answers are set per test — no live org-service needed. */
@@ -254,6 +260,20 @@ function fakeOrgClient(): FakeOrgClient {
     limits: {},
     findCountry: (tenantId: string) => Promise.resolve(state.countries[tenantId]),
     findLimits: (tenantId: string) => Promise.resolve(state.limits[tenantId]),
+    certificates: {},
+    listSipCertificates: () =>
+      Promise.resolve(
+        Object.entries(state.certificates).map(([fqdn, c]) => ({
+          fqdn,
+          resellerId: c.resellerId,
+          version: c.version,
+          fingerprint: createHash('sha256').update(c.certificate, 'utf8').digest('hex'),
+        })),
+      ),
+    findCertificate: (fqdn: string) => {
+      const c = state.certificates[fqdn];
+      return Promise.resolve(c === undefined ? undefined : { fqdn, ...c });
+    },
   };
   return state;
 }
@@ -375,6 +395,27 @@ function fakeVoicemailClient(storage: Storage): FakeVoicemailClient {
  * MariaDB, not a mock, verifies this service's actual SQL against them.
  */
 async function createOpenSipsTables(db: Database<OpenSipsDb>): Promise<void> {
+  await db.kysely.schema
+    .createTable('tls_mgm')
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('domain', 'char(64)', (col) => col.notNull())
+    .addColumn('match_ip_address', 'char(255)')
+    .addColumn('match_sip_domain', 'char(255)')
+    .addColumn('type', 'integer', (col) => col.notNull().defaultTo(1))
+    .addColumn('method', 'char(16)')
+    .addColumn('verify_cert', 'integer')
+    .addColumn('require_cert', 'integer')
+    .addColumn('certificate', 'text')
+    .addColumn('private_key', 'text')
+    .addColumn('cipher_list', 'char(255)')
+    .execute();
+  await db.kysely.schema
+    .createIndex('tls_mgm_domain_type_idx')
+    .on('tls_mgm')
+    .columns(['domain', 'type'])
+    .unique()
+    .execute();
+
   await db.kysely.schema
     .createTable('domain')
     .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
@@ -615,6 +656,7 @@ export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void
 
 export async function resetOpenSipsSchema(db: Database<OpenSipsDb>): Promise<void> {
   await db.kysely.deleteFrom('subscriber').execute();
+  await db.kysely.deleteFrom('tls_mgm').execute();
   await db.kysely.deleteFrom('domain').execute();
   await db.kysely.deleteFrom('registrant').execute();
   await db.kysely.deleteFrom('address').execute();
