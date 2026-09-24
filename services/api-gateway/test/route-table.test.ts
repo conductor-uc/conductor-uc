@@ -226,7 +226,10 @@ describe('every service route resolves through the default table', () => {
       Object.keys(OWNERS).flatMap((service) => declaredPaths(service).map(filled)),
     );
     const braces = (path: string) => path.replace(/\{[^}]+\}/g, 'p1');
+    // Answered by the gateway itself, so no service declares it.
+    const gatewayOwn = new Set(['/v1/platform/health']);
     for (const path of Object.keys(dump.paths)) {
+      if (gatewayOwn.has(path)) continue;
       expect(declared.has(braces(path)), path).toBe(true);
       expect(resolveRoute(table, braces(path)), path).toBeDefined();
     }

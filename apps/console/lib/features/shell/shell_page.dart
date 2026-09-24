@@ -4,12 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/session_brand.dart';
 import '../../core/acting.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../widgets/brand_header.dart';
 import 'sections.dart';
 
 /// The signed-in frame: header, role-based navigation, and the section body
-/// (08 §3). Act-as-descendant is S3-05.
+/// (08 §3), narrowed to what the user's permissions allow.
 class ShellPage extends ConsumerWidget {
   const ShellPage({super.key, required this.child});
 
@@ -22,7 +23,7 @@ class ShellPage extends ConsumerWidget {
     final acting = ref.watch(actingProvider);
     final sections = session == null
         ? const <Section>[]
-        : visibleSections(session, acting);
+        : visibleSections(session, acting, ref.watch(knownPermissionsProvider));
     final location = GoRouterState.of(context).uri.path;
     final selected = sections.indexWhere((s) => location.startsWith(s.path));
 

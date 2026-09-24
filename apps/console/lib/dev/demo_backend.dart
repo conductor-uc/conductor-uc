@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
 
+import 'demo_access.dart';
 import 'demo_pbx.dart';
 
 /// A stand-in for api-gateway so the console can be clicked through without a
@@ -26,6 +27,7 @@ ConsoleApi demoApi() =>
 class _DemoAdapter implements HttpClientAdapter {
   final _pbx = DemoPbx();
   var _orgType = 'tenant';
+  var _email = '';
   var _signedIn = false;
 
   @override
@@ -34,6 +36,8 @@ class _DemoAdapter implements HttpClientAdapter {
     Stream<Uint8List>? requestStream,
     Future<void>? cancelFuture,
   ) async {
+    final access = _access(options);
+    if (access != null) return access;
     final pbx = _pbx.handle(options);
     if (pbx != null) return pbx;
     switch (options.path) {
@@ -69,6 +73,7 @@ class _DemoAdapter implements HttpClientAdapter {
         final email = '${request['email']}';
         final orgRequired = _orgRequired(email, request['orgId']);
         if (orgRequired != null) return orgRequired;
+        _email = email;
         _orgType = email.startsWith('master')
             ? 'master'
             : email.startsWith('reseller')
@@ -212,6 +217,37 @@ class _DemoAdapter implements HttpClientAdapter {
       'expiresIn': 900,
     };
     return _json(plain ? tokens : {'status': 'ok', ...tokens});
+  }
+
+  /// What the user may do, their org's audit trail, and platform health.
+  ResponseBody? _access(RequestOptions options) {
+    final path = options.path;
+    if (RegExp(r'^/v1/orgs/[^/]+/me$').hasMatch(path)) {
+      final permissions = demoPermissions(_orgType, _email);
+      if (permissions == null) {
+        return _problem(403, 'forbidden', 'You cannot see that.');
+      }
+      return _json({
+        'userId': 'demo-user',
+        'orgId': path.split('/')[3],
+        'orgType': _orgType,
+        'roleIds': const <String>[],
+        'permissions': permissions,
+      });
+    }
+    if (RegExp(r'^/v1/orgs/[^/]+/audit-events$').hasMatch(path)) {
+      return _json({'rows': demoAuditEvents(path.split('/')[3], _orgType)});
+    }
+    if (path == '/v1/platform/health') {
+      return _orgType == 'master'
+          ? _json(demoPlatformHealth())
+          : _problem(
+              403,
+              'forbidden',
+              'Only the master can see platform health.',
+            );
+    }
+    return null;
   }
 
   ResponseBody _problem(int status, String code, String detail) =>

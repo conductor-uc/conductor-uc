@@ -22,6 +22,8 @@ const SOURCES = [
   ['identity-service', 'auth', 'registerAuthRoutes', 1],
   ['identity-service', 'users', 'registerUserRoutes', 3],
   ['identity-service', 'roles', 'registerRoleRoutes', 3],
+  ['identity-service', 'audit', 'registerAuditRoutes', 2],
+  ['identity-service', 'me', 'registerMeRoutes', 2],
   ['org-service', 'brand', 'registerBrandRoutes', 4],
   ['org-service', 'org', 'registerOrgRoutes', 2],
   ['pbx-config-service', 'extension', 'registerExtensionRoutes', 2],
@@ -35,6 +37,8 @@ const SOURCES = [
   ['pbx-config-service', 'conference-room', 'registerConferenceRoomRoutes', 1],
   ['pbx-config-service', 'schedule', 'registerScheduleRoutes', 1],
   ['callflow-service', 'flow', 'registerFlowRoutes', 1],
+  // A leading `@` names a module directly under `src/` rather than `src/routes/`.
+  ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
 
 const merged = {
@@ -47,7 +51,11 @@ const merged = {
 
 for (const [service, module, register, stubs] of SOURCES) {
   const app = await createServer({ serviceName: service, logLevel: 'silent' });
-  const routes = await load(`services/${service}/dist/src/routes/${module}.routes.js`);
+  const routes = await load(
+    module.startsWith('@')
+      ? `services/${service}/dist/src/${module.slice(1)}.js`
+      : `services/${service}/dist/src/routes/${module}.routes.js`,
+  );
   // Some registers take a bus as their last argument; a stub is enough.
   routes[register](app, ...Array.from({ length: stubs }, () => ({})));
   await app.ready();
@@ -72,6 +80,9 @@ const OVERRIDES = {
   'post /v1/auth/logout': 'logout',
   'get /v1/public/brand': 'getPublicBrand',
   'get /v1/resellers/{id}/brand': 'getBrand',
+  'get /v1/orgs/{orgId}/me': 'getMyAccess',
+  'get /v1/orgs/{orgId}/audit-events': 'listAuditEvents',
+  'get /v1/platform/health': 'getPlatformHealth',
   'get /v1/tenants/{tenantId}/flows/{id}/versions/{versionNumber}': 'getFlowVersion',
   'post /v1/resellers/{id}/brand/assets': 'uploadBrandAsset',
 };
