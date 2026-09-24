@@ -1,17 +1,30 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { databaseOrSkipReason, silentLogger } from '@cuc/testing';
-import { createServer, type Server } from '@cuc/http';
+import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 
 import { registerAuthRoutes } from '../src/routes/auth.routes.js';
 import { registerGrantRoutes } from '../src/routes/grants.routes.js';
 import { registerInternalRoutes } from '../src/routes/internal.routes.js';
 import { registerJwksRoute } from '../src/routes/jwks.routes.js';
+import { createOrgAccess } from '../src/authz/org-access.js';
 import { registerRoleRoutes } from '../src/routes/roles.routes.js';
 import { startHarness, TEST_TTL, type Harness } from './harness.js';
 
 const skipReason = await databaseOrSkipReason();
 
 const INTERNAL_TOKEN = 'test-internal-service-token';
+const HEADER_SECRET = 'test-internal-header-secret';
+
+/** A signed-in tenant admin of [orgId]. */
+function actorIn(orgId: string) {
+  return signInternalHeaders(HEADER_SECRET, {
+    actorId: 'actor-1',
+    actorType: 'user',
+    orgId,
+    orgType: 'tenant',
+    tenantId: orgId,
+  });
+}
 
 describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => {
   let h: Harness;
@@ -19,11 +32,20 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
 
   beforeAll(async () => {
     h = await startHarness();
-    app = await createServer({ serviceName: 'identity-service', logger: silentLogger() });
+    app = await createServer({
+      serviceName: 'identity-service',
+      logger: silentLogger(),
+      context: { trustInternalHeaders: true, internalHeaderSigningSecret: HEADER_SECRET },
+    });
     registerAuthRoutes(app, h.auth);
     registerJwksRoute(app, createSigningKeyRepoFrom(h), TEST_TTL.signingKeyOverlapDays);
     registerInternalRoutes(app, h.users, INTERNAL_TOKEN);
-    registerRoleRoutes(app, h.roles);
+    registerRoleRoutes(
+      app,
+      h.roles,
+      createOrgAccess({ lineage: () => Promise.resolve(undefined) }),
+      h.users,
+    );
     registerGrantRoutes(app, h.grants);
     await app.ready();
   });
@@ -228,9 +250,11 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
 
   describe('GET/POST /v1/orgs/:orgId/roles', () => {
     it('lists the built-in roles even with no custom roles defined', async () => {
+      const orgId = crypto.randomUUID();
       const response = await app.inject({
         method: 'GET',
-        url: `/v1/orgs/${crypto.randomUUID()}/roles`,
+        url: `/v1/orgs/${orgId}/roles`,
+        headers: actorIn(orgId),
       });
 
       expect(response.statusCode).toBe(200);
@@ -245,6 +269,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const created = await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/roles`,
+        headers: actorIn(orgId),
         payload: { name: 'billing-viewer', permissions: ['cdr.read'] },
       });
       expect(created.statusCode).toBe(201);
@@ -254,7 +279,11 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
         permissions: ['cdr.read'],
       });
 
-      const listed = await app.inject({ method: 'GET', url: `/v1/orgs/${orgId}/roles` });
+      const listed = await app.inject({
+        method: 'GET',
+        url: `/v1/orgs/${orgId}/roles`,
+        headers: actorIn(orgId),
+      });
       const { rows } = listed.json<{ rows: { name: string; builtIn: boolean }[] }>();
       expect(rows.some((role) => role.name === 'billing-viewer' && !role.builtIn)).toBe(true);
     });
@@ -264,12 +293,14 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/roles`,
+        headers: actorIn(orgId),
         payload: { name: 'dup', permissions: ['cdr.read'] },
       });
 
       const response = await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/roles`,
+        headers: actorIn(orgId),
         payload: { name: 'dup', permissions: ['analytics.view'] },
       });
 
@@ -278,9 +309,11 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     });
 
     it('rejects a malformed body before it reaches the repo', async () => {
+      const orgId = crypto.randomUUID();
       const response = await app.inject({
         method: 'POST',
-        url: `/v1/orgs/${crypto.randomUUID()}/roles`,
+        url: `/v1/orgs/${orgId}/roles`,
+        headers: actorIn(orgId),
         payload: { name: '', permissions: [] },
       });
 
@@ -297,6 +330,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const assigned = await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/roles/tenant_admin/assignments`,
+        headers: actorIn(orgId),
         payload: { userId },
       });
       expect(assigned.statusCode).toBe(204);
@@ -305,6 +339,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const revoked = await app.inject({
         method: 'DELETE',
         url: `/v1/orgs/${orgId}/roles/tenant_admin/assignments`,
+        headers: actorIn(orgId),
         payload: { userId },
       });
       expect(revoked.statusCode).toBe(204);

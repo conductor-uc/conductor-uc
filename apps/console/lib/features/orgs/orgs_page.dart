@@ -150,6 +150,8 @@ class _OrgTile extends ConsumerWidget {
             onSelected: (choice) => _menu(context, ref, choice),
             itemBuilder: (_) => [
               const PopupMenuItem(value: 'edit', child: Text('Edit')),
+              if (!isReseller)
+                const PopupMenuItem(value: 'people', child: Text('People')),
               PopupMenuItem(
                 value: 'suspend',
                 child: Text(suspended ? 'Resume' : 'Suspend'),
@@ -172,6 +174,15 @@ extension on _OrgTile {
     void refresh() {
       ref.invalidate(resellersProvider);
       ref.invalidate(tenantsProvider);
+    }
+
+    if (choice == 'people') {
+      // A tenant's people are managed from inside the tenant, like the rest.
+      ref
+          .read(actingProvider.notifier)
+          .enter(ActingTenant(id: id, name: '${org['name']}'));
+      context.go('/users');
+      return;
     }
 
     if (choice == 'edit') {

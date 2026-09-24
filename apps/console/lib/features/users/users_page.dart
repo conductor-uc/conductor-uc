@@ -8,8 +8,8 @@ import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart';
 import 'users_api.dart';
 
-/// The people in the signed-in user's own organization: invite, name, role,
-/// and whether they can sign in.
+/// The people in an organization: invite, name, role, and whether they can
+/// sign in. The signed-in user's own, or the tenant they have entered.
 class UsersPage extends ConsumerWidget {
   const UsersPage({super.key});
 
@@ -17,25 +17,15 @@ class UsersPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     if (session == null) return const SizedBox.shrink();
-    if (ref.watch(actingProvider) != null) {
-      // Each organization's people are managed from inside it.
-      return const PageFrame(
-        children: [
-          PageHeader(title: 'Users'),
-          SizedBox(height: 16),
-          Text(
-            "A tenant's people are managed by the tenant's own administrators, "
-            'not from here. Leave this tenant to manage your own users.',
-          ),
-        ],
-      );
-    }
+    final acting = ref.watch(actingProvider);
     final rows = ref.watch(usersProvider);
     return PageFrame(
       children: [
         PageHeader(
           title: 'Users',
-          subtitle: 'People who can sign in. Invite someone by email, then give them a role.',
+          subtitle: acting == null
+              ? 'People who can sign in. Invite someone by email, then give them a role.'
+              : "People who can sign in to ${acting.name}. Invite someone by email, then give them a role.",
           actions: [
             FilledButton.icon(
               onPressed: () => _invite(context, ref),
@@ -138,7 +128,7 @@ class UsersPage extends ConsumerWidget {
     final saved = await showDialog<Json>(
       context: context,
       builder: (_) => ResourceFormDialog(
-        def: userEditDef(session.orgType),
+        def: userEditDef(api.orgType),
         row: user,
         save: (_, body) => api.update(user, body),
       ),

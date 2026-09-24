@@ -2,6 +2,7 @@ import { decryptString, encrypt, type KekProvider } from '@cuc/crypto';
 import type { DbContext } from '@cuc/db';
 
 import { generateTotpSecret, verifyTotpCode } from '../domain/totp.js';
+import { assertPasswordDistinct } from './ambiguity.js';
 import { assertPasswordStrength, verifyPassword } from '../domain/password.js';
 import type { MfaRepo } from '../repo/mfa.repo.js';
 import type { SessionRepo } from '../repo/session.repo.js';
@@ -381,6 +382,14 @@ export function createAuthService(options: AuthServiceOptions) {
      */
     async confirmPasswordReset(token: string, newPassword: string): Promise<void> {
       assertPasswordStrength(newPassword);
+      // Checked before the token is spent, so a refused password can be changed
+      // and tried again on the same link.
+      const pending = await tokens.findOpenPasswordReset(token);
+      if (pending === undefined) throw new InvalidResetTokenError();
+      const account = await users.findById(pending);
+      if (account !== undefined) {
+        await assertPasswordDistinct(users, account, account.email, newPassword, account.id);
+      }
       const userId = await tokens.consumePasswordReset(token);
       if (userId === undefined) throw new InvalidResetTokenError();
       await users.setPassword(userId, newPassword);
@@ -424,6 +433,12 @@ export function createAuthService(options: AuthServiceOptions) {
       assertPasswordStrength(password);
       const invitation = await tokens.findOpenInvitation(token);
       if (invitation === undefined) throw new InvalidInvitationError();
+      await assertPasswordDistinct(
+        users,
+        { orgId: invitation.orgId, orgType: invitation.orgType, resellerId: invitation.resellerId },
+        invitation.email,
+        password,
+      );
       const user = await users.create(ctx, {
         orgId: invitation.orgId,
         orgType: invitation.orgType,

@@ -164,20 +164,89 @@ void main() {
     );
   });
 
-  testWidgets(
-    'a reseller acting as a tenant is told users are the tenant\'s own',
-    (tester) async {
+  group('a reseller managing a tenant\'s people', () {
+    Future<void> enterTenantUsers(WidgetTester tester) async {
       await signInAs(tester, 'reseller@example.test');
       await tester.tap(find.text('Acme Dental').first);
       await tester.pumpAndSettle();
       await actAs(tester, 'Acme Dental');
       await tester.tap(navItem('Users'));
       await tester.pumpAndSettle();
+    }
+
+    testWidgets('sees the tenant\'s people, not their own', (tester) async {
+      await enterTenantUsers(tester);
+      expect(find.textContaining('sign in to Acme Dental'), findsOneWidget);
+      expect(find.text('Riley Owner'), findsOneWidget);
+      expect(find.text('Jo Front Desk'), findsOneWidget);
+      expect(find.text('Alex Admin'), findsNothing);
+      expect(find.text('Invite user'), findsOneWidget);
+    });
+
+    testWidgets('can invite, rename, give a tenant role, and disable', (
+      tester,
+    ) async {
+      await enterTenantUsers(tester);
+
+      await tester.tap(find.text('Invite user'));
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Email *'), 'new@tenant.example.test');
+      await tester.enterText(field('Name *'), 'Nia New');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
       expect(
-        find.textContaining("tenant's own administrators"),
+        find.text('Invitation sent to new@tenant.example.test.'),
         findsOneWidget,
       );
-      expect(find.text('Invite user'), findsNothing);
-    },
-  );
+
+      await tapIn(tester, 'Jo Front Desk', find.byTooltip('Edit'));
+      // The roles offered are a tenant's, whoever is signed in.
+      await pickFromDropdown(tester, 'Role', 'Supervisor');
+      await tester.enterText(field('Name *'), 'Jo Reception');
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Jo Reception'), findsOneWidget);
+      expect(find.text('Supervisor'), findsOneWidget);
+
+      await tapIn(tester, 'Riley Owner', find.byTooltip('Disable'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Disable'));
+      await tester.pumpAndSettle();
+      expect(
+        inRow(tester, 'desk@tenant.example.test', find.text('Can sign in')),
+        findsOneWidget,
+      );
+      expect(
+        inRow(tester, 'owner@tenant.example.test', find.text('Disabled')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('leaving the tenant returns to one\'s own people', (
+      tester,
+    ) async {
+      await enterTenantUsers(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Exit'));
+      await tester.pumpAndSettle();
+      await tester.tap(navItem('Users'));
+      await tester.pumpAndSettle();
+      expect(find.text('Riley Owner'), findsNothing);
+      expect(find.text('Alex Admin (you)'), findsOneWidget);
+    });
+
+    testWidgets('People on a tenant opens its people directly', (tester) async {
+      await signInAs(tester, 'reseller@example.test');
+      final tile = find.ancestor(
+        of: find.text('Acme Dental').first,
+        matching: find.byType(ListTile),
+      );
+      await tester.tap(
+        find.descendant(of: tile, matching: find.byTooltip('More')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('People'));
+      await tester.pumpAndSettle();
+      expect(find.text('Acting as Acme Dental'), findsOneWidget);
+      expect(find.text('Riley Owner'), findsOneWidget);
+    });
+  });
 }

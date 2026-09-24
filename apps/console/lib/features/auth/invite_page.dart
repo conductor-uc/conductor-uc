@@ -100,6 +100,7 @@ class _InvitePageState extends ConsumerState<InvitePage> {
           'email_taken' =>
             'That email already has an account. Sign in instead.',
           'weak_password' => problemDetail(e) ?? 'Choose a stronger password.',
+          'password_in_use' => problemDetail(e) ?? 'That password is already used for another account with this email. Choose a different one.',
           _ =>
             isOffline(e)
                 ? 'Could not reach the server.'

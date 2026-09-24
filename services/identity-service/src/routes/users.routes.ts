@@ -1,5 +1,6 @@
 import { ProblemError, Type, type Server } from '@cuc/http';
 
+import { type ActorContext, type OrgAccess } from '../authz/org-access.js';
 import type { RoleRepo } from '../repo/role.repo.js';
 import type { UserRepo } from '../repo/user.repo.js';
 
@@ -31,25 +32,22 @@ const UpdateUserBodySchema = Type.Object({
  * disabling them. New people arrive by invitation (`POST .../invitations`),
  * and roles are assigned through `.../roles/{roleId}/assignments`.
  *
- * Own org only, for the reason invitations are (G-56): identity-service holds
- * no org read model, so it cannot tell whether another org id is one the
- * caller may manage. A user cannot be deleted from here; disabling ends their
- * sessions and stops them signing in, and keeps the record that audit trails
- * point at.
+ * An actor manages their own org's people; the master manages anyone's, and a
+ * reseller its own tenants' (G-62, through [OrgAccess]). A user cannot be
+ * deleted from here; disabling ends their sessions and stops them signing in,
+ * and keeps the record that audit trails point at.
  */
-export function registerUserRoutes(app: Server, users: UserRepo, roles: RoleRepo): void {
-  function ownOrg(request: {
-    context: { orgId?: string | undefined };
+export function registerUserRoutes(
+  app: Server,
+  users: UserRepo,
+  roles: RoleRepo,
+  access: OrgAccess,
+): void {
+  async function managedOrg(request: {
+    context: ActorContext;
     params: { orgId: string };
-  }): string {
-    const own = request.context.orgId;
-    if (own === undefined) throw ProblemError.unauthorized('Sign in to manage users.');
-    if (request.params.orgId !== own) {
-      throw ProblemError.forbidden('You can only manage users in your own organization.', {
-        code: 'users_other_org',
-      });
-    }
-    return own;
+  }): Promise<string> {
+    return (await access.resolve(request.context, request.params.orgId)).orgId;
   }
 
   app.get(
@@ -62,7 +60,7 @@ export function registerUserRoutes(app: Server, users: UserRepo, roles: RoleRepo
       },
     },
     async (request) => {
-      const orgId = ownOrg(request);
+      const orgId = await managedOrg(request);
       const [rows, roleIds] = await Promise.all([
         users.listByOrg(orgId),
         roles.roleIdsByUserIn(orgId),
@@ -92,7 +90,7 @@ export function registerUserRoutes(app: Server, users: UserRepo, roles: RoleRepo
       },
     },
     async (request) => {
-      const orgId = ownOrg(request);
+      const orgId = await managedOrg(request);
       const { userId } = request.params;
       if (request.body.status === 'disabled' && userId === request.context.actorId) {
         throw ProblemError.conflict('You cannot disable your own account.', {

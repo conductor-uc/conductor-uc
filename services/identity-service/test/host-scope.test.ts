@@ -25,6 +25,9 @@ const HOSTS = new Map<string, SignInScope>([
 
 /** What org-service answers, without a network. */
 const orgClient: OrgClient = {
+  lineage() {
+    return Promise.resolve(undefined);
+  },
   signInScope(host) {
     if (host === 'org-service-down.example') {
       return Promise.reject(new OrgClientError('down'));
