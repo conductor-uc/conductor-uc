@@ -108,7 +108,8 @@ export function registerProvisionRoutes(
           username: credential.username,
           password: credential.password,
           server,
-          port: edge.port,
+          // TLS is on its own port; UDP and TCP share the other.
+          port: transport === 'tls' ? edge.tlsPort : edge.port,
           transport,
         }),
       );

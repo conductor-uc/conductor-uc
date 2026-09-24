@@ -18,10 +18,10 @@ RUN printf '%s\n' \
 # real deployment provisions the schema the same way every other service's
 # schema is provisioned, not via this image at container start.
 #
-# No TLS module: 03 §2 lists `proto_tls` among OpenSIPs' eventual modules,
-# but neither this task's own plan line nor S1-10 (FreeSWITCH, which made
-# the same call for the same reason) includes it — there is no certificate
-# story for internal links yet. Revisit both together when there is one.
+# TLS (07 §5: "SIP-TLS (5061) and SRTP are offered to endpoints"): the
+# transport module, its certificate manager, and the OpenSSL backend. The
+# listener is only turned on when a certificate is configured (see
+# docker-entrypoint.sh), so an image without one behaves as before.
 RUN apt-get -o Acquire::Check-Valid-Until=false update && \
     apt-get install -y --no-install-recommends \
       gettext-base \
@@ -29,7 +29,10 @@ RUN apt-get -o Acquire::Check-Valid-Until=false update && \
       opensips-http-modules \
       opensips-redis-module \
       opensips-presence-modules \
-      opensips-auth-modules && \
+      opensips-auth-modules \
+      opensips-tls-module \
+      opensips-tlsmgm-module \
+      opensips-tls-openssl-module && \
     rm -rf /var/lib/apt/lists/*
 
 COPY opensips.cfg.template /etc/opensips/opensips.cfg.template
@@ -40,7 +43,7 @@ COPY docker-entrypoint.sh /docker-entrypoint.sh
 COPY seed-dispatcher.py /seed-dispatcher.py
 RUN chmod +x /docker-entrypoint.sh
 
-EXPOSE 5060/udp 5060/tcp
+EXPOSE 5060/udp 5060/tcp 5061/tcp
 
 # opensips-cli defaults to the FIFO transport (its own defaults.py); this
 # image never loads mi_datagram/FIFO, only mi_http — confirmed directly, the

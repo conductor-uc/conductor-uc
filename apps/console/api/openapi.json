@@ -6051,6 +6051,7 @@
                   "required": [
                     "server",
                     "port",
+                    "tlsPort",
                     "transports",
                     "realm"
                   ],
@@ -6060,6 +6061,12 @@
                     },
                     "port": {
                       "type": "integer"
+                    },
+                    "tlsPort": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
                     },
                     "transports": {
                       "type": "array",

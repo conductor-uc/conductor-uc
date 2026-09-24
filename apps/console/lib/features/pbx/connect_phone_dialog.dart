@@ -126,6 +126,8 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
                   const SizedBox(height: 16),
                   _Line('Server', '${e['server']}'),
                   _Line('Port', '${e['port']}'),
+                  if (e['tlsPort'] != null)
+                    _Line('TLS port', '${e['tlsPort']}'),
                   _Line(
                     'Transport',
                     transports.join(' or '),

@@ -61,7 +61,9 @@ void main() {
     expect(find.text('Connect a phone to 102'), findsOneWidget);
     expect(find.text('demo.voice.northwind.example'), findsWidgets);
     expect(find.text('5060'), findsOneWidget);
-    expect(find.text('UDP or TCP'), findsOneWidget);
+    expect(find.text('UDP or TCP or TLS'), findsOneWidget);
+    // TLS listens on its own port.
+    expect(find.text('5061'), findsOneWidget);
     expect(find.text('102'), findsWidgets);
     // Nothing secret until it is asked for.
     expect(find.text('demo-102-secret'), findsNothing);
