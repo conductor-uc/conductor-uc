@@ -11,6 +11,7 @@ import { createDomainConsumer } from './consumers/domain.consumer.js';
 import { createOrgClient } from './org-client.js';
 import { createDidRepo } from './repo/did.repo.js';
 import { createEmergencyLocationRepo } from './repo/emergency-location.repo.js';
+import { globalProvisioningCredential as globalProvisioningCredentialFrom } from './domain/provisioning.js';
 import { createDeviceRepo } from './repo/device.repo.js';
 import { createExtensionRepo } from './repo/extension.repo.js';
 import { createMediaAssetRepo } from './repo/media-asset.repo.js';
@@ -143,7 +144,15 @@ registerDeviceRoutes(app, deviceRepo, bus, {
     ? {}
     : { provisioningBaseUrl: config.PROVISIONING_BASE_URL }),
 });
-registerProvisionRoutes(app, deviceRepo, extensionRepo, orgClient.primaryDomain, sipEdge);
+const globalProvisioningCredential = globalProvisioningCredentialFrom(
+  config.PROVISIONING_USERNAME,
+  config.PROVISIONING_PASSWORD,
+);
+registerProvisionRoutes(app, deviceRepo, extensionRepo, orgClient.primaryDomain, sipEdge, {
+  ...(globalProvisioningCredential === undefined
+    ? {}
+    : { globalCredential: globalProvisioningCredential }),
+});
 registerDidRoutes(app, didRepo);
 registerEmergencyLocationRoutes(app, emergencyLocationRepo);
 registerMediaAssetRoutes(app, mediaAssetRepo);

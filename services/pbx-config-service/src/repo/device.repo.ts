@@ -258,6 +258,30 @@ export function createDeviceRepo(db: Database<PbxConfigServiceDb>) {
         );
     },
 
+    /**
+     * Cross-tenant, for the same reason as `findProvisioningTarget`: a phone
+     * that authenticated with the platform-wide credential names itself only
+     * by its MAC address, so the tenant is what the lookup returns.
+     */
+    findProvisioningTargetByMac(mac: string): Promise<ProvisioningTarget | undefined> {
+      return db.kysely
+        .selectFrom('devices')
+        .select(['id', 'tenant_id', 'extension_id', 'mac', 'token_hash'])
+        .where('mac', '=', mac)
+        .executeTakeFirst()
+        .then((row) =>
+          row === undefined
+            ? undefined
+            : {
+                id: row.id,
+                tenantId: row.tenant_id,
+                extensionId: row.extension_id,
+                mac: row.mac,
+                tokenHash: row.token_hash,
+              },
+        );
+    },
+
     /** Notes that the phone just fetched its settings, and from where. */
     async recordFetch(
       ctx: DbContext,

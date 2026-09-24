@@ -45,6 +45,45 @@ export function tokenMatches(storedHash: string | null, presented: string): bool
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+export interface GlobalProvisioningCredential {
+  readonly username: string;
+  readonly password: string;
+}
+
+/**
+ * The platform-wide provisioning user name and password from configuration.
+ * Both or neither: one without the other is a typo that would silently leave
+ * the route with no global credential, so it stops the service at startup.
+ */
+export function globalProvisioningCredential(
+  username: string | undefined,
+  password: string | undefined,
+): GlobalProvisioningCredential | undefined {
+  if (username === undefined && password === undefined) return undefined;
+  if (username === undefined || password === undefined) {
+    throw new Error(
+      'PROVISIONING_USERNAME and PROVISIONING_PASSWORD must be set together, or neither.',
+    );
+  }
+  return { username, password };
+}
+
+/** Whether [presented] is the configured global credential, in constant time for both parts. */
+export function globalCredentialMatches(
+  expected: GlobalProvisioningCredential,
+  presented: { readonly username: string; readonly password: string },
+): boolean {
+  // Hashed first so the two compared buffers are always the same length.
+  const same = (a: string, b: string): boolean =>
+    timingSafeEqual(
+      createHash('sha256').update(a, 'utf8').digest(),
+      createHash('sha256').update(b, 'utf8').digest(),
+    );
+  const userOk = same(expected.username, presented.username);
+  const passwordOk = same(expected.password, presented.password);
+  return userOk && passwordOk;
+}
+
 /** Reads an `Authorization: Basic ...` header into its username and password. */
 export function parseBasicAuth(
   header: string | undefined,

@@ -36,6 +36,14 @@ export const configSchema = Type.Object({
    * Provisioning URLs are built from it; without it they are reported as unset.
    */
   PROVISIONING_BASE_URL: Env.optional(Env.url()),
+  /**
+   * A platform-wide user name and password (HTTP Basic) that lets any phone
+   * fetch the settings for its own MAC address. Set both or neither. Every
+   * tenant's phones end up holding it, so it protects the server from outsiders
+   * and does not keep one tenant's phones from another's: see G-103.
+   */
+  PROVISIONING_USERNAME: Env.optional(Env.string()),
+  PROVISIONING_PASSWORD: Env.optional(Env.secret()),
 
   /** The port the SIP edge accepts registrations on, as phones are told (the console's "connect a phone"). */
   SIP_PUBLIC_PORT: Env.port({ default: 5060 }),
