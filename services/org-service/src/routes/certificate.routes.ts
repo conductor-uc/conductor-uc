@@ -120,6 +120,35 @@ export function registerCertificateInternalRoutes(
   );
 
   app.get(
+    '/internal/v1/certificates',
+    {
+      config: { public: true },
+      schema: {
+        querystring: Type.Object({
+          purpose: Type.Union([Type.Literal('sip'), Type.Literal('console')]),
+        }),
+        response: {
+          200: Type.Object({
+            rows: Type.Array(
+              Type.Object({
+                fqdn: Type.String(),
+                purpose: Type.Union([Type.Literal('sip'), Type.Literal('console')]),
+                resellerId: nullableString,
+                version: Type.Integer(),
+                fingerprint: Type.String(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      requireInternal(request.headers.authorization);
+      return { rows: await certs.listActive(request.query.purpose) };
+    },
+  );
+
+  app.get(
     '/internal/v1/certificates/:fqdn',
     {
       config: { public: true },

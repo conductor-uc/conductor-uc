@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { Database } from '@cuc/db';
 import { isDuplicateKeyError } from '@cuc/db';
 import { decryptString, encrypt, type KekProvider } from '@cuc/crypto';
@@ -35,6 +37,16 @@ export interface CertificateMaterial {
   readonly notAfter: Date;
   readonly certificatePem: string;
   readonly privateKeyPem: string;
+}
+
+/** One held certificate, described without its key. */
+export interface CertificateSummary {
+  readonly fqdn: string;
+  readonly purpose: CertificatePurpose;
+  readonly resellerId: string | null;
+  readonly version: number;
+  /** SHA-256 (hex) of the certificate PEM as stored. */
+  readonly fingerprint: string;
 }
 
 export interface SipProxy {
@@ -311,6 +323,32 @@ export function createCertificateRepo(db: Database<OrgServiceDb>, options: Certi
           .where('fqdn', '=', name)
           .execute();
       }
+    },
+
+    /**
+     * The active certificates of one kind, without their keys, each with a
+     * fingerprint (SHA-256 of the certificate as stored). What a consumer that keeps
+     * its own copy (OpenSIPs' table, via telephony-config) compares against, so it
+     * only fetches a key when the certificate it holds is not the current one.
+     */
+    async listActive(purpose: CertificatePurpose): Promise<CertificateSummary[]> {
+      const rows = await kysely
+        .selectFrom('tls_certificates')
+        .select(['fqdn', 'purpose', 'reseller_id', 'version', 'certificate_pem'])
+        .where('purpose', '=', purpose)
+        .where('status', '=', 'active')
+        .where('certificate_pem', 'is not', null)
+        .orderBy('fqdn', 'asc')
+        .execute();
+      return rows.map((r) => ({
+        fqdn: r.fqdn,
+        purpose: r.purpose,
+        resellerId: r.reseller_id,
+        version: r.version,
+        fingerprint: createHash('sha256')
+          .update(r.certificate_pem ?? '', 'utf8')
+          .digest('hex'),
+      }));
     },
 
     /** The certificate and its decrypted key, or undefined while none has been issued. */

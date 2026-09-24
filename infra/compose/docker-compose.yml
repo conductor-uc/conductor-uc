@@ -222,6 +222,8 @@ services:
       # and leaves the self-signed switch off (no phone trusts a self-signed one).
       OPENSIPS_TLS_CERT_FILE: ${OPENSIPS_TLS_CERT_FILE:-/etc/opensips/tls/cert.pem}
       OPENSIPS_TLS_KEY_FILE: ${OPENSIPS_TLS_KEY_FILE:-/etc/opensips/tls/key.pem}
+      # Load per-hostname certificates from the opensips schema (tls_mgm), kept there by telephony-config.
+      OPENSIPS_TLS_ENABLED: ${OPENSIPS_TLS_ENABLED:-true}
       OPENSIPS_TLS_DEV_SELF_SIGNED: ${OPENSIPS_TLS_DEV_SELF_SIGNED:-true}
       OPENSIPS_TLS_DEV_NAMES: ${OPENSIPS_TLS_DEV_NAMES:-platform.test,*.platform.test}
     volumes:

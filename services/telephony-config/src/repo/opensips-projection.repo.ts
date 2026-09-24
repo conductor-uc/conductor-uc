@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import type { Database } from '@cuc/db';
 import type { Kysely } from 'kysely';
 
@@ -106,6 +108,60 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
 
     async deleteDomain(fqdn: string): Promise<void> {
       await k.deleteFrom('domain').where('domain', '=', fqdn).execute();
+    },
+
+    /**
+     * A server-side TLS certificate for [domain]: a named row chosen by the SNI name
+     * ([matchSipDomain]), or the `default` row (`matchIpAddress` `*`, no name) that
+     * answers anything else. Type 2 is OpenSIPs' server domain.
+     */
+    async upsertTlsDomain(row: {
+      domain: string;
+      matchIpAddress: string | null;
+      matchSipDomain: string | null;
+      certificate: string;
+      privateKey: string;
+    }): Promise<void> {
+      const values = {
+        match_ip_address: row.matchIpAddress,
+        match_sip_domain: row.matchSipDomain,
+        method: 'SSLv23',
+        verify_cert: 0,
+        require_cert: 0,
+        certificate: row.certificate,
+        private_key: row.privateKey,
+        cipher_list: 'HIGH:!aNULL:!MD5:!RC4:!3DES',
+      };
+      await k
+        .insertInto('tls_mgm')
+        .values({ domain: row.domain, type: 2, ...values })
+        .onDuplicateKeyUpdate(values)
+        .execute();
+    },
+
+    async deleteTlsDomain(domain: string): Promise<void> {
+      await k.deleteFrom('tls_mgm').where('domain', '=', domain).where('type', '=', 2).execute();
+    },
+
+    /** Every TLS server row with the SHA-256 of its certificate, for reconciliation to compare. */
+    async listTlsDomains(): Promise<{ domain: string; fingerprint: string }[]> {
+      const rows = await k
+        .selectFrom('tls_mgm')
+        .select(['domain', 'certificate'])
+        .where('type', '=', 2)
+        .execute();
+      return rows.map((r) => ({
+        domain: r.domain,
+        // A BLOB comes back as a Buffer from the driver, text from a test double.
+        fingerprint: createHash('sha256')
+          .update(
+            Buffer.isBuffer(r.certificate)
+              ? r.certificate.toString('utf8')
+              : String(r.certificate ?? ''),
+            'utf8',
+          )
+          .digest('hex'),
+      }));
     },
 
     /** Every domain currently projected — what reconciliation diffs against. */

@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { fileKekFromConfig } from '@cuc/crypto';
@@ -351,6 +351,67 @@ describe.skipIf(skipReason !== undefined)('certificate repo', () => {
         .executeTakeFirstOrThrow();
       expect(host.tls_status).toBe('failed');
       await expect(certs.recordFailure('nobody.test', 'x')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('listActive', () => {
+    it('lists only the active certificates of the kind asked for, with a fingerprint and no key', async () => {
+      const reseller = await makeReseller();
+      await activeBase(reseller.id, 'voice.reseller-brand.com');
+      await certs.reconcileWanted();
+      const sip = makeCertificate(['sip.platform.test']);
+      const resellerSip = makeCertificate(['sip.voice.reseller-brand.com']);
+      const consoleCert = makeCertificate(['console.platform.test']);
+      await certs.storeIssued({
+        fqdn: 'sip.platform.test',
+        certificatePem: sip.certificate,
+        privateKeyPem: sip.key,
+      });
+      await certs.storeIssued({
+        fqdn: 'sip.voice.reseller-brand.com',
+        certificatePem: resellerSip.certificate,
+        privateKeyPem: resellerSip.key,
+      });
+      await certs.storeIssued({
+        fqdn: 'console.platform.test',
+        certificatePem: consoleCert.certificate,
+        privateKeyPem: consoleCert.key,
+      });
+
+      const rows = await certs.listActive('sip');
+
+      expect(rows.map((r) => [r.fqdn, r.resellerId])).toEqual([
+        ['sip.platform.test', null],
+        ['sip.voice.reseller-brand.com', reseller.id],
+      ]);
+      expect(rows[0]?.fingerprint).toBe(
+        createHash('sha256').update(sip.certificate, 'utf8').digest('hex'),
+      );
+      expect(JSON.stringify(rows)).not.toContain('PRIVATE KEY');
+      expect((await certs.listActive('console')).map((r) => r.fqdn)).toEqual([
+        'console.platform.test',
+      ]);
+    });
+
+    it('leaves out a certificate not yet issued, and changes fingerprint when it is renewed', async () => {
+      await certs.reconcileWanted();
+      expect(await certs.listActive('sip')).toEqual([]);
+      const first = makeCertificate(['sip.platform.test']);
+      await certs.storeIssued({
+        fqdn: 'sip.platform.test',
+        certificatePem: first.certificate,
+        privateKeyPem: first.key,
+      });
+      const before = (await certs.listActive('sip'))[0];
+      const second = makeCertificate(['sip.platform.test']);
+      await certs.storeIssued({
+        fqdn: 'sip.platform.test',
+        certificatePem: second.certificate,
+        privateKeyPem: second.key,
+      });
+      const after = (await certs.listActive('sip'))[0];
+      expect(after?.version).toBe(2);
+      expect(after?.fingerprint).not.toBe(before?.fingerprint);
     });
   });
 
