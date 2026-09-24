@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
+import 'users_test.dart' show tapIn;
 
 /// Signs in to the demo backend as a tenant user and opens [section].
 Future<void> openSection(
@@ -51,6 +52,68 @@ void main() {
     // The emergency location column shows the location's name, not its id.
     expect(find.text('Head office'), findsWidgets);
   });
+
+  testWidgets('Connect a phone shows where to register, and reveals the '
+      'password only after a reason', (tester) async {
+    await openSection(tester, 'Extensions');
+    await tapIn(tester, '102', find.byTooltip('Connect a phone'));
+
+    expect(find.text('Connect a phone to 102'), findsOneWidget);
+    expect(find.text('demo.voice.northwind.example'), findsWidgets);
+    expect(find.text('5060'), findsOneWidget);
+    expect(find.text('UDP or TCP'), findsOneWidget);
+    expect(find.text('102'), findsWidgets);
+    // Nothing secret until it is asked for.
+    expect(find.text('demo-102-secret'), findsNothing);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Reveal password'));
+    await tester.pumpAndSettle();
+    // A reason is required.
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Reveal'))
+          .onPressed,
+      isNull,
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Why do you need it?'),
+      'Setting up the desk phone',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Reveal'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('demo-102-secret'), findsOneWidget);
+    expect(
+      find.widgetWithText(OutlinedButton, 'Reveal password'),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+    'someone who cannot reveal secrets still gets the server details',
+    (tester) async {
+      await completeSignIn(tester, 'limited@example.test');
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationRail),
+          matching: find.text('Extensions'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tapIn(tester, '102', find.byTooltip('Connect a phone'));
+
+      expect(find.text('5060'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Reveal password'),
+        findsNothing,
+      );
+      expect(
+        find.text('The password is shown only to people allowed to reveal it.'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('creating an extension adds a row', (tester) async {
     await openSection(tester, 'Extensions');
@@ -106,6 +169,9 @@ void main() {
 
   testWidgets('deleting asks first, then removes the row', (tester) async {
     await openSection(tester, 'Extensions');
+    // The row has more buttons now, so the last one can be off screen.
+    await tester.ensureVisible(find.byTooltip('Delete').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Delete').last);
     await tester.pumpAndSettle();
     expect(find.text('Delete extension?'), findsOneWidget);

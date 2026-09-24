@@ -93,6 +93,27 @@ class PbxApi {
     await _dio.delete<Object?>(_path(resource, id), options: _options);
   }
 
+  /// Where a phone registers: the server, port, transports and realm for this
+  /// tenant (`GET /v1/tenants/{id}/sip-endpoint`).
+  Future<Json> sipEndpoint() async {
+    final response = await _dio.get<Object?>(
+      _path('sip-endpoint'),
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  /// An extension's SIP username, password and realm. The password is not kept
+  /// anywhere else; each reveal is audited with [reason].
+  Future<Json> revealSip(String extensionId, String reason) async {
+    final response = await _dio.post<Object?>(
+      _path('extensions', extensionId, 'reveal'),
+      data: {'reason': reason},
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   /// A call to an action or sub-resource, such as `flows/{id}/publish`.
   Future<Object?> call(
     String method,

@@ -131,6 +131,7 @@ describe('the default routing table', () => {
     ['/v1/tenants/t1/domain', SERVICES.org],
     ['/v1/session/brand', SERVICES.org],
     ['/v1/tenants/t1/extensions/e1/reveal', SERVICES.pbx],
+    ['/v1/tenants/t1/sip-endpoint', SERVICES.pbx],
     ['/v1/tenants/t1/schedules', SERVICES.pbx],
     ['/v1/tenants/t1/flows/f1/versions/2', SERVICES.callflow],
     ['/v1/tenants/t1/voicemail/mailboxes/m1/messages', SERVICES.voicemail],

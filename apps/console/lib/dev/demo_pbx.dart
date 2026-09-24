@@ -452,6 +452,37 @@ class DemoPbx {
     );
   }
 
+  /// Where a phone registers, and an extension's SIP login. The demo has no
+  /// real edge; the values only need to look like what the service returns.
+  ResponseBody? _phone(RequestOptions options) {
+    final path = options.path;
+    final method = options.method.toUpperCase();
+    final endpoint = RegExp(r'^/v1/tenants/([^/]+)/sip-endpoint$');
+    if (method == 'GET' && endpoint.hasMatch(path)) {
+      final realm = 'demo.voice.northwind.example';
+      return _json({
+        'server': realm,
+        'port': 5060,
+        'transports': ['udp', 'tcp'],
+        'realm': realm,
+      });
+    }
+    final reveal = RegExp(r'^/v1/tenants/([^/]+)/extensions/([^/]+)/reveal$')
+        .firstMatch(path);
+    if (method == 'POST' && reveal != null) {
+      final found = _rows['extensions']!.where(
+        (r) => r['id'] == reveal.group(2),
+      );
+      if (found.isEmpty) return _problem(404, 'Not found.');
+      return _json({
+        'username': '${found.first['number']}',
+        'password': 'demo-${found.first['number']}-secret',
+        'realm': 'demo.voice.northwind.example',
+      });
+    }
+    return null;
+  }
+
   ResponseBody? _people(RequestOptions options) {
     final path = options.path;
     final method = options.method.toUpperCase();
@@ -763,6 +794,8 @@ class DemoPbx {
     if (infra != null) return infra;
     final people = _people(options);
     if (people != null) return people;
+    final phone = _phone(options);
+    if (phone != null) return phone;
     if (options.path.endsWith('/voicemail/mailboxes')) {
       return _json({
         'rows': [

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
 import '../../widgets/page.dart';
+import 'connect_phone_dialog.dart';
 import 'pbx_api.dart';
 import 'resource.dart';
 import 'resource_form.dart';
@@ -282,17 +283,28 @@ class ResourcePage extends ConsumerWidget {
   /// The table for [def], with the extras some resources have.
   Widget _view(ResourceDef def) => ResourceView(
     def: def,
-    rowActions: def.key == 'queues'
-        ? (context, ref, row) => [
-            IconButton(
-              tooltip: 'Agents and tiers',
-              icon: const Icon(Icons.people_outline),
-              onPressed: () => showDialog<void>(
-                context: context,
-                builder: (_) => QueueTiersDialog(queue: row),
-              ),
-            ),
-          ]
-        : null,
+    rowActions: switch (def.key) {
+      'queues' => (context, ref, row) => [
+        IconButton(
+          tooltip: 'Agents and tiers',
+          icon: const Icon(Icons.people_outline),
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => QueueTiersDialog(queue: row),
+          ),
+        ),
+      ],
+      'extensions' => (context, ref, row) => [
+        IconButton(
+          tooltip: 'Connect a phone',
+          icon: const Icon(Icons.phone_in_talk_outlined),
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (_) => ConnectPhoneDialog(extension: row),
+          ),
+        ),
+      ],
+      _ => null,
+    },
   );
 }

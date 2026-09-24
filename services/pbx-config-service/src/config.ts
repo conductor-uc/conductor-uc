@@ -30,6 +30,11 @@ export const configSchema = Type.Object({
    * INTERNAL_SERVICE_TOKEN.
    */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
+
+  /** The port the SIP edge accepts registrations on, as phones are told (the console's "connect a phone"). */
+  SIP_PUBLIC_PORT: Env.port({ default: 5060 }),
+  /** Transports the edge accepts, comma-separated, most preferred first: `udp`, `tcp`, `tls`. */
+  SIP_PUBLIC_TRANSPORTS: Env.string({ default: 'udp,tcp' }),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;
