@@ -146,6 +146,11 @@ export const configSchema = Type.Object({
   TLS_KEY_FILE: Env.optional(Env.string()),
   TLS_CERT_DIR: Env.optional(Env.string()),
   /**
+   * Take console hostnames' certificates from org-service, which issues and renews
+   * them (G-105), needing `INTERNAL_SERVICE_TOKEN`. Files, if also set, win.
+   */
+  TLS_FROM_ORG_SERVICE: Env.bool({ default: false }),
+  /**
    * The token org-service's internal routes expect. The gateway uses it only to
    * ask for the answer to a certificate authority's HTTP challenge (G-105); left
    * unset, challenges are never answered and no certificate can be requested.

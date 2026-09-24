@@ -3,6 +3,8 @@ import type { ServerOptions } from 'node:https';
 import { join } from 'node:path';
 import { createSecureContext, type SecureContext } from 'node:tls';
 
+import type { CertificateSource } from './certificate-source.js';
+
 export interface TlsSettings {
   /** The certificate (and chain) served when a client names no host or an unknown one. */
   readonly certFile?: string | undefined;
@@ -15,6 +17,11 @@ export interface TlsSettings {
    * has to write files there; a renewed file is picked up without a restart.
    */
   readonly certDir?: string | undefined;
+  /**
+   * Certificates from somewhere else (org-service's database), asked for after the
+   * directory and before the default. Its presence alone turns HTTPS on.
+   */
+  readonly source?: CertificateSource | undefined;
 }
 
 /** How long a loaded certificate is trusted before its file is looked at again. */
@@ -44,17 +51,17 @@ export function tlsServerOptions(
   settings: TlsSettings,
   now: () => number = Date.now,
 ): ServerOptions | undefined {
-  const { certFile, keyFile, certDir } = settings;
+  const { certFile, keyFile, certDir, source } = settings;
   if ((certFile === undefined) !== (keyFile === undefined)) {
     throw new Error('TLS_CERT_FILE and TLS_KEY_FILE must be set together, or neither.');
   }
-  if (certFile === undefined && certDir === undefined) return undefined;
+  if (certFile === undefined && certDir === undefined && source === undefined) return undefined;
 
   const fallback =
     certFile !== undefined && keyFile !== undefined
       ? createSecureContext({ cert: readFileSync(certFile), key: readFileSync(keyFile) })
       : undefined;
-  if (fallback === undefined && certDir === undefined) return undefined;
+  if (fallback === undefined && certDir === undefined && source === undefined) return undefined;
 
   const cache = new Map<string, Cached>();
 
@@ -102,12 +109,19 @@ export function tlsServerOptions(
       ? { cert: readFileSync(certFile), key: readFileSync(keyFile) }
       : {}),
     SNICallback: (servername, callback) => {
-      const found = contextFor(servername) ?? fallback;
-      if (found === undefined) {
-        callback(new Error(`No certificate for ${servername}`), undefined);
-        return;
-      }
-      callback(null, found);
+      const local = contextFor(servername);
+      const resolved: Promise<SecureContext | undefined> =
+        local !== undefined || source === undefined
+          ? Promise.resolve(local)
+          : source(servername).catch(() => undefined);
+      void resolved.then((context) => {
+        const found = context ?? fallback;
+        if (found === undefined) {
+          callback(new Error(`No certificate for ${servername}`), undefined);
+          return;
+        }
+        callback(null, found);
+      });
     },
   };
 }
