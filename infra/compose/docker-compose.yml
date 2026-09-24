@@ -293,6 +293,10 @@ services:
       INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       ORG_SERVICE_URL: http://org-service:8080
       TRUNK_SERVICE_URL: http://trunk-service:8080
+      # G-103: phones fetch their settings from the gateway's own address. On a
+      # laptop that is the published gateway port; set this to the address the
+      # phones can actually reach.
+      PROVISIONING_BASE_URL: ${PROVISIONING_BASE_URL:-http://localhost:8080}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
