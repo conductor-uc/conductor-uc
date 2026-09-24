@@ -279,6 +279,73 @@ export async function setTenantLimits(
   );
 }
 
+/**
+ * Resets an extension's SIP password (`seed.ts`'s own `resetExtensionPassword`)
+ * and returns the new one. The same throwaway-container rationale as
+ * `seedFixtures`: the databases have no published host port.
+ */
+export async function resetExtensionPassword(
+  tenantId: string,
+  number: string,
+): Promise<{ password: string; realm: string }> {
+  const env = sipTestEnv();
+  const dbHost = envOr('SIP_TEST_DB_HOST', 'mariadb');
+  const dbPort = envOr('SIP_TEST_DB_PORT', '3306');
+  const { stdout } = await execFileAsync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      env.network,
+      '-v',
+      `${REPO_ROOT}:/repo`,
+      '-w',
+      '/repo/tests/sip',
+      '-e',
+      `ORG_DB_HOST=${dbHost}`,
+      '-e',
+      `ORG_DB_PORT=${dbPort}`,
+      '-e',
+      'ORG_DB_USER=org_service',
+      '-e',
+      `ORG_DB_PASSWORD=${envOr('ORG_SERVICE_DB_PASSWORD', 'dev-org-password')}`,
+      '-e',
+      'ORG_DB_NAME=org_service',
+      '-e',
+      `PBX_DB_HOST=${dbHost}`,
+      '-e',
+      `PBX_DB_PORT=${dbPort}`,
+      '-e',
+      'PBX_DB_USER=pbx_config_service',
+      '-e',
+      `PBX_DB_PASSWORD=${envOr('PBX_CONFIG_SERVICE_DB_PASSWORD', 'dev-pbx-config-password')}`,
+      '-e',
+      'PBX_DB_NAME=pbx_config_service',
+      '-e',
+      'ORG_SERVICE_URL=http://org-service:8080',
+      '-e',
+      `INTERNAL_SERVICE_TOKEN=${envOr('INTERNAL_SERVICE_TOKEN', 'dev-internal-service-token')}`,
+      '-e',
+      `CRYPTO_KEKS=${envOr('CRYPTO_KEKS', '1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=')}`,
+      '-e',
+      'CRYPTO_KEK_CURRENT=1',
+      'node:22',
+      'node',
+      'dist/src/seed.js',
+      'reset-password',
+      tenantId,
+      number,
+    ],
+    { maxBuffer: 16 * 1024 * 1024 },
+  );
+  const start = stdout.lastIndexOf('\n{');
+  return JSON.parse(start === -1 ? stdout : stdout.slice(start + 1)) as {
+    password: string;
+    realm: string;
+  };
+}
+
 /** `docker exec`s the real MI command — see `project_s1_14_checkpoint.md`:
  * `usrloc`/`subscriber` are DB-persisted, so a stale registration from a
  * prior run (same AOR) can make a fresh REGISTER fail with "Invalid CSeq

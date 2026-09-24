@@ -337,6 +337,7 @@ export async function seed(): Promise<SeedResult> {
 
     await seedExtension(tenantA.id, '101', 'SIP Test 101');
     await seedExtension(tenantA.id, '102', 'SIP Test 102');
+    await seedExtension(tenantA.id, '107', 'SIP Test 107 (password reset)');
     await seedExtension(tenantB.id, '102', 'SIP Test 102 (tenant B)');
     await seedExtension(tenantSuspended.id, '103', 'SIP Test 103 (suspended)');
     await seedExtension(tenantOutbound.id, '104', 'SIP Test 104 (outbound failover)');
@@ -440,6 +441,57 @@ export async function setLimits(tenantId: string, limits: Record<string, unknown
   }
 }
 
+/**
+ * Resets one extension's SIP password through pbx-config-service's own repo
+ * (`resetPassword`, the same code behind the console's Reset password), and
+ * prints the new one. The repo writes the new digests and queues
+ * `pbx.extension.updated` in one transaction, so what happens next is the live
+ * pbx-config-service relay, NATS and telephony-config projecting it into
+ * OpenSIPs: this only starts the chain, like `seed()` does for creation.
+ */
+export async function resetExtensionPassword(
+  tenantId: string,
+  number: string,
+): Promise<{ readonly password: string; readonly realm: string }> {
+  const orgDb = createDatabase<OrgServiceDb>({
+    host: env('ORG_DB_HOST'),
+    port: Number(env('ORG_DB_PORT')),
+    user: env('ORG_DB_USER'),
+    password: env('ORG_DB_PASSWORD'),
+    database: env('ORG_DB_NAME'),
+    poolSize: 2,
+    logger,
+  });
+  const pbxDb = createDatabase<PbxConfigServiceDb>({
+    host: env('PBX_DB_HOST'),
+    port: Number(env('PBX_DB_PORT')),
+    user: env('PBX_DB_USER'),
+    password: env('PBX_DB_PASSWORD'),
+    database: env('PBX_DB_NAME'),
+    poolSize: 2,
+    logger,
+  });
+  try {
+    const orgClient = createOrgClient({
+      baseUrl: env('ORG_SERVICE_URL'),
+      internalServiceToken: env('INTERNAL_SERVICE_TOKEN'),
+    });
+    const kek = fileKekFromConfig({
+      CRYPTO_KEKS: env('CRYPTO_KEKS'),
+      CRYPTO_KEK_CURRENT: env('CRYPTO_KEK_CURRENT'),
+    });
+    const extensionRepo = createExtensionRepo(pbxDb, orgClient.primaryDomain, kek);
+    const ctx = { tenantId };
+    const found = (await extensionRepo.list(ctx)).find((e) => e.number === number);
+    if (found === undefined) throw new Error(`no extension ${number} in tenant ${tenantId}`);
+    const reset = await extensionRepo.resetPassword(ctx, found.id);
+    return { password: reset.password, realm: reset.realm };
+  } finally {
+    await pbxDb.destroy();
+    await orgDb.destroy();
+  }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   if (process.argv[2] === 'set-limits') {
     const tenantId = process.argv[3];
@@ -449,6 +501,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     await setLimits(tenantId, JSON.parse(limitsJson) as Record<string, unknown>);
     process.stdout.write('{"ok":true}\n');
+  } else if (process.argv[2] === 'reset-password') {
+    const tenantId = process.argv[3];
+    const number = process.argv[4];
+    if (tenantId === undefined || number === undefined) {
+      throw new Error('usage: seed.js reset-password <tenantId> <extensionNumber>');
+    }
+    const reset = await resetExtensionPassword(tenantId, number);
+    process.stdout.write(`\n${JSON.stringify(reset)}\n`);
   } else {
     const result = await seed();
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
