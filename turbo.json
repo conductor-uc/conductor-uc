@@ -1,7 +1,13 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
-  "globalDependencies": ["tsconfig.base.json", "eslint.config.js", ".prettierrc.json", ".nvmrc"],
+  "globalDependencies": [
+    "tsconfig.base.json",
+    "eslint.config.js",
+    ".prettierrc.json",
+    "vitest.shared.ts",
+    ".nvmrc"
+  ],
   "globalEnv": ["NODE_ENV", "CI"],
   "tasks": {
     "build": {
