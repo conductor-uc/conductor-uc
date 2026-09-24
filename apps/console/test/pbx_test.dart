@@ -56,10 +56,16 @@ void main() {
   testWidgets('Connect a phone shows where to register, and reveals the '
       'password only after a reason', (tester) async {
     await openSection(tester, 'Extensions');
+    // The dialog is taller now that it names the proxy as well as the domain.
+    tester.view.physicalSize = const Size(1280, 1000);
     await tapIn(tester, '102', find.byTooltip('Connect a phone'));
 
     expect(find.text('Connect a phone to 102'), findsOneWidget);
     expect(find.text('demo.voice.northwind.example'), findsWidgets);
+    // Phones connect to the reseller's proxy and log in to the tenant's domain.
+    expect(find.text('Outbound proxy'), findsOneWidget);
+    expect(find.text('sip.voice.northwind.example'), findsOneWidget);
+    expect(find.text('Server / registrar'), findsOneWidget);
     expect(find.text('5060'), findsOneWidget);
     expect(find.text('UDP or TCP or TLS'), findsOneWidget);
     // TLS listens on its own port.

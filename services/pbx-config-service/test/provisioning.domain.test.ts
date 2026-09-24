@@ -102,6 +102,24 @@ describe('renderYealinkConfig', () => {
     expect(text.endsWith('\n')).toBe(true);
   });
 
+  it('sends nothing through a proxy unless it is given one', () => {
+    expect(renderYealinkConfig(account)).toContain('account.1.outbound_proxy_enable = 0\n');
+    expect(renderYealinkConfig(account)).not.toContain('outbound_host');
+  });
+
+  it('registers to the domain but connects to the outbound proxy, on the same port', () => {
+    const text = renderYealinkConfig({
+      ...account,
+      transport: 'tls',
+      port: 5061,
+      outboundProxy: 'sip.voice.reseller.test',
+    });
+    expect(text).toContain('account.1.sip_server.1.address = acme.voice.example.test\n');
+    expect(text).toContain('account.1.outbound_proxy_enable = 1\n');
+    expect(text).toContain('account.1.outbound_host = sip.voice.reseller.test\n');
+    expect(text).toContain('account.1.outbound_port = 5061\n');
+  });
+
   it.each([
     ['udp', 0],
     ['tcp', 1],

@@ -451,6 +451,49 @@ describe.skipIf(skipReason !== undefined)('devices and provisioning HTTP routes'
       }
     });
 
+    it('connects through the reseller proxy, keeping the tenant domain as the server, once the proxy is active', async () => {
+      const { creds } = await provisioned();
+      let status: 'pending' | 'active' = 'pending';
+      const proxied = await createServer({
+        serviceName: 'pbx-config-service',
+        logger: h.logger,
+        context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
+      });
+      registerProvisionRoutes(
+        proxied,
+        h.devices,
+        h.extensions,
+        h.domains.lookup,
+        { port: 5060, tlsPort: 5061, transports: ['tls', 'udp'] },
+        { sipProxy: () => Promise.resolve({ host: 'sip.voice.reseller.test', status }) },
+      );
+      await proxied.ready();
+      const fetchConfig = async () =>
+        (
+          await proxied.inject({
+            method: 'GET',
+            url: '/v1/public/provision/yealink/001565aabbcc.cfg',
+            headers: { authorization: basic(creds.username, creds.password) },
+          })
+        ).body;
+      try {
+        const waiting = await fetchConfig();
+        expect(waiting).toContain('account.1.outbound_proxy_enable = 0\n');
+        expect(waiting).not.toContain('sip.voice.reseller.test');
+
+        status = 'active';
+        const ready = await fetchConfig();
+        expect(ready).toContain('account.1.outbound_proxy_enable = 1\n');
+        expect(ready).toContain('account.1.outbound_host = sip.voice.reseller.test\n');
+        expect(ready).toContain('account.1.outbound_port = 5061\n');
+        // The account still registers to, and logs in as, the tenant's own domain.
+        expect(ready).toMatch(/account\.1\.sip_server\.1\.address = \S+\n/);
+        expect(ready).not.toContain('sip_server.1.address = sip.voice.reseller.test');
+      } finally {
+        await proxied.close();
+      }
+    });
+
     it("will not serve another phone's file, or one that is not a Yealink file", async () => {
       const { tenantId, ext, creds } = await provisioned();
       await createDevice(tenantId, ext.id, '001565000002');

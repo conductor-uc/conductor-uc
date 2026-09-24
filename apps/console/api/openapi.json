@@ -6455,7 +6455,8 @@
                     "port",
                     "tlsPort",
                     "transports",
-                    "realm"
+                    "realm",
+                    "outboundProxy"
                   ],
                   "properties": {
                     "server": {
@@ -6478,6 +6479,12 @@
                     },
                     "realm": {
                       "type": "string"
+                    },
+                    "outboundProxy": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     }
                   }
                 }

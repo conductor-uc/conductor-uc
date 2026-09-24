@@ -128,6 +128,11 @@ export interface YealinkAccount {
   readonly server: string;
   readonly port: number;
   readonly transport: SipTransportName;
+  /**
+   * A proxy to send everything through while `server` stays the domain the
+   * account registers to and logs in as. Its certificate is the one checked.
+   */
+  readonly outboundProxy?: string;
 }
 
 /** The first line of every Yealink configuration file. */
@@ -153,6 +158,13 @@ export function renderYealinkConfig(account: YealinkAccount): string {
     `account.1.sip_server.1.port = ${String(account.port)}`,
     `account.1.sip_server.1.transport_type = ${String(TRANSPORT_TYPE[account.transport])}`,
     'account.1.sip_server.1.expires = 3600',
+    ...(account.outboundProxy === undefined
+      ? ['account.1.outbound_proxy_enable = 0']
+      : [
+          'account.1.outbound_proxy_enable = 1',
+          `account.1.outbound_host = ${oneLine(account.outboundProxy)}`,
+          `account.1.outbound_port = ${String(account.port)}`,
+        ]),
     // Fetch again daily, so a password reset or a moved extension reaches the
     // phone without someone rebooting it. Yealink's default is boot only.
     'static.auto_provision.repeat.enable = 1',

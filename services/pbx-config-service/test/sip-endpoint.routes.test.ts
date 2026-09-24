@@ -65,7 +65,49 @@ describe('pbx-config-service SIP endpoint route', () => {
       tlsPort: null,
       transports: ['udp', 'tcp'],
       realm: 'acme.voice.platform.test',
+      outboundProxy: null,
     });
+  });
+
+  it("names the tenant's SIP proxy, apart from its realm, once the proxy has a certificate", async () => {
+    const statuses: Record<string, 'pending' | 'active'> = { 't-1': 'pending' };
+    const proxied = await createServer({
+      serviceName: 'pbx-config-service',
+      logger: silentLogger(),
+      context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
+    });
+    registerSipEndpointRoutes(
+      proxied,
+      (tenantId) => Promise.resolve(domains[tenantId]),
+      { port: 5060, tlsPort: 5061, transports: ['tls'] },
+      (tenantId) =>
+        Promise.resolve(
+          statuses[tenantId] === undefined
+            ? undefined
+            : { host: 'sip.voice.reseller.test', status: statuses[tenantId] },
+        ),
+    );
+    await proxied.ready();
+    try {
+      const get = async (): Promise<unknown> =>
+        (
+          await proxied.inject({
+            method: 'GET',
+            url: '/v1/tenants/t-1/sip-endpoint',
+            headers: headers('t-1'),
+          })
+        ).json();
+      // A proxy still waiting for its certificate is not something to send phones to.
+      expect(await get()).toMatchObject({ outboundProxy: null });
+      statuses['t-1'] = 'active';
+      expect(await get()).toMatchObject({
+        server: 'acme.voice.platform.test',
+        realm: 'acme.voice.platform.test',
+        outboundProxy: 'sip.voice.reseller.test',
+      });
+    } finally {
+      await proxied.close();
+    }
   });
 
   it('reports the TLS port, which is not the plain one, when TLS is offered', async () => {

@@ -10,7 +10,7 @@ import {
   tokenMatches,
   type GlobalProvisioningCredential,
 } from '../domain/provisioning.js';
-import type { TenantDomainLookup } from '../org-client.js';
+import { activeSipProxy, type SipProxyLookup, type TenantDomainLookup } from '../org-client.js';
 import type { DeviceRepo, ProvisioningTarget } from '../repo/device.repo.js';
 import type { ExtensionRepo } from '../repo/extension.repo.js';
 import type { SipEdgeConfig } from './sip-endpoint.routes.js';
@@ -36,7 +36,10 @@ export function registerProvisionRoutes(
   extensions: ExtensionRepo,
   primaryDomain: TenantDomainLookup,
   edge: SipEdgeConfig,
-  options: { readonly globalCredential?: GlobalProvisioningCredential } = {},
+  options: {
+    readonly globalCredential?: GlobalProvisioningCredential;
+    readonly sipProxy?: SipProxyLookup;
+  } = {},
 ): void {
   app.get(
     '/v1/public/provision/yealink/:file',
@@ -93,6 +96,7 @@ export function registerProvisionRoutes(
         );
       }
 
+      const outboundProxy = await activeSipProxy(options.sipProxy, target.tenantId);
       const transport = edge.transports[0] ?? 'udp';
       await devices.recordFetch(ctx, target.id, {
         ...(request.ip === undefined ? {} : { ip: request.ip }),
@@ -111,6 +115,7 @@ export function registerProvisionRoutes(
           // TLS is on its own port; UDP and TCP share the other.
           port: transport === 'tls' ? edge.tlsPort : edge.port,
           transport,
+          ...(outboundProxy === undefined ? {} : { outboundProxy }),
         }),
       );
     },
