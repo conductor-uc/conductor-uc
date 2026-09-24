@@ -254,6 +254,27 @@ export interface PbxConfigServiceDb extends EventTables {
     version: number;
   };
   /**
+   * Per-extension call handling (parity 1a; `011_add_extension_call_handling.ts`),
+   * 1:1 with `extensions`. The destination columns hold a
+   * `domain/call-handling.ts` `Destination` as JSON (parsed or text depending
+   * on the driver); `simultaneous_ring` a JSON array of them.
+   */
+  extension_call_handling: {
+    extension_id: string;
+    tenant_id: string;
+    dnd: boolean;
+    dnd_action: string;
+    forward_always: unknown;
+    forward_busy: unknown;
+    forward_no_answer: unknown;
+    no_answer_seconds: number;
+    forward_unreachable: unknown;
+    simultaneous_ring: unknown;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
+  /**
    * A conference room (S2-15; `mod_conference`). `pin_enc` is envelope-
    * encrypted (07 §5) — null means no PIN required. `video` records intent
    * only; see `008_add_conference_rooms.ts`'s own comment on why it has no

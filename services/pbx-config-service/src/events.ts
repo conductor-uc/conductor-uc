@@ -31,6 +31,13 @@ export const pbxEvents = defineEvents({
     description: 'An extension (and its SIP credentials) was deleted.',
     data: Type.Object({ extensionId: Type.String({ minLength: 1 }) }),
   },
+  'pbx.call_handling.updated': {
+    schemaVersion: 1,
+    description:
+      "An extension's call handling changed: do not disturb, forwarding, or simultaneous ring. " +
+      "Thin: consumers re-fetch the extension's current call handling by id.",
+    data: Type.Object({ extensionId: Type.String({ minLength: 1 }) }),
+  },
   'pbx.did.created': {
     schemaVersion: 1,
     description: 'A DID was created and bound to a trunk and a destination.',
