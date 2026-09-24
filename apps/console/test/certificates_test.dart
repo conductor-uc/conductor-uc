@@ -109,6 +109,58 @@ void main() {
     expect(find.text('portal.northwind.example'), findsOneWidget);
   });
 
+  testWidgets(
+    'a reseller is told nothing to point at until the operator sets the '
+    'platform address, then which record for each name',
+    (tester) async {
+      await signInAs(tester, 'master@example.test');
+      // The operator says where the platform is reached.
+      await tester.tap(navItem('Certificates'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Public address'),
+        'https://edge.example.test',
+      );
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('save-public-address')),
+      );
+      await tester.tap(find.byKey(const ValueKey('save-public-address')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('without http://'), findsOneWidget);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Public address'),
+        '203.0.113.10',
+      );
+      await tester.tap(find.byKey(const ValueKey('save-public-address')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('without http://'), findsNothing);
+
+      await tester.tap(navItem('Resellers'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Northwind Telecom'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(Tab, 'Certificates'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DNS records to publish'), findsOneWidget);
+      expect(find.text('203.0.113.10'), findsNWidgets(2));
+      expect(find.text('A'), findsNWidgets(2));
+    },
+  );
+
+  testWidgets('with no platform address yet, a reseller is told to ask', (
+    tester,
+  ) async {
+    await signInAs(tester, 'master@example.test');
+    await tester.tap(find.text('Northwind Telecom'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Tab, 'Certificates'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('dns-no-address')), findsOneWidget);
+    expect(find.text('DNS records to publish'), findsNothing);
+  });
+
   testWidgets('only the platform operator has a Certificates section', (
     tester,
   ) async {

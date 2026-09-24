@@ -25,9 +25,9 @@ Why OpenSIPs owns registration and trunks **(Proposed, D-007)**: FreeSWITCH node
 
 ## 2. OpenSIPs
 
-- Version: OpenSIPs 3.4 LTS or later. Configuration is a templated `opensips.cfg` rendered at container start from environment variables. There are no per-tenant edits to the config file; everything tenant-specific lives in DB tables.
-- DB backend: `db_mysql` against a dedicated `opensips` schema in MariaDB. **Only `telephony-config` writes to that schema** (the projection pattern). OpenSIPs reads it and caches it, and reloads are triggered through MI (`mi_http`) after projection updates: `dr_reload`, `address_reload`, `domain_reload`, `reg_reload`, `ds_reload`.
-- Modules in scope: `registrar`, `usrloc`, `auth`, `auth_db`, `domain`, `permissions`, `dispatcher`, `drouting`, `uac`, `uac_auth`, `uac_registrant`, `dialog`, `topology_hiding`, `nathelper`, `presence`, `presence_dialoginfo`, `pua_dialoginfo`, `cachedb_redis`, `clusterer`, `proto_tls`, `proto_hep` (HEP export to Homer).
+- Version: OpenSIPs 3.6 (the image is `opensips/opensips:3.6`, schema vendored from 3.6.8). Configuration is a templated `opensips.cfg` rendered at container start from environment variables. There are no per-tenant edits to the config file; everything tenant-specific lives in DB tables.
+- DB backend: `db_mysql` against a dedicated `opensips` schema in MariaDB. **Only `telephony-config` writes to that schema** (the projection pattern). OpenSIPs reads it and caches it, and reloads are triggered through MI (`mi_http`) after projection updates: `dr_reload`, `address_reload`, `domain_reload`, `reg_reload`, `ds_reload`, and `tls_reload` for certificates.
+- Modules in scope: `registrar`, `usrloc`, `auth`, `auth_db`, `domain`, `permissions`, `dispatcher`, `drouting`, `uac`, `uac_auth`, `uac_registrant`, `dialog`, `topology_hiding`, `nathelper`, `presence`, `presence_dialoginfo`, `pua_dialoginfo`, `cachedb_redis`, `tls_openssl`, `tls_mgm`, `proto_tls`, `clusterer`, `proto_hep` (HEP export to Homer). As built, `clusterer` is not loaded yet and HEP export is not enabled (see `opensips.cfg.template`).
 - Header discipline: OpenSIPs strips any inbound `X-Tenant-*` or `X-Trunk-*` headers from external sources. It then sets `X-Tenant-Id`, `X-Tenant-Domain`, `X-Trunk-Id`, and `X-Call-Direction` on the leg toward FS. FS accepts calls only from OpenSIPs addresses (a Sofia ACL).
 - NAT: `nathelper` for signaling (`fix_nated_contact`, keepalive pinging). Media NAT is handled by FreeSWITCH (`NDLB`/auto-NAT). Media anchoring at the edge with RTPengine is deferred (O-7), which means FS media IPs are visible in SDP until then.
 
@@ -60,6 +60,20 @@ The only new routing logic is the SUBSCRIBE handler: digest-authenticated the sa
 "Publishes park-slot state" (§1's table) is **not yet implemented** — it's S2-14's (call parking) forward reference, added when that task's own park-lot state exists to publish. S2-17 covers ordinary extension-to-extension BLF only.
 
 See `docs/decisions.md` G-38 for what this task could verify live (config parses, every presence/pua module reaches clean `mod_init`) versus what needs a real call in flight to confirm (actual NOTIFY delivery across early/confirmed/terminated) — left for issue #44's SIP regression suite, per this repo's standing practice for FS/OpenSIPs-facing behavior.
+
+### 2.3 SIP over TLS
+
+| Item | Behaviour |
+|---|---|
+| Listener | `tls:*:5061` (`OPENSIPS_TLS_PORT`), alongside UDP and TCP on 5060. TLS 1.2 is the floor; weak ciphers are refused. Clients are not asked for a certificate; phones authenticate with digest. |
+| On/off | The entrypoint keeps the TLS blocks of the template when `OPENSIPS_TLS_CERT_FILE` is set or `OPENSIPS_TLS_ENABLED=true`; otherwise there is no 5061 listener. |
+| Certificates | `tls_mgm` runs in **database mode**: one server row (`type` 2) per SIP proxy hostname, chosen by the name the client asks for (SNI, `match_sip_domain`). A `default` row answers an unknown or missing name. `telephony-config` is the only writer (`certificate-sync`). |
+| Reload | On `org.certificate.issued` and on a periodic reconcile, telephony-config rewrites changed rows, removes rows for withdrawn certificates, and calls `tls_reload` over MI. No restart. |
+| File fallback | `OPENSIPS_TLS_CERT_FILE` / `OPENSIPS_TLS_KEY_FILE` add a `filedefault` certificate for names the database has nothing for, and for the time before the first certificate is issued. |
+| Development | `OPENSIPS_TLS_DEV_SELF_SIGNED=true` makes a self-signed certificate for `OPENSIPS_TLS_DEV_NAMES` (default `platform.test,*.platform.test`) when the file is missing. Not for production: no phone trusts it. |
+| Not built | SRTP (encrypted media). |
+
+The private key sits in clear in the `opensips` schema, because that is how OpenSIPs loads it from the database. org-service's encrypted copy stays the source of truth, so restrict access to that schema accordingly.
 
 ## 3. FreeSWITCH
 

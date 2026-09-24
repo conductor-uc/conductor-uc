@@ -105,6 +105,22 @@ the same reason.
   Idempotent: running it again logs "master org already exists" and exits 0, whichever of the
   two constraints above is what actually caught the repeat.
 
+## What G-105 adds: TLS certificates (migrations 003 and 004)
+
+org-service owns the certificate lifecycle for the platform's hostnames.
+
+| Piece | File | What it does |
+|---|---|---|
+| Tables | `migrations/003_certificates.ts`, `004_acme_settings.ts` | `tls_certificates` (chain, envelope-encrypted key, status, retry state), `acme_challenges`, `acme_accounts`, `acme_settings` |
+| Reconciler | `src/main.ts` | At startup and every 5 minutes: work out which hostnames need a certificate (platform proxy and console, `sip.<base>` for each active reseller base domain, each console hostname) |
+| Issuer | `src/acme-issuer.ts`, `src/certificate-worker.ts` | Background ACME HTTP-01 request, 2048-bit RSA, lease and backoff (one minute to one day). Idle until the ACME settings are complete |
+| Settings | `src/routes/acme-settings.routes.ts`, `src/acme-terms.ts` | `GET/PUT /v1/platform/acme-settings` (`domain.manage`): contact address, production or staging, agreement to the terms (recorded with who and when; re-asked when the directory changes). Audited |
+| Listings | `src/routes/certificate.routes.ts` | `GET /v1/platform/certificates`, `GET /v1/resellers/:id/certificates` |
+| Internal routes | same | `GET /internal/v1/tenants/:id/sip-proxy`, `GET /internal/v1/certificates[/:fqdn]` (chain and key), `GET /internal/v1/acme/challenges/:token`; all need `INTERNAL_SERVICE_TOKEN` |
+| Event | `src/events.ts` | `org.certificate.issued`, no key in the payload |
+
+Settings: `PLATFORM_BASE_DOMAIN` (required), `INTERNAL_SERVICE_TOKEN` (required), `CRYPTO_KEKS` (encrypts keys), and optional `ACME_DIRECTORY_URL` to use another ACME server (the Pebble test in `test/acme.pebble.test.ts` does; skipped without Docker). The CA reaches the challenge through api-gateway's plain-HTTP port, which asks the internal challenge route.
+
 ## What is deliberately not here yet
 
 - **No admin user on the master.** The bootstrap CLI still only creates the org and logs that
@@ -120,8 +136,7 @@ the same reason.
   reassigned if its reseller later activates a base domain, and neither domain table has a
   delete path — 02 §3 flags changing a tenant's domain as invalidating stored SIP digest
   HA1 values, a distinct, more involved operation this task does not build.
-- **No ACME / TLS issuance.** 02 §3 mentions it; `console_hostnames.tls_status` just
-  starts and stays `pending` — no task owns actually issuing anything yet.
+- **Certificate coverage is limited to what G-105 built.** See "What G-105 adds" below; a certificate per tenant domain, and wildcard certificates, are not issued.
 - **No asset-existence check on brand upload finalize**, and no brand asset deletion —
   see the S1-04 section above.
 
