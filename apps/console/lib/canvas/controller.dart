@@ -149,12 +149,19 @@ class CanvasController extends ChangeNotifier {
     return node;
   }
 
-  /// Replaces one node's data (a properties edit). One undo step.
+  /// Replaces one node's data (a properties edit). One undo step. A change
+  /// that takes a port away also removes the connections leaving it.
   void setData(String id, Map<String, Object?> data) {
     final node = _nodes[id];
     if (node == null) return;
     _record();
-    _nodes[id] = node.copyWith(data: data);
+    final updated = node.copyWith(data: data);
+    _nodes[id] = updated;
+    final ports = {for (final p in portsOf(updated)) p.id};
+    _edges.removeWhere((e) => e.from == id && !ports.contains(e.port));
+    if (_selectedEdge != null && !_edges.contains(_selectedEdge)) {
+      _selectedEdge = null;
+    }
     _changed();
   }
 

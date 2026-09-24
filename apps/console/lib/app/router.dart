@@ -8,6 +8,7 @@ import '../features/auth/invite_page.dart';
 import '../features/auth/login_page.dart';
 import '../features/auth/mfa_page.dart';
 import '../features/auth/reset_pages.dart';
+import '../features/callflow/builder/flow_builder_page.dart';
 import '../features/callflow/flows_page.dart';
 import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
@@ -86,7 +87,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/call-flows/:id',
             builder: (context, state) =>
-                FlowEditorPage(flowId: state.pathParameters['id']!),
+                FlowBuilderPage(flowId: state.pathParameters['id']!),
           ),
           for (final s in everySection)
             GoRoute(path: s.path, builder: (context, state) => _pageFor(s)),

@@ -27,6 +27,11 @@ export interface FlowVersionSummary {
   readonly publishedAt: Date;
 }
 
+/** A published version with the graph it was published from. */
+export interface FlowVersionDetail extends FlowVersionSummary {
+  readonly graph: FlowGraphInput;
+}
+
 /**
  * A flow's currently published IR together with the identity of the version
  * it came from — the exact payload the internal IR endpoint returns, and what
@@ -129,6 +134,28 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
         .orderBy('version_number', 'asc')
         .execute();
       return rows;
+    },
+
+    /** One published version and its authored graph, or `undefined`. */
+    async findVersion(
+      ctx: DbContext,
+      flowId: string,
+      versionNumber: number,
+    ): Promise<FlowVersionDetail | undefined> {
+      const row = await db
+        .scoped(ctx)
+        .selectFrom('flow_versions')
+        .select(['id', 'version_number as versionNumber', 'published_at as publishedAt', 'graph'])
+        .where('flow_id', '=', flowId)
+        .where('version_number', '=', versionNumber)
+        .executeTakeFirst();
+      if (row === undefined) return undefined;
+      return {
+        id: row.id,
+        versionNumber: row.versionNumber,
+        publishedAt: row.publishedAt,
+        graph: parseJson<FlowGraphInput>(row.graph),
+      };
     },
 
     /**

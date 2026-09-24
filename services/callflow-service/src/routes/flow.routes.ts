@@ -1,4 +1,5 @@
 import { NODE_TYPES } from '@cuc/callflow-ir';
+import type { FlowGraphInput } from '@cuc/callflow-ir';
 import type { DbContext } from '@cuc/db';
 import { ProblemError, Type, type Server } from '@cuc/http';
 
@@ -28,6 +29,9 @@ const NodeInputSchema = Type.Object({
   id: Type.String({ minLength: 1 }),
   type: Type.String({ minLength: 1 }),
   config: Type.Unknown(),
+  // Editor layout: kept with the draft and the published graph, never compiled.
+  position: Type.Optional(Type.Object({ x: Type.Number(), y: Type.Number() })),
+  openPorts: Type.Optional(Type.Array(Type.String())),
 });
 const EdgeInputSchema = Type.Object({
   from: Type.String({ minLength: 1 }),
@@ -60,6 +64,20 @@ const VersionSummarySchema = Type.Object({
   publishedAt: Type.String(),
 });
 
+const VersionDetailSchema = Type.Object({
+  id: Type.String(),
+  versionNumber: Type.Number(),
+  publishedAt: Type.String(),
+  graph: FlowGraphSchema,
+});
+
+const VersionParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  id: Type.String({ minLength: 1 }),
+  // Path parameters arrive as strings, and the server does not coerce types.
+  versionNumber: Type.String({ pattern: '^[1-9][0-9]*$' }),
+});
+
 const CreateBodySchema = Type.Object({ name: Type.String({ minLength: 1, maxLength: 128 }) });
 const RollbackBodySchema = Type.Object({ versionNumber: Type.Number({ minimum: 1 }) });
 
@@ -68,6 +86,17 @@ function ctxFor(request: {
   readonly params: { readonly tenantId: string };
 }): DbContext {
   return { ...request.context, tenantId: request.params.tenantId };
+}
+
+/** A node with fresh, mutable copies of its editor fields (the response typing wants that). */
+function toNodeResponse(node: FlowGraphInput['nodes'][number]) {
+  return {
+    id: node.id,
+    type: node.type,
+    config: node.config,
+    ...(node.position === undefined ? {} : { position: { ...node.position } }),
+    ...(node.openPorts === undefined ? {} : { openPorts: [...node.openPorts] }),
+  };
 }
 
 function toFlowResponse(flow: Flow) {
@@ -81,7 +110,7 @@ function toFlowResponse(flow: Flow) {
     // response boundary, not a sign the readonly-ness upstream was wrong.
     draftGraph: {
       entryPoints: { ...flow.draftGraph.entryPoints },
-      nodes: flow.draftGraph.nodes.map((node) => ({ ...node })),
+      nodes: flow.draftGraph.nodes.map(toNodeResponse),
       edges: flow.draftGraph.edges.map((edge) => ({ ...edge })),
     },
     draftUpdatedAt: flow.draftUpdatedAt.toISOString(),
@@ -170,6 +199,32 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
     async (request) => {
       const versions = await flows.listVersions(ctxFor(request), request.params.id);
       return { rows: versions.map(toVersionResponse) };
+    },
+  );
+
+  /** One published version with the graph it was published from (for the builder's history and diff). */
+  app.get(
+    '/v1/tenants/:tenantId/flows/:id/versions/:versionNumber',
+    {
+      config: { permission: 'callflow.edit', dataClass: 'config' },
+      schema: { params: VersionParamsSchema, response: { 200: VersionDetailSchema } },
+    },
+    async (request) => {
+      const versionNumber = Number(request.params.versionNumber);
+      const version = await flows.findVersion(ctxFor(request), request.params.id, versionNumber);
+      if (version === undefined) {
+        throw ProblemError.notFound(
+          `Flow '${request.params.id}' has no published version number ${String(versionNumber)}.`,
+        );
+      }
+      return {
+        ...toVersionResponse(version),
+        graph: {
+          entryPoints: { ...version.graph.entryPoints },
+          nodes: version.graph.nodes.map(toNodeResponse),
+          edges: version.graph.edges.map((edge) => ({ ...edge })),
+        },
+      };
     },
   );
 

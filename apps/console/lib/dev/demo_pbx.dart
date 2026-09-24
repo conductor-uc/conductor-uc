@@ -114,26 +114,41 @@ class DemoPbx {
         'id': 'ver-1',
         'versionNumber': 1,
         'publishedAt': '2026-09-01T09:00:00Z',
+        'graph': _mainMenu,
       },
     ];
   }
 
   static const _mainMenu = {
-    'entryPoints': {'default': 'greet'},
+    'entryPoints': {'main': 'greet'},
     'nodes': [
       {
         'id': 'greet',
         'type': 'menu',
-        'config': {'prompt': 'media-1'},
+        'config': {
+          'promptMediaAssetId': 'media-1',
+          'timeoutSeconds': 5,
+          'maxInvalidAttempts': 3,
+        },
       },
       {
         'id': 'sales',
         'type': 'ring_group',
         'config': {'ringGroupId': 'rg-1'},
       },
+      {
+        'id': 'mail',
+        'type': 'voicemail',
+        'config': {'mailboxId': 'mb-1'},
+      },
+      {'id': 'bye', 'type': 'hangup', 'config': {}},
     ],
     'edges': [
       {'from': 'greet', 'port': '1', 'to': 'sales'},
+      {'from': 'greet', 'port': 'timeout', 'to': 'bye'},
+      {'from': 'greet', 'port': 'invalid', 'to': 'bye'},
+      {'from': 'sales', 'port': 'noAnswer', 'to': 'mail'},
+      {'from': 'mail', 'port': 'next', 'to': 'bye'},
     ],
   };
 
@@ -165,7 +180,7 @@ class DemoPbx {
   var _next = 100;
 
   static final _route = RegExp(
-    r'^/v1/tenants/[^/]+/([^/]+)(?:/([^/]+))?(?:/([^/]+))?$',
+    r'^/v1/tenants/[^/]+/([^/]+)(?:/([^/]+))?(?:/([^/]+))?(?:/([^/]+))?$',
   );
 
   final _resellers = <Map<String, dynamic>>[
@@ -348,6 +363,18 @@ class DemoPbx {
   ResponseBody? handle(RequestOptions options) {
     final orgs = _orgs(options);
     if (orgs != null) return orgs;
+    if (options.path.endsWith('/voicemail/mailboxes')) {
+      return _json({
+        'rows': [
+          {
+            'id': 'mb-1',
+            'extensionId': _rows['extensions']!.first['id'],
+            'greetingStatus': 'none',
+            'unreadCount': 0,
+          },
+        ],
+      });
+    }
     final match = _route.firstMatch(options.path);
     if (match == null) return null;
     final resource = match.group(1)!;
@@ -358,7 +385,7 @@ class DemoPbx {
     final method = options.method.toUpperCase();
 
     if (resource == 'flows' && id != null && action != null) {
-      return _flowAction(method, id, action, options.data);
+      return _flowAction(method, id, action, options.data, match.group(4));
     }
     if (id == null) {
       if (method == 'GET') return _json({'rows': rows});
@@ -475,12 +502,21 @@ class DemoPbx {
     String id,
     String action,
     Object? data,
+    String? number,
   ) {
     final flow = _rows['flows']!.firstWhere((f) => f['id'] == id);
     final versions = _versions.putIfAbsent(id, () => []);
+    Map<String, dynamic> summary(Map<String, dynamic> v) => {
+      for (final k in const ['id', 'versionNumber', 'publishedAt']) k: v[k],
+    };
     switch ((method, action)) {
+      case ('GET', 'versions') when number != null:
+        final found = versions.where((v) => '${v['versionNumber']}' == number);
+        return found.isEmpty
+            ? _problem(404, 'No such version.')
+            : _json(found.first);
       case ('GET', 'versions'):
-        return _json({'rows': versions});
+        return _json({'rows': versions.map(summary).toList()});
       case ('PUT', 'draft'):
         flow['draftGraph'] = data is Map ? data : jsonDecode('$data');
         flow['draftUpdatedAt'] = DateTime.now().toUtc().toIso8601String();
@@ -503,16 +539,17 @@ class DemoPbx {
           'id': 'ver-${_next++}',
           'versionNumber': versions.length + 1,
           'publishedAt': DateTime.now().toUtc().toIso8601String(),
+          'graph': jsonDecode(jsonEncode(flow['draftGraph'])),
         };
         versions.add(version);
         flow['currentPublishedVersionId'] = version['id'];
-        return _json(version, 201);
+        return _json(summary(version), 201);
       case ('POST', 'rollback'):
         final n = (data is Map ? data : jsonDecode('$data'))['versionNumber'];
         final found = versions.where((v) => v['versionNumber'] == n);
         if (found.isEmpty) return _problem(404, 'No such version.');
         flow['currentPublishedVersionId'] = found.first['id'];
-        return _json(found.first);
+        return _json(summary(found.first));
     }
     return _problem(405, 'Not supported.');
   }

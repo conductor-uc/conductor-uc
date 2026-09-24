@@ -72,3 +72,11 @@ Run it in Chrome, ideally on a real GPU:
 
 Record a performance trace from DevTools alongside it if the numbers need a
 closer look. The target (08 §4.1) is 60 fps, meaning few frames over 16.7 ms.
+
+## Call-flow builder
+
+`lib/canvas/` is the generic canvas engine (no telephony). The builder on top
+of it is `lib/features/callflow/builder/`. Its node types and local validator
+are checked against `@cuc/callflow-ir` through `api/callflow-ir.json`; after
+changing the IR, re-run `node tool/dump-callflow-ir.mjs` (build `@cuc/callflow-ir`
+first) and the console tests say what to update.

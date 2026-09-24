@@ -87,6 +87,13 @@ export interface NodeInput {
   readonly id: string;
   readonly type: string;
   readonly config: unknown;
+  /**
+   * Editor state, not call behavior: where the visual builder drew the node,
+   * and the ports it shows before anything is wired to them (a menu's digits).
+   * The validator and compiler ignore both, so they never reach the IR.
+   */
+  readonly position?: { readonly x: number; readonly y: number };
+  readonly openPorts?: readonly string[];
 }
 
 /** An authored edge: one outgoing connection from a node's named port. */

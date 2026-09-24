@@ -69,6 +69,7 @@ const OVERRIDES = {
   'post /v1/auth/logout': 'logout',
   'get /v1/public/brand': 'getPublicBrand',
   'get /v1/resellers/{id}/brand': 'getBrand',
+  'get /v1/tenants/{tenantId}/flows/{id}/versions/{versionNumber}': 'getFlowVersion',
   'post /v1/resellers/{id}/brand/assets': 'uploadBrandAsset',
 };
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };

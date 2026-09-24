@@ -159,42 +159,17 @@ void main() {
     expect(find.byTooltip('Delete'), findsWidgets);
   });
 
-  testWidgets('call flow: create, validate an empty graph, publish', (
-    tester,
-  ) async {
+  testWidgets('call flows list opens the builder', (tester) async {
     await openSection(tester, 'Call flows');
     expect(find.text('Main menu'), findsOneWidget);
-
-    await tester.tap(find.text('New call flow'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'After hours');
-    await tester.tap(find.widgetWithText(FilledButton, 'Create'));
-    await tester.pumpAndSettle();
-
-    // Now in the editor for the new flow.
-    expect(find.text('After hours'), findsOneWidget);
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Validate'));
-    await tester.pumpAndSettle();
-    expect(find.text('The flow has no nodes yet.'), findsOneWidget);
-
-    await tester.tap(find.widgetWithText(FilledButton, 'Publish'));
-    await tester.pumpAndSettle();
-    expect(find.text('Published version 1.'), findsOneWidget);
-    expect(find.text('Version 1'), findsOneWidget);
-  });
-
-  testWidgets('invalid JSON in the flow editor is reported, not sent', (
-    tester,
-  ) async {
-    await openSection(tester, 'Call flows');
     await tester.tap(find.text('Main menu'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Flow graph'),
-      '{ not json',
+    expect(
+      find.text(
+        'Save'
+        'd',
+      ),
+      findsOneWidget,
     );
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Save draft'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('not valid JSON'), findsOneWidget);
   });
 }

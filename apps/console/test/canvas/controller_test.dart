@@ -131,6 +131,28 @@ void main() {
     });
   });
 
+  test(
+    'a data change that removes a port drops the connections leaving it',
+    () {
+      // `portsOf` here gives a node with `open` in its data an extra port.
+      final c = CanvasController(
+        portsOf: (n) => [
+          const CanvasPort('a', 'A'),
+          if (n.data['open'] == true) const CanvasPort('x', 'X'),
+        ],
+      );
+      final a = c.addNode('step', Offset.zero, data: {'open': true});
+      final b = c.addNode('step', const Offset(300, 0));
+      c.connect(a.id, 'x', b.id);
+      c.connect(a.id, 'a', b.id);
+      c.setData(a.id, {'open': false});
+      expect(c.edges, [CanvasEdge(a.id, 'a', b.id)]);
+      c.undo();
+      expect(c.edges, hasLength(2));
+      c.dispose();
+    },
+  );
+
   group('selection', () {
     test('select, add to, and toggle', () {
       final a = step(Offset.zero);
