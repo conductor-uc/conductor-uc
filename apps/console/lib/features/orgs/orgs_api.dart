@@ -26,6 +26,10 @@ class OrgsApi {
   Future<Json> _body(Future<Response<Object?>> call) async =>
       ((await call).data as Map).cast<String, dynamic>();
 
+  /// The brand this session's org is presented with (S3-02).
+  Future<Json> sessionBrand() =>
+      _body(_dio.get<Object?>('/v1/session/brand', options: _options));
+
   Future<List<Json>> resellers() => _rows('/v1/resellers');
 
   Future<List<Json>> tenantsOf(String resellerId) =>

@@ -32,6 +32,20 @@ class Brand {
     );
   }
 
+  /// From the plain-map form of the same public shape, for the session brand.
+  factory Brand.fromJson(Map<String, dynamic> json) {
+    if (json['neutral'] == true) return const Brand.neutral();
+    return Brand(
+      displayName: _blankToNull(json['displayName'] as String?),
+      primary: parseHex(json['primaryColor'] as String?),
+      accent: parseHex(json['accentColor'] as String?),
+      logoLightUrl: _blankToNull(json['logoLightUrl'] as String?),
+      faviconUrl: _blankToNull(json['faviconUrl'] as String?),
+      supportEmail: _blankToNull(json['supportEmail'] as String?),
+      legalFooter: _blankToNull(json['legalFooter'] as String?),
+    );
+  }
+
   final String? displayName;
   final Color? primary;
   final Color? accent;
@@ -90,7 +104,9 @@ ThemeData buildTheme(Brand brand) {
   return ThemeData(colorScheme: scheme, useMaterial3: true);
 }
 
-/// Overridden in `main` with the brand fetched before `runApp` (08 §2).
+/// The brand for this hostname. Overridden in `main` with the brand fetched
+/// before `runApp` (08 §2). Signed-out screens use it as is; once signed in,
+/// [effectiveBrandProvider] may replace it.
 final brandProvider = Provider<Brand>((ref) => const Brand.neutral());
 
 /// The brand for [host], or neutral when the fetch fails: an unreachable or

@@ -22,6 +22,7 @@ function role(id: BuiltInRoleId, permissions: readonly Permission[]): Role {
 }
 
 const RESELLER_ADMIN_PERMISSIONS: readonly Permission[] = [
+  'org.view',
   'tenant.create',
   'tenant.manage',
   'tenant.suspend',
@@ -47,6 +48,7 @@ const RESELLER_ADMIN_PERMISSIONS: readonly Permission[] = [
 ];
 
 const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
+  'org.view',
   'user.manage',
   'role.manage',
   'grant.manage',
@@ -92,6 +94,7 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
  * unilaterally here.
  */
 const READ_SHAPED_PERMISSIONS: readonly Permission[] = [
+  'org.view',
   'cdr.read',
   'analytics.view',
   'audit.read',
@@ -114,11 +117,12 @@ export const BUILT_IN_ROLES: ReadonlyMap<BuiltInRoleId, Role> = new Map([
   ['master_admin', role('master_admin', allPermissions())],
   ['master_support', role('master_support', READ_SHAPED_PERMISSIONS)],
   ['reseller_admin', role('reseller_admin', RESELLER_ADMIN_PERMISSIONS)],
-  ['reseller_support', role('reseller_support', ['audit.read'])],
+  ['reseller_support', role('reseller_support', ['org.view', 'audit.read'])],
   ['tenant_admin', role('tenant_admin', TENANT_ADMIN_PERMISSIONS)],
   [
     'tenant_supervisor',
     role('tenant_supervisor', [
+      'org.view',
       'monitor.presence',
       'monitor.listen',
       'monitor.whisper',
@@ -131,7 +135,7 @@ export const BUILT_IN_ROLES: ReadonlyMap<BuiltInRoleId, Role> = new Map([
   // where granted"), not a role permission — a role has no scope of its own,
   // so bundling voicemail.access here would give every tenant user access to
   // every mailbox in the org, not just their own.
-  ['tenant_user', role('tenant_user', ['monitor.presence'])],
+  ['tenant_user', role('tenant_user', ['org.view', 'monitor.presence'])],
 ]);
 
 export function isBuiltInRoleId(value: string): value is BuiltInRoleId {

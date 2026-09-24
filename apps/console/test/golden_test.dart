@@ -27,4 +27,27 @@ void main() {
       isNot(buildTheme(const Brand.neutral()).colorScheme.primary),
     );
   });
+
+  // The signed-in console, once the session's own brand is known (S3-02).
+  testWidgets('signed in as the master: neutral, no label and no logo', (
+    tester,
+  ) async {
+    await completeSignIn(tester, 'master@example.test');
+    expect(find.byType(Image), findsNothing);
+    expect(find.text('Sample Reseller'), findsNothing);
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/shell_neutral.png'),
+    );
+  });
+
+  testWidgets('signed in as a reseller: re-themed from the session', (
+    tester,
+  ) async {
+    await completeSignIn(tester, 'reseller@example.test');
+    await expectLater(
+      find.byType(MaterialApp),
+      matchesGoldenFile('goldens/shell_brand.png'),
+    );
+  });
 }

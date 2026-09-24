@@ -9,7 +9,7 @@ import {
   startTestS3,
   type TestS3Handle,
 } from '@cuc/testing';
-import { createServer, type Server } from '@cuc/http';
+import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 import { createStorage, type Storage } from '@cuc/storage';
 
 import { createBrandRepo, type BrandRepo } from '../src/repo/brand.repo.js';
@@ -23,6 +23,7 @@ const s3SkipReason = await s3OrSkipReason();
 const skipReason = dbSkipReason ?? s3SkipReason;
 
 const PLATFORM_CONSOLE_HOSTNAME = 'console.platform.test';
+const TEST_INTERNAL_SECRET = 'test-internal-header-secret';
 
 describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
   let db: Database<OrgServiceDb>;
@@ -60,8 +61,12 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
     });
     await storage.forPlatform().provisionBucket();
 
-    app = await createServer({ serviceName: 'org-service', logger });
-    registerBrandRoutes(app, brandsRepo, storage, PLATFORM_CONSOLE_HOSTNAME);
+    app = await createServer({
+      serviceName: 'org-service',
+      logger,
+      context: { trustInternalHeaders: true, internalHeaderSigningSecret: TEST_INTERNAL_SECRET },
+    });
+    registerBrandRoutes(app, brandsRepo, storage, PLATFORM_CONSOLE_HOSTNAME, orgs);
     await app.ready();
 
     stop = async () => {
@@ -330,5 +335,73 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       expect(route.permission, `${route.method} ${route.url}`).not.toBeNull();
       expect(route.dataClass, `${route.method} ${route.url}`).not.toBeNull();
     }
+  });
+
+  describe('GET /v1/session/brand', () => {
+    function asOrg(orgId: string, orgType: 'master' | 'reseller' | 'tenant') {
+      return signInternalHeaders(TEST_INTERNAL_SECRET, {
+        actorId: 'user-1',
+        actorType: 'user',
+        orgId,
+        orgType,
+      });
+    }
+
+    async function branded() {
+      const reseller = await makeReseller();
+      const tenant = await orgs.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'dental',
+        name: 'Dental',
+      });
+      await app.inject({
+        method: 'PUT',
+        url: `/v1/resellers/${reseller.id}/brand`,
+        payload: { displayName: 'Acme Voice', primaryColor: '#4a148c', accentColor: '#ffe082' },
+      });
+      return { reseller, tenant };
+    }
+
+    it('gives a reseller its own brand', async () => {
+      const { reseller } = await branded();
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/session/brand',
+        headers: asOrg(reseller.id, 'reseller'),
+      });
+      expect(response.json()).toMatchObject({ neutral: false, displayName: 'Acme Voice' });
+    });
+
+    it("gives a tenant its reseller's brand", async () => {
+      const { tenant } = await branded();
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/session/brand',
+        headers: asOrg(tenant.id, 'tenant'),
+      });
+      expect(response.json()).toMatchObject({ neutral: false, displayName: 'Acme Voice' });
+    });
+
+    it('is neutral for the master, and for a reseller with no brand yet', async () => {
+      const reseller = await makeReseller();
+      const master = await orgs.findById(reseller.parentId ?? '');
+      const asMaster = await app.inject({
+        method: 'GET',
+        url: '/v1/session/brand',
+        headers: asOrg(master?.id ?? '', 'master'),
+      });
+      expect(asMaster.json()).toEqual({ neutral: true });
+      const unbranded = await app.inject({
+        method: 'GET',
+        url: '/v1/session/brand',
+        headers: asOrg(reseller.id, 'reseller'),
+      });
+      expect(unbranded.json()).toEqual({ neutral: true });
+    });
+
+    it('needs a signed-in actor', async () => {
+      const response = await app.inject({ method: 'GET', url: '/v1/session/brand' });
+      expect(response.statusCode).toBe(401);
+    });
   });
 });

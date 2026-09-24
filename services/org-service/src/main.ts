@@ -101,7 +101,13 @@ registerInternalRoutes(
 
 const storage = storageFromConfig(config, logger);
 // 02 §3's table: the master/unbranded console lives at console.{PLATFORM_BASE_DOMAIN}.
-registerBrandRoutes(app, createBrandRepo(db), storage, `console.${config.PLATFORM_BASE_DOMAIN}`);
+registerBrandRoutes(
+  app,
+  createBrandRepo(db),
+  storage,
+  `console.${config.PLATFORM_BASE_DOMAIN}`,
+  orgRepo,
+);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

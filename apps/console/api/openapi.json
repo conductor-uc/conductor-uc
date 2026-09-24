@@ -1276,6 +1276,125 @@
         ]
       }
     },
+    "/v1/session/brand": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "neutral"
+                      ],
+                      "properties": {
+                        "neutral": {
+                          "type": "boolean",
+                          "enum": [
+                            true
+                          ]
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "neutral",
+                        "displayName",
+                        "primaryColor",
+                        "accentColor",
+                        "logoLightUrl",
+                        "logoDarkUrl",
+                        "faviconUrl",
+                        "supportEmail",
+                        "supportUrl",
+                        "supportPhone",
+                        "legalFooter"
+                      ],
+                      "properties": {
+                        "neutral": {
+                          "type": "boolean",
+                          "enum": [
+                            false
+                          ]
+                        },
+                        "displayName": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "primaryColor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "accentColor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "logoLightUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "logoDarkUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "faviconUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "supportEmail": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "supportUrl": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "supportPhone": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "legalFooter": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listBrand",
+        "tags": [
+          "Session"
+        ]
+      }
+    },
     "/v1/resellers": {
       "post": {
         "requestBody": {

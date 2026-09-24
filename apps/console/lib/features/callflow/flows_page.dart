@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 
 /// Call flows (IVRs and auto-attendants): list, create, and open. The visual
@@ -22,59 +23,46 @@ class FlowsPage extends ConsumerWidget {
       );
     }
     final rows = ref.watch(rowsProvider('flows'));
-    final textTheme = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('Call flows', style: textTheme.headlineSmall),
-              ),
-              FilledButton.icon(
-                onPressed: () => _create(context, ref),
-                icon: const Icon(Icons.add),
-                label: const Text('New call flow'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Menus, time-of-day routing, and other call handling a number can point at.',
-          ),
-          const SizedBox(height: 16),
-          Expanded(
-            child: rows.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text(problemMessage(e))),
-              data: (data) => data.isEmpty
-                  ? const Center(child: Text('No call flows yet.'))
-                  : Material(
-                      type: MaterialType.transparency,
-                      child: ListView(
-                        children: [
-                          for (final flow in data)
-                            ListTile(
-                              leading: const Icon(Icons.account_tree_outlined),
-                              title: Text('${flow['name']}'),
-                              subtitle: Text(
-                                flow['currentPublishedVersionId'] == null
-                                    ? 'Not published'
-                                    : 'Published',
-                              ),
-                              trailing: const Icon(Icons.chevron_right),
-                              onTap: () =>
-                                  context.go('/call-flows/${flow['id']}'),
-                            ),
-                        ],
+    return PageFrame(
+      children: [
+        PageHeader(
+          title: 'Call flows',
+          subtitle: 'Menus, time-of-day routing, and other call handling a number can point at.',
+          actions: [
+            FilledButton.icon(
+              onPressed: () => _create(context, ref),
+              icon: const Icon(Icons.add),
+              label: const Text('New call flow'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: AsyncBody(
+            value: rows,
+            emptyText: 'No call flows yet.',
+            builder: (data) => Material(
+              type: MaterialType.transparency,
+              child: ListView(
+                children: [
+                  for (final flow in data)
+                    ListTile(
+                      leading: const Icon(Icons.account_tree_outlined),
+                      title: Text('${flow['name']}'),
+                      subtitle: Text(
+                        flow['currentPublishedVersionId'] == null
+                            ? 'Not published'
+                            : 'Published',
                       ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.go('/call-flows/${flow['id']}'),
                     ),
+                ],
+              ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -337,12 +325,7 @@ class _FlowEditorPageState extends ConsumerState<FlowEditorPage> {
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      _error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
+                    child: ErrorText(_error!),
                   ),
                 const SizedBox(height: 12),
                 Expanded(
