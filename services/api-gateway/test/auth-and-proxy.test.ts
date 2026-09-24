@@ -91,6 +91,22 @@ describe('api-gateway: auth + proxy', () => {
     tenantServices = {};
     for (const [name, urls] of Object.entries(routes)) {
       tenantServices[name] = await startFakeDownstream(SECRET, (fake) => {
+        if (name === 'pbx') {
+          // A phone's settings: text, authenticated by the Basic header the
+          // gateway must pass through, and a challenge it must pass back.
+          fake.get(
+            '/v1/public/provision/yealink/:file',
+            { config: { public: true } },
+            (request, reply) => {
+              if (request.headers.authorization !== 'Basic cGhvbmU6cHc=') {
+                void reply.status(401).header('www-authenticate', 'Basic realm="provisioning"');
+                return 'Unauthorized\n';
+              }
+              void reply.type('text/plain; charset=utf-8');
+              return '#!version:1.0.0.1\naccount.1.enable = 1\n';
+            },
+          );
+        }
         for (const url of urls) {
           fake.get(
             url,
@@ -175,6 +191,24 @@ describe('api-gateway: auth + proxy', () => {
       'refresh=new; Path=/v1/auth; HttpOnly',
       'other=1; Path=/',
     ]);
+  });
+
+  it("passes a phone's Basic credentials to the provisioning route, and its text answer and challenge back", async () => {
+    const ok = await app.inject({
+      method: 'GET',
+      url: '/v1/public/provision/yealink/001565aabbcc.cfg',
+      headers: { authorization: 'Basic cGhvbmU6cHc=' },
+    });
+    expect(ok.statusCode).toBe(200);
+    expect(ok.headers['content-type']).toContain('text/plain');
+    expect(ok.body).toBe('#!version:1.0.0.1\naccount.1.enable = 1\n');
+
+    const challenge = await app.inject({
+      method: 'GET',
+      url: '/v1/public/provision/yealink/001565aabbcc.cfg',
+    });
+    expect(challenge.statusCode).toBe(401);
+    expect(challenge.headers['www-authenticate']).toBe('Basic realm="provisioning"');
   });
 
   it('tells identity-service which hostname the browser used, and ignores a forged one', async () => {

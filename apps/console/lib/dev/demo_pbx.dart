@@ -23,6 +23,20 @@ class DemoPbx {
           'country': 'US',
         },
       ],
+      'devices': [
+        {
+          'id': 'dev-1',
+          'extensionId': 'ext-1',
+          'vendor': 'yealink',
+          'model': 'T46U',
+          'mac': '001565aabbcc',
+          'label': 'Front desk',
+          'provisioningIssued': false,
+          'lastProvisionedAt': null,
+          'lastSeenIp': null,
+          'lastUserAgent': null,
+        },
+      ],
       'extensions': [
         _ext('ext-1', '101', 'Alice Kim'),
         _ext('ext-2', '102', 'Bob Osei'),
@@ -468,6 +482,24 @@ class DemoPbx {
         'port': 5060,
         'transports': ['udp', 'tcp'],
         'realm': realm,
+      });
+    }
+    final issue = RegExp(
+      r'^/v1/tenants/([^/]+)/devices/([^/]+)/provisioning-credentials$',
+    ).firstMatch(path);
+    if (method == 'POST' && issue != null) {
+      final id = issue.group(2)!;
+      final found = _rows['devices']!.where((r) => r['id'] == id);
+      if (found.isEmpty) return _problem(404, 'Not found.');
+      found.first['provisioningIssued'] = true;
+      const base = 'https://api.demo.example/v1/public/provision/yealink/';
+      final password = 'demo-provision-${_next++}';
+      return _json({
+        'url': base,
+        'username': id,
+        'password': password,
+        'urlWithCredentials':
+            'https://$id:$password@api.demo.example/v1/public/provision/yealink/',
       });
     }
     final reveal = RegExp(

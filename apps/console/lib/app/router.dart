@@ -146,6 +146,7 @@ Widget _pageFor(Section section) {
 
 const _pbxPages = <String, List<ResourceDef>>{
   '/extensions': [extensionsDef],
+  '/phones': [devicesDef],
   '/phone-numbers': [didsDef],
   '/ring-groups': [ringGroupsDef],
   '/queues': [queuesDef, agentsDef],

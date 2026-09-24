@@ -377,6 +377,8 @@ export function createExtensionRepo(
       const { tenantId } = requireTenant(ctx);
 
       await db.scoped(ctx).transaction(async (trx, raw) => {
+        // A phone provisioned for this extension has nothing left to sign in to.
+        await trx.deleteFrom('devices').where('extension_id', '=', id).execute();
         await trx.deleteFrom('sip_credentials').where('extension_id', '=', id).execute();
         const result = await trx.deleteFrom('extensions').where('id', '=', id).executeTakeFirst();
         if (Number(result.numDeletedRows) === 0) {

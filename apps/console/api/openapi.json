@@ -6082,6 +6082,573 @@
         ]
       }
     },
+    "/v1/tenants/{tenantId}/devices": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "extensionId",
+                          "vendor",
+                          "model",
+                          "mac",
+                          "label",
+                          "provisioningIssued",
+                          "lastProvisionedAt",
+                          "lastSeenIp",
+                          "lastUserAgent"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "extensionId": {
+                            "type": "string"
+                          },
+                          "vendor": {
+                            "type": "string"
+                          },
+                          "model": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "mac": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "provisioningIssued": {
+                            "type": "boolean"
+                          },
+                          "lastProvisionedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastSeenIp": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "lastUserAgent": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listDevices",
+        "tags": [
+          "Devices"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "extensionId",
+                  "mac"
+                ],
+                "properties": {
+                  "extensionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "mac": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "model": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 64
+                  },
+                  "label": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "vendor",
+                    "model",
+                    "mac",
+                    "label",
+                    "provisioningIssued",
+                    "lastProvisionedAt",
+                    "lastSeenIp",
+                    "lastUserAgent"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "vendor": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mac": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "provisioningIssued": {
+                      "type": "boolean"
+                    },
+                    "lastProvisionedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastSeenIp": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastUserAgent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createDevice",
+        "tags": [
+          "Devices"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/devices/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "vendor",
+                    "model",
+                    "mac",
+                    "label",
+                    "provisioningIssued",
+                    "lastProvisionedAt",
+                    "lastSeenIp",
+                    "lastUserAgent"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "vendor": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mac": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "provisioningIssued": {
+                      "type": "boolean"
+                    },
+                    "lastProvisionedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastSeenIp": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastUserAgent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getDevice",
+        "tags": [
+          "Devices"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "extensionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "model": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 64
+                  },
+                  "label": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 255
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "extensionId",
+                    "vendor",
+                    "model",
+                    "mac",
+                    "label",
+                    "provisioningIssued",
+                    "lastProvisionedAt",
+                    "lastSeenIp",
+                    "lastUserAgent"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": "string"
+                    },
+                    "vendor": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "mac": {
+                      "type": "string"
+                    },
+                    "label": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "provisioningIssued": {
+                      "type": "boolean"
+                    },
+                    "lastProvisionedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastSeenIp": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "lastUserAgent": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateDevice",
+        "tags": [
+          "Devices"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteDevice",
+        "tags": [
+          "Devices"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/devices/{id}/provisioning-credentials": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 1024
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "url",
+                    "username",
+                    "password",
+                    "urlWithCredentials"
+                  ],
+                  "properties": {
+                    "url": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "password": {
+                      "type": "string"
+                    },
+                    "urlWithCredentials": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createProvisioningCredential",
+        "tags": [
+          "Devices"
+        ]
+      }
+    },
     "/v1/tenants/{tenantId}/dids": {
       "get": {
         "parameters": [

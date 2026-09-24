@@ -115,6 +115,15 @@ function hasBody(request: { method: string; body?: unknown }): boolean {
  * for cookie-only transport.
  */
 const AUTH_PREFIX = '/v1/auth';
+
+/**
+ * A desk phone fetching its settings has no session: it proves who it is with
+ * HTTP Basic credentials, which pbx-config-service checks itself. So this one
+ * prefix, and no other, gets the caller's `Authorization` header forwarded;
+ * everywhere else the gateway has already authenticated the caller and passes
+ * on signed internal headers instead.
+ */
+const PROVISION_PREFIX = '/v1/public/provision/';
 const REFRESH_TRANSPORT_HEADER = 'x-refresh-transport';
 
 function buildForwardHeaders(
@@ -150,6 +159,11 @@ function buildForwardHeaders(
     // Host header, never a value the client supplied as `x-forwarded-host`.
     const host = request.headers['host'];
     if (typeof host === 'string') headers.set('x-forwarded-host', host);
+  }
+
+  if (path.startsWith(PROVISION_PREFIX)) {
+    const authorization = request.headers['authorization'];
+    if (typeof authorization === 'string') headers.set('authorization', authorization);
   }
 
   const signed = signInternalHeaders(secret, contextFields(request.context));

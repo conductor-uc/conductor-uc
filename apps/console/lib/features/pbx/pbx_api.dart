@@ -125,6 +125,17 @@ class PbxApi {
     return (response.data as Map).cast<String, dynamic>();
   }
 
+  /// The address, user name and password a desk phone is given to fetch its
+  /// settings. The password is shown once; asking again replaces it.
+  Future<Json> issueProvisioning(String deviceId, String reason) async {
+    final response = await _dio.post<Object?>(
+      _path('devices', deviceId, 'provisioning-credentials'),
+      data: {'reason': reason},
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   /// A call to an action or sub-resource, such as `flows/{id}/publish`.
   Future<Object?> call(
     String method,

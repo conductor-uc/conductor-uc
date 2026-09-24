@@ -15,6 +15,7 @@ import {
   type TestS3Handle,
 } from '@cuc/testing';
 
+import { createDeviceRepo, type DeviceRepo } from '../src/repo/device.repo.js';
 import { createDidRepo, type DidRepo } from '../src/repo/did.repo.js';
 import {
   createEmergencyLocationRepo,
@@ -42,6 +43,7 @@ export interface Harness {
   readonly kek: KekProvider;
   readonly extensions: ExtensionRepo;
   readonly dids: DidRepo;
+  readonly devices: DeviceRepo;
   readonly emergencyLocations: EmergencyLocationRepo;
   readonly storage: Storage;
   readonly mediaAssets: MediaAssetRepo;
@@ -112,6 +114,7 @@ export async function startHarness(): Promise<Harness> {
   const extensions = createExtensionRepo(db, domains.lookup, kek);
   const trunks = fakeTrunkLookup();
   const dids = createDidRepo(db, trunks.exists);
+  const devices = createDeviceRepo(db);
   const emergencyLocations = createEmergencyLocationRepo(db);
   const storage = createStorage({
     mode: 'prefix-per-tenant',
@@ -137,6 +140,7 @@ export async function startHarness(): Promise<Harness> {
     kek,
     extensions,
     dids,
+    devices,
     emergencyLocations,
     storage,
     mediaAssets,
@@ -193,6 +197,7 @@ export async function resetSchema(db: Database<PbxConfigServiceDb>): Promise<voi
   await db.kysely.deleteFrom('parking_lots').execute();
   await db.kysely.deleteFrom('schedules').execute();
   await db.kysely.deleteFrom('conference_rooms').execute();
+  await db.kysely.deleteFrom('devices').execute();
   await db.kysely.deleteFrom('sip_credentials').execute();
   await db.kysely.deleteFrom('extensions').execute();
   await db.kysely.deleteFrom('emergency_locations').execute();

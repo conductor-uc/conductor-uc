@@ -60,6 +60,9 @@ export const configSchema = Type.Object({
       // The brand the signed-in actor's own org is shown (S3-02).
       '/v1/session=org',
       // pbx-config-service
+      // Desk phones fetching their settings (public; they send Basic credentials).
+      '/v1/public/provision=pbx',
+      '/v1/tenants/*/devices=pbx',
       '/v1/tenants/*/extensions=pbx',
       '/v1/tenants/*/sip-endpoint=pbx',
       '/v1/tenants/*/dids=pbx',

@@ -693,8 +693,50 @@ const flowsDef = ResourceDef(
   fields: [],
 );
 
+/// A desk phone that sets itself up from the platform. The phone's own
+/// settings are the extension it registers as; its address (MAC) is fixed once
+/// it exists, because the phone asks for its file by that name.
+const devicesDef = ResourceDef(
+  key: 'devices',
+  permission: 'extension.manage',
+  singular: 'Phone',
+  plural: 'Phones',
+  icon: Icons.phone_android_outlined,
+  blurb: 'Yealink desk phones that fetch their own settings.',
+  title: _deviceTitle,
+  fields: [
+    Field(
+      'mac',
+      'MAC address',
+      FieldKind.text,
+      required: true,
+      showInList: true,
+      scope: FieldScope.create,
+      help: 'Printed on the back of the phone, such as 00:15:65:aa:bb:cc.',
+    ),
+    Field(
+      'extensionId',
+      'Extension',
+      FieldKind.ref,
+      required: true,
+      ref: 'extensions',
+      showInList: true,
+      help: 'The extension this phone registers as.',
+    ),
+    Field('model', 'Model', FieldKind.text, showInList: true),
+    Field('label', 'Label', FieldKind.text, showInList: true),
+  ],
+);
+
+String _deviceTitle(Map<String, dynamic> row) {
+  final label = row['label'];
+  if (label is String && label.isNotEmpty) return label;
+  return '${row['mac']}';
+}
+
 const allResources = <ResourceDef>[
   extensionsDef,
+  devicesDef,
   didsDef,
   ringGroupsDef,
   queuesDef,
