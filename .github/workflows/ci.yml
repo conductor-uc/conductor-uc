@@ -427,7 +427,9 @@ jobs:
       - run: flutter test
         working-directory: apps/console
 
-      - run: flutter build web --release
+      # Built the way production serves it (G-104): CanvasKit bundled, so the
+      # gateway's Content-Security-Policy needs no CDN in it.
+      - run: flutter build web --release --no-web-resources-cdn
         working-directory: apps/console
 
       - run: pnpm install --frozen-lockfile

@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 
 import { createAccessTokenVerifier } from './auth/access-token-verifier.js';
 import { registerAuthentication } from './auth/authenticate.js';
+import { registerConsoleHosting } from './console-hosting.js';
 import { registerCors } from './cors.js';
 import { registerPlatformHealth } from './platform-health.js';
 import { registerProvisioningTransport } from './provisioning-transport.js';
@@ -133,6 +134,14 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     timeoutMs: config.PROXY_TIMEOUT_MS,
     internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET,
   });
+
+  // Last, so every more specific route (the API, health, the platform page) wins.
+  if (config.CONSOLE_DIR !== undefined) {
+    registerConsoleHosting(app, {
+      dir: config.CONSOLE_DIR,
+      extraConnectSources: config.CONSOLE_CONNECT_SOURCES,
+    });
+  }
 
   return app;
 }

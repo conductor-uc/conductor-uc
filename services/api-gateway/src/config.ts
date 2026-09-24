@@ -151,6 +151,14 @@ export const configSchema = Type.Object({
    * extension's SIP password. Development over http://localhost turns it off.
    */
   REQUIRE_HTTPS_FOR_PROVISIONING: Env.bool({ default: true }),
+  /**
+   * The built console (`flutter build web --no-web-resources-cdn`). When set the
+   * gateway serves it from its own origin, with a strict Content-Security-Policy.
+   * Unset, something else serves the console (development uses `tests/e2e`).
+   */
+  CONSOLE_DIR: Env.optional(Env.string()),
+  /** Other origins the console may call: the object store it uploads media to. */
+  CONSOLE_CONNECT_SOURCES: Env.list({ default: [] }),
   CONSOLE_HOSTNAMES: Env.list({ default: [] }),
 });
 
