@@ -25,6 +25,12 @@ interface InvitationData {
   readonly expiresAt: string;
 }
 
+interface MfaResetData {
+  readonly orgId: string;
+  readonly email: string;
+  readonly displayName: string;
+}
+
 export interface IdentityConsumerOptions {
   readonly pullTimeoutMs?: number;
   /** Where links point when the org has no reseller console hostname. */
@@ -36,8 +42,9 @@ export interface IdentityConsumerOptions {
 }
 
 /**
- * Sends the emails identity-service's events ask for: a password-reset link
- * and an invitation (S3-03). The brand comes from org-service (02 §5.2), the
+ * Sends the emails identity-service's events ask for: a password-reset link,
+ * an invitation, and the notice that an admin reset someone's two-step
+ * verification (S3-03). The brand comes from org-service (02 §5.2), the
  * email is rendered with it or with the neutral presentation, and it goes out
  * through the SMTP relay.
  *
@@ -67,11 +74,15 @@ export function createIdentityConsumer(
     logger,
     registry: notificationEvents,
     durable: 'notification-identity',
-    subjects: ['identity.user.password_reset_requested', 'identity.invitation.created'],
+    subjects: [
+      'identity.user.password_reset_requested',
+      'identity.invitation.created',
+      'identity.user.mfa_reset',
+    ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
     handler: async (envelope, trx) => {
       let template: TemplateName;
-      let data: ResetData | InvitationData;
+      let data: ResetData | InvitationData | MfaResetData;
       let path: string;
       switch (envelope.type) {
         case 'identity.user.password_reset_requested':
@@ -84,12 +95,19 @@ export function createIdentityConsumer(
           data = envelope.data as InvitationData;
           path = '/invite';
           break;
+        case 'identity.user.mfa_reset':
+          template = 'mfa-reset';
+          data = envelope.data as MfaResetData;
+          path = '/login';
+          break;
         default:
           return;
       }
 
-      const expiresAt = new Date(data.expiresAt);
-      if (expiresAt.getTime() <= Date.now()) {
+      // A one-time link goes stale; the MFA-reset notice has none, and is
+      // worth sending however late it arrives.
+      const expiresAt = 'expiresAt' in data ? new Date(data.expiresAt) : undefined;
+      if (expiresAt !== undefined && expiresAt.getTime() <= Date.now()) {
         logger.warn({ eventId: envelope.id, template }, 'link already expired; not sending');
         return;
       }
@@ -99,7 +117,9 @@ export function createIdentityConsumer(
         logger.warn({ orgId: data.orgId, template }, 'org not found; sending neutral');
       }
       const brand: MailBrand = resolved === undefined ? NEUTRAL_BRAND : brandOf(resolved);
-      const link = `${linkBase(resolved?.consoleHostname ?? null)}${path}?token=${encodeURIComponent(data.token)}`;
+      // The sign-in page carries no credential; the others carry their token.
+      const query = 'token' in data ? `?token=${encodeURIComponent(data.token)}` : '';
+      const link = `${linkBase(resolved?.consoleHostname ?? null)}${path}${query}`;
 
       const mail = await renderEmail({
         template,
@@ -107,7 +127,7 @@ export function createIdentityConsumer(
         email: data.email,
         ...('displayName' in data ? { name: data.displayName } : {}),
         link,
-        validFor: validFor(expiresAt),
+        ...(expiresAt === undefined ? {} : { validFor: validFor(expiresAt) }),
       });
 
       await mailer.send({

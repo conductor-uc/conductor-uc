@@ -20,7 +20,7 @@ const { createServer } = await load('packages/http/dist/index.js');
 // [service dir, route module, exported register function, extra stub args]
 const SOURCES = [
   ['identity-service', 'auth', 'registerAuthRoutes', 1],
-  ['identity-service', 'users', 'registerUserRoutes', 3],
+  ['identity-service', 'users', 'registerUserRoutes', 4],
   ['identity-service', 'roles', 'registerRoleRoutes', 3],
   ['org-service', 'brand', 'registerBrandRoutes', 4],
   ['org-service', 'org', 'registerOrgRoutes', 2],

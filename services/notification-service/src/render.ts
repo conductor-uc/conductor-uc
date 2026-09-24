@@ -5,7 +5,7 @@ import mjml2html from 'mjml';
 
 import { readableOn, safeColor, type MailBrand } from './domain/brand.js';
 
-export type TemplateName = 'password-reset' | 'invitation';
+export type TemplateName = 'password-reset' | 'invitation' | 'mfa-reset';
 
 export interface RenderInput {
   readonly template: TemplateName;
@@ -14,10 +14,10 @@ export interface RenderInput {
   readonly email: string;
   /** Their name, for a greeting. */
   readonly name?: string;
-  /** The one-time link. */
+  /** The link: a one-time one, or for `mfa-reset` the plain sign-in page. */
   readonly link: string;
-  /** How long it works, in words: "1 hour", "7 days". */
-  readonly validFor: string;
+  /** How long a one-time link works, in words: "1 hour", "7 days". */
+  readonly validFor?: string;
 }
 
 export interface RenderedEmail {
@@ -29,6 +29,7 @@ export interface RenderedEmail {
 const SUBJECTS: Record<TemplateName, string> = {
   'password-reset': 'Reset your password',
   invitation: 'You have been invited',
+  'mfa-reset': 'Your two-step verification was reset',
 };
 
 const TEMPLATE_DIR = new URL('./templates/', import.meta.url);
@@ -83,7 +84,7 @@ export async function renderEmail(input: RenderInput): Promise<RenderedEmail> {
     email: input.email,
     name: input.name ?? input.email,
     link: input.link,
-    validFor: input.validFor,
+    validFor: input.validFor ?? '',
   };
 
   const mjmlSource = (await load(`${input.template}.mjml`))(context);
