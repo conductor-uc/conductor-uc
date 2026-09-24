@@ -33,8 +33,15 @@ const MenuConfig = Type.Object({
   maxInvalidAttempts: Type.Number({ minimum: 1 }),
 });
 
+/**
+ * `scheduleId` names one of the tenant's schedules (pbx-config-service). The
+ * schedule is evaluated when the call arrives, not when the flow is
+ * published, so editing a schedule's hours or holidays takes effect on the
+ * next call with no republish (G-59). A flow authored before schedules
+ * existed carries `{ timezone }` instead; see `legacyTimeConditionMessage`.
+ */
 const TimeConditionConfig = Type.Object({
-  timezone: Type.String({ minLength: 1 }),
+  scheduleId: Type.String({ minLength: 1 }),
 });
 
 const ExtensionConfig = Type.Object({
@@ -114,6 +121,13 @@ export interface FlowGraphInput {
   readonly entryPoints: Readonly<Record<string, string>>;
   readonly nodes: readonly NodeInput[];
   readonly edges: readonly EdgeInput[];
+}
+
+/** True when `config` is the pre-schedule `time_condition` shape (a time zone and no schedule). */
+export function isLegacyTimeCondition(config: unknown): boolean {
+  if (typeof config !== 'object' || config === null) return false;
+  const record = config as Record<string, unknown>;
+  return 'timezone' in record && !('scheduleId' in record);
 }
 
 /** True when `type` is one of the MVP node types. */

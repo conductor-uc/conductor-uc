@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../../canvas/canvas.dart';
 import '../../pbx/pbx_api.dart' show Json;
-import '../../pbx/resource.dart' show commonTimezones;
 
-enum ConfigKind { ref, integer, text, timezone, flowEntry }
+enum ConfigKind { ref, integer, text, flowEntry }
 
 /// One setting of a node type, matching a property of its IR config schema.
 /// Every property of an MVP node's config is required.
@@ -120,11 +119,17 @@ const flowNodeTypes = <FlowNodeType>[
     type: 'time_condition',
     label: 'Time condition',
     icon: Icons.schedule,
-    description: 'Route by whether it is open hours.',
-    summaryKey: 'timezone',
-    ports: [CanvasPort('match', 'Match'), CanvasPort('noMatch', 'No match')],
+    description: 'Route by whether a schedule is open right now.',
+    summaryKey: 'scheduleId',
+    ports: [CanvasPort('match', 'Open'), CanvasPort('noMatch', 'Closed')],
     fields: [
-      ConfigField('timezone', 'Time zone', ConfigKind.timezone, initial: 'UTC'),
+      ConfigField(
+        'scheduleId',
+        'Schedule',
+        ConfigKind.ref,
+        resource: 'schedules',
+        help: 'Checked when each call arrives, so changing the schedule needs no republish.',
+      ),
     ],
   ),
   FlowNodeType(
@@ -221,8 +226,6 @@ FlowNodeType? flowNodeType(String type) {
   }
   return null;
 }
-
-const timezones = commonTimezones;
 
 String portLabel(String id) => switch (id) {
   'timeout' => 'No input',

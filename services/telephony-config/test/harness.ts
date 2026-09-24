@@ -139,6 +139,8 @@ export interface FakePbxConfigClient extends PbxConfigClient {
   conferenceRooms: Record<string, ConferenceRoomConfig>;
   /** Keyed by `roomId` — the PIN `verifyConferencePin` treats as correct for that room, set per test. */
   conferencePins: Record<string, string>;
+  /** Keyed by `scheduleId` — whether that schedule is open; a missing key is a schedule that does not exist. */
+  schedulesOpen: Record<string, boolean | undefined>;
 }
 
 /** A digest-credential/DID/emergency-location/media-asset/ring-group/queue/agent/tier/parking-lot/conference-room lookup whose answers are set per test — no live pbx-config-service needed. */
@@ -155,6 +157,7 @@ function fakePbxConfigClient(): FakePbxConfigClient {
     parkingLots: {},
     conferenceRooms: {},
     conferencePins: {},
+    schedulesOpen: {},
     findCredential: (_tenantId: string, extensionId: string) =>
       Promise.resolve(state.credentials[extensionId]),
     findDid: (_tenantId: string, didId: string) => Promise.resolve(state.dids[didId]),
@@ -173,6 +176,8 @@ function fakePbxConfigClient(): FakePbxConfigClient {
       Promise.resolve(state.conferenceRooms[conferenceRoomId]),
     verifyConferencePin: (_tenantId: string, conferenceRoomId: string, pin: string) =>
       Promise.resolve(state.conferencePins[conferenceRoomId] === pin),
+    isScheduleOpen: (_tenantId: string, scheduleId: string) =>
+      Promise.resolve(state.schedulesOpen[scheduleId]),
   };
   return state;
 }

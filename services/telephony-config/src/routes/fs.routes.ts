@@ -81,6 +81,12 @@ const FlowRingGroupParamsSchema = Type.Object({
   ringGroupId: Type.String({ minLength: 1 }),
 });
 
+/** `/fs/flow/:tenantId/schedule/:scheduleId/open` (S3-10) — the `time_condition` node's own lookup. */
+const FlowScheduleParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  scheduleId: Type.String({ minLength: 1 }),
+});
+
 /** `/fs/flow/:tenantId/queue/:queueId` (S2-13) — the `queue` node's own resolve-and-acquire lookup. */
 const FlowQueueParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
@@ -1411,6 +1417,34 @@ export function registerFsRoutes(
         strategy: resolved.ringGroup.strategy,
         ringTimeoutSeconds: resolved.ringGroup.ringTimeoutSeconds,
       };
+    },
+  );
+
+  /**
+   * `GET /fs/flow/:tenantId/schedule/:scheduleId/open` (S3-10, G-59) — the
+   * `time_condition` node's own lookup: whether the tenant's schedule is open
+   * right now. Evaluated live by pbx-config-service on every call (no cache
+   * here), so a schedule edit needs no flow republish, and the node stays
+   * stateless. A schedule that no longer exists is a 404, which the runner
+   * treats as closed.
+   */
+  app.get(
+    '/fs/flow/:tenantId/schedule/:scheduleId/open',
+    { config: { public: true }, schema: { params: FlowScheduleParamsSchema } },
+    async (request, reply) => {
+      if (!authorized(request.headers)) {
+        reply.code(401);
+        return '';
+      }
+
+      const { tenantId, scheduleId } = request.params;
+      const open = await pbxConfigClient.isScheduleOpen(tenantId, scheduleId);
+      if (open === undefined) {
+        logger.info({ tenantId, scheduleId }, 'flow: schedule did not resolve');
+        reply.code(404);
+        return '';
+      }
+      return { open };
     },
   );
 

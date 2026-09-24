@@ -262,40 +262,48 @@ function handlers.menu(node)
 end
 
 --[[
-`time_condition` is, today, a pass-through that takes `match`.
+`time_condition` asks whether the tenant's schedule is open *now* (S3-10,
+G-59), taking `match` when it is and `noMatch` when it is not.
 
-S2-09's IR gives this node a `timezone` and nothing else, while 03 §2.3
-describes it as keyed on a `scheduleId` — and schedules do not exist as a
-subsystem until S3-08. With no hours to compare the current time against,
-every honest evaluation is "no schedule says we are closed".
+The question goes to telephony-config on every call, which asks
+pbx-config-service, which evaluates the schedule in its own time zone against
+its holidays. Nothing is cached here or baked into the published IR: editing a
+schedule's hours or a holiday takes effect on the next call without
+republishing any flow, the node holds no state (CLAUDE.md rule 5), and this
+script never has to do time zone arithmetic, which Lua cannot do without a
+tz database.
 
-Inventing a default business-hours window here (the obvious temptation:
-Mon-Fri 09:00-17:00) would silently send after-hours callers down the
-`noMatch` branch on a rule nobody configured, which is worse than not
-branching at all. So this takes `match`, logs that it did, and S3-08 is what
-makes the node real. Flagged as G-43 in docs/decisions.md.
+When the answer cannot be had (the schedule was deleted, or a service is
+unreachable) the caller is treated as outside hours and takes `noMatch`:
+after-hours handling (voicemail, a recorded message) is the safe place to
+send a call nobody can vouch is inside hours, and the failure is logged.
 
-The optional `businessHours` config below is read if a caller *does* supply
-it, so a future schema addition works without changing this script.
+A flow published before schedules existed carries a time zone and no
+schedule id (its IR is immutable, so it stays that way). It keeps the
+behavior it always had, taking `match`, and says so in the log; the owner is
+told to choose a schedule the next time the flow is validated or published.
 --]]
 function handlers.time_condition(node)
-  local hours = node.config.businessHours
-  if hours == nil then
-    log("INFO", "time_condition '" .. node.id .. "' has no schedule; taking 'match' (G-43)")
+  local scheduleId = node.config.scheduleId
+  if scheduleId == nil then
+    log("WARNING", "time_condition '" .. node.id .. "' was published without a schedule; taking 'match'")
     return node.ports.match
   end
 
-  -- `os.date` works in the container's own local time. A flow whose timezone
-  -- differs from the node's would evaluate against the wrong clock, which is
-  -- the other half of why this waits for real schedule support.
-  local now = os.date("*t")
-  local minutes = now.hour * 60 + now.min
-  local openAt = (hours.startHour or 0) * 60
-  local closeAt = (hours.endHour or 24) * 60
-  local dayAllowed = hours.days == nil or hours.days[tostring(now.wday)] == true
-  local isOpen = dayAllowed and minutes >= openAt and minutes < closeAt
+  local body, err = httpGet("/fs/flow/" .. tenantId .. "/schedule/" .. scheduleId .. "/open")
+  if body == nil then
+    log("WARNING", "time_condition '" .. node.id .. "' could not read schedule '" .. scheduleId .. "' (" .. tostring(err) .. "); treating it as closed")
+    return node.ports.noMatch
+  end
 
-  return isOpen and node.ports.match or node.ports.noMatch
+  local decoded = json.decode(body)
+  if type(decoded) ~= "table" or type(decoded.open) ~= "boolean" then
+    log("WARNING", "time_condition '" .. node.id .. "' got an unreadable answer for schedule '" .. scheduleId .. "'; treating it as closed")
+    return node.ports.noMatch
+  end
+
+  if decoded.open then return node.ports.match end
+  return node.ports.noMatch
 end
 
 --[[

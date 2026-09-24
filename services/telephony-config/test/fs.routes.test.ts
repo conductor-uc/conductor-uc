@@ -2114,6 +2114,42 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
     });
   });
 
+  describe('/fs/flow/:tenantId/schedule/:scheduleId/open (S3-10: time_condition)', () => {
+    it('answers whether the schedule is open, live, each time', async () => {
+      const tenantId = crypto.randomUUID();
+      const scheduleId = crypto.randomUUID();
+      const ask = () =>
+        app.inject({
+          method: 'GET',
+          url: `/fs/flow/${tenantId}/schedule/${scheduleId}/open`,
+          headers: { authorization: BASIC_AUTH },
+        });
+
+      h.pbxConfig.schedulesOpen[scheduleId] = true;
+      expect((await ask()).json()).toEqual({ open: true });
+      // No caching here: an edit to the schedule applies to the very next call.
+      h.pbxConfig.schedulesOpen[scheduleId] = false;
+      expect((await ask()).json()).toEqual({ open: false });
+    });
+
+    it('404s a schedule that does not exist, which the runner treats as closed', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${crypto.randomUUID()}/schedule/${crypto.randomUUID()}/open`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(response.statusCode).toBe(404);
+    });
+
+    it('needs the FreeSWITCH node token', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${crypto.randomUUID()}/schedule/${crypto.randomUUID()}/open`,
+      });
+      expect(response.statusCode).toBe(401);
+    });
+  });
+
   describe('/fs/affinity (S2-12: resource affinity leases)', () => {
     it('reports null when nothing holds the lease', async () => {
       const response = await app.inject({

@@ -113,6 +113,7 @@ class NodeProperties extends ConsumerWidget {
           key: ValueKey('${node.id}:${f.key}'),
           label: f.label,
           resource: f.resource!,
+          help: f.help,
           value: value as String?,
           onChanged: (v) => _set(
             f.key,
@@ -139,22 +140,6 @@ class NodeProperties extends ConsumerWidget {
           label: f.label,
           value: '${value ?? ''}',
           onCommit: (text) => _set(f.key, text.trim()),
-        );
-      case ConfigKind.timezone:
-        final current = value as String?;
-        final zones = [
-          ...timezones,
-          if (current != null && !timezones.contains(current)) current,
-        ];
-        return DropdownButtonFormField<String>(
-          key: ValueKey('${node.id}:${f.key}'),
-          initialValue: current,
-          isExpanded: true,
-          decoration: InputDecoration(labelText: f.label),
-          items: [
-            for (final z in zones) DropdownMenuItem(value: z, child: Text(z)),
-          ],
-          onChanged: (v) => _set(f.key, v),
         );
       case ConfigKind.flowEntry:
         final flowId = node.config['flowId'] as String?;
@@ -248,9 +233,11 @@ class _RefPicker extends ConsumerWidget {
     required this.resource,
     required this.value,
     required this.onChanged,
+    this.help,
   });
 
   final String label;
+  final String? help;
   final String resource;
   final String? value;
   final void Function(String?) onChanged;
@@ -276,7 +263,8 @@ class _RefPicker extends ConsumerWidget {
           isExpanded: true,
           decoration: InputDecoration(
             labelText: label,
-            helperText: map.isEmpty ? 'None yet. Create one first.' : null,
+            helperText: map.isEmpty ? 'None yet. Create one first.' : help,
+            helperMaxLines: 3,
           ),
           items: [
             for (final e in map.entries)

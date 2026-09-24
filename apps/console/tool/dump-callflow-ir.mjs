@@ -81,6 +81,12 @@ const graphs = {
   },
   time_condition: {
     entryPoints: main('t'),
+    nodes: [{ id: 't', type: 'time_condition', config: { scheduleId: 's1' } }, hangup('h')],
+    edges: [edge('t', 'match', 'h'), edge('t', 'noMatch', 'h')],
+  },
+  // Saved before schedules existed: a time zone and no schedule.
+  time_condition_legacy_timezone: {
+    entryPoints: main('t'),
     nodes: [{ id: 't', type: 'time_condition', config: { timezone: 'UTC' } }, hangup('h')],
     edges: [edge('t', 'match', 'h'), edge('t', 'noMatch', 'h')],
   },

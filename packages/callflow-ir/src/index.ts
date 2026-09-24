@@ -1,6 +1,7 @@
 export { compileGraph, CompileError, type CompiledNode, type FlowIR } from './compiler.js';
 export {
   allowedPorts,
+  isLegacyTimeCondition,
   isNodeType,
   MENU_DIGIT_PORTS,
   MENU_FIXED_PORTS,

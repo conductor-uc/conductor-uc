@@ -68,10 +68,10 @@
       "config": {
         "type": "object",
         "required": [
-          "timezone"
+          "scheduleId"
         ],
         "properties": {
-          "timezone": {
+          "scheduleId": {
             "type": "string",
             "minLength": 1
           }
@@ -585,7 +585,7 @@
             "id": "t",
             "type": "time_condition",
             "config": {
-              "timezone": "UTC"
+              "scheduleId": "s1"
             }
           },
           {
@@ -608,6 +608,46 @@
         ]
       },
       "issues": []
+    },
+    {
+      "name": "time_condition_legacy_timezone",
+      "graph": {
+        "entryPoints": {
+          "main": "t"
+        },
+        "nodes": [
+          {
+            "id": "t",
+            "type": "time_condition",
+            "config": {
+              "timezone": "UTC"
+            }
+          },
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": [
+          {
+            "from": "t",
+            "port": "match",
+            "to": "h"
+          },
+          {
+            "from": "t",
+            "port": "noMatch",
+            "to": "h"
+          }
+        ]
+      },
+      "issues": [
+        {
+          "kind": "invalid_config",
+          "nodeId": "t"
+        }
+      ]
     }
   ]
 }
