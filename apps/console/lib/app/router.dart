@@ -10,6 +10,7 @@ import '../features/auth/mfa_page.dart';
 import '../features/auth/reset_pages.dart';
 import '../features/callflow/builder/flow_builder_page.dart';
 import '../features/callflow/flows_page.dart';
+import '../features/media/media_page.dart';
 import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
 import '../features/pbx/resource.dart';
@@ -106,6 +107,7 @@ Widget _pageFor(Section section) {
   if (section.path == '/call-flows') return const FlowsPage();
   if (section.path == '/brand') return const BrandPage();
   if (section.path == '/users') return const UsersPage();
+  if (section.path == '/media') return const MediaPage();
   if (section.path == '/resellers' || section.path == '/tenants') {
     return const OrgsPage();
   }
@@ -120,7 +122,6 @@ const _pbxPages = <String, List<ResourceDef>>{
   '/conference-rooms': [conferenceRoomsDef],
   '/parking-lots': [parkingLotsDef],
   '/schedules': [schedulesDef],
-  '/media': [mediaAssetsDef],
   '/settings': [emergencyLocationsDef],
 };
 

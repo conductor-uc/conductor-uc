@@ -179,7 +179,7 @@ jobs:
         # it. Building the four services first makes this independent of which
         # packages `--affected` happened to build above.
         run: |
-          pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service
+          pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service --filter=@cuc/trunk-service
           node apps/console/tool/dump-openapi.mjs
           git diff --exit-code -- apps/console/api/openapi.json
 

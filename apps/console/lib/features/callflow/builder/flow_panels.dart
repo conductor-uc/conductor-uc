@@ -6,7 +6,7 @@ import '../../pbx/pbx_api.dart';
 import 'flow_graph.dart';
 import 'local_validation.dart';
 import 'node_types.dart';
-import 'properties_panel.dart';
+import '../../../widgets/commit_field.dart';
 
 /// "Menu (greet)": how a node is named where it is picked or listed.
 String nodeLabel(CanvasNode node) =>

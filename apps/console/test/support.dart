@@ -9,6 +9,7 @@ import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 /// A Dio adapter that answers from a function, so tests drive the real
@@ -51,11 +52,16 @@ const sampleBrand = Brand(
   legalFooter: 'Sample Reseller Ltd.',
 );
 
-Widget appWith({Brand brand = const Brand.neutral(), ConsoleApi? api}) {
+Widget appWith({
+  Brand brand = const Brand.neutral(),
+  ConsoleApi? api,
+  List<Override> overrides = const [],
+}) {
   return ProviderScope(
     overrides: [
       brandProvider.overrideWithValue(brand),
       if (api != null) apiProvider.overrideWithValue(api),
+      ...overrides,
     ],
     child: const ConsoleApp(),
   );

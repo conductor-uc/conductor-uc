@@ -6,6 +6,13 @@ import '../../pbx/resource.dart';
 /// The name to show for row [row] of [resource] in a picker or a node.
 /// A voicemail mailbox has no name of its own: it is its extension's.
 String optionTitle(String resource, Json row, List<Json> extensions) {
+  // An agent and a mailbox have no name of their own: each is an extension's.
+  if (resource == 'agents') {
+    final ext = extensions.where((e) => e['id'] == row['extensionId']);
+    return ext.isEmpty
+        ? 'Agent ${row['id']}'
+        : resourceByKey('extensions').titleOf(ext.first);
+  }
   if (resource == 'voicemail/mailboxes') {
     final ext = extensions.where((e) => e['id'] == row['extensionId']);
     return ext.isEmpty
@@ -21,7 +28,7 @@ final optionsProvider = FutureProvider.family<Map<String, String>, String>((
   resource,
 ) async {
   final rows = await ref.watch(rowsProvider(resource).future);
-  final extensions = resource == 'voicemail/mailboxes'
+  final extensions = resource == 'voicemail/mailboxes' || resource == 'agents'
       ? await ref.watch(rowsProvider('extensions').future)
       : const <Json>[];
   return {

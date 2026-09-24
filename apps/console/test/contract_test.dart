@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:console/features/media/media_page.dart';
 import 'package:console/features/orgs/brand_page.dart';
 import 'package:console/features/orgs/org_defs.dart';
 import 'package:console/core/session.dart';
@@ -90,7 +91,7 @@ void main() {
   });
 
   test('every resource with a page has a list route', () {
-    for (final def in allResources.where((r) => r.key != 'trunks')) {
+    for (final def in allResources) {
       expect(paths, contains('/v1/tenants/{tenantId}/${def.key}'));
     }
   });
@@ -381,5 +382,111 @@ void main() {
         }
       },
     );
+  });
+
+  group('media upload', () {
+    const base = '/v1/tenants/{tenantId}/media-assets';
+
+    test('creating a recording asks for what the dialog sends', () {
+      final body = _schema(
+        (paths[base] as Map)['post'] as Map<String, dynamic>,
+      );
+      expect((body['properties'] as Map).keys.toSet(), {
+        'kind',
+        'label',
+        'contentType',
+      });
+      expect(body['required'], containsAll(['kind', 'label', 'contentType']));
+    });
+
+    test('and answers with the asset and the address to upload to', () {
+      final created = _schema(
+        (paths[base] as Map)['post'] as Map<String, dynamic>,
+        response: '201',
+      );
+      expect((created['properties'] as Map).keys.toSet(), {
+        'asset',
+        'uploadUrl',
+      });
+    });
+
+    test('the kinds offered are the kinds the service knows', () {
+      final created = _schema(
+        (paths[base] as Map)['post'] as Map<String, dynamic>,
+        response: '201',
+      );
+      final asset = (created['properties'] as Map)['asset'] as Map;
+      final kind = (asset['properties'] as Map)['kind'] as Map;
+      expect({
+        for (final u in kind['anyOf'] as List)
+          ((u as Map)['enum'] as List).single as String,
+      }, mediaKinds.keys.toSet());
+    });
+
+    test('every status a recording can have has a label in the table', () {
+      final list = _schema(
+        (paths[base] as Map)['get'] as Map<String, dynamic>,
+        response: '200',
+      );
+      final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+      final status = (row['properties'] as Map)['status'] as Map;
+      expect(
+        {
+          for (final u in status['anyOf'] as List)
+            ((u as Map)['enum'] as List).single as String,
+        },
+        {'pending', 'processing', 'ready', 'failed'},
+      );
+    });
+
+    test('finalizing and deleting are routes', () {
+      expect(paths, contains('$base/{id}/finalize'));
+      expect((paths['$base/{id}'] as Map), contains('delete'));
+      expect((paths['$base/{id}/finalize'] as Map), contains('post'));
+    });
+  });
+
+  group('queue tiers', () {
+    const base = '/v1/tenants/{tenantId}/queues/{queueId}/tiers';
+    Set<Object?> props(Map<String, dynamic> schema) =>
+        (schema['properties'] as Map).keys.toSet();
+
+    test('adding an agent sends an agent, a level, and a position', () {
+      final body = _schema(
+        (paths[base] as Map)['post'] as Map<String, dynamic>,
+      );
+      expect(props(body), {'agentId', 'level', 'position'});
+      expect(body['required'], ['agentId']);
+    });
+
+    test('changing one sends only a level and a position', () {
+      final body = _schema(
+        (paths['$base/{id}'] as Map)['patch'] as Map<String, dynamic>,
+      );
+      expect(props(body), {'level', 'position'});
+    });
+
+    test('a listed tier carries what the dialog reads', () {
+      final list = _schema(
+        (paths[base] as Map)['get'] as Map<String, dynamic>,
+        response: '200',
+      );
+      final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll(['id', 'agentId', 'level', 'position']),
+      );
+      expect((paths['$base/{id}'] as Map), contains('delete'));
+    });
+  });
+
+  test('the trunk list carries what a phone number picker reads', () {
+    final list = _schema(
+      (paths['/v1/tenants/{tenantId}/trunks'] as Map)['get']
+          as Map<String, dynamic>,
+      response: '200',
+    );
+    final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+    expect((row['properties'] as Map).keys, containsAll(['id', 'name']));
   });
 }

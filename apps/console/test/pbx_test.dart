@@ -1,12 +1,17 @@
 import 'package:console/dev/demo_backend.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support.dart';
 
 /// Signs in to the demo backend as a tenant user and opens [section].
-Future<void> openSection(WidgetTester tester, String section) async {
-  await pumpApp(tester, appWith(api: demoApi()));
+Future<void> openSection(
+  WidgetTester tester,
+  String section, {
+  List<Override> overrides = const [],
+}) async {
+  await pumpApp(tester, appWith(api: demoApi(), overrides: overrides));
   await tester.enterText(
     find.widgetWithText(TextField, 'Email'),
     'tenant@example.test',

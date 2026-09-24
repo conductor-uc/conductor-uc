@@ -5,13 +5,26 @@ import '../../widgets/page.dart';
 import 'pbx_api.dart';
 import 'resource.dart';
 import 'resource_form.dart';
+import '../queues/tiers_dialog.dart';
 import 'schedule_fields.dart';
 
 /// A table of one resource with create, edit, and delete.
 class ResourceView extends ConsumerWidget {
-  const ResourceView({super.key, required this.def});
+  const ResourceView({
+    super.key,
+    required this.def,
+    this.headerActions = const [],
+    this.rowActions,
+  });
 
   final ResourceDef def;
+
+  /// Extra buttons beside "New", such as an upload.
+  final List<Widget> headerActions;
+
+  /// Extra buttons on each row, before Edit and Delete.
+  final List<Widget> Function(BuildContext context, WidgetRef ref, Json row)?
+  rowActions;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,6 +39,7 @@ class ResourceView extends ConsumerWidget {
           title: def.plural,
           subtitle: def.blurb,
           actions: [
+            ...headerActions,
             if (!def.readOnly)
               FilledButton.icon(
                 onPressed: () => _openForm(context, ref),
@@ -72,11 +86,13 @@ class ResourceView extends ConsumerWidget {
   ) {
     return DataRow(
       cells: [
-        for (final c in columns) DataCell(_cell(ref, c, row[c.key], row)),
+        for (final c in columns)
+          DataCell(_cell(context, ref, c, row[c.key], row)),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              ...?rowActions?.call(context, ref, row),
               if (!def.readOnly)
                 IconButton(
                   tooltip: 'Edit',
@@ -95,7 +111,46 @@ class ResourceView extends ConsumerWidget {
     );
   }
 
-  Widget _cell(WidgetRef ref, Field f, Object? value, Json row) {
+  Widget _statusChip(BuildContext context, Object? value, Json row) {
+    final scheme = Theme.of(context).colorScheme;
+    final failed = value == 'failed';
+    final working = value == 'processing';
+    final label = switch (value) {
+      'pending' => 'Waiting for upload',
+      'processing' => 'Processing…',
+      'ready' => 'Ready',
+      'failed' => 'Failed',
+      _ => '$value',
+    };
+    final chip = Chip(
+      visualDensity: VisualDensity.compact,
+      avatar: working
+          ? const SizedBox(
+              width: 12,
+              height: 12,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : null,
+      label: Text(
+        label,
+        style: TextStyle(color: failed ? scheme.onErrorContainer : null),
+      ),
+      backgroundColor: failed ? scheme.errorContainer : null,
+    );
+    final why = row['errorMessage'];
+    return failed && why is String && why.isNotEmpty
+        ? Tooltip(message: why, child: chip)
+        : chip;
+  }
+
+  Widget _cell(
+    BuildContext context,
+    WidgetRef ref,
+    Field f,
+    Object? value,
+    Json row,
+  ) {
+    if (f.status) return _statusChip(context, value, row);
     switch (f.kind) {
       case FieldKind.toggle:
         return Icon(value == true ? Icons.check : Icons.remove, size: 18);
@@ -193,7 +248,7 @@ class ResourcePage extends ConsumerWidget {
         ),
       );
     }
-    if (defs.length == 1) return ResourceView(def: defs.single);
+    if (defs.length == 1) return _view(defs.single);
     return DefaultTabController(
       length: defs.length,
       child: Column(
@@ -203,12 +258,27 @@ class ResourcePage extends ConsumerWidget {
             isScrollable: true,
           ),
           Expanded(
-            child: TabBarView(
-              children: [for (final d in defs) ResourceView(def: d)],
-            ),
+            child: TabBarView(children: [for (final d in defs) _view(d)]),
           ),
         ],
       ),
     );
   }
+
+  /// The table for [def], with the extras some resources have.
+  Widget _view(ResourceDef def) => ResourceView(
+    def: def,
+    rowActions: def.key == 'queues'
+        ? (context, ref, row) => [
+            IconButton(
+              tooltip: 'Agents and tiers',
+              icon: const Icon(Icons.people_outline),
+              onPressed: () => showDialog<void>(
+                context: context,
+                builder: (_) => QueueTiersDialog(queue: row),
+              ),
+            ),
+          ]
+        : null,
+  );
 }

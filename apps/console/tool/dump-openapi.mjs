@@ -35,6 +35,7 @@ const SOURCES = [
   ['pbx-config-service', 'conference-room', 'registerConferenceRoomRoutes', 1],
   ['pbx-config-service', 'schedule', 'registerScheduleRoutes', 1],
   ['callflow-service', 'flow', 'registerFlowRoutes', 1],
+  ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
 ];
 
 const merged = {
