@@ -14,16 +14,19 @@ Future<PickedFile?> pickAudioFile() {
   final done = Completer<PickedFile?>();
   input.addEventListener(
     'change',
-    ((web.Event _) async {
+    // `toJS` takes no async function, so the reading runs from a plain one.
+    ((web.Event _) {
       final file = input.files?.item(0);
       if (file == null) {
         done.complete(null);
         return;
       }
-      final buffer = await file.arrayBuffer().toDart;
-      done.complete(
-        PickedFile(file.name, file.type, buffer.toDart.asUint8List()),
-      );
+      unawaited(() async {
+        final buffer = await file.arrayBuffer().toDart;
+        done.complete(
+          PickedFile(file.name, file.type, buffer.toDart.asUint8List()),
+        );
+      }());
     }).toJS,
   );
   input.addEventListener(
