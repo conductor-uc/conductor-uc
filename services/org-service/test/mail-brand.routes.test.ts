@@ -43,7 +43,14 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/orgs/:id/mail-brand'
     brands = createBrandRepo(db);
 
     app = await createServer({ serviceName: 'org-service', logger });
-    registerInternalRoutes(app, createDomainRepo(db), INTERNAL_TOKEN, orgs, brands);
+    registerInternalRoutes(
+      app,
+      createDomainRepo(db),
+      INTERNAL_TOKEN,
+      orgs,
+      brands,
+      'console.platform.test',
+    );
     await app.ready();
 
     stop = async () => {
@@ -153,6 +160,41 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/orgs/:id/mail-brand'
     expect((await get(otherTenant.id)).json()).toMatchObject({
       neutral: true,
       displayName: null,
+    });
+  });
+
+  describe('GET /internal/v1/hosts/:host/sign-in-scope', () => {
+    const scope = (host: string, headers: Record<string, string> = AUTH) =>
+      app.inject({ method: 'GET', url: `/internal/v1/hosts/${host}/sign-in-scope`, headers });
+
+    it('requires the internal service token', async () => {
+      await tree();
+      expect((await scope('console.platform.test', {})).statusCode).toBe(401);
+    });
+
+    it('maps the platform console hostname to the master, whatever the case', async () => {
+      const { master } = await tree();
+      for (const host of ['console.platform.test', 'CONSOLE.Platform.test']) {
+        const response = await scope(host);
+        expect(response.statusCode).toBe(200);
+        expect(response.json()).toEqual({ orgId: master.id, type: 'master' });
+      }
+    });
+
+    it("maps a reseller's console hostname to that reseller", async () => {
+      const { reseller } = await tree();
+      await brands.registerConsoleHostname(reseller.id, 'portal.acme.example');
+      expect((await scope('portal.acme.example')).json()).toEqual({
+        orgId: reseller.id,
+        type: 'reseller',
+      });
+    });
+
+    it('404s a hostname nobody registered, without saying anything else', async () => {
+      await tree();
+      const response = await scope('nobody.example');
+      expect(response.statusCode).toBe(404);
+      expect(JSON.stringify(response.json())).not.toMatch(/reseller|master|org/i);
     });
   });
 });

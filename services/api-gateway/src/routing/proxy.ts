@@ -145,6 +145,11 @@ function buildForwardHeaders(
     if (typeof cookie === 'string') headers.set('cookie', cookie);
     const transport = request.headers[REFRESH_TRANSPORT_HEADER];
     if (typeof transport === 'string') headers.set(REFRESH_TRANSPORT_HEADER, transport);
+    // Which console the browser was on, so identity-service can tell which
+    // org's users sign in there (G-56). Always the gateway's own view of the
+    // Host header, never a value the client supplied as `x-forwarded-host`.
+    const host = request.headers['host'];
+    if (typeof host === 'string') headers.set('x-forwarded-host', host);
   }
 
   const signed = signInternalHeaders(secret, contextFields(request.context));

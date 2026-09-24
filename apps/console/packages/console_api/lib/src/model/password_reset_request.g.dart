@@ -9,9 +9,9 @@ part of 'password_reset_request.dart';
 PasswordResetRequest _$PasswordResetRequestFromJson(
   Map<String, dynamic> json,
 ) => $checkedCreate('PasswordResetRequest', json, ($checkedConvert) {
-  $checkKeys(json, requiredKeys: const ['orgId', 'email']);
+  $checkKeys(json, requiredKeys: const ['email']);
   final val = PasswordResetRequest(
-    orgId: $checkedConvert('orgId', (v) => v as String),
+    orgId: $checkedConvert('orgId', (v) => v as String?),
     email: $checkedConvert('email', (v) => v as String),
   );
   return val;
@@ -19,4 +19,4 @@ PasswordResetRequest _$PasswordResetRequestFromJson(
 
 Map<String, dynamic> _$PasswordResetRequestToJson(
   PasswordResetRequest instance,
-) => <String, dynamic>{'orgId': instance.orgId, 'email': instance.email};
+) => <String, dynamic>{'orgId': ?instance.orgId, 'email': instance.email};

@@ -97,6 +97,8 @@ registerInternalRoutes(
   config.INTERNAL_SERVICE_TOKEN,
   orgRepo,
   createBrandRepo(db),
+  // 02 §3's table: the master/unbranded console lives at console.{PLATFORM_BASE_DOMAIN}.
+  `console.${config.PLATFORM_BASE_DOMAIN}`,
 );
 
 const storage = storageFromConfig(config, logger);

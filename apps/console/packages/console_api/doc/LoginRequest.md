@@ -8,7 +8,7 @@ import 'package:console_api/api.dart';
 ## Properties
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**orgId** | **String** |  | 
+**orgId** | **String** |  | [optional] 
 **email** | **String** |  | 
 **password** | **String** |  | 
 

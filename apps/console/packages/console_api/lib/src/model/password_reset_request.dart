@@ -18,7 +18,7 @@ class PasswordResetRequest {
   /// Returns a new [PasswordResetRequest] instance.
   PasswordResetRequest({
 
-    required  this.orgId,
+     this.orgId,
 
     required  this.email,
   });
@@ -26,12 +26,12 @@ class PasswordResetRequest {
   @JsonKey(
     
     name: r'orgId',
-    required: true,
+    required: false,
     includeIfNull: false,
   )
 
 
-  final String orgId;
+  final String? orgId;
 
 
 

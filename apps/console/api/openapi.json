@@ -19,7 +19,6 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "orgId",
                   "email",
                   "password"
                 ],
@@ -344,7 +343,6 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "orgId",
                   "email"
                 ],
                 "properties": {
