@@ -10,6 +10,9 @@ import '../features/auth/mfa_page.dart';
 import '../features/auth/reset_pages.dart';
 import '../features/callflow/builder/flow_builder_page.dart';
 import '../features/callflow/flows_page.dart';
+import '../features/orgs/domains_panel.dart';
+import '../features/orgs/reseller_page.dart';
+import '../features/trunks/trunks_page.dart';
 import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
 import '../features/pbx/resource.dart';
@@ -83,7 +86,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/resellers/:id',
             builder: (context, state) =>
-                OrgsPage(resellerId: state.pathParameters['id']),
+                ResellerPage(resellerId: state.pathParameters['id']!),
           ),
           GoRoute(
             path: '/call-flows/:id',
@@ -106,6 +109,8 @@ Widget _pageFor(Section section) {
   if (section.path == '/call-flows') return const FlowsPage();
   if (section.path == '/brand') return const BrandPage();
   if (section.path == '/users') return const UsersPage();
+  if (section.path == '/trunks') return const TrunksPage();
+  if (section.path == '/domains') return const DomainsPage();
   if (section.path == '/resellers' || section.path == '/tenants') {
     return const OrgsPage();
   }
