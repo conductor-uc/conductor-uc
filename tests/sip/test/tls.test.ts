@@ -1,17 +1,16 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
-  runForeground,
   seedFixtures,
   sipInfraOrSkipReason,
   sipTestEnv,
-  stopContainer,
   type SeedResult,
 } from '../src/run-scenario.js';
+import { registerOverTls } from '../src/tls-client.js';
 
 const execFileAsync = promisify(execFile);
 const skipReason = await sipInfraOrSkipReason();
@@ -23,15 +22,9 @@ const skipReason = await sipInfraOrSkipReason();
  */
 describe.skipIf(skipReason !== undefined)('SIP over TLS', () => {
   let seed: SeedResult;
-  const containers = new Set<string>();
-
   beforeAll(async () => {
     seed = await seedFixtures();
   }, 60_000);
-
-  afterAll(async () => {
-    await Promise.all([...containers].map((name) => stopContainer(name)));
-  });
 
   /** What `openssl s_client` reports for one handshake, run inside the OpenSIPs container. */
   async function handshake(extra: string[] = []): Promise<string> {
@@ -66,37 +59,36 @@ describe.skipIf(skipReason !== undefined)('SIP over TLS', () => {
     expect(output).not.toContain('BEGIN CERTIFICATE');
   });
 
+  const tlsPort = Number(process.env['SIP_TEST_OPENSIPS_TLS_HOST_PORT'] ?? '5061');
+
   it('registers an extension over TLS with its ordinary digest credentials', async () => {
     const ext = seed.extensions[`${seed.tenantA.fqdn}/102`];
     if (ext === undefined) throw new Error('the seed has no extension 102 for tenant A');
     await clearRegistration(`102@${seed.tenantA.fqdn}`);
-    containers.add('sip-test-tls-register');
-    const result = await runForeground({
-      scenario: 'register_tls.xml',
-      csvLine: `102;${seed.tenantA.fqdn}`,
-      au: '102',
-      ap: ext.password,
-      authUri: seed.tenantA.fqdn,
-      containerName: 'sip-test-tls-register',
-      tls: true,
+
+    const result = await registerOverTls({
+      host: '127.0.0.1',
+      port: tlsPort,
+      domain: seed.tenantA.fqdn,
+      user: '102',
+      password: ext.password,
     });
-    expect(result.successfulCalls, result.stdout).toBe(1);
-    expect(result.failedCalls, result.stdout).toBe(0);
+
+    expect(result.statuses).toEqual([401, 200]);
+    expect(['TLSv1.2', 'TLSv1.3']).toContain(result.protocol);
   });
 
   it('refuses a wrong password over TLS, as it does over UDP', async () => {
     await clearRegistration(`102@${seed.tenantA.fqdn}`);
-    containers.add('sip-test-tls-wrong');
-    const result = await runForeground({
-      scenario: 'register_tls.xml',
-      csvLine: `102;${seed.tenantA.fqdn}`,
-      au: '102',
-      ap: 'not-the-password',
-      authUri: seed.tenantA.fqdn,
-      containerName: 'sip-test-tls-wrong',
-      tls: true,
+    const result = await registerOverTls({
+      host: '127.0.0.1',
+      port: tlsPort,
+      domain: seed.tenantA.fqdn,
+      user: '102',
+      password: 'not-the-password',
     });
-    expect(result.successfulCalls, result.stdout).toBe(0);
-    expect(result.failedCalls, result.stdout).toBe(1);
+    // Challenged, answered wrongly, and refused: never a 200.
+    expect(result.statuses[0]).toBe(401);
+    expect(result.statuses).not.toContain(200);
   });
 });
