@@ -385,6 +385,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # `runs-on: self-hosted` can land on more than one runner, and a runner
+      # that starts its jobs with no HOME (seen on `runner-1`) stops
+      # flutter-action's setup script with "HOME: unbound variable" before it does
+      # anything. Give the rest of the job a HOME when it has none; where there is
+      # one (the `dell` runner) this leaves it exactly as it was.
+      - name: Make sure HOME is set
+        run: |
+          home="${HOME:-$RUNNER_TEMP/home}"
+          mkdir -p "$home"
+          echo "HOME=$home" >> "$GITHUB_ENV"
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
