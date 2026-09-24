@@ -10,6 +10,7 @@ import { registerCors } from './cors.js';
 import { registerPlatformHealth } from './platform-health.js';
 import { registerProvisioningTransport } from './provisioning-transport.js';
 import { registerSecurityHeaders } from './security-headers.js';
+import { createOrgCertificateSource } from './certificate-source.js';
 import { tlsServerOptions } from './tls.js';
 import { createRateLimiter } from './rate-limit/limiter.js';
 import { registerRateLimit } from './rate-limit/hooks.js';
@@ -44,6 +45,12 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     certFile: config.TLS_CERT_FILE,
     keyFile: config.TLS_KEY_FILE,
     certDir: config.TLS_CERT_DIR,
+    source: config.TLS_FROM_ORG_SERVICE
+      ? createOrgCertificateSource({
+          orgServiceUrl: config.ORG_SERVICE_URL,
+          internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+        })
+      : undefined,
   });
 
   const app = await createServer({
