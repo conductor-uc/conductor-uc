@@ -44,6 +44,7 @@ const SOURCES = [
   ['pbx-config-service', 'schedule', 'registerScheduleRoutes', 1],
   ['callflow-service', 'flow', 'registerFlowRoutes', 1],
   ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
+  ['voicemail-service', 'mailbox', 'registerMailboxRoutes', 3],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
   ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
@@ -96,6 +97,11 @@ const OVERRIDES = {
   'put /v1/platform/acme-settings': 'saveAcmeSettings',
   'get /v1/tenants/{tenantId}/flows/{id}/versions/{versionNumber}': 'getFlowVersion',
   'post /v1/resellers/{id}/brand/assets': 'uploadBrandAsset',
+  'put /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/email-settings': 'saveMailboxEmailSettings',
+  'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/reset-pin': 'resetMailboxPin',
+  'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/presign': 'presignMailboxGreeting',
+  'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/complete': 'completeMailboxGreeting',
+  'get /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/messages/{messageId}/play-url': 'getMessagePlayUrl',
 };
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };
 
