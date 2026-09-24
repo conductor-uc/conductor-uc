@@ -66,7 +66,15 @@ services/<name>/
 
 ## 5. CI (GitHub Actions)
 
-The `ci.yml` workflow runs `pnpm install` → `turbo run lint typecheck test build` (affected packages only) → SIP smoke on the compose stack → console build and tests → brand-leak scan → container image builds (pushed on `main`).
+The `ci.yml` workflow (triggers: push to `main`, pull requests, and a nightly schedule) has three jobs, all on **self-hosted runners** (long-lived hosts, not fresh VMs, so steps that start something by hand must remove it):
+
+| Job | What it does |
+|---|---|
+| `check` | Formatting, then `turbo run lint typecheck test build` with `--affected` on pull requests and over everything on `main`; console OpenAPI and call-flow IR snapshot checks; brand-leak scan. Runs against MariaDB, Redis, Mailpit, a NATS binary and a hand-started MinIO. |
+| `sip-smoke` | Builds and starts the compose stack and runs the S1-14 SIP smoke scenarios on push and pull request; the full `tests/sip` suite runs nightly (S2-20). |
+| `console` | Flutter analyze, tests, web build, regenerated API client check, brand-leak scan including `build/web`. |
+
+Container images are not built or pushed by this workflow yet (the compose stack builds them locally).
 
 ## 6. Rules for implementers (also summarized in the repository `CLAUDE.md`)
 

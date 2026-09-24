@@ -1,9 +1,15 @@
 name: CI
 
+# One run per change, not two. A pull request is tested when it is opened and
+# on every push to it, and there is deliberately no `push` trigger for `main`:
+# with one, the same suite ran a second time the moment the PR merged. `main`
+# is checked in full by the nightly run below, and by hand with "Run workflow"
+# (`workflow_dispatch`) when a merge needs checking sooner. Keep "Require
+# branches to be up to date before merging" on for `main`, so the run a PR
+# passed was run against the code it merges into.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
   # S2-20 (issue #44): "a nightly full run and a per-PR smoke subset" — the
   # full `tests/sip` suite (every S1/S2 scenario, ~20+ tests, each with
   # real SIP transaction timers over real UDP) is too slow to gate every
@@ -18,11 +24,9 @@ on:
   schedule:
     - cron: '0 6 * * *'
 
-# A new push to a PR makes the previous run irrelevant. Runs on main are never
-# cancelled: `main` being green is a claim about every commit, not just the tip.
-# The nightly run's own ref (`refs/heads/main`, always) would otherwise share
-# a concurrency group with ordinary pushes to `main` and get cancelled by one
-# — `github.event_name` in the group key keeps it in a lane of its own.
+# A new push to a PR makes the previous run irrelevant. Nightly and manual runs
+# are never cancelled. Their ref is always `refs/heads/main`, so
+# `github.event_name` in the group key keeps each kind in a lane of its own.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -169,15 +173,15 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
-      # On a pull request only the affected packages are built and tested; on
-      # main everything is, because that is the run the branch's green tick
-      # actually claims something about.
+      # On a pull request only the affected packages are built and tested; the
+      # nightly and manual runs build and test everything, which is what says
+      # `main` itself is green.
       #
       # `--affected` is safe here because turbo.json lists the root configs
       # (tsconfig.base.json, eslint.config.js, .prettierrc.json,
       # vitest.shared.ts, .nvmrc) as globalDependencies, so changing one marks
       # every package affected rather than none. If that list ever drifts, the
-      # full run on main is the backstop that catches it.
+      # nightly full run is the backstop that catches it.
       - name: Lint, typecheck, test, build (affected)
         if: github.event_name == 'pull_request'
         env:
@@ -200,7 +204,7 @@ jobs:
         # `--affected` happened to build above. Leave one out and the step only
         # fails on a pull request that does not touch that service.
         run: |
-          pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service --filter=@cuc/trunk-service --filter=@cuc/voicemail-service --filter=@cuc/api-gateway
+          pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service --filter=@cuc/trunk-service --filter=@cuc/voicemail-service --filter=@cuc/cdr-service --filter=@cuc/api-gateway
           node apps/console/tool/dump-openapi.mjs
           git diff --exit-code -- apps/console/api/openapi.json
 
@@ -230,7 +234,7 @@ jobs:
   # A separate job, not a step in `check` above, so one slow suite does not
   # hold up the fast feedback loop (real SIP transaction timers over real
   # UDP make this the slowest thing in the workflow). One job, not two
-  # (`sip-smoke` + a separate nightly job): `schedule` and `push`/
+  # (`sip-smoke` + a separate nightly job): `schedule` and
   # `pull_request` never trigger the same workflow run, so there is no
   # concurrency to gain by splitting, and splitting would mean duplicating
   # every setup/build/compose-up/teardown/diagnostics step below. The run
@@ -312,7 +316,7 @@ jobs:
           docker compose build
           docker compose up -d --wait --wait-timeout 180
 
-      # S2-20 (issue #44): every push/PR run gets only the original S1-14
+      # S2-20 (issue #44): every PR (or manual) run gets only the original S1-14
       # smoke subset (`scenarios.test.ts` — the job's own name predates this
       # split and still describes exactly this step). The full suite (this
       # file plus conference/queue/voicemail/presence/parking/... — every

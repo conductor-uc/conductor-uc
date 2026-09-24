@@ -27,10 +27,10 @@ pnpm lint typecheck test build
 | `pnpm format` | Prettier over code (Markdown is excluded; see `.prettierignore`) |
 | `pnpm vitest` | Runs every package's suite at once from the root |
 
-Turborepo caches task output in `.turbo/`; `pnpm clean` removes build output and caches.
+Turborepo caches task output in `.turbo/`; `pnpm clean` removes build output and caches. CI runs on self-hosted runners and uses `turbo run ... --affected` on pull requests (everything on `main`), see [09 §5](docs/architecture/09-engineering-conventions.md).
 
 Services need MariaDB, Redis, NATS, MinIO, and Mailpit locally. `make up` brings up
-[the compose stack](infra/compose/README.md); `make seed` applies migrations and bootstraps
+[the compose stack](infra/compose/README.md) (those, plus OpenSIPs, two FreeSWITCH nodes, the Node services and api-gateway); `make seed` applies migrations and bootstraps
 the master org.
 
 ## Layout

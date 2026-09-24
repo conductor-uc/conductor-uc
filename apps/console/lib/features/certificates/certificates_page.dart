@@ -40,6 +40,16 @@ class CertificatesPage extends ConsumerWidget {
                     settings: s,
                   ),
                 ),
+                const SizedBox(height: 16),
+                AsyncBody<Json>(
+                  value: ref.watch(networkSettingsProvider),
+                  emptyText: '',
+                  isEmpty: (_) => false,
+                  builder: (n) => PublicAddressCard(
+                    key: ValueKey('${n['publicAddress']}'),
+                    settings: n,
+                  ),
+                ),
                 const SizedBox(height: 24),
                 Text(
                   'Platform certificates',
@@ -229,6 +239,100 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
   }
 }
 
+/// Where the platform is reached from the internet. Resellers are told to point
+/// their names here, and Let's Encrypt has to be able to reach it on port 80.
+class PublicAddressCard extends ConsumerStatefulWidget {
+  const PublicAddressCard({super.key, required this.settings});
+
+  final Json settings;
+
+  @override
+  ConsumerState<PublicAddressCard> createState() => _PublicAddressCardState();
+}
+
+class _PublicAddressCardState extends ConsumerState<PublicAddressCard> {
+  late final TextEditingController _address;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _address = TextEditingController(
+      text: '${widget.settings['publicAddress'] ?? ''}',
+    );
+  }
+
+  @override
+  void dispose() {
+    _address.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final api = ref.read(certificatesApiProvider);
+    if (api == null) return;
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      final value = _address.text.trim();
+      await api.savePublicAddress(value.isEmpty ? null : value);
+      ref.invalidate(networkSettingsProvider);
+    } catch (e) {
+      if (mounted) setState(() => _error = problemMessage(e));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Public address',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Where phones and browsers reach the platform. Resellers are '
+              'shown DNS records that point their names here, and the '
+              'certificate authority checks the names on port 80.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _address,
+              decoration: const InputDecoration(
+                labelText: 'Public address',
+                helperText: 'An IP address, or a hostname to point names at with a CNAME.',
+              ),
+              onSubmitted: (_) => _save(),
+            ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(_error!, style: TextStyle(color: scheme.error)),
+              ),
+            const SizedBox(height: 12),
+            FilledButton(
+              key: const ValueKey('save-public-address'),
+              onPressed: _saving ? null : _save,
+              child: const Text('Save address'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 String _date(Object? iso) {
   final t = iso == null ? null : DateTime.tryParse('$iso')?.toLocal();
   if (t == null) return '—';
@@ -316,10 +420,15 @@ class CertificatesPanel extends ConsumerWidget {
           children: [
             const Text(
               'Phones connect to sip.<your base domain> and sign in with their '
-              'own domain. Each active base domain gets a certificate for that '
-              'name automatically. For one to be issued, the name has to point '
-              'at the platform’s address; a certificate that keeps failing '
-              'usually means it does not yet.',
+              'own domain. Each verified base domain gets a certificate for '
+              'that name automatically, once its name points at the platform.',
+            ),
+            const SizedBox(height: 12),
+            AsyncBody<Json>(
+              value: ref.watch(resellerDnsRecordsProvider(resellerId)),
+              emptyText: '',
+              isEmpty: (_) => false,
+              builder: (d) => DnsRecordsTable(records: d),
             ),
             const SizedBox(height: 12),
             AsyncBody<List<Json>>(
@@ -330,6 +439,70 @@ class CertificatesPanel extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// The DNS records a reseller publishes so its names reach the platform, to copy.
+class DnsRecordsTable extends StatelessWidget {
+  const DnsRecordsTable({super.key, required this.records});
+
+  final Json records;
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = [
+      for (final r in records['rows'] as List)
+        (r as Map).cast<String, dynamic>(),
+    ];
+    final theme = Theme.of(context);
+    if (records['publicAddress'] == null) {
+      return const Text(
+        'The platform operator has not said where the platform is reached '
+        'yet, so there is nothing to point your names at. Ask them.',
+        key: ValueKey('dns-no-address'),
+      );
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+    const mono = TextStyle(fontFamily: 'monospace');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('DNS records to publish', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        const Text(
+          'Add one record for each name, at wherever your domain’s DNS is kept.',
+        ),
+        const SizedBox(height: 8),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            key: const ValueKey('dns-records'),
+            columns: const [
+              DataColumn(label: Text('Name')),
+              DataColumn(label: Text('Type')),
+              DataColumn(label: Text('Value')),
+              DataColumn(label: Text('Used for')),
+            ],
+            rows: [
+              for (final r in rows)
+                DataRow(
+                  cells: [
+                    DataCell(SelectableText('${r['name']}', style: mono)),
+                    DataCell(Text('${r['type']}')),
+                    DataCell(SelectableText('${r['value']}', style: mono)),
+                    DataCell(
+                      Text(r['purpose'] == 'sip' ? 'Phones (SIP)' : 'Console'),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text('Certificates', style: theme.textTheme.titleMedium),
+        const SizedBox(height: 8),
+      ],
     );
   }
 }

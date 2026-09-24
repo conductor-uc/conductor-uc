@@ -333,6 +333,94 @@ void main() {
     }
   });
 
+  group('call records and routing screens', () {
+    test('the call records list takes the filters the screen sends', () {
+      final list = (paths['/v1/tenants/{tenantId}/cdrs'] as Map)['get'] as Map;
+      final params = {
+        for (final p in list['parameters'] as List)
+          if ((p as Map)['in'] == 'query') p['name'],
+      };
+      expect(
+        params,
+        containsAll([
+          'from',
+          'to',
+          'direction',
+          'number',
+          'did',
+          'cursor',
+          'limit',
+        ]),
+      );
+      final body = _schema(list.cast<String, dynamic>(), response: '200');
+      expect(
+        (body['properties'] as Map).keys,
+        containsAll(['rows', 'nextCursor']),
+      );
+      final row = ((body['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll([
+          'id',
+          'direction',
+          'startAt',
+          'answerAt',
+          'endAt',
+          'durationSec',
+          'billableSec',
+          'fromNumber',
+          'fromName',
+          'toNumber',
+          'dialedNumber',
+          'did',
+          'trunkId',
+          'extensionIds',
+          'disposition',
+          'hangupCause',
+          'hangupBy',
+          'queueId',
+          'flowId',
+          'recordingIds',
+        ]),
+      );
+    });
+
+    test('exports are started with a period and report state and download', () {
+      final start =
+          (paths['/v1/tenants/{tenantId}/cdr-exports'] as Map)['post'] as Map;
+      expect(
+        (_schema(start.cast<String, dynamic>())['properties'] as Map).keys
+            .toSet(),
+        {'from', 'to'},
+      );
+      final one =
+          (paths['/v1/tenants/{tenantId}/cdr-exports/{id}'] as Map)['get']
+              as Map;
+      expect(
+        (_schema(one.cast<String, dynamic>(), response: '200')['properties']
+                as Map)
+            .keys,
+        containsAll([
+          'id',
+          'status',
+          'fromAt',
+          'toAt',
+          'downloadUrl',
+          'errorMessage',
+        ]),
+      );
+    });
+
+    test('the emergency route is one per tenant: get, put, delete', () {
+      final route =
+          paths['/v1/tenants/{tenantId}/emergency-route']
+              as Map<String, dynamic>;
+      expect(route.keys, containsAll(['get', 'put', 'delete']));
+      final put = _schema(route['put'] as Map<String, dynamic>);
+      expect((put['properties'] as Map).keys.toSet(), {'trunkId', 'numbers'});
+    });
+  });
+
   group('users', () {
     Map<String, dynamic> body(String path, String method) =>
         _schema((paths[path] as Map)[method] as Map<String, dynamic>);
