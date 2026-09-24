@@ -266,6 +266,11 @@ services:
       # config still requires a syntactically valid URL to boot.
       IDENTITY_SERVICE_URL: http://127.0.0.1:1
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # G-105: the certificates org-service keeps have their private keys
+      # envelope-encrypted with this. Dev-only key (packages/crypto/src/config.ts);
+      # production uses a KMS.
+      CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
+      CRYPTO_KEK_CURRENT: '1'
       PLATFORM_BASE_DOMAIN: ${PLATFORM_BASE_DOMAIN:-platform.test}
       STORAGE_BUCKET_PREFIX: cuc-dev
       STORAGE_ENDPOINT: http://minio:9000

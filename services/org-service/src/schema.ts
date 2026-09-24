@@ -4,6 +4,10 @@ export type OrgType = 'master' | 'reseller' | 'tenant';
 export type OrgStatus = 'active' | 'suspended' | 'pending_deletion' | 'deleted';
 /** A reseller base domain starts `pending` and becomes `active` once its TXT record verifies (02 §3). */
 export type BaseDomainStatus = 'pending' | 'active';
+/** What a certificate is for: the SIP proxy phones connect to, or a console hostname. */
+export type CertificatePurpose = 'sip' | 'console';
+/** `pending` until first issued, `active` while a usable certificate is held, `failed` after an attempt that has not yet succeeded. */
+export type CertificateStatus = 'pending' | 'active' | 'failed';
 
 /**
  * This service's own schema (05 §1.1). No cross-schema joins.
@@ -88,6 +92,47 @@ export interface OrgServiceDb extends EventTables {
     legal_footer: string | null;
     created_at: Date;
     updated_at: Date;
+  };
+
+  /**
+   * A certificate the platform keeps for one hostname (G-105). `private_key_enc`
+   * is envelope-encrypted (07 §5); `certificate_pem` is the leaf and its chain.
+   * Null until the first issue. `next_attempt_at` is the lease and retry clock.
+   */
+  tls_certificates: {
+    fqdn: string;
+    purpose: CertificatePurpose;
+    /** The reseller whose proxy or console this is; null for the platform's own. */
+    reseller_id: string | null;
+    status: CertificateStatus;
+    certificate_pem: string | null;
+    private_key_enc: string | null;
+    not_before: Date | null;
+    not_after: Date | null;
+    attempts: number;
+    next_attempt_at: Date;
+    last_error: string | null;
+    /** Bumped each time a new certificate is stored, so a consumer can tell it changed. */
+    version: number;
+    created_at: Date;
+    updated_at: Date;
+  };
+
+  /** The answer to an HTTP-01 challenge, served by the edge on port 80 until it expires. */
+  acme_challenges: {
+    token: string;
+    fqdn: string;
+    key_authorization: string;
+    expires_at: Date;
+    created_at: Date;
+  };
+
+  /** The ACME account per directory (the key is envelope-encrypted). */
+  acme_accounts: {
+    directory_url: string;
+    account_key_enc: string;
+    account_url: string | null;
+    created_at: Date;
   };
 
   /** A reseller's branded console hostname (`portal.reseller-brand.com`), driving brand resolution (02 §5.2). */

@@ -1,4 +1,5 @@
 import { redactConfig } from '@cuc/config';
+import { fileKekFromConfig } from '@cuc/crypto';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createServer } from '@cuc/http';
@@ -9,9 +10,11 @@ import { configSchema, loadServiceConfig } from './config.js';
 import { nodeDnsResolver } from './dns-resolver.js';
 import { createIdentityClient } from './identity-client.js';
 import { createBrandRepo } from './repo/brand.repo.js';
+import { createCertificateRepo } from './repo/certificate.repo.js';
 import { createDomainRepo } from './repo/domain.repo.js';
 import { createOrgRepo } from './repo/org.repo.js';
 import { registerBrandRoutes } from './routes/brand.routes.js';
+import { registerCertificateRoutes } from './routes/certificate.routes.js';
 import { registerDomainRoutes } from './routes/domain.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerOrgRoutes } from './routes/org.routes.js';
@@ -101,6 +104,29 @@ registerInternalRoutes(
   `console.${config.PLATFORM_BASE_DOMAIN}`,
 );
 
+const certificateRepo = createCertificateRepo(db, {
+  kek: fileKekFromConfig(config),
+  platformBaseDomain: config.PLATFORM_BASE_DOMAIN,
+});
+registerCertificateRoutes(app, certificateRepo, config.INTERNAL_SERVICE_TOKEN);
+
+// Keeps a row for every hostname that should have a certificate, worked out from
+// what the database already holds, so no provisioning path has to remember to ask.
+// Runs at startup and then every few minutes; issuing them is the next change.
+let reconciling = true;
+async function reconcileLoop(): Promise<void> {
+  while (reconciling) {
+    try {
+      const added = await certificateRepo.reconcileWanted();
+      if (added > 0) logger.info({ added }, 'certificates: new hostnames wanted');
+    } catch (error) {
+      logger.warn({ err: error }, 'certificates: reconcile failed');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5 * 60_000));
+  }
+}
+const reconcileDone = reconcileLoop();
+
 const storage = storageFromConfig(config, logger);
 // 02 §3's table: the master/unbranded console lives at console.{PLATFORM_BASE_DOMAIN}.
 registerBrandRoutes(
@@ -122,11 +148,13 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   relay.stop();
+  reconciling = false;
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   await relayLoop;
+  void reconcileDone;
   await bus.close();
   await db.destroy();
   logger.info('shutdown complete');

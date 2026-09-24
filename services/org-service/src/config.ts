@@ -1,4 +1,5 @@
 import { Env, Type, baseEnvSchema, loadConfig } from '@cuc/config';
+import { cryptoEnvSchema } from '@cuc/crypto';
 import { dbEnvSchema } from '@cuc/db';
 import { eventsEnvSchema } from '@cuc/events';
 import { httpEnvSchema } from '@cuc/http';
@@ -14,6 +15,7 @@ import { storageEnvSchema } from '@cuc/storage';
 export const configSchema = Type.Object({
   ...baseEnvSchema.properties,
   ...dbEnvSchema.properties,
+  ...cryptoEnvSchema.properties,
   ...eventsEnvSchema.properties,
   ...storageEnvSchema.properties,
   ...httpEnvSchema.properties,
