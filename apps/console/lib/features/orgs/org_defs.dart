@@ -8,7 +8,7 @@ const _slug = Field(
   FieldKind.text,
   required: true,
   scope: FieldScope.create,
-  help: 'Used in addresses. It cannot be changed later.',
+  help: 'Lowercase letters, digits and hyphens, at least two characters. It cannot be changed later.',
 );
 const _name = Field('name', 'Name', FieldKind.text, required: true);
 const _adminEmail = Field(
@@ -33,6 +33,7 @@ const _adminPassword = Field(
   required: true,
   secret: true,
   scope: FieldScope.create,
+  help: 'At least 12 characters.',
 );
 const _timezone = Field(
   'timezone',
