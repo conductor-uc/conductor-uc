@@ -61,3 +61,14 @@ flutter build web --release
 ```
 
 `tool/generate-api.sh` regenerates `packages/console_api` from `api/openapi.yaml`.
+
+## Canvas benchmark
+
+`lib/dev/canvas_bench.dart` pans and zooms 150 connected nodes for six seconds
+and prints one `BENCH {...}` line of frame timings to the browser console.
+Run it in Chrome, ideally on a real GPU:
+
+    flutter run -d chrome --profile -t lib/dev/canvas_bench.dart
+
+Record a performance trace from DevTools alongside it if the numbers need a
+closer look. The target (08 §4.1) is 60 fps, meaning few frames over 16.7 ms.
