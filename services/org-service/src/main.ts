@@ -91,7 +91,13 @@ const orgRepo = createOrgRepo(db, { platformBaseDomain: config.PLATFORM_BASE_DOM
 registerOrgRoutes(app, orgRepo, identityClient.createAdminUser);
 const domainRepo = createDomainRepo(db);
 registerDomainRoutes(app, domainRepo, nodeDnsResolver());
-registerInternalRoutes(app, domainRepo, config.INTERNAL_SERVICE_TOKEN, orgRepo);
+registerInternalRoutes(
+  app,
+  domainRepo,
+  config.INTERNAL_SERVICE_TOKEN,
+  orgRepo,
+  createBrandRepo(db),
+);
 
 const storage = storageFromConfig(config, logger);
 // 02 §3's table: the master/unbranded console lives at console.{PLATFORM_BASE_DOMAIN}.

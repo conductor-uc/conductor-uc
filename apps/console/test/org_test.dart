@@ -180,7 +180,7 @@ void main() {
     testWidgets('a draft shows in the preview and saves', (tester) async {
       await openBrand(tester);
       await tester.enterText(brandField('Display name'), 'Sample Reseller');
-      await tester.enterText(brandField('Primary color'), '#6a1b9a');
+      await tester.enterText(brandField('Primary color'), '#4a148c');
       await tester.pumpAndSettle();
       // Once in the field, once drawn in the preview header.
       expect(find.text('Sample Reseller'), findsWidgets);
@@ -194,11 +194,27 @@ void main() {
       await tester.enterText(brandField('Primary color'), 'purple');
       await tapVisible(tester, find.text('Save brand'));
       expect(
-        find.text('Colors are six-digit hex values, like #6a1b9a.'),
+        find.text('Colors are six-digit hex values, like #4a148c.'),
         findsOneWidget,
       );
       expect(find.text('Brand saved.'), findsNothing);
     });
+
+    testWidgets(
+      'colors that do not contrast enough are refused with the reason',
+      (tester) async {
+        await openBrand(tester);
+        await tester.enterText(brandField('Primary color'), '#4a148c');
+        await tester.enterText(brandField('Accent color'), '#5e35b1');
+        await tester.pumpAndSettle();
+        await tapVisible(tester, find.text('Save brand'));
+        expect(
+          find.textContaining('WCAG AA requires at least 4.5:1'),
+          findsOneWidget,
+        );
+        expect(find.text('Brand saved.'), findsNothing);
+      },
+    );
 
     testWidgets('a saved brand is there when the page is opened again', (
       tester,

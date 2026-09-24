@@ -4,6 +4,7 @@ import { databaseOrSkipReason, silentLogger, startTestDatabase } from '@cuc/test
 import { createServer, type Server } from '@cuc/http';
 
 import type { DnsResolver } from '../src/dns-resolver.js';
+import { createBrandRepo } from '../src/repo/brand.repo.js';
 import { createDomainRepo, type DomainRepo } from '../src/repo/domain.repo.js';
 import { createOrgRepo, type OrgRepo } from '../src/repo/org.repo.js';
 import { registerDomainRoutes } from '../src/routes/domain.routes.js';
@@ -52,7 +53,7 @@ describe.skipIf(skipReason !== undefined)('domain-service HTTP routes', () => {
 
     app = await createServer({ serviceName: 'org-service', logger });
     registerDomainRoutes(app, domainsRepo, resolver);
-    registerInternalRoutes(app, domainsRepo, INTERNAL_TOKEN, orgs);
+    registerInternalRoutes(app, domainsRepo, INTERNAL_TOKEN, orgs, createBrandRepo(db));
     await app.ready();
 
     stop = async () => {

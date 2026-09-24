@@ -1,0 +1,7 @@
+{{#if brandName}}
+<mj-section background-color="{{primary}}" padding="16px 24px">
+  <mj-column>
+    <mj-text color="{{onPrimary}}" font-size="18px" font-weight="600">{{ brandName }}</mj-text>
+  </mj-column>
+</mj-section>
+{{/if}}

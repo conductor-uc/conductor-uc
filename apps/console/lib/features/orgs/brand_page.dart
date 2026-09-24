@@ -14,8 +14,8 @@ const brandFields = <(String, String, String?)>[
     'Display name',
     'Shown in the console header and page title.',
   ),
-  ('primaryColor', 'Primary color', 'Six-digit hex, like #6a1b9a.'),
-  ('accentColor', 'Accent color', 'Six-digit hex, like #00695c.'),
+  ('primaryColor', 'Primary color', 'Six-digit hex, like #4a148c.'),
+  ('accentColor', 'Accent color', 'Six-digit hex, like #ffe082.'),
   ('supportEmail', 'Support email', null),
   ('supportUrl', 'Support URL', null),
   ('supportPhone', 'Support phone', null),
@@ -80,7 +80,7 @@ class _BrandPageState extends ConsumerState<BrandPage> {
       final value = _text(key);
       if (value != null && parseHex(value) == null) {
         setState(
-          () => _error = 'Colors are six-digit hex values, like #6a1b9a.',
+          () => _error = 'Colors are six-digit hex values, like #4a148c.',
         );
         return;
       }

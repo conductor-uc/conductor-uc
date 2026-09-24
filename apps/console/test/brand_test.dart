@@ -67,7 +67,7 @@ void main() {
           return jsonBody({
             'neutral': false,
             'displayName': 'Acme',
-            'primaryColor': '#6a1b9a',
+            'primaryColor': '#4a148c',
           });
         });
       final brand = await fetchBrand(ConsoleApi(dio: dio), 'portal.example');
