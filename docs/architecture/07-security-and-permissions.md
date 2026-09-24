@@ -95,7 +95,8 @@ Audit is append-only, and retention is configurable (default 1 year). Tenants ca
 
 - Envelope encryption (`@cuc/crypto`) protects SIP secrets, trunk credentials, MFA secrets, and conference PINs. Each record is encrypted with a data key, and data keys are wrapped by a KEK from a KMS (Vault Transit or a cloud KMS; local dev uses a file key). Ciphertext carries a key version so keys can be rotated.
 - Service DB credentials, the NATS nkeys, and the S3 keys come from the orchestrator's secret store, never from the repo.
-- TLS everywhere outside the private network. SIP-TLS (5061) and SRTP are offered to endpoints.
+- TLS everywhere outside the private network. SIP-TLS (5061) is built; SRTP is not. HTTPS on the edge is built (api-gateway, security headers, HSTS); certificates are issued by ACME and held by org-service ([02 §3.1](02-tenancy-and-branding.md#31-tls-certificates)), with private keys envelope-encrypted. Phone provisioning is refused over plain HTTP by default because the file carries the SIP password.
+- Exception to encryption at rest: OpenSIPs' `tls_mgm` table holds SIP proxy private keys in clear (its only database loading mode); limit access to the `opensips` schema.
 
 ## 6. Abuse & fraud controls
 

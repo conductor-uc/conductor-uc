@@ -36,13 +36,27 @@ Every tenant has one **primary SIP domain**, and it is the isolation key at the 
 - A reseller MAY register one or more **reseller base domains**, for example `voice.reseller-brand.com`. Tenant domains are then `{slug}.{reseller-base-domain}`.
 - Tenant domain = `{tenant-slug}.{base}` where `base` is the reseller's base domain if set, otherwise the platform base domain.
 - Domains are globally unique. Slugs are lowercase DNS labels (`[a-z0-9-]{2,63}`) and are reserved for 90 days after deletion.
-- The platform validates DNS ownership (a TXT record) before a reseller base domain is activated. TLS for console hostnames and SIP-TLS is issued by ACME for each activated hostname.
+- The platform validates DNS ownership (a TXT record) before a reseller base domain is activated. Certificates are issued by ACME (Let's Encrypt) in the background by org-service, one per **hostname that needs one**, not one per tenant (see below).
 
 | Concept | Example | Used by |
 |---|---|---|
 | Tenant SIP domain / realm | `acme.voice.reseller-brand.com` | OpenSIPs `domain`, digest realm, FreeSWITCH directory domain, XMPP vhost |
 | Console hostname (reseller) | `portal.reseller-brand.com` | Brand resolution, CORS, cookies |
 | Console hostname (master / unbranded) | `console.{PLATFORM_BASE_DOMAIN}` | Neutral theme |
+
+### 3.1 TLS certificates
+
+| Hostname | Certificate for | Used by |
+|---|---|---|
+| `sip.<reseller base domain>` (active base domain only) | One per reseller | OpenSIPs (SIP-TLS), for that reseller's tenants |
+| `sip.<PLATFORM_BASE_DOMAIN>` | The platform | OpenSIPs, for direct tenants and for tenants of a reseller with no active base domain; also OpenSIPs' `default` row |
+| Console hostnames (platform and reseller) | One each | api-gateway (HTTPS) |
+
+- A phone connects to the proxy hostname and keeps the tenant's own domain as its realm (outbound proxy), so a certificate covers only the proxy name, never each tenant domain.
+- org-service owns the lifecycle: a reconciler (at startup and every 5 minutes) works out which hostnames need a certificate; a background worker requests each by ACME HTTP-01 (2048-bit RSA), with a lease and a retry backoff of one minute to one day. A failed renewal keeps the held certificate active.
+- Certificate chain and ACME account key are stored in org-service's database; private keys are envelope-encrypted (`@cuc/crypto`). Nothing is requested until the platform operator has saved a contact address and agreed to the CA's terms in the console (Certificates section; production or staging directory). Resellers see only their own certificates and why one is failing.
+- The HTTP-01 challenge is answered on port 80 by api-gateway (`HTTP_REDIRECT_PORT`), which fetches the answer from org-service. Port 80 must reach the same public address as the SIP edge.
+- Delivery: OpenSIPs certificates are projected by telephony-config (`org.certificate.issued`); the gateway asks org-service directly. See [03 §2.3](03-signaling-and-media.md#23-sip-over-tls) and [06](06-services.md).
 
 Changing a tenant's primary domain invalidates stored SIP digest HA1 values, which include the realm. Credentials are therefore stored encrypted and reversibly, as well as in HA1 form, so the HA1 values can be recomputed. See [05 §3.3](05-data-architecture.md#33-pbx-config).
 
