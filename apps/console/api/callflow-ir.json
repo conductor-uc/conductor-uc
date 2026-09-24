@@ -1,0 +1,613 @@
+{
+  "nodeTypes": {
+    "play": {
+      "config": {
+        "type": "object",
+        "required": [
+          "mediaAssetId"
+        ],
+        "properties": {
+          "mediaAssetId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "requiredPorts": [
+        "next"
+      ],
+      "allowedPorts": [
+        "next"
+      ]
+    },
+    "menu": {
+      "config": {
+        "type": "object",
+        "required": [
+          "promptMediaAssetId",
+          "timeoutSeconds",
+          "maxInvalidAttempts"
+        ],
+        "properties": {
+          "promptMediaAssetId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "timeoutSeconds": {
+            "type": "number",
+            "minimum": 1
+          },
+          "maxInvalidAttempts": {
+            "type": "number",
+            "minimum": 1
+          }
+        }
+      },
+      "requiredPorts": [
+        "timeout",
+        "invalid"
+      ],
+      "allowedPorts": [
+        "timeout",
+        "invalid",
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "*",
+        "#"
+      ]
+    },
+    "time_condition": {
+      "config": {
+        "type": "object",
+        "required": [
+          "timezone"
+        ],
+        "properties": {
+          "timezone": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "requiredPorts": [
+        "match",
+        "noMatch"
+      ],
+      "allowedPorts": [
+        "match",
+        "noMatch"
+      ]
+    },
+    "extension": {
+      "config": {
+        "type": "object",
+        "required": [
+          "extensionId",
+          "ringSeconds"
+        ],
+        "properties": {
+          "extensionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "ringSeconds": {
+            "type": "number",
+            "minimum": 1
+          }
+        }
+      },
+      "requiredPorts": [
+        "noAnswer"
+      ],
+      "allowedPorts": [
+        "noAnswer"
+      ]
+    },
+    "ring_group": {
+      "config": {
+        "type": "object",
+        "required": [
+          "ringGroupId"
+        ],
+        "properties": {
+          "ringGroupId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "requiredPorts": [
+        "noAnswer"
+      ],
+      "allowedPorts": [
+        "noAnswer"
+      ]
+    },
+    "queue": {
+      "config": {
+        "type": "object",
+        "required": [
+          "queueId"
+        ],
+        "properties": {
+          "queueId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "requiredPorts": [
+        "next"
+      ],
+      "allowedPorts": [
+        "next"
+      ]
+    },
+    "voicemail": {
+      "config": {
+        "type": "object",
+        "required": [
+          "mailboxId"
+        ],
+        "properties": {
+          "mailboxId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "requiredPorts": [
+        "next"
+      ],
+      "allowedPorts": [
+        "next"
+      ]
+    },
+    "goto_flow": {
+      "config": {
+        "type": "object",
+        "required": [
+          "flowId",
+          "entryPoint"
+        ],
+        "properties": {
+          "flowId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "entryPoint": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "requiredPorts": [],
+      "allowedPorts": []
+    },
+    "hangup": {
+      "config": {
+        "type": "object",
+        "properties": {}
+      },
+      "requiredPorts": [],
+      "allowedPorts": []
+    }
+  },
+  "menuDigitPorts": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "*",
+    "#"
+  ],
+  "cases": [
+    {
+      "name": "valid_menu",
+      "graph": {
+        "entryPoints": {
+          "main": "m"
+        },
+        "nodes": [
+          {
+            "id": "m",
+            "type": "menu",
+            "config": {
+              "promptMediaAssetId": "p",
+              "timeoutSeconds": 5,
+              "maxInvalidAttempts": 3
+            }
+          },
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": [
+          {
+            "from": "m",
+            "port": "timeout",
+            "to": "h"
+          },
+          {
+            "from": "m",
+            "port": "invalid",
+            "to": "h"
+          },
+          {
+            "from": "m",
+            "port": "1",
+            "to": "h"
+          }
+        ]
+      },
+      "issues": []
+    },
+    {
+      "name": "empty",
+      "graph": {
+        "entryPoints": {},
+        "nodes": [],
+        "edges": []
+      },
+      "issues": [
+        {
+          "kind": "missing_entry_point"
+        }
+      ]
+    },
+    {
+      "name": "no_entry_points",
+      "graph": {
+        "entryPoints": {},
+        "nodes": [
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": []
+      },
+      "issues": [
+        {
+          "kind": "missing_entry_point"
+        },
+        {
+          "kind": "unreachable_node",
+          "nodeId": "h"
+        }
+      ]
+    },
+    {
+      "name": "unreachable",
+      "graph": {
+        "entryPoints": {
+          "main": "h"
+        },
+        "nodes": [
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          },
+          {
+            "id": "lonely",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": []
+      },
+      "issues": [
+        {
+          "kind": "unreachable_node",
+          "nodeId": "lonely"
+        }
+      ]
+    },
+    {
+      "name": "missing_port",
+      "graph": {
+        "entryPoints": {
+          "main": "m"
+        },
+        "nodes": [
+          {
+            "id": "m",
+            "type": "menu",
+            "config": {
+              "promptMediaAssetId": "p",
+              "timeoutSeconds": 5,
+              "maxInvalidAttempts": 3
+            }
+          },
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": [
+          {
+            "from": "m",
+            "port": "timeout",
+            "to": "h"
+          }
+        ]
+      },
+      "issues": [
+        {
+          "kind": "missing_port",
+          "nodeId": "m"
+        }
+      ]
+    },
+    {
+      "name": "edge_to_nowhere",
+      "graph": {
+        "entryPoints": {
+          "main": "m"
+        },
+        "nodes": [
+          {
+            "id": "m",
+            "type": "menu",
+            "config": {
+              "promptMediaAssetId": "p",
+              "timeoutSeconds": 5,
+              "maxInvalidAttempts": 3
+            }
+          }
+        ],
+        "edges": [
+          {
+            "from": "m",
+            "port": "timeout",
+            "to": "gone"
+          },
+          {
+            "from": "m",
+            "port": "invalid",
+            "to": "gone"
+          }
+        ]
+      },
+      "issues": [
+        {
+          "kind": "bad_reference",
+          "nodeId": "m"
+        },
+        {
+          "kind": "bad_reference",
+          "nodeId": "m"
+        }
+      ]
+    },
+    {
+      "name": "entry_to_nowhere",
+      "graph": {
+        "entryPoints": {
+          "main": "gone"
+        },
+        "nodes": [
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": []
+      },
+      "issues": [
+        {
+          "kind": "bad_reference"
+        },
+        {
+          "kind": "unreachable_node",
+          "nodeId": "h"
+        }
+      ]
+    },
+    {
+      "name": "digit_conflict",
+      "graph": {
+        "entryPoints": {
+          "main": "m"
+        },
+        "nodes": [
+          {
+            "id": "m",
+            "type": "menu",
+            "config": {
+              "promptMediaAssetId": "p",
+              "timeoutSeconds": 5,
+              "maxInvalidAttempts": 3
+            }
+          },
+          {
+            "id": "a",
+            "type": "hangup",
+            "config": {}
+          },
+          {
+            "id": "b",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": [
+          {
+            "from": "m",
+            "port": "timeout",
+            "to": "a"
+          },
+          {
+            "from": "m",
+            "port": "invalid",
+            "to": "a"
+          },
+          {
+            "from": "m",
+            "port": "1",
+            "to": "a"
+          },
+          {
+            "from": "m",
+            "port": "1",
+            "to": "b"
+          }
+        ]
+      },
+      "issues": [
+        {
+          "kind": "digit_conflict",
+          "nodeId": "m"
+        }
+      ]
+    },
+    {
+      "name": "invalid_port",
+      "graph": {
+        "entryPoints": {
+          "main": "p"
+        },
+        "nodes": [
+          {
+            "id": "p",
+            "type": "play",
+            "config": {
+              "mediaAssetId": "x"
+            }
+          },
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": [
+          {
+            "from": "p",
+            "port": "next",
+            "to": "h"
+          },
+          {
+            "from": "p",
+            "port": "sideways",
+            "to": "h"
+          }
+        ]
+      },
+      "issues": [
+        {
+          "kind": "invalid_port",
+          "nodeId": "p"
+        }
+      ]
+    },
+    {
+      "name": "duplicate_id",
+      "graph": {
+        "entryPoints": {
+          "main": "h"
+        },
+        "nodes": [
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          },
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": []
+      },
+      "issues": [
+        {
+          "kind": "duplicate_node_id",
+          "nodeId": "h"
+        },
+        {
+          "kind": "duplicate_node_id",
+          "nodeId": "h"
+        }
+      ]
+    },
+    {
+      "name": "unknown_type",
+      "graph": {
+        "entryPoints": {
+          "main": "x"
+        },
+        "nodes": [
+          {
+            "id": "x",
+            "type": "teleport",
+            "config": {}
+          }
+        ],
+        "edges": []
+      },
+      "issues": [
+        {
+          "kind": "bad_reference",
+          "nodeId": "x"
+        }
+      ]
+    },
+    {
+      "name": "time_condition",
+      "graph": {
+        "entryPoints": {
+          "main": "t"
+        },
+        "nodes": [
+          {
+            "id": "t",
+            "type": "time_condition",
+            "config": {
+              "timezone": "UTC"
+            }
+          },
+          {
+            "id": "h",
+            "type": "hangup",
+            "config": {}
+          }
+        ],
+        "edges": [
+          {
+            "from": "t",
+            "port": "match",
+            "to": "h"
+          },
+          {
+            "from": "t",
+            "port": "noMatch",
+            "to": "h"
+          }
+        ]
+      },
+      "issues": []
+    }
+  ]
+}

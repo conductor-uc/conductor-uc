@@ -183,6 +183,15 @@ jobs:
           node apps/console/tool/dump-openapi.mjs
           git diff --exit-code -- apps/console/api/openapi.json
 
+      - name: Console call-flow IR snapshot is current
+        # apps/console/api/callflow-ir.json holds what the call-flow builder
+        # must agree with @cuc/callflow-ir on (node schemas, ports, validator
+        # verdicts); the console's tests compare the builder against it.
+        run: |
+          pnpm exec turbo run build --filter=@cuc/callflow-ir
+          node apps/console/tool/dump-callflow-ir.mjs
+          git diff --exit-code -- apps/console/api/callflow-ir.json
+
       - name: Brand-leak scan
         # Rule 1 in CLAUDE.md: no branding on any user-facing or network-visible
         # surface. Runs after build so it sees built artifacts as well as sources.
