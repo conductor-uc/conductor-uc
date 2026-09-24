@@ -197,4 +197,43 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/orgs/:id/mail-brand'
       expect(JSON.stringify(response.json())).not.toMatch(/reseller|master|org/i);
     });
   });
+
+  describe('GET /internal/v1/orgs/:id/lineage', () => {
+    interface LineageBody {
+      orgId: string;
+      type: string;
+      parentId: string | null;
+      resellerId: string | null;
+    }
+    const lineage = (id: string, headers: Record<string, string> = AUTH) =>
+      app.inject({ method: 'GET', url: `/internal/v1/orgs/${id}/lineage`, headers });
+
+    it('requires the internal service token, and 404s an unknown org', async () => {
+      const { master } = await tree();
+      expect((await lineage(master.id, {})).statusCode).toBe(401);
+      expect((await lineage(crypto.randomUUID())).statusCode).toBe(404);
+    });
+
+    it('places the master, a reseller, and a tenant in the tree', async () => {
+      const { master, reseller, tenant } = await tree();
+      expect((await lineage(master.id)).json<LineageBody>()).toEqual({
+        orgId: master.id,
+        type: 'master',
+        parentId: null,
+        resellerId: null,
+      });
+      expect((await lineage(reseller.id)).json<LineageBody>()).toEqual({
+        orgId: reseller.id,
+        type: 'reseller',
+        parentId: master.id,
+        resellerId: reseller.id,
+      });
+      expect((await lineage(tenant.id)).json<LineageBody>()).toEqual({
+        orgId: tenant.id,
+        type: 'tenant',
+        parentId: reseller.id,
+        resellerId: reseller.id,
+      });
+    });
+  });
 });

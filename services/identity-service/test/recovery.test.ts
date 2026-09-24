@@ -418,7 +418,7 @@ describe.skipIf(skipReason !== undefined)('password reset, invitations, refresh 
       const mine = crypto.randomUUID();
       const response = await invite(crypto.randomUUID(), asActor(mine, 'tenant'));
       expect(response.statusCode).toBe(403);
-      expect(response.json()).toMatchObject({ code: 'invitation_other_org' });
+      expect(response.json()).toMatchObject({ code: 'users_other_org' });
     });
 
     it('refuses an anonymous caller', async () => {

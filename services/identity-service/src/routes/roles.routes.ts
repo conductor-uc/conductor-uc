@@ -1,7 +1,9 @@
 import { BUILT_IN_ROLES } from '@cuc/authz';
 import { ProblemError, Type, type Server } from '@cuc/http';
 
+import { type ActorContext, type OrgAccess } from '../authz/org-access.js';
 import { RoleNameTakenError, type RoleRepo } from '../repo/role.repo.js';
+import type { UserRepo } from '../repo/user.repo.js';
 
 const OrgParamsSchema = Type.Object({ orgId: Type.String({ minLength: 1 }) });
 const RoleParamsSchema = Type.Object({
@@ -28,7 +30,26 @@ const AssignmentBodySchema = Type.Object({ userId: Type.String({ minLength: 1 })
  * ones — they are `@cuc/authz` data, not rows, but an org managing its access
  * control needs to see both to make sense of a role assignment.
  */
-export function registerRoleRoutes(app: Server, roles: RoleRepo): void {
+export function registerRoleRoutes(
+  app: Server,
+  roles: RoleRepo,
+  access: OrgAccess,
+  users: UserRepo,
+): void {
+  /** The org the request names, once the actor is known to be allowed to manage it. */
+  async function managedOrg(request: {
+    context: ActorContext;
+    params: { orgId: string };
+  }): Promise<string> {
+    return (await access.resolve(request.context, request.params.orgId)).orgId;
+  }
+
+  /** Assigning or revoking a role reaches only people who belong to the org. */
+  async function memberOf(orgId: string, userId: string): Promise<void> {
+    const user = await users.findById(userId);
+    if (user?.orgId !== orgId) throw ProblemError.notFound('No such user in this organization.');
+  }
+
   app.get(
     '/v1/orgs/:orgId/roles',
     {
@@ -39,7 +60,7 @@ export function registerRoleRoutes(app: Server, roles: RoleRepo): void {
       },
     },
     async (request) => {
-      const custom = await roles.listCustomRoles(request.params.orgId);
+      const custom = await roles.listCustomRoles(await managedOrg(request));
       const builtIn = [...BUILT_IN_ROLES.values()].map((role) => ({
         id: role.id,
         name: role.id,
@@ -70,9 +91,10 @@ export function registerRoleRoutes(app: Server, roles: RoleRepo): void {
       },
     },
     async (request, reply) => {
+      const orgId = await managedOrg(request);
       try {
         const created = await roles.createCustomRole(
-          request.params.orgId,
+          orgId,
           request.body.name,
           request.body.permissions,
         );
@@ -95,7 +117,9 @@ export function registerRoleRoutes(app: Server, roles: RoleRepo): void {
       schema: { params: RoleParamsSchema, body: AssignmentBodySchema },
     },
     async (request, reply) => {
-      await roles.assignRole(request.body.userId, request.params.roleId, request.params.orgId);
+      const orgId = await managedOrg(request);
+      await memberOf(orgId, request.body.userId);
+      await roles.assignRole(request.body.userId, request.params.roleId, orgId);
       return reply.status(204).send();
     },
   );
@@ -107,7 +131,9 @@ export function registerRoleRoutes(app: Server, roles: RoleRepo): void {
       schema: { params: RoleParamsSchema, body: AssignmentBodySchema },
     },
     async (request, reply) => {
-      await roles.revokeRole(request.body.userId, request.params.roleId, request.params.orgId);
+      const orgId = await managedOrg(request);
+      await memberOf(orgId, request.body.userId);
+      await roles.revokeRole(request.body.userId, request.params.roleId, orgId);
       return reply.status(204).send();
     },
   );

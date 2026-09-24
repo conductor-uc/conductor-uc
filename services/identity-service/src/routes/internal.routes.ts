@@ -1,6 +1,7 @@
 import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server } from '@cuc/http';
 
+import { assertPasswordDistinct, PasswordInUseError } from '../auth/ambiguity.js';
 import { EmailTakenError, type UserRepo } from '../repo/user.repo.js';
 
 const AdminUserBodySchema = Type.Object({
@@ -43,6 +44,16 @@ export function registerInternalRoutes(
       }
 
       try {
+        await assertPasswordDistinct(
+          users,
+          {
+            orgId: request.params.orgId,
+            orgType: request.body.orgType,
+            resellerId: request.body.resellerId ?? null,
+          },
+          request.body.email,
+          request.body.password,
+        );
         const user = await users.create(request.context, {
           orgId: request.params.orgId,
           orgType: request.body.orgType,
@@ -58,6 +69,9 @@ export function registerInternalRoutes(
           displayName: user.displayName,
         });
       } catch (error) {
+        if (error instanceof PasswordInUseError) {
+          throw ProblemError.conflict(error.message, { code: 'password_in_use' });
+        }
         if (error instanceof EmailTakenError) {
           throw ProblemError.conflict(error.message, { code: 'email_taken' });
         }

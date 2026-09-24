@@ -73,6 +73,18 @@ export function createTokenRepo(db: Database<IdentityServiceDb>) {
       return { token, expiresAt };
     },
 
+    /** The user a valid, unused, unexpired reset token belongs to, without using it. */
+    async findOpenPasswordReset(token: string): Promise<string | undefined> {
+      const row = await db.kysely
+        .selectFrom('password_reset_tokens')
+        .select('user_id')
+        .where('token_hash', '=', hashToken(token))
+        .where('used_at', 'is', null)
+        .where('expires_at', '>', new Date())
+        .executeTakeFirst();
+      return row?.user_id;
+    },
+
     /** The user a valid, unused, unexpired reset token belongs to; marks it used. */
     async consumePasswordReset(token: string): Promise<string | undefined> {
       return db.kysely.transaction().execute(async (trx) => {

@@ -419,6 +419,28 @@ void main() {
       expect(find.textContaining('invalid or has expired'), findsOneWidget);
     });
 
+    testWidgets(
+      'a password already used for the same address elsewhere is refused',
+      (tester) async {
+        await pumpApp(tester, appWith(api: demoApi()));
+        await goTo(tester, '/reset/confirm?token=shared');
+        await tester.enterText(
+          field('New password'),
+          'a long enough passphrase',
+        );
+        await tester.enterText(
+          field('Confirm new password'),
+          'a long enough passphrase',
+        );
+        await tester.tap(find.text('Change password'));
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Choose a different password'),
+          findsOneWidget,
+        );
+      },
+    );
+
     testWidgets('success returns to sign-in with a note', (tester) async {
       await pumpApp(tester, appWith(api: demoApi()));
       await goTo(tester, '/reset/confirm?token=good');
@@ -504,5 +526,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('already has an account'), findsOneWidget);
     });
+
+    testWidgets(
+      'a password already used for the same address elsewhere is refused',
+      (tester) async {
+        await pumpApp(tester, appWith(api: demoApi()));
+        await goTo(tester, '/invite?token=shared');
+        await tester.enterText(field('Password'), 'a long enough passphrase');
+        await tester.enterText(
+          field('Confirm password'),
+          'a long enough passphrase',
+        );
+        await tester.tap(find.text('Create account'));
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('Choose a different password'),
+          findsOneWidget,
+        );
+      },
+    );
   });
 }

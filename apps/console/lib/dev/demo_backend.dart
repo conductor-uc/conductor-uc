@@ -118,6 +118,13 @@ class _DemoAdapter implements HttpClientAdapter {
             'This reset link is invalid or has expired.',
           );
         }
+        if (request['token'] == 'shared') {
+          return _problem(
+            409,
+            'password_in_use',
+            'That password already signs in to another account with this email address. Choose a different password.',
+          );
+        }
         if ('${request['newPassword']}'.length < 12) {
           return _problem(
             400,
@@ -144,6 +151,13 @@ class _DemoAdapter implements HttpClientAdapter {
             409,
             'email_taken',
             'That email already has an account.',
+          );
+        }
+        if (request['token'] == 'shared') {
+          return _problem(
+            409,
+            'password_in_use',
+            'That password already signs in to another account with this email address. Choose a different password.',
           );
         }
         if ('${request['password']}'.length < 12) {

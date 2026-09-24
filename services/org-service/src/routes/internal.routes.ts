@@ -32,6 +32,14 @@ const SignInScopeResponseSchema = Type.Object({
   /** `master` for the unbranded console; `reseller` for a reseller's own hostname. */
   type: Type.Union([Type.Literal('master'), Type.Literal('reseller')]),
 });
+const LineageResponseSchema = Type.Object({
+  orgId: Type.String(),
+  type: Type.Union([Type.Literal('master'), Type.Literal('reseller'), Type.Literal('tenant')]),
+  /** The org this one sits under; null for the master. */
+  parentId: nullableString,
+  /** The reseller this org is or belongs to; null for the master. */
+  resellerId: nullableString,
+});
 const LimitsResponseSchema = Type.Object({ limits: Type.Record(Type.String(), Type.Unknown()) });
 
 /**
@@ -202,6 +210,35 @@ export function registerInternalRoutes(
         legalFooter: brand?.legalFooter ?? null,
         consoleHostname,
       } satisfies Static<typeof MailBrandResponseSchema>;
+    },
+  );
+
+  /**
+   * `GET /internal/v1/orgs/:id/lineage` (G-62): where an org sits in the tree,
+   * so identity-service can tell whether the org a signed-in user names is one
+   * they may manage: their own, or (for a reseller) a tenant beneath them, or
+   * (for the master) any. Orgs never move, so a caller may cache the answer.
+   */
+  app.get(
+    '/internal/v1/orgs/:id/lineage',
+    {
+      config: { public: true },
+      schema: { params: TenantParamsSchema, response: { 200: LineageResponseSchema } },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const org = await orgs.findById(request.params.id);
+      if (org === undefined) throw ProblemError.notFound('No such org.');
+      return {
+        orgId: org.id,
+        type: org.type,
+        parentId: org.parentId,
+        resellerId:
+          org.type === 'reseller' ? org.id : org.type === 'tenant' ? org.resellerId : null,
+      } satisfies Static<typeof LineageResponseSchema>;
     },
   );
 

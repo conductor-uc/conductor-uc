@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/acting.dart';
 import '../../core/api_client.dart';
 import '../../core/session.dart';
 import '../pbx/pbx_api.dart';
@@ -65,9 +66,10 @@ const userInviteDef = ResourceDef(
   ],
 );
 
-/// Users of the signed-in user's own organization (`/v1/orgs/{id}/users`),
-/// their invitations, and the role assignments. Own organization only: the
-/// service does not let anyone manage another organization's people.
+/// The people of one organization (`/v1/orgs/{id}/users`), their invitations,
+/// and the role assignments. That is the signed-in user's own organization, or,
+/// for a master or reseller who has entered a tenant, that tenant: the service
+/// lets them manage the organizations beneath them.
 class UsersApi {
   UsersApi(this._dio, this._token, this.orgId, this.orgType);
 
@@ -155,14 +157,17 @@ class UsersApi {
   }
 }
 
+/// Whose people the Users screen shows: the tenant entered through "act as",
+/// else the signed-in user's own organization.
 final usersApiProvider = Provider<UsersApi?>((ref) {
   final session = ref.watch(sessionProvider);
   if (session == null) return null;
+  final tenant = ref.watch(actingProvider);
   return UsersApi(
     ref.watch(apiProvider).dio,
     session.accessToken,
-    session.orgId,
-    session.orgType,
+    tenant?.id ?? session.orgId,
+    tenant == null ? session.orgType : OrgType.tenant,
   );
 });
 

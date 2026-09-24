@@ -21,6 +21,8 @@ import {
 import { InvitationConflictError } from '../repo/token.repo.js';
 import { EmailTakenError } from '../repo/user.repo.js';
 import { OrgRequiredError, type OrgTarget, type createAuthService } from '../auth/auth-service.js';
+import { PasswordInUseError } from '../auth/ambiguity.js';
+import { createOrgAccess } from '../authz/org-access.js';
 import { OrgClientError, type OrgClient } from '../org-client.js';
 
 type AuthService = ReturnType<typeof createAuthService>;
@@ -108,6 +110,10 @@ export function registerAuthRoutes(
   auth: AuthService,
   options: AuthRouteOptions = {},
 ): void {
+  // Without an org client only the actor's own org can be reached.
+  const access = createOrgAccess(
+    options.orgClient ?? { lineage: () => Promise.resolve(undefined) },
+  );
   const secure = options.cookieSecure ?? true;
   const ttlDays = options.refreshTokenTtlDays ?? 30;
 
@@ -352,9 +358,8 @@ export function registerAuthRoutes(
     },
   );
 
-  // Inviting someone is an authenticated action. Only into the caller's own
-  // org for now: identity-service holds no org read model, so it cannot tell
-  // what type of org another id names (G-56).
+  // Inviting someone is an authenticated action: into the actor's own org, and
+  // for the master or a reseller into an org beneath them (G-62).
   app.post(
     '/v1/orgs/:orgId/invitations',
     {
@@ -372,19 +377,16 @@ export function registerAuthRoutes(
       },
     },
     async (request, reply) => {
-      const { orgId, orgType, resellerId, actorId } = request.context;
-      if (orgId === undefined || orgType === undefined) {
-        throw ProblemError.unauthorized('Sign in to invite someone.');
-      }
-      if (request.params.orgId !== orgId) {
-        throw ProblemError.forbidden('You can only invite people into your own organization.', {
-          code: 'invitation_other_org',
-        });
-      }
+      const target = await access.resolve(request.context, request.params.orgId);
       try {
         const invitation = await auth.invite(
           request.context,
-          { orgId, orgType, resellerId: resellerId ?? null, userId: actorId ?? null },
+          {
+            orgId: target.orgId,
+            orgType: target.type,
+            resellerId: target.resellerId,
+            userId: request.context.actorId ?? null,
+          },
           request.body,
         );
         if (options.devExposeTokens === true) {
@@ -457,6 +459,9 @@ function toProblem(error: unknown): ProblemError {
   }
   if (error instanceof InvalidInvitationError) {
     return ProblemError.badRequest(error.message, { code: 'invalid_invitation' });
+  }
+  if (error instanceof PasswordInUseError) {
+    return ProblemError.conflict(error.message, { code: 'password_in_use' });
   }
   if (error instanceof WeakPasswordError) {
     return ProblemError.badRequest(error.message, { code: 'weak_password' });

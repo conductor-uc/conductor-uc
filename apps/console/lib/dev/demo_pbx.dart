@@ -272,6 +272,26 @@ class DemoPbx {
     'roleIds': roles,
   };
 
+  /// Another organization's people, made up the first time they are asked for.
+  final _otherPeople = <String, List<Map<String, dynamic>>>{};
+
+  /// The people of [orgId]: the signed-in user's own (`demo-org`), or a tenant
+  /// entered through "act as".
+  List<Map<String, dynamic>> _peopleOf(String orgId) {
+    if (orgId == 'demo-org') return _users;
+    return _otherPeople.putIfAbsent(
+      orgId,
+      () => [
+        _user('$orgId-user-1', 'owner@tenant.example.test', 'Riley Owner', [
+          'tenant_admin',
+        ]),
+        _user('$orgId-user-2', 'desk@tenant.example.test', 'Jo Front Desk', [
+          'tenant_user',
+        ]),
+      ],
+    );
+  }
+
   ResponseBody? _people(RequestOptions options) {
     final path = options.path;
     final method = options.method.toUpperCase();
@@ -279,25 +299,26 @@ class DemoPbx {
         .firstMatch(path);
     if (users != null) {
       final id = users.group(2);
-      if (id == null) return _json({'rows': _users});
-      final index = _users.indexWhere((u) => u['id'] == id);
+      final people = _peopleOf(users.group(1)!);
+      if (id == null) return _json({'rows': people});
+      final index = people.indexWhere((u) => u['id'] == id);
       if (index < 0) return _problem(404, 'No such user in this organization.');
       final body = _body(options);
       if (body['status'] == 'disabled' && id == 'user-1') {
         return _problem(409, 'You cannot disable your own account.');
       }
-      _users[index] = {
-        ..._users[index],
+      people[index] = {
+        ...people[index],
         for (final k in const ['displayName', 'status'])
           if (body.containsKey(k)) k: body[k],
       };
-      return _json(_users[index]);
+      return _json(people[index]);
     }
     final invite = RegExp(r'^/v1/orgs/([^/]+)/invitations$').firstMatch(path);
     if (invite != null && method == 'POST') {
       final body = _body(options);
       final email = '${body['email']}'.toLowerCase();
-      if (_users.any((u) => u['email'] == email)) {
+      if (_peopleOf(invite.group(1)!).any((u) => u['email'] == email)) {
         return _problem(409, 'That email already has an account.');
       }
       return _json({
@@ -310,16 +331,19 @@ class DemoPbx {
         .firstMatch(path);
     if (assign != null) {
       final body = _body(options);
-      final index = _users.indexWhere((u) => u['id'] == body['userId']);
+      final people = _peopleOf(
+        RegExp(r'^/v1/orgs/([^/]+)/').firstMatch(path)!.group(1)!,
+      );
+      final index = people.indexWhere((u) => u['id'] == body['userId']);
       if (index < 0) return _problem(404, 'No such user in this organization.');
-      final roles = [...(_users[index]['roleIds'] as List).cast<String>()];
+      final roles = [...(people[index]['roleIds'] as List).cast<String>()];
       final role = assign.group(2)!;
       if (method == 'DELETE') {
         roles.remove(role);
       } else if (!roles.contains(role)) {
         roles.add(role);
       }
-      _users[index] = {..._users[index], 'roleIds': roles};
+      people[index] = {...people[index], 'roleIds': roles};
       return ResponseBody.fromString('', 204);
     }
     return null;

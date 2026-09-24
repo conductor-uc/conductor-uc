@@ -187,6 +187,7 @@ class _ResetConfirmPageState extends ConsumerState<ResetConfirmPage> {
           'invalid_reset_token' =>
             'This link is invalid or has expired. Request a new one.',
           'weak_password' => problemDetail(e) ?? 'Choose a stronger password.',
+          'password_in_use' => problemDetail(e) ?? 'That password is already used for another account with this email. Choose a different one.',
           _ =>
             isOffline(e)
                 ? 'Could not reach the server.'

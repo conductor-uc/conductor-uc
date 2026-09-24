@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { databaseOrSkipReason, silentLogger } from '@cuc/testing';
 import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 
+import { createOrgAccess } from '../src/authz/org-access.js';
 import { registerAuthRoutes } from '../src/routes/auth.routes.js';
 import { registerUserRoutes } from '../src/routes/users.routes.js';
 import { startHarness, type Harness } from './harness.js';
@@ -32,7 +33,12 @@ describe.skipIf(skipReason !== undefined)('users routes', () => {
       context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
     });
     registerAuthRoutes(app, h.auth, { cookieSecure: true, refreshTokenTtlDays: 30 });
-    registerUserRoutes(app, h.users, h.roles);
+    registerUserRoutes(
+      app,
+      h.users,
+      h.roles,
+      createOrgAccess({ lineage: () => Promise.resolve(undefined) }),
+    );
     await app.ready();
   });
 
