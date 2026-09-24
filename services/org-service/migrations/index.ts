@@ -2,6 +2,7 @@ import type { Migration } from 'kysely/migration';
 
 import * as initial from './001_initial.js';
 import * as brandsAndHostnames from './002_brands_and_hostnames.js';
+import * as certificates from './003_certificates.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -15,4 +16,5 @@ import * as brandsAndHostnames from './002_brands_and_hostnames.js';
 export const migrations: Record<string, Migration> = {
   '001_initial': initial,
   '002_brands_and_hostnames': brandsAndHostnames,
+  '003_certificates': certificates,
 };
