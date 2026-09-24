@@ -136,6 +136,34 @@ class PbxApi {
     return (response.data as Map).cast<String, dynamic>();
   }
 
+  /// The tenant's emergency route, or null when it has none (404).
+  Future<Json?> emergencyRoute() async {
+    try {
+      final response = await _dio.get<Object?>(
+        _path('emergency-route'),
+        options: _options,
+      );
+      return (response.data as Map).cast<String, dynamic>();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// Sets the tenant's one emergency route (`PUT`, so it creates or replaces).
+  Future<Json> saveEmergencyRoute(Json body) async {
+    final response = await _dio.put<Object?>(
+      _path('emergency-route'),
+      data: body,
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  Future<void> deleteEmergencyRoute() async {
+    await _dio.delete<Object?>(_path('emergency-route'), options: _options);
+  }
+
   /// A call to an action or sub-resource, such as `flows/{id}/publish`.
   Future<Object?> call(
     String method,

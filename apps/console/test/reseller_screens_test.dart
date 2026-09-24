@@ -108,7 +108,7 @@ void main() {
       tester,
     ) async {
       await openTrunks(tester);
-      await tapVisible(tester, find.byTooltip('Edit'));
+      await tapVisible(tester, find.byTooltip('Edit').first);
       expect(
         tester.widget<TextFormField>(field('Secret')).controller!.text,
         '',
@@ -123,7 +123,7 @@ void main() {
       tester,
     ) async {
       await openTrunks(tester);
-      await tapVisible(tester, find.byTooltip('IP addresses and status'));
+      await tapVisible(tester, find.byTooltip('IP addresses and status').first);
       expect(find.text('Status: Registered'), findsOneWidget);
       expect(find.text('203.0.113.0/24'), findsOneWidget);
 

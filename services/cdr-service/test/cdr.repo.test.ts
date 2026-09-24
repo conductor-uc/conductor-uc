@@ -130,6 +130,33 @@ describe.skipIf(skipReason !== undefined)('cdr repo', () => {
     expect(byRange.rows[0]?.direction).toBe('internal');
   });
 
+  it('filters by a number that is the caller, the callee or the dialed number', async () => {
+    const tenantId = 'tenant-number';
+    await h.cdrs.ingest(
+      sample({ tenantId, fromNumber: '101', toNumber: '102', dialedNumber: '102' }),
+      null,
+    );
+    await h.cdrs.ingest(
+      sample({ tenantId, fromNumber: '103', toNumber: '101', dialedNumber: '101' }),
+      null,
+    );
+    await h.cdrs.ingest(
+      sample({ tenantId, fromNumber: '+15550001', toNumber: '104', dialedNumber: '+15550100' }),
+      null,
+    );
+
+    const ext101 = await h.cdrs.list({ tenantId }, { number: '101' });
+    expect(ext101.rows).toHaveLength(2);
+    const dialed = await h.cdrs.list({ tenantId }, { number: '+15550100' });
+    expect(dialed.rows).toHaveLength(1);
+    expect(dialed.rows[0]?.toNumber).toBe('104');
+    expect((await h.cdrs.list({ tenantId }, { number: '999' })).rows).toHaveLength(0);
+    // Never another tenant's calls.
+    expect((await h.cdrs.list({ tenantId: 'someone-else' }, { number: '101' })).rows).toHaveLength(
+      0,
+    );
+  });
+
   it('paginates with a cursor, one row at a time', async () => {
     const tenantId = 'tenant-page';
     for (let day = 1; day <= 3; day++) {

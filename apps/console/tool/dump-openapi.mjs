@@ -44,7 +44,9 @@ const SOURCES = [
   ['pbx-config-service', 'conference-room', 'registerConferenceRoomRoutes', 1],
   ['pbx-config-service', 'schedule', 'registerScheduleRoutes', 1],
   ['callflow-service', 'flow', 'registerFlowRoutes', 1],
-  ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
+  ['trunk-service', 'outbound-route', 'registerOutboundRouteRoutes', 1],
+  ['trunk-service', 'emergency-route', 'registerEmergencyRouteRoutes', 1],
+  ['cdr-service', 'cdr', 'registerCdrRoutes', 3],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
   ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
