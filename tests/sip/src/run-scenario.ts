@@ -467,7 +467,7 @@ export async function clearRegistration(aor: string): Promise<void> {
 }
 
 /** `docker exec`s a real MI command — the same `opensips-cli -x mi` shape {@link clearRegistration} already establishes. */
-async function opensipsMi(command: string, ...args: readonly string[]): Promise<void> {
+export async function opensipsMi(command: string, ...args: readonly string[]): Promise<void> {
   const env = sipTestEnv();
   await execFileAsync('docker', [
     'exec',
