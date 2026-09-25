@@ -176,6 +176,8 @@ describe.skipIf(skipReason !== undefined)('S5-13 on-demand recording and pause (
           authUri: fqdn,
           csvLine: `401;${fqdn}`,
           containerName: UAS_401,
+          // A phone that takes DTMF in RTP, so digits relayed to it are not SIP INFO.
+          answerScenario: 'answer_call_dtmf.xml',
         });
         await uas.ready();
 
