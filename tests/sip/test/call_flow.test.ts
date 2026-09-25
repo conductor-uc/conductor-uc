@@ -107,8 +107,18 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
 
   async function callFlow(
     scenario: string,
-    graphFor: (ids: { mailboxId: string; promptId: string }) => FlowGraph,
+    graphFor: (ids: {
+      mailboxId: string;
+      promptId: string;
+      extra: Record<string, string>;
+    }) => FlowGraph,
     needsPrompt: boolean,
+    prepare?: (context: {
+      tenantId: string;
+      mailboxId: string;
+      promptId: string;
+      cleanup: (undo: () => Promise<unknown>) => void;
+    }) => Promise<Record<string, string>>,
   ): Promise<void> {
     await withSingleFsNode(async () => {
       const tenantId = seed.tenantVoicemail.id;
@@ -122,7 +132,17 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
       let flowId: string | undefined;
       let trunkId: string | undefined;
       let didId: string | undefined;
+      const undo: (() => Promise<unknown>)[] = [];
       try {
+        const extra =
+          prepare === undefined
+            ? {}
+            : await prepare({
+                tenantId,
+                mailboxId: mailbox.id,
+                promptId,
+                cleanup: (fn) => undo.push(fn),
+              });
         const flow = await ok(
           'POST',
           `${CALLFLOW_SERVICE_URL}/v1/tenants/${tenantId}/flows`,
@@ -133,7 +153,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         await ok(
           'PUT',
           `${CALLFLOW_SERVICE_URL}/v1/tenants/${tenantId}/flows/${flowId}/draft`,
-          graphFor({ mailboxId: mailbox.id, promptId }),
+          graphFor({ mailboxId: mailbox.id, promptId, extra }),
           200,
         );
         await ok(
@@ -236,6 +256,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         expect(lines[0]).toMatch(/^id,callUuid,direction,/);
         expect(lines.slice(1).some((line) => line.startsWith(`${cdrId},`))).toBe(true);
       } finally {
+        for (const fn of undo.reverse()) await fn().catch(() => undefined);
         if (didId !== undefined) {
           await dockerCurlJson(
             'DELETE',
@@ -296,6 +317,155 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         ],
       }),
       true,
+    );
+  }, 90_000);
+
+  it('a play node plays its prompt and the call carries on to voicemail', async () => {
+    await callFlow(
+      'trunk_invite_wait_for_bye.xml',
+      ({ mailboxId, promptId }) => ({
+        entryPoints: { main: 'say' },
+        nodes: [
+          {
+            id: 'say',
+            type: 'play',
+            config: { mediaAssetId: promptId },
+            position: { x: 0, y: 0 },
+          },
+          { id: 'mail', type: 'voicemail', config: { mailboxId }, position: { x: 200, y: 0 } },
+          { id: 'bye', type: 'hangup', config: {}, position: { x: 400, y: 0 } },
+        ],
+        edges: [
+          { from: 'say', port: 'next', to: 'mail' },
+          { from: 'mail', port: 'next', to: 'bye' },
+        ],
+      }),
+      true,
+    );
+  }, 90_000);
+
+  async function schedule(
+    tenantId: string,
+    label: string,
+    rules: { days: number[]; start: string; end: string }[],
+    cleanup: (undo: () => Promise<unknown>) => void,
+  ): Promise<string> {
+    const created = await ok(
+      'POST',
+      `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/schedules`,
+      { label, timezone: 'UTC', rules },
+      201,
+    );
+    cleanup(() =>
+      dockerCurlJson(
+        'DELETE',
+        `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/schedules/${created.id}`,
+      ),
+    );
+    return created.id;
+  }
+
+  const timeGraph =
+    (openPort: 'match' | 'noMatch') =>
+    ({ mailboxId, extra }: { mailboxId: string; extra: Record<string, string> }): FlowGraph => ({
+      entryPoints: { main: 'hours' },
+      nodes: [
+        {
+          id: 'hours',
+          type: 'time_condition',
+          config: { scheduleId: extra['scheduleId'] },
+          position: { x: 0, y: 0 },
+        },
+        { id: 'mail', type: 'voicemail', config: { mailboxId }, position: { x: 200, y: 0 } },
+        { id: 'bye', type: 'hangup', config: {}, position: { x: 400, y: 0 } },
+      ],
+      // Only the port this test expects leads to voicemail. The other ends the call
+      // with no message, so a message proves the runner took the right branch.
+      edges: [
+        { from: 'hours', port: openPort, to: 'mail' },
+        { from: 'hours', port: openPort === 'match' ? 'noMatch' : 'match', to: 'bye' },
+        { from: 'mail', port: 'next', to: 'bye' },
+      ],
+    });
+
+  it('a time_condition takes match inside the schedule and reaches voicemail', async () => {
+    await callFlow(
+      'trunk_invite_wait_for_bye.xml',
+      timeGraph('match'),
+      false,
+      async ({ tenantId, cleanup }) => ({
+        // Open every day, all day (the window's end is exclusive).
+        scheduleId: await schedule(
+          tenantId,
+          'S3-11 always open',
+          [{ days: [0, 1, 2, 3, 4, 5, 6], start: '00:00', end: '23:59' }],
+          cleanup,
+        ),
+      }),
+    );
+  }, 90_000);
+
+  it('a time_condition takes noMatch outside the schedule and reaches voicemail by that branch', async () => {
+    await callFlow(
+      'trunk_invite_wait_for_bye.xml',
+      timeGraph('noMatch'),
+      false,
+      async ({ tenantId, cleanup }) => ({
+        scheduleId: await schedule(tenantId, 'S3-11 never open', [], cleanup),
+      }),
+    );
+  }, 90_000);
+
+  it('a goto_flow node continues in another published flow, which reaches voicemail', async () => {
+    await callFlow(
+      'trunk_invite_wait_for_bye.xml',
+      ({ extra }) => ({
+        entryPoints: { main: 'jump' },
+        nodes: [
+          {
+            id: 'jump',
+            type: 'goto_flow',
+            config: { flowId: extra['targetFlowId'], entryPoint: 'main' },
+            position: { x: 0, y: 0 },
+          },
+        ],
+        edges: [],
+      }),
+      false,
+      async ({ tenantId, mailboxId, cleanup }) => {
+        const target = await ok(
+          'POST',
+          `${CALLFLOW_SERVICE_URL}/v1/tenants/${tenantId}/flows`,
+          { name: 'S3-11 goto target' },
+          201,
+        );
+        await ok(
+          'PUT',
+          `${CALLFLOW_SERVICE_URL}/v1/tenants/${tenantId}/flows/${target.id}/draft`,
+          {
+            entryPoints: { main: 'mail' },
+            nodes: [
+              { id: 'mail', type: 'voicemail', config: { mailboxId }, position: { x: 0, y: 0 } },
+              { id: 'bye', type: 'hangup', config: {}, position: { x: 200, y: 0 } },
+            ],
+            edges: [{ from: 'mail', port: 'next', to: 'bye' }],
+          },
+          200,
+        );
+        await ok(
+          'POST',
+          `${CALLFLOW_SERVICE_URL}/v1/tenants/${tenantId}/flows/${target.id}/publish`,
+          {},
+          201,
+        );
+        cleanup(() =>
+          dockerCurlJson(
+            'DELETE',
+            `${CALLFLOW_SERVICE_URL}/v1/tenants/${tenantId}/flows/${target.id}`,
+          ),
+        );
+        return { targetFlowId: target.id };
+      },
     );
   }, 90_000);
 });
