@@ -25,10 +25,12 @@ hangs up. The file stays there: the node uploader sidecar (the same one
 that delivers call recordings) waits for it to settle, uploads it to
 voicemail-service, which checks size and MD5 against storage before the
 message is listed, and only then deletes it. Nothing durable stays on the
-node (CLAUDE.md rule 5). A caller who hangs up before speaking leaves a
-header-only file, which the uploader reports as `empty_file`; no file at
-all leaves the row `pending`, which voicemail-service's pending sweep
-marks failed. Pending messages are never listed either way.
+node (CLAUDE.md rule 5). A call that ends before a single frame is
+recorded leaves a header-only file, which the uploader reports as
+`empty_file`; no file at all leaves the row `pending`, which
+voicemail-service's pending sweep marks failed. Pending messages are never
+listed either way. The message appears once the uploader has delivered it,
+about 30 seconds after the hang-up (its settle time).
 
 The `voicemail/vm-*.wav` prompt paths below are pre-emptively fixed, not
 merely unverified: this image ships no FreeSWITCH sound package at all
@@ -150,6 +152,11 @@ local function leaveMessage()
   session:answer()
   session:execute("playback", "silence_stream://1000")
   session:setVariable("RECORD_APPEND", "false")
+  -- Comfort-noise frames (a phone suppressing silence, or no RTP at all)
+  -- are written as low-level noise instead of being skipped, so a message
+  -- keeps its real timing and a silent caller still leaves real audio
+  -- rather than a header-only file the uploader reports as `empty_file`.
+  session:setVariable("record_fill_cng", "true")
   session:recordFile(spoolPath, 180, 500, 3)
 
   -- No upload, no completion call, no delete: the node uploader owns the
