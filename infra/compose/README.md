@@ -42,9 +42,9 @@ Telephony and edge:
 | FreeSWITCH, FreeSWITCH-2 | Two identical stateless media nodes (`FS_NODE_ID`, `FS_NODE_ID_2`) | none published: reached only through OpenSIPs' dispatcher |
 | api-gateway | The one public HTTP entry point: token check, routing, rate limits | `8080` (`GATEWAY_PORT`), plain HTTP |
 
-Node services (each on `8080` inside the network, none published; reach them through the gateway): `org-service`, `identity-service`, `pbx-config-service`, `trunk-service`, `telephony-config`, `media-worker`, `call-control`, `callflow-service`, `voicemail-service`, `cdr-service`, `notification-service`.
+Node services (each on `8080` inside the network, none published; reach them through the gateway): `org-service`, `identity-service`, `pbx-config-service`, `trunk-service`, `telephony-config`, `media-worker`, `call-control`, `callflow-service`, `voicemail-service`, `cdr-service`, `notification-service`, `recording-service`. Each FreeSWITCH node has a `recording-uploader` sidecar (no published ports) that watches the node's spool and uploads finished recordings through recording-service.
 
-Named volumes: `mariadb-data`, `redis-data`, `nats-data`, `minio-data`, `mailpit-data`, and `opensips-tls` (the development self-signed certificate).
+Named volumes: `mariadb-data`, `redis-data`, `nats-data`, `minio-data`, `mailpit-data`, `opensips-tls`, and `recording-spool` / `recording-spool-2` (tmpfs-backed, so nothing survives a restart: they exist only to share a node's spool with its uploader) (the development self-signed certificate).
 
 Override any port in `.env` if something on your machine already owns it —
 `docker-compose.yml` reads every value through a `${VAR:-default}` fallback.

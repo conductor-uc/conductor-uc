@@ -953,6 +953,9 @@ importers:
       '@cuc/pbx-config-service':
         specifier: workspace:*
         version: link:../../services/pbx-config-service
+      '@cuc/recording-service':
+        specifier: workspace:*
+        version: link:../../services/recording-service
       '@cuc/trunk-service':
         specifier: workspace:*
         version: link:../../services/trunk-service

@@ -24,6 +24,7 @@
     "@cuc/notification-service": "workspace:*",
     "@cuc/org-service": "workspace:*",
     "@cuc/pbx-config-service": "workspace:*",
+    "@cuc/recording-service": "workspace:*",
     "@cuc/trunk-service": "workspace:*",
     "@cuc/voicemail-service": "workspace:*",
     "typescript": "~5.9.3",

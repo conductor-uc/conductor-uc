@@ -120,6 +120,7 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     voicemail: config.VOICEMAIL_SERVICE_URL,
     cdr: config.CDR_SERVICE_URL,
     trunk: config.TRUNK_SERVICE_URL,
+    recording: config.RECORDING_SERVICE_URL,
   });
 
   // Served here rather than proxied: it asks every service, so no one service
@@ -134,6 +135,7 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
       { name: 'voicemail-service', url: config.VOICEMAIL_SERVICE_URL },
       { name: 'cdr-service', url: config.CDR_SERVICE_URL },
       { name: 'trunk-service', url: config.TRUNK_SERVICE_URL },
+      { name: 'recording-service', url: config.RECORDING_SERVICE_URL },
     ],
   });
 

@@ -50,6 +50,8 @@ const SOURCES = [
   ['trunk-service', 'outbound-route', 'registerOutboundRouteRoutes', 1],
   ['trunk-service', 'emergency-route', 'registerEmergencyRouteRoutes', 1],
   ['cdr-service', 'cdr', 'registerCdrRoutes', 3],
+  ['recording-service', 'recording', 'registerRecordingRoutes', 1],
+  ['recording-service', 'policy', 'registerPolicyRoutes', 1],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
   ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
@@ -112,6 +114,10 @@ const OVERRIDES = {
   'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/presign': 'presignMailboxGreeting',
   'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/complete': 'completeMailboxGreeting',
   'get /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/messages/{messageId}/play-url': 'getMessagePlayUrl',
+  'get /v1/tenants/{tenantId}/recordings/{id}/play-url': 'getRecordingPlayUrl',
+  'get /v1/tenants/{tenantId}/recordings/{id}/download-url': 'getRecordingDownloadUrl',
+  'get /v1/tenants/{tenantId}/recording-settings': 'getRecordingSettings',
+  'put /v1/tenants/{tenantId}/recording-settings': 'saveRecordingSettings',
 };
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };
 

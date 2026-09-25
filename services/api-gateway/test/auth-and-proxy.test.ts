@@ -87,6 +87,7 @@ describe('api-gateway: auth + proxy', () => {
       voicemail: ['/v1/tenants/:id/voicemail/mailboxes'],
       trunk: ['/v1/tenants/:id/trunks'],
       cdr: ['/v1/tenants/:id/cdrs'],
+      recording: ['/v1/tenants/:id/recordings', '/v1/tenants/:id/recording-policies'],
     };
     tenantServices = {};
     for (const [name, urls] of Object.entries(routes)) {
@@ -128,6 +129,7 @@ describe('api-gateway: auth + proxy', () => {
         VOICEMAIL_SERVICE_URL: tenantServices['voicemail']!.url,
         CDR_SERVICE_URL: tenantServices['cdr']!.url,
         TRUNK_SERVICE_URL: tenantServices['trunk']!.url,
+        RECORDING_SERVICE_URL: tenantServices['recording']!.url,
         RATE_LIMIT_IP_MAX: '100000',
         RATE_LIMIT_ACTOR_MAX: '100000',
       }),
@@ -339,6 +341,8 @@ describe('api-gateway: auth + proxy', () => {
     ['/v1/tenants/tenant-9/voicemail/mailboxes', 'voicemail'],
     ['/v1/tenants/tenant-9/trunks', 'trunk'],
     ['/v1/tenants/tenant-9/cdrs', 'cdr'],
+    ['/v1/tenants/tenant-9/recordings', 'recording'],
+    ['/v1/tenants/tenant-9/recording-policies', 'recording'],
   ])('sends %s to the %s service, still signed as the actor', async (url, service) => {
     const token = await mintAccessToken(jwks.privateKey, {
       sub: 'user-42',
