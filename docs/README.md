@@ -18,6 +18,7 @@ These docs turn the [Software Architecture Document](sad.md) into implementation
 | 09 | [Engineering conventions](architecture/09-engineering-conventions.md) | API style, testing strategy, observability, CI, coding rules |
 | — | [Implementation plan](plan/implementation-plan.md) | Stages 0–8 with task IDs, dependencies, and acceptance criteria |
 | — | [Decisions & open questions](decisions.md) | Decision register, open questions, and gaps/conflicts found in the SAD |
+| — | [Operations and deployment](operations/README.md) | For system administrators: components, ports and firewalls, configuration, DNS and certificates, all-in-one and distributed deployment, day-2 operations |
 
 ## Conventions used in these docs
 
