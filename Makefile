@@ -3,14 +3,16 @@
 COMPOSE := docker compose --project-directory infra/compose -f infra/compose/docker-compose.yml
 ENV_FILE := infra/compose/.env
 
-# S0-05: MariaDB, Redis, NATS (JetStream), MinIO, and Mailpit — everything a
-# service needs locally except telephony, which arrives in S1. See
+# The local stack: infrastructure (MariaDB, Redis, NATS, MinIO, Mailpit),
+# FreeSWITCH and OpenSIPs, and the Node services behind api-gateway. See
 # infra/compose/README.md for details and troubleshooting.
 
+# --build: the images carry the services and the bootstrap CLI `make seed`
+# runs, so they must match the checkout (unchanged layers come from cache).
 up: $(ENV_FILE)
-	$(COMPOSE) up -d
-	@infra/compose/wait-healthy.sh
-	@echo "MariaDB :3306  Redis :6379  NATS :4222 (monitor :8222)  MinIO :9000 (console :9001)  Mailpit :8025"
+	$(COMPOSE) up -d --build
+	@infra/compose/wait-healthy.sh 180
+	@echo "Default host ports (see $(ENV_FILE)): gateway :8080  SIP :5060 udp/tcp, :5061 TLS  MariaDB :3306  Redis :6379  NATS :4222 (monitor :8222)  MinIO :9000 (console :9001)  Mailpit :8025"
 
 down:
 	$(COMPOSE) down
@@ -25,7 +27,8 @@ ps:
 logs:
 	$(COMPOSE) logs -f
 
-# Applies migrations and bootstraps the master org. Needs `pnpm build` first.
+# Creates the master org and a master administrator (DEV_ADMIN_* in .env).
+# Needs the stack up (`make up`); safe to re-run.
 seed:
 	infra/compose/seed.sh
 

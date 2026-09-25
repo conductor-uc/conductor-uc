@@ -5,6 +5,7 @@ import {
   AdminUserCreationError,
   AdminUserEmailTakenError,
   createIdentityClient,
+  OrgHasUsersError,
 } from '../src/identity-client.js';
 
 const TOKEN = 'test-internal-service-token';
@@ -120,6 +121,32 @@ describe('createIdentityClient', () => {
         password: 'correct horse battery staple',
       }),
     ).rejects.toThrow(AdminUserEmailTakenError);
+  });
+
+  it('sends firstUserOnly and throws OrgHasUsersError on a 409 org_has_users', async () => {
+    let seenBody: unknown;
+    const fake = await fakeIdentityService((_req, body, res) => {
+      seenBody = body;
+      res.writeHead(409, { 'content-type': 'application/problem+json' });
+      res.end(JSON.stringify({ title: 'Conflict', code: 'org_has_users', detail: 'has users' }));
+    });
+    close = fake.close;
+
+    const client = createIdentityClient({ baseUrl: fake.baseUrl, internalServiceToken: TOKEN });
+
+    await expect(
+      client.createAdminUser({
+        orgId: 'm1',
+        orgType: 'master',
+        resellerId: null,
+        email: 'admin@example.com',
+        displayName: 'Admin',
+        password: 'correct horse battery staple',
+        firstUserOnly: true,
+      }),
+    ).rejects.toThrow(OrgHasUsersError);
+    expect(seenBody).toMatchObject({ orgType: 'master', firstUserOnly: true });
+    expect(seenBody).not.toHaveProperty('resellerId');
   });
 
   it('throws AdminUserCreationError on any other non-2xx status', async () => {
