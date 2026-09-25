@@ -225,7 +225,7 @@ Logs may contain telephone numbers and tenant identifiers. Treat log storage as 
 | Phones cannot register | DNS for the tenant domain; wrong credentials; OpenSIPs has not received the tenant's domain yet (telephony-config projection); flood block | `ul_dump`; OpenSIPs log; telephony-config log |
 | Registered phones don't receive calls | Phone behind NAT sending a private Contact ([network §6.5](network-and-firewall.md#65-phones-behind-nat)) | `ul_dump` shows the contact address |
 | Calls fail with 503 | No FreeSWITCH node active in dispatcher; node refusing OpenSIPs (ACL `FS_OPENSIPS_CIDR`); the node flood-blocked by pike | `ds_list`; FreeSWITCH log (`acl` rejections); OpenSIPs log (`pike`) |
-| Calls connect but no audio, or one-way audio | FreeSWITCH advertising a private address (1:1 NAT); RTP range blocked; carrier or phone NAT | `sofia status profile internal` (`EXT-RTP-IP`); firewall; packet capture on the RTP range |
+| Calls connect but no audio, or one-way audio | FreeSWITCH advertising a private address (1:1 NAT without `FS_EXTERNAL_RTP_IP`); RTP range blocked; carrier or phone NAT | `sofia status profile internal` (`Ext-RTP-IP`); firewall; packet capture on the RTP range |
 | Calls to extensions fail, FreeSWITCH log shows xml_curl errors | telephony-config unreachable from FreeSWITCH; `FS_XML_CURL_TOKEN` mismatch; `SELF_URL` ≠ `TELEPHONY_CONFIG_URL` | FreeSWITCH log; telephony-config log (401s) |
 | Outbound calls fail | No outbound route; trunk not registered; carrier rejects the caller ID; tenant fraud limits | `reg_list`, `dr_gw_status`; OpenSIPs and telephony-config logs |
 | Carrier cannot reach you after registration | `OPENSIPS_SIP_URI` is a private address (it is the contact sent to carriers) | telephony-config environment; `reg_list` |
@@ -250,7 +250,6 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Security | OpenSIPs TLS private keys stored in clear in the `opensips` schema | 07 §5 |
 | Availability | No HA for OpenSIPs, MariaDB, Redis, NATS; call-control single copy; no FreeSWITCH failure cleanup or synthetic CDRs | S4-03 to S4-07 |
 | Telephony | No media relay: media servers need public addresses; no SRTP | O-7 |
-| Telephony | FreeSWITCH's advertised address cannot be set without editing `vars.xml` (1:1 NAT unsupported as shipped) | G-114 |
 | Telephony | Queues, parking and conferences unreliable with more than one media server | G-46, S4-05 |
 | Telephony | Media server list fixed at OpenSIPs start; no weights or draining | S4-02 |
 | Telephony | Flood protection has no allow list for carriers and media servers; per-tenant call rate fixed at 10 per second | network §6.4, G-31 |

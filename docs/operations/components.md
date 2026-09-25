@@ -128,7 +128,7 @@ The FreeSWITCH pool is read from `OPENSIPS_FS_DESTINATION` **only when OpenSIPs 
 
 FreeSWITCH holds no tenant configuration. Every call asks telephony-config what to do, so any node can take any call. The exceptions are queues, parking lots and conference rooms, which live in one node's memory while they are in use.
 
-**The address FreeSWITCH puts in SDP is its own detected interface address.** There is no setting to change it ([network §4](network-and-firewall.md#4-media-rtp-and-why-freeswitch-needs-a-public-address)).
+**The address FreeSWITCH puts in SDP for audio is its own detected interface address, unless `FS_EXTERNAL_RTP_IP` sets another** (for 1:1 NAT; [network §4](network-and-firewall.md#4-media-rtp-and-why-freeswitch-needs-a-public-address)).
 
 ### 3.2 recording-uploader
 

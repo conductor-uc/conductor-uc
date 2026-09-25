@@ -272,6 +272,18 @@ How the addresses fit together on a media server:
 - call-control connects to `10.10.0.21:8021` from app-1's private address, which is what `FS_CLUSTER_CIDR` allows.
 - The node and its uploader reach object storage over the internet (voicemail uploads, recordings).
 
+### 4.5 Media servers behind 1:1 NAT (AWS, Google Cloud, Azure)
+
+When a media server's public address is not on its own interface, FreeSWITCH detects its private address. It then binds SIP and RTP to the private address and would advertise that address in SDP. Change three things for that server:
+
+- On the media server, set `FS_EXTERNAL_RTP_IP: <its public IPv4>` on `freeswitch`, so SDP carries the public address.
+- In the edge's `OPENSIPS_FS_DESTINATION`, list the node by its **private** address (`sip:10.10.0.21:5060`), because its SIP listener is on the private address.
+- On the media server, set `FS_OPENSIPS_CIDR` to the edge's **private** address (`10.10.0.10/32`). OpenSIPs now reaches the node over the private network, so that is its source address.
+
+The provider's firewall (security group) must allow UDP 16384–32768 from anywhere to the node's public address, and SIP 5060 from the edge's private address. If the edge is behind 1:1 NAT too, remember that OpenSIPs has no equivalent setting: its public address must be on its interface, or phones and carriers cannot reach it correctly (the contact it gives carriers is `OPENSIPS_SIP_URI`, which you set to the public address).
+
+This layout is **not verified** on a real cloud network. `tests/sip/test/media_address.test.ts` proves the SDP address follows the setting; make a test call through each node before going live.
+
 ## 5. Firewall rules per server
 
 Use your cloud provider's security groups or host firewalls. The rules below are the complete inbound policy. Default: deny inbound, allow outbound. Where Docker publishes a port on a private address, host firewalls such as UFW do not see the traffic ([network §7](network-and-firewall.md#7-docker-networking-rules-that-affect-the-firewall)). Enforce those rules in security groups, or in the `DOCKER-USER` chain (example after the tables).
@@ -390,5 +402,5 @@ Everything in [all-in-one §10](deploy-all-in-one.md#10-verify), plus:
 - From outside, only the ports in §5 answer on each public address, and nothing answers on app-1 or data-1.
 - A call placed through each media server has two-way audio. Call repeatedly: calls alternate between nodes. `fs_cli -x 'show calls'` on each node shows them.
 - `docker compose logs call-control` on app-1 shows a connection to every node.
-- On each media server, `fs_cli -x 'sofia status profile internal'` shows that server's public address for `SIP-IP` and `EXT-RTP-IP`.
+- On each media server, `fs_cli -x 'sofia status profile internal'` shows that server's public address for `SIP-IP` and `Ext-RTP-IP`.
 - Stop one media server during a test call to see the failure behaviour in §8, before your users do.

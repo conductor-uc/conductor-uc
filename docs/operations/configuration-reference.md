@@ -334,13 +334,14 @@ Set as environment variables on the FreeSWITCH container. `vars.xml` reads them 
 | `CDR_SERVICE_URL` | `http://cdr-service:8080` | |
 | `FS_CDR_INGEST_TOKEN` | `change-me-…` | Same as cdr-service's |
 | `FS_REDIS_HOST` / `FS_REDIS_PORT` | `redis` / `6379` | The shared Redis (no password possible) |
+| `FS_EXTERNAL_RTP_IP` | — (the interface address) | The address advertised in SDP for audio. Set it to the public IPv4 when the server sits behind 1:1 NAT (the public address is not on its interface). Signalling is unaffected. ([network §4](network-and-firewall.md#4-media-rtp-and-why-freeswitch-needs-a-public-address)) |
 | `FS_SIP_PORT` | `5060` | SIP port. Change it only if OpenSIPs runs on the same address ([all-in-one](deploy-all-in-one.md#73-freeswitch)). |
 | `FS_RTP_START_PORT` / `FS_RTP_END_PORT` | `16384` / `32768` | RTP range to open in the firewall |
 | `FS_SIP_IDENTITY` | `SIP Media Server` | SIP `User-Agent`. Keep it neutral (brand rule). |
 | `FS_SDP_IDENTITY` | `SIP-Media-Server` | SDP `o=`/`s=` name. Neutral, no spaces. |
 | `FS_LOG_LEVEL` | `info` | |
 
-Fixed in the configuration files, with no variable: SIP binds to the detected interface address only; the SDP address is that same address ([network §4](network-and-firewall.md#4-media-rtp-and-why-freeswitch-needs-a-public-address)); codecs are Opus, G.722, PCMU, PCMA; at most 1,000 sessions and 30 new sessions per second; recordings go to `/var/spool/cuc/rec`; the event socket port is 8021.
+Fixed in the configuration files, with no variable: SIP binds to the detected interface address only; signalling (`ext-sip-ip`) is always that same address; codecs are Opus, G.722, PCMU, PCMA; at most 1,000 sessions and 30 new sessions per second; recordings go to `/var/spool/cuc/rec`; the event socket port is 8021.
 
 Directories: `/var/spool/cuc/rec` (recording spool, shared with the uploader), `/var/cache/cuc/flow` and `/var/cache/cuc/http` (caches). Mount all three on tmpfs or disposable storage; nothing in them is durable.
 
