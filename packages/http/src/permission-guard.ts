@@ -1,3 +1,4 @@
+import { h1RouteLevelWall } from '@cuc/authz';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import type { RouteContract } from './contract.js';
@@ -33,8 +34,12 @@ const ALWAYS_ALLOWED: ReadonlySet<string> = new Set(['org.view']);
  * Per-request authorization for signed-in people (07 §3.1). Registered by
  * {@link createServer} when a service passes `permissions`.
  *
- * Two checks, run after the hard rules (so H1 keeps its own clear answer for
- * a reseller) and before any handler:
+ * Checks, run before validation so an unauthorized caller learns nothing from
+ * a schema error, and before any handler:
+ *
+ * 0. **H1** (the same rule `registerHardRules` enforces, repeated here only so
+ *    it keeps its own clear answer for a reseller instead of a bare
+ *    permission error).
  *
  * 1. **H2, tenant boundary.** A person whose org is a tenant may only name
  *    their own tenant in a `/v1/tenants/{tenantId}/…` path.
@@ -50,13 +55,21 @@ const ALWAYS_ALLOWED: ReadonlySet<string> = new Set(['org.view']);
  */
 export function registerPermissionGuard(app: Server, resolve: PermissionResolver): void {
   app.addHook(
-    'preHandler',
+    'preValidation',
     async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
       const contract = (request.routeOptions.config ?? {}) as RouteContract;
       const { actorId, actorType, orgId, orgType } = request.context;
       if (contract.public === true || contract.permission === undefined) return;
       if (actorType !== 'user' || actorId === undefined) return;
       if (orgId === undefined || orgType === undefined) return;
+
+      // H1 first, with its own answer (the hard-rules hook runs later, after
+      // validation, and would otherwise be pre-empted by this guard's 403).
+      if (contract.dataClass !== undefined && !h1RouteLevelWall(orgType, contract.dataClass)) {
+        throw ProblemError.forbidden('Resellers cannot access private tenant data.', {
+          code: 'reseller_private_data_denied',
+        });
+      }
 
       const tenantId = (request.params as { tenantId?: unknown } | undefined)?.tenantId;
       if (orgType === 'tenant' && typeof tenantId === 'string' && tenantId !== orgId) {

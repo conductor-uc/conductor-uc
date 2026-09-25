@@ -17,6 +17,14 @@ export const configSchema = Type.Object({
   ...storageEnvSchema.properties,
   ...httpEnvSchema.properties,
 
+  /** pbx-config-service, asked which extension belongs to a signed-in person (self-service). */
+  PBX_CONFIG_SERVICE_URL: Env.url(),
+  /**
+   * identity-service, asked what a signed-in person may do
+   * (`@cuc/http`'s permission guard). Required, not optional: without it the
+   * service would let any signed-in person call any route.
+   */
+  IDENTITY_SERVICE_URL: Env.url(),
   /** Shared bearer token this service's own `/internal/v1` routes expect (07 §1's precedent). */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
 });
