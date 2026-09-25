@@ -128,6 +128,7 @@ Stage 3's non-telephony screens can start as soon as Stage 1 lands, in parallel 
 | S1-13 | telephony-config: xml_curl directory + dialplan (ext→ext) | S1-12, S1-10 |
 | S1-14 | SIP test harness + M1 scenarios | S1-13 |
 | S1-15 | Read permissions: a `.read` twin for every `.manage`, `.manage` implies `.read`, support roles fixed, console read-only screens (G-10) | S1-06 |
+| S1-16 | Organisation deletion: pending deletion with a 30-day grace period, data export, hard delete across every service on `org.deleted` (G-11) | S1-02 |
 
 **S1-01 org-service schema.** The `orgs`, `tenant_domains`, `reseller_base_domains`, and `brands` tables. The single-master constraint and parent-type rules. A bootstrap CLI `org-service bootstrap-master` creates the master org and its first admin user. That admin user is created through identity-service's internal API, which is stubbed until S1-05.
 *Done when:* invariant tests reject a tenant under master, a reseller under reseller, and a second master.
@@ -206,6 +207,7 @@ Stage 3's non-telephony screens can start as soon as Stage 1 lands, in parallel 
 | S2-18 | cdr-service: ingest + CDR v1 + export API | S2-11 |
 | S2-19 | Second FS node in dev stack + node-agnostic test pass | S2-10, S2-13, S2-16 |
 | S2-20 | M2 backend SIP regression suite | all above |
+| S2-21 | Retention job for partitioned tables: `CDR_RETENTION_MONTHS` (13) for call and billing records, `AUDIT_RETENTION_MONTHS` (12) for the audit log; add upcoming monthly partitions, drop expired ones (G-12, G-52) | S1-07, S2-18 |
 
 **S2-01 trunk-service.** Trunk CRUD (register, IP, or both auth modes), encrypted credentials, trunk IPs, codec preferences, `max_channels`, and caller-ID policy. Resellers can manage their tenants' trunks. Tenant admins can view them, and edit them with the `trunk.manage` grant.
 *Done when:* credentials are never returned, and the H1/tenancy tests pass.
