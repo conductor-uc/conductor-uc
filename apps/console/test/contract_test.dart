@@ -7,6 +7,7 @@ import 'package:console/features/orgs/org_defs.dart';
 import 'package:console/core/session.dart';
 import 'package:console/features/pbx/resource.dart';
 import 'package:console/features/users/users_api.dart';
+import 'package:console/features/recordings/recordings_api.dart';
 import 'package:console/features/voicemail/voicemail_api.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:yaml/yaml.dart';
@@ -188,6 +189,136 @@ void main() {
         (paths['$base/{id}/reset-pin'] as Map)['post'] as Map<String, dynamic>,
       );
       expect(keys(pin), {'pin'});
+    });
+  });
+
+  group('recordings (S5-04)', () {
+    const base = '/v1/tenants/{tenantId}/recordings';
+
+    Set<String> keys(Map<String, dynamic> schema) =>
+        (schema['properties'] as Map).keys.cast<String>().toSet();
+
+    /// The values of a union of string literals.
+    Set<String> literals(Map<String, dynamic> schema, String property) => {
+      for (final u
+          in ((schema['properties'] as Map)[property] as Map)['anyOf'] as List)
+        ((u as Map)['enum'] as List).single as String,
+    };
+
+    test('the rule form sends exactly what the service takes', () {
+      final body = _schema(
+        (paths['/v1/tenants/{tenantId}/recording-policies'] as Map)['post']
+            as Map<String, dynamic>,
+      );
+      expect(keys(body), const PolicyForm(scopeId: 'x').toJson().keys.toSet());
+      expect(
+        {...?(body['required'] as List?)?.cast<String>()},
+        {'scopeType', 'action'},
+      );
+      expect(literals(body, 'scopeType'), policyScopes.keys.toSet());
+      expect(literals(body, 'direction'), policyDirections.keys.toSet());
+      expect(literals(body, 'action'), policyActions.keys.toSet());
+      final replace = _schema(
+        (paths['/v1/tenants/{tenantId}/recording-policies/{id}'] as Map)['put']
+            as Map<String, dynamic>,
+      );
+      expect(keys(replace), keys(body));
+    });
+
+    test('a rule carries the fields the rules table reads', () {
+      final list = _schema(
+        (paths['/v1/tenants/{tenantId}/recording-policies'] as Map)['get']
+            as Map<String, dynamic>,
+        response: '200',
+      );
+      final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll([
+          'id',
+          'scopeType',
+          'scopeId',
+          'direction',
+          'action',
+          'announce',
+          'consentAssetId',
+        ]),
+      );
+    });
+
+    test('the list takes the filters the screen sends and pages', () {
+      final list = (paths[base] as Map)['get'] as Map;
+      final params = {
+        for (final p in list['parameters'] as List)
+          if ((p as Map)['in'] == 'query') p['name'],
+      };
+      expect(
+        params,
+        containsAll([
+          'from',
+          'to',
+          'direction',
+          'extensionId',
+          'queueId',
+          'cursor',
+          'limit',
+        ]),
+      );
+      // Everything the filter sends is a parameter the service has.
+      expect(
+        const RecordingFilter(
+          direction: 'x',
+          extensionId: 'x',
+          queueId: 'x',
+        ).toQuery(cursor: 'c', limit: 1).keys,
+        everyElement(isIn(params)),
+      );
+      final body = _schema(list.cast<String, dynamic>(), response: '200');
+      expect(keys(body), containsAll(['rows', 'nextCursor']));
+      final row = ((body['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll([
+          'id',
+          'direction',
+          'extensionId',
+          'peerExtensionId',
+          'queueId',
+          'status',
+          'startedAt',
+          'durationMs',
+          'sizeBytes',
+          'retentionDate',
+        ]),
+      );
+    });
+
+    test('play, download and delete are routes the service has', () {
+      expect(paths, contains('$base/{id}/play-url'));
+      expect(paths, contains('$base/{id}/download-url'));
+      expect(paths['$base/{id}'] as Map, contains('delete'));
+      final url = _schema(
+        (paths['$base/{id}/play-url'] as Map)['get'] as Map<String, dynamic>,
+        response: '200',
+      );
+      expect(keys(url), containsAll(['url', 'expiresAt']));
+    });
+
+    test('retention is a number of days the screen reads and saves', () {
+      const path = '/v1/tenants/{tenantId}/recording-settings';
+      expect(
+        keys(
+          _schema(
+            (paths[path] as Map)['get'] as Map<String, dynamic>,
+            response: '200',
+          ),
+        ),
+        {'retentionDays'},
+      );
+      expect(
+        keys(_schema((paths[path] as Map)['put'] as Map<String, dynamic>)),
+        {'retentionDays'},
+      );
     });
   });
 

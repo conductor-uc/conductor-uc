@@ -29,6 +29,7 @@ import '../features/shell/notice_pages.dart';
 import '../features/shell/sections.dart';
 import '../features/certificates/certificates_page.dart';
 import '../features/users/users_page.dart';
+import '../features/recordings/recordings_page.dart';
 import '../features/voicemail/voicemail_page.dart';
 import '../features/shell/shell_page.dart';
 
@@ -139,6 +140,7 @@ Widget _pageFor(Section section) {
   if (section.path == '/certificates') return const CertificatesPage();
   if (section.path == '/media') return const MediaPage();
   if (section.path == '/voicemail') return const VoicemailPage();
+  if (section.path == '/recordings') return const RecordingsPage();
   if (section.path == '/dashboard') return const DashboardPage();
   if (section.path == '/audit') return const AuditPage();
   if (section.path == '/platform-health') return const PlatformHealthPage();

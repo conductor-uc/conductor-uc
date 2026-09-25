@@ -88,6 +88,8 @@ const _masterAdmin = [
 /// - `reader@...` is a tenant who can read call records but not export them.
 /// - `routes@...` is a tenant who can change outbound routes but not the
 ///   emergency route.
+/// - `listener@...` is a tenant who can play recordings but not download or delete
+///   them, or change what is recorded.
 /// - `noperm@...` is a tenant whose permission lookup fails.
 List<String>? demoPermissions(String orgType, String email) {
   if (email.startsWith('noperm')) return null;
@@ -95,6 +97,9 @@ List<String>? demoPermissions(String orgType, String email) {
     return const ['org.view', 'extension.manage', 'monitor.presence'];
   }
   if (email.startsWith('reader')) return const ['org.view', 'cdr.read'];
+  if (email.startsWith('listener')) {
+    return const ['org.view', 'recording.listen'];
+  }
   if (email.startsWith('routes')) return const ['org.view', 'trunk.manage'];
   if (email.startsWith('editor')) return const ['org.view', 'callflow.edit'];
   return switch (orgType) {

@@ -179,7 +179,12 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       'Recordings',
       Icons.mic_none_outlined,
       privateData: true,
-      requires: ['recording.listen', 'recording.download'],
+      requires: [
+        'recording.listen',
+        'recording.download',
+        'recording.delete',
+        'recording.policy.manage',
+      ],
     ),
     Section(
       '/voicemail',
