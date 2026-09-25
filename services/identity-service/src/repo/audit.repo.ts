@@ -104,15 +104,22 @@ export function createAuditRepo(db: Database<IdentityServiceDb>) {
      * never sees a row naming neither field, so master-internal actions
      * unrelated to `orgId` (or another org's private data) are excluded
      * structurally, not by a separate visibility check.
+     *
+     * `excludePrivate` leaves out every `data_class = 'private'` row (G-13):
+     * set when a reseller reads a trail, since a reseller never reads private
+     * data (07 §3.1, H1), not even the record of who else did.
      */
-    async listForOrg(orgId: string, limit = 100): Promise<AuditEvent[]> {
-      const rows = await db.kysely
+    async listForOrg(
+      orgId: string,
+      limit = 100,
+      options: { readonly excludePrivate?: boolean } = {},
+    ): Promise<AuditEvent[]> {
+      let query = db.kysely
         .selectFrom('audit_events')
         .selectAll()
-        .where((eb) => eb.or([eb('actor_org_id', '=', orgId), eb('target_org_id', '=', orgId)]))
-        .orderBy('at', 'desc')
-        .limit(limit)
-        .execute();
+        .where((eb) => eb.or([eb('actor_org_id', '=', orgId), eb('target_org_id', '=', orgId)]));
+      if (options.excludePrivate === true) query = query.where('data_class', '!=', 'private');
+      const rows = await query.orderBy('at', 'desc').limit(limit).execute();
       return rows.map(toAuditEvent);
     },
   };
