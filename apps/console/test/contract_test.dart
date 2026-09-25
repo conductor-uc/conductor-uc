@@ -752,6 +752,15 @@ void main() {
       expect((paths['$base/{id}'] as Map), contains('delete'));
       expect((paths['$base/{id}/finalize'] as Map), contains('post'));
     });
+
+    test('a ready recording has an address to play it from', () {
+      final url = _schema(
+        (paths['$base/{id}/download-url'] as Map)['get']
+            as Map<String, dynamic>,
+        response: '200',
+      );
+      expect((url['properties'] as Map).keys, containsAll(['url']));
+    });
   });
 
   group('queue tiers', () {

@@ -141,7 +141,11 @@ class OrgsApi {
     );
     // The presigned URL carries its own authority: no bearer token, and no
     // cookies (a credentialed request to the storage host would be refused).
-    await _dio.put<Object?>(
+    // A plain client rather than the API's, so none of the API's own headers
+    // go along either: storage's CORS rule allows `Content-Type` only (G-80).
+    // It shares the API's transport, which is what tests look at.
+    final storage = Dio()..httpClientAdapter = _dio.httpClientAdapter;
+    await storage.put<Object?>(
       '${ticket['uploadUrl']}',
       data: Uint8List.fromList(bytes),
       options: Options(

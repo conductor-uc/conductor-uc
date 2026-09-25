@@ -403,7 +403,8 @@ void main() {
       'asks for a URL, then sends the bytes there without credentials',
       () async {
         final seen = <RequestOptions>[];
-        final dio = Dio()
+        // The API client sends a header of its own on every request.
+        final dio = Dio(BaseOptions(headers: {'x-refresh-transport': 'cookie'}))
           ..httpClientAdapter = FakeAdapter((options) {
             seen.add(options);
             if (options.method == 'POST') {
@@ -433,6 +434,8 @@ void main() {
         expect(seen[1].path, 'https://storage.example/brand/x?sig=1');
         expect(seen[1].headers['Content-Type'], 'image/png');
         expect(seen[1].headers.containsKey('Authorization'), isFalse);
+        // Only what storage's CORS rule allows (G-80).
+        expect(seen[1].headers.containsKey('x-refresh-transport'), isFalse);
         expect(seen[1].extra['withCredentials'], isFalse);
         expect(seen[1].data, [9, 8, 7]);
       },

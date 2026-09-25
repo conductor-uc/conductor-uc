@@ -120,6 +120,7 @@ const OVERRIDES = {
   'get /v1/tenants/{tenantId}/recordings/{id}/play-url': 'getRecordingPlayUrl',
   'get /v1/tenants/{tenantId}/recordings/{id}/download-url': 'getRecordingDownloadUrl',
   'get /v1/tenants/{tenantId}/recording-settings': 'getRecordingSettings',
+  'get /v1/tenants/{tenantId}/media-assets/{id}/download-url': 'getMediaAssetDownloadUrl',
   'put /v1/tenants/{tenantId}/recording-settings': 'saveRecordingSettings',
   // End-user self-service (parity 1e): a person's own extension, voicemail and history.
   'get /v1/tenants/{tenantId}/me/extension': 'getMyExtension',

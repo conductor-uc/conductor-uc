@@ -6,6 +6,7 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  PutBucketCorsCommand,
   PutBucketEncryptionCommand,
   PutBucketLifecycleConfigurationCommand,
   PutObjectCommand,
@@ -18,6 +19,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Logger } from '@cuc/logger';
 
 import { locatePlatformObject, locateTenantObject, type ObjectLocation } from './bucket-naming.js';
+import { BROWSER_CORS_RULE } from './cors.js';
 import {
   MAX_GET_TTL_SECONDS,
   MAX_PUT_TTL_SECONDS,
@@ -44,7 +46,17 @@ export interface CreateStorageOptions {
 export interface ScopedStorage {
   /** Where `key` actually lives — the bucket and the real key, after mode-dependent resolution. */
   locate(key: string): ObjectLocation;
+  /**
+   * A short-lived URL a client can read the object from. Like `presignPut`, the first
+   * one this process hands out for a bucket also sets the bucket's CORS rule (G-80).
+   */
   presignGet(key: string, options?: PresignOptions): Promise<string>;
+  /**
+   * A short-lived URL a client can upload the object to. The first one this process
+   * hands out for a bucket also sets the bucket's CORS rule ({@link BROWSER_CORS_RULE}),
+   * so a browser may send the upload from another origin — including to buckets
+   * provisioned before the rule existed (G-80).
+   */
   presignPut(key: string, options?: PresignPutOptions): Promise<string>;
   /**
    * Reads an object's bytes directly, server-side — unlike `presignGet`,
@@ -68,15 +80,17 @@ export interface ScopedStorage {
   deleteObject(key: string): Promise<void>;
   /**
    * Creates this scope's bucket if it does not exist yet, with server-side
-   * encryption and a public-access block (05 §4). Idempotent: a bucket that
-   * already exists is left alone, not recreated.
+   * encryption, a public-access block (05 §4) and the browser CORS rule
+   * (G-80). Idempotent: a bucket that already exists is not recreated, and
+   * the three settings are applied to it again (once per process).
    *
-   * Encryption and the public-access block are attempted, not required —
-   * not every S3-compatible provider implements them (MinIO does not
-   * support `PutPublicAccessBlock` at all, and needs KMS configured before
-   * it accepts `PutBucketEncryption`, confirmed against a real MinIO
-   * server). A provider that cannot honor one logs a warning and the bucket
-   * still gets created; real S3 honors both.
+   * The three settings are attempted, not required — not every S3-compatible
+   * provider implements them (MinIO does not support `PutPublicAccessBlock`
+   * at all, needs KMS configured before it accepts `PutBucketEncryption`,
+   * and answers `PutBucketCors` with `NotImplemented` because it allows any
+   * origin already; confirmed against a real MinIO server). A provider that
+   * cannot honor one logs a warning and the bucket still gets created; real
+   * S3 honors all three.
    */
   provisionBucket(): Promise<void>;
   setLifecycleRule(rule: LifecycleRule): Promise<void>;
@@ -109,6 +123,79 @@ export function createStorage(options: CreateStorageOptions): Storage {
     });
   const logger = options.logger;
   const provisioned = makeProvisionCache();
+  /** The buckets this process has set the CORS rule on (or tried to), keyed by bucket. */
+  const corsApplied = new Map<string, Promise<void>>();
+  /**
+   * Set once the provider has refused `PutBucketCors` for a reason that holds for every
+   * bucket (it does not implement it, or the key may not use it): the error's name. This
+   * process then stops asking, so a store with a thousand tenant buckets logs one warning,
+   * not a thousand.
+   */
+  let corsRefusedBy: string | undefined;
+
+  /**
+   * Sets {@link BROWSER_CORS_RULE} on `bucket` once per process (G-80). `PutBucketCors`
+   * replaces the bucket's whole CORS configuration and is idempotent, so running it again
+   * after every restart is harmless — and that is how buckets provisioned before the rule
+   * existed get it, without listing every tenant's bucket: the first time a process
+   * provisions a bucket or presigns a URL in it, the rule is (re)applied.
+   *
+   * Attempted, not required, like encryption. A provider-wide refusal (MinIO answers
+   * `NotImplemented` since it allows any origin by default; a key without the permission
+   * gets `AccessDenied`) logs one warning and turns the attempt off for the whole process.
+   * Any other failure is logged and not retried for that bucket. A bucket that does not
+   * exist yet is not remembered, so the next touch after it is created tries again.
+   */
+  function ensureCors(bucket: string): Promise<void> {
+    if (corsRefusedBy !== undefined) return Promise.resolve();
+    let pending = corsApplied.get(bucket);
+    if (pending === undefined) {
+      pending = applyCors(bucket);
+      corsApplied.set(bucket, pending);
+    }
+    return pending;
+  }
+
+  async function applyCors(bucket: string): Promise<void> {
+    try {
+      await client.send(
+        new PutBucketCorsCommand({
+          Bucket: bucket,
+          CORSConfiguration: {
+            CORSRules: [
+              {
+                AllowedMethods: [...BROWSER_CORS_RULE.AllowedMethods],
+                AllowedOrigins: [...BROWSER_CORS_RULE.AllowedOrigins],
+                AllowedHeaders: [...BROWSER_CORS_RULE.AllowedHeaders],
+                MaxAgeSeconds: BROWSER_CORS_RULE.MaxAgeSeconds,
+              },
+            ],
+          },
+        }),
+      );
+    } catch (error) {
+      if (error instanceof S3ServiceException && error.name === 'NoSuchBucket') {
+        // Nothing to configure yet. Whoever creates it provisions it, which sets the rule.
+        corsApplied.delete(bucket);
+        return;
+      }
+      if (isProviderWideRefusal(error)) {
+        // Concurrent first touches of other buckets may land here too; warn only once.
+        if (corsRefusedBy !== undefined) return;
+        corsRefusedBy = error.name;
+        logger.warn(
+          { err: error.message, code: error.name },
+          `The storage provider refused to set the browser CORS rule (${error.name}); not trying again for any bucket until restart. ` +
+            'Browser uploads need the rule unless the store allows any origin itself: see docs/operations/dns-tls-and-certificates.md §6.',
+        );
+        return;
+      }
+      logger.warn(
+        { err: error instanceof Error ? error.message : String(error) },
+        `Could not set the browser CORS rule on '${bucket}'. See docs/operations/dns-tls-and-certificates.md §6.`,
+      );
+    }
+  }
 
   async function ensureBucket(bucket: string): Promise<void> {
     if (provisioned.has(bucket)) return;
@@ -148,6 +235,7 @@ export function createStorage(options: CreateStorageOptions): Storage {
         }),
       ),
     );
+    await ensureCors(bucket);
 
     provisioned.add(bucket);
   }
@@ -222,6 +310,7 @@ export function createStorage(options: CreateStorageOptions): Storage {
       locate,
       async presignGet(key, presignOptions) {
         const { bucket, key: realKey } = locate(key);
+        await ensureCors(bucket);
         return getSignedUrl(
           client,
           new GetObjectCommand({
@@ -236,6 +325,7 @@ export function createStorage(options: CreateStorageOptions): Storage {
       },
       async presignPut(key, presignOptions) {
         const { bucket, key: realKey } = locate(key);
+        await ensureCors(bucket);
         return getSignedUrl(
           client,
           new PutObjectCommand({
@@ -321,6 +411,19 @@ export function createStorage(options: CreateStorageOptions): Storage {
 function clampTtl(requested: number | undefined, max: number): number {
   if (requested === undefined) return max;
   return Math.min(Math.max(requested, 1), max);
+}
+
+/**
+ * A refusal that will be the same for every bucket: the provider does not implement the
+ * call (MinIO answers `NotImplemented`, HTTP 501), or the key is not allowed to make it.
+ */
+function isProviderWideRefusal(error: unknown): error is S3ServiceException {
+  return (
+    error instanceof S3ServiceException &&
+    (error.name === 'NotImplemented' ||
+      error.name === 'AccessDenied' ||
+      error.$metadata.httpStatusCode === 501)
+  );
 }
 
 function isBucketAlreadyOwned(error: unknown): boolean {
