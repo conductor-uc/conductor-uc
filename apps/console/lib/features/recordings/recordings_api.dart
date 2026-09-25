@@ -25,6 +25,7 @@ const recordingStatuses = {
 const policyScopes = {
   'tenant': 'Whole organization',
   'extension': 'Extension',
+  'agent': 'Queue agent',
   'queue': 'Queue',
   'did': 'Phone number',
 };

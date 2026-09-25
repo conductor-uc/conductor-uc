@@ -38,6 +38,11 @@ export interface RecordingCall {
   readonly extensionIds: readonly string[];
   readonly queueId?: string | undefined;
   readonly didId?: string | undefined;
+  /**
+   * S5-14: the extension that answered a queue call as its agent. Only known at that answer, so
+   * only `/fs/recording/:tenantId/agent-answer` sets it; the recording is then registered to it.
+   */
+  readonly agentId?: string | undefined;
   readonly callUuid: string;
   readonly nodeId?: string | undefined;
 }
@@ -163,6 +168,7 @@ export function createRecordingClient(options: RecordingClientOptions): Recordin
       [...call.extensionIds].sort().join(','),
       call.queueId ?? '',
       call.didId ?? '',
+      call.agentId ?? '',
     ].join('|');
   }
 
@@ -193,6 +199,7 @@ export function createRecordingClient(options: RecordingClientOptions): Recordin
         extensionIds: call.extensionIds,
         ...(call.queueId === undefined ? {} : { queueId: call.queueId }),
         ...(call.didId === undefined ? {} : { didId: call.didId }),
+        ...(call.agentId === undefined ? {} : { agentId: call.agentId }),
       })) as Decision;
       cache.set(key, { decision, fetchedAt: current });
       breakerOpenUntil = 0;
@@ -270,7 +277,7 @@ export function createRecordingClient(options: RecordingClientOptions): Recordin
           tenantId: call.tenantId,
           callUuid: call.callUuid,
           direction: call.direction,
-          extensionId: call.extensionIds[0] ?? null,
+          extensionId: call.extensionIds[0] ?? call.agentId ?? null,
           peerExtensionId: call.extensionIds[1] ?? null,
           queueId: call.queueId ?? null,
           didId: call.didId ?? null,

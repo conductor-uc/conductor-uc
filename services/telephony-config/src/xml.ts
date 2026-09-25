@@ -1098,6 +1098,8 @@ export interface CallcenterAgentEntry {
 export function buildCallcenterConfigurationDocument(
   queues: readonly CallcenterQueueEntry[],
   agents: readonly CallcenterAgentEntry[],
+  /** OpenSIPs' SIP listener: agents are reached through it, see {@link agentContact}. */
+  opensipsSipUri: string,
 ): string {
   const queueXml = queues
     .map(
@@ -1114,7 +1116,7 @@ export function buildCallcenterConfigurationDocument(
   const agentXml = agents
     .map(
       (agent) =>
-        `      <agent name="${escapeXml(agent.name)}" type="callback" contact="user/${escapeXml(agent.name)}" status="Logged Out" ` +
+        `      <agent name="${escapeXml(agent.name)}" type="callback" contact="${escapeXml(agentContact(agent.name, opensipsSipUri))}" status="Logged Out" ` +
         `max-no-answer="${String(agent.maxNoAnswer)}" wrap-up-time="${String(agent.wrapUpSeconds)}" reject-delay-time="${String(agent.rejectDelaySeconds)}"/>\n`,
     )
     .join('');
@@ -1149,6 +1151,55 @@ export function buildCallcenterConfigurationDocument(
 }
 
 /**
+ * How `mod_callcenter` dials an agent (S5-14, found while building agent-scoped recording):
+ * through OpenSIPs, like every other bridge this platform places (`buildDialplanDocument`'s doc
+ * comment has why both the route and the tenant-domain R-URI are needed). The contact used to be
+ * `user/<number>@<domain>`, but phones register with OpenSIPs, not with FreeSWITCH, and the
+ * directory this service serves has no `dial-string`, so FreeSWITCH had no way to reach the agent's
+ * phone at all: a likely reason queue distribution was never seen to reach an agent (G-47).
+ * `agentName` is `<extension number>@<tenant domain>` (`callcenterName`). Unverified live.
+ */
+export function agentContact(agentName: string, opensipsSipUri: string): string {
+  return `{sip_route_uri=sip:${opensipsSipUri}}sofia/internal/${agentName}`;
+}
+
+/**
+ * S5-14 (G-111): what a queue call carries so an agent-scoped recording rule can be applied when
+ * an agent answers. Which agent will answer is unknown at setup, so the decision is made then, on
+ * the agent's leg: `mod_callcenter` copies the variables named in `cc_export_vars` from the caller
+ * to the agent leg it originates, and `execute_on_answer_cuc_agent` (FreeSWITCH runs every
+ * `execute_on_answer*` variable when that leg answers) runs `agent_recording.lua` there. The
+ * script skips a caller already being recorded (a queue, DID or tenant rule from setup), and
+ * otherwise asks `/fs/recording/:tenantId/agent-answer`, which decides with the answering agent.
+ *
+ * Set after the caller's own `answer`, so the `execute_on_answer_cuc_agent` copy on the caller
+ * never runs there (its answer has already happened). `flow_runner.lua`'s `queue` node sets the
+ * same variables (keep the two in step).
+ *
+ * `cc_export_vars` and the agent leg variables (`cc_agent`) are confirmed present in the 1.10.12
+ * `mod_callcenter` binary; their behaviour on a live call is not yet seen.
+ */
+export const AGENT_ANSWER_EXPORTS = [
+  'cuc_tenant_id',
+  'cuc_queue_id',
+  'cuc_did_id',
+  'cuc_queue_member_uuid',
+  'execute_on_answer_cuc_agent',
+] as const;
+
+export function agentAnswerRecordingActions(queueId: string, didId: string | undefined): string[] {
+  return [
+    `<action application="set" data="${escapeXml(`cuc_queue_id=${queueId}`)}"/>`,
+    ...(didId === undefined
+      ? []
+      : [`<action application="set" data="${escapeXml(`cuc_did_id=${didId}`)}"/>`]),
+    '<action application="set" data="cuc_queue_member_uuid=${uuid}"/>',
+    '<action application="set" data="execute_on_answer_cuc_agent=lua agent_recording.lua"/>',
+    `<action application="set" data="cc_export_vars=${AGENT_ANSWER_EXPORTS.join(',')}"/>`,
+  ];
+}
+
+/**
  * `/fs/dialplan`'s from-trunk `queue` branch (S2-13; G-25's "each later
  * stage teaches `/fs/dialplan` to resolve its own destination type" — this
  * is that stage for `queue`). Reached only once the caller's handler has
@@ -1163,7 +1214,13 @@ export function buildQueueDialplanDocument(
   destinationNumber: string,
   queueName: string,
   tenantId: string,
+  /** S5-14: armed for agent-scoped recording rules (see {@link agentAnswerRecordingActions}). */
+  agentAnswer?: { readonly queueId: string; readonly didId?: string },
 ): string {
+  const agentActions =
+    agentAnswer === undefined
+      ? []
+      : agentAnswerRecordingActions(agentAnswer.queueId, agentAnswer.didId);
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
     '<document type="freeswitch/xml">\n' +
@@ -1173,6 +1230,7 @@ export function buildQueueDialplanDocument(
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
     `          ${tenantIdAction(tenantId)}\n` +
     '          <action application="answer"/>\n' +
+    agentActions.map((action) => `          ${action}\n`).join('') +
     `          <action application="callcenter" data="${escapeXml(queueName)}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +
@@ -1214,6 +1272,8 @@ export function buildAgentStatusDialplanDocument(
   agentName: string,
   status: 'Available' | 'Logged Out',
   tenantId: string,
+  /** S5-14: the agent's contact is set to reach its phone through OpenSIPs ({@link agentContact}). */
+  opensipsSipUri: string,
 ): string {
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
@@ -1224,7 +1284,7 @@ export function buildAgentStatusDialplanDocument(
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(featureCode)}$`)}">\n` +
     `          ${tenantIdAction(tenantId)}\n` +
     '          <action application="answer"/>\n' +
-    `          <action application="lua" data="agent_status.lua ${escapeXml(agentName)} ${status === 'Available' ? '1' : '0'}"/>\n` +
+    `          <action application="lua" data="agent_status.lua ${escapeXml(agentName)} ${status === 'Available' ? '1' : '0'} ${escapeXml(opensipsSipUri)}"/>\n` +
     '          <action application="hangup"/>\n' +
     '        </condition>\n' +
     '      </extension>\n' +

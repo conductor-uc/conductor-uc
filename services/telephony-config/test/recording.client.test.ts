@@ -310,6 +310,25 @@ describe('recording client: allow on demand and feature codes (S5-13)', () => {
   });
 });
 
+describe('recording client: the answering agent (S5-14)', () => {
+  it('asks with the agent, keys the cache on it, and registers the recording to it', async () => {
+    const f = fake();
+    const c = client(f, { t: 0 });
+    const atAnswer = { ...call, extensionIds: [], agentId: 'A7' };
+
+    await c.decide(atAnswer);
+    expect(f.seen[0]).toMatchObject({ path: 'evaluate', body: { agentId: 'A7' } });
+    expect(f.seen[1]).toMatchObject({ path: 'register', body: { extensionId: 'A7' } });
+
+    // A different agent is a different decision, not a cache hit.
+    await c.decide({ ...atAnswer, agentId: 'A8' });
+    expect(f.seen.filter((s) => s.path === 'evaluate')).toHaveLength(2);
+    // The same agent again is.
+    await c.decide(atAnswer);
+    expect(f.seen.filter((s) => s.path === 'evaluate')).toHaveLength(2);
+  });
+});
+
 describe('recording client: the fail-closed tenant list (S5-12)', () => {
   const listClient = (fetchImpl: typeof fetch) =>
     createRecordingClient({

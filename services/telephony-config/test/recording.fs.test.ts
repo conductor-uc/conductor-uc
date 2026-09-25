@@ -1116,6 +1116,145 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
     });
   });
 
+  describe('agent-scoped rules for queue calls (S5-14)', () => {
+    async function seedQueue(tenantId: string): Promise<string> {
+      const queueId = crypto.randomUUID();
+      await h.readModel.upsertQueue(h.db.kysely, {
+        id: queueId,
+        tenantId,
+        label: 'Support',
+        strategy: 'round-robin',
+        mohMediaAssetId: null,
+        maxWaitSeconds: 0,
+        announcePosition: false,
+        announceFrequencySeconds: null,
+        noAgentDestinationType: null,
+        noAgentDestinationId: null,
+      });
+      return queueId;
+    }
+
+    it('a DID to a queue arms the agent-answer decision after answer, before the queue', async () => {
+      const tenantId = await seedTenant();
+      const trunkId = await seedTrunk(tenantId);
+      const queueId = await seedQueue(tenantId);
+      const didId = crypto.randomUUID();
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: didId,
+        tenantId,
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'queue',
+        destinationId: queueId,
+      });
+      fake.directive = { kind: 'none' };
+
+      const list = apps(await inbound(trunkId, '+15551234567', '?nodeId=fs-1'));
+      const names = list.map((a) => a.app);
+      expect(list).toContainEqual({ app: 'set', data: `cuc_queue_id=${queueId}` });
+      expect(list).toContainEqual({ app: 'set', data: `cuc_did_id=${didId}` });
+      expect(list).toContainEqual({ app: 'set', data: 'cuc_queue_member_uuid=${uuid}' });
+      const armed = list.findIndex(
+        (a) => a.data === 'execute_on_answer_cuc_agent=lua agent_recording.lua',
+      );
+      const exported = list.findIndex(
+        (a) =>
+          a.data ===
+          'cc_export_vars=cuc_tenant_id,cuc_queue_id,cuc_did_id,cuc_queue_member_uuid,execute_on_answer_cuc_agent',
+      );
+      // After the caller's own answer (so it never runs on the caller), before the queue.
+      expect(armed).toBeGreaterThan(names.indexOf('answer'));
+      expect(exported).toBeGreaterThan(names.indexOf('answer'));
+      expect(armed).toBeLessThan(names.indexOf('callcenter'));
+      expect(exported).toBeLessThan(names.indexOf('callcenter'));
+    });
+
+    describe('/fs/recording/:tenantId/agent-answer', () => {
+      const answer = (tenantId: string, query: string) =>
+        app.inject({
+          method: 'GET',
+          url: `/fs/recording/${tenantId}/agent-answer?${query}`,
+          headers: { 'x-fs-node-token': TOKEN },
+        });
+
+      it('decides with the answering agent and records the agent’s leg', async () => {
+        const tenantId = await seedTenant();
+        const agentExtension = await seedExtension(tenantId, '301');
+        const queueId = await seedQueue(tenantId);
+        fake.directive = record();
+
+        const response = await answer(
+          tenantId,
+          `queueId=${queueId}&agent=301@${DOMAIN}&callUuid=member-1&nodeId=fs-1&didId=D1`,
+        );
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json()).toEqual({
+          action: 'record',
+          recordingId: RECORDING_ID,
+          path: `${SPOOL}/${RECORDING_ID}.wav`,
+        });
+        expect(fake.calls).toEqual([
+          {
+            tenantId,
+            direction: 'inbound',
+            extensionIds: [],
+            queueId,
+            didId: 'D1',
+            agentId: agentExtension,
+            callUuid: 'member-1',
+            nodeId: 'fs-1',
+          },
+        ]);
+      });
+
+      it('no rule, or recording-service unreachable: nothing, and never a refusal (S5-12 does not apply here)', async () => {
+        const tenantId = await seedTenant();
+        await seedExtension(tenantId, '301');
+        const queueId = await seedQueue(tenantId);
+        await h.readModel.upsertRecordingFailClosed(h.db.kysely, tenantId, true);
+        const query = `queueId=${queueId}&agent=301@${DOMAIN}&callUuid=m`;
+
+        fake.directive = { kind: 'none' };
+        expect((await answer(tenantId, query)).json()).toEqual({ action: 'none' });
+        fake.directive = { kind: 'unavailable', reason: 'down' };
+        expect((await answer(tenantId, query)).json()).toEqual({ action: 'none' });
+      });
+
+      it('an agent or queue outside the tenant is never decided', async () => {
+        const tenantId = await seedTenant();
+        await seedExtension(tenantId, '301');
+        const queueId = await seedQueue(tenantId);
+        const otherTenant = crypto.randomUUID();
+        await h.readModel.upsertTenant(h.db.kysely, { id: otherTenant, status: 'active' });
+        await h.readModel.upsertDomain(h.db.kysely, {
+          id: crypto.randomUUID(),
+          tenantId: otherTenant,
+          fqdn: 'other.platform.test',
+        });
+        const otherQueue = await seedQueue(otherTenant);
+        fake.directive = record();
+
+        for (const query of [
+          `queueId=${queueId}&agent=301@other.platform.test&callUuid=m`,
+          `queueId=${queueId}&agent=999@${DOMAIN}&callUuid=m`,
+          `queueId=${otherQueue}&agent=301@${DOMAIN}&callUuid=m`,
+          `queueId=${queueId}&agent=nodomain&callUuid=m`,
+        ]) {
+          expect((await answer(tenantId, query)).json(), query).toEqual({ action: 'none' });
+        }
+        expect(fake.calls).toEqual([]);
+      });
+
+      it('needs the node token', async () => {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/fs/recording/${crypto.randomUUID()}/agent-answer?queueId=q&agent=1@x&callUuid=m`,
+        });
+        expect(response.statusCode).toBe(401);
+      });
+    });
+  });
+
   describe('calls that are never recorded here', () => {
     it('voicemail retrieval, agent login and DIDs to voicemail are not offered for recording', async () => {
       const tenantId = await seedTenant();

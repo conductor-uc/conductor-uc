@@ -304,6 +304,23 @@ describe.skipIf(skipReason !== undefined)(
       ).toBe(400);
     });
 
+    it('takes an agent rule (S5-14), which can only record', async () => {
+      const headers = admin();
+      const created = await send('POST', base, headers, {
+        scopeType: 'agent',
+        scopeId: 'E7',
+        action: 'record',
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      expect(created.json()).toMatchObject({ scopeType: 'agent', scopeId: 'E7' });
+      const refused = await send('POST', base, headers, {
+        scopeType: 'agent',
+        scopeId: 'E8',
+        action: 'no_record',
+      });
+      expect(refused.statusCode).toBe(400);
+    });
+
     describe('recording required (S5-12, fail closed)', () => {
       const url = `/v1/tenants/${tenant}/recording-settings`;
 

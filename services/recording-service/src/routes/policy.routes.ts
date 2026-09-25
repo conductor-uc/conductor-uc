@@ -20,6 +20,8 @@ const PolicyParamsSchema = Type.Object({
 const ScopeTypeSchema = Type.Union([
   Type.Literal('tenant'),
   Type.Literal('extension'),
+  /** S5-14: an extension acting as a queue agent; applies to queue calls it answers. */
+  Type.Literal('agent'),
   Type.Literal('queue'),
   Type.Literal('did'),
 ]);

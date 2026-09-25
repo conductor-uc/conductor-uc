@@ -611,6 +611,19 @@ function handlers.queue(node)
   applyRecording(decoded.recording, false)
   if not session:ready() then return nil end
 
+  -- S5-14: arms agent-scoped recording for when an agent answers, the same
+  -- variables `/fs/dialplan` sets for a DID straight to a queue (`xml.ts`'s
+  -- `agentAnswerRecordingActions`; keep the two in step). The call is
+  -- already answered, so `execute_on_answer_cuc_agent` never runs here; the
+  -- agent leg gets it through `cc_export_vars`.
+  session:setVariable("cuc_queue_id", node.config.queueId)
+  session:setVariable("cuc_queue_member_uuid", session:get_uuid())
+  session:setVariable("execute_on_answer_cuc_agent", "lua agent_recording.lua")
+  session:setVariable(
+    "cc_export_vars",
+    "cuc_tenant_id,cuc_queue_id,cuc_did_id,cuc_queue_member_uuid,execute_on_answer_cuc_agent"
+  )
+
   session:execute("callcenter", decoded.queueName)
   if not session:ready() then return nil end
   return node.ports.next

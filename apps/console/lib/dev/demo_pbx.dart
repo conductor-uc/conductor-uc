@@ -1742,10 +1742,16 @@ class DemoPbx {
   /// checks the service makes).
   Object _policyFrom(Map<String, dynamic> body, String id, {String? except}) {
     final scope = '${body['scopeType']}';
-    if (!const ['tenant', 'extension', 'queue', 'did'].contains(scope)) {
+    if (!const [
+      'tenant',
+      'extension',
+      'agent',
+      'queue',
+      'did',
+    ].contains(scope)) {
       return _problem(
         400,
-        'scopeType is not one of tenant, extension, queue, did.',
+        'scopeType is not one of tenant, extension, agent, queue, did.',
       );
     }
     final direction = '${body['direction'] ?? 'any'}';
@@ -1779,6 +1785,12 @@ class DemoPbx {
     final onDemand = body['allowOnDemand'] ?? false;
     if (onDemand is! bool) {
       return _problem(400, 'allowOnDemand must be true or false.');
+    }
+    if (scope == 'agent' && (action != 'record' || announce || onDemand)) {
+      return _problem(
+        400,
+        'An agent rule can only record, with no announcement or feature codes.',
+      );
     }
     final taken = _policies.any(
       (p) =>

@@ -84,6 +84,42 @@ describe.skipIf(skipReason !== undefined)(
       expect(response.json()).toEqual({ tenantIds: ['tenant-fc'] });
     });
 
+    it('evaluate takes the answering agent (S5-14)', async () => {
+      await h.policies.create(
+        { tenantId },
+        {
+          scopeType: 'queue',
+          scopeId: 'Q1',
+          direction: 'any',
+          action: 'no_record',
+          announce: false,
+          consentAssetId: null,
+          allowOnDemand: false,
+        },
+      );
+      const agent = await h.policies.create(
+        { tenantId },
+        {
+          scopeType: 'agent',
+          scopeId: 'E7',
+          direction: 'any',
+          action: 'record',
+          announce: false,
+          consentAssetId: null,
+          allowOnDemand: false,
+        },
+      );
+      const atSetup = await post('evaluate', { tenantId, direction: 'inbound', queueId: 'Q1' });
+      expect(atSetup.json()).toMatchObject({ record: false });
+      const atAnswer = await post('evaluate', {
+        tenantId,
+        direction: 'inbound',
+        queueId: 'Q1',
+        agentId: 'E7',
+      });
+      expect(atAnswer.json()).toMatchObject({ record: true, policyId: agent.id });
+    });
+
     describe('evaluate', () => {
       it('answers with the winning policy for the call, and the default when none applies', async () => {
         await h.policies.create(

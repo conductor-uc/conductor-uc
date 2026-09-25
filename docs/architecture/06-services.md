@@ -241,7 +241,7 @@ The **billing view** for resellers is pending decision D-013.
 
 **Public API:**
 
-- `/v1/tenants/{t}/recording-policies` (tenant default, plus overrides per extension, agent, queue, or DID, by direction)
+- `/v1/tenants/{t}/recording-policies` (tenant default, plus overrides per extension, agent, queue, or DID, by direction; an `agent` rule, S5-14, is decided when the agent answers a queue call; `allowOnDemand`, S5-13, arms the in-call feature codes)
 - `/v1/tenants/{t}/recordings` (search)
 - `GET /v1/tenants/{t}/recordings/{id}:url`, which returns a presigned URL after an authorization check and writes an audit entry
 - `DELETE` (requires permission; audited)

@@ -405,6 +405,44 @@ void main() {
       expect(find.text('Incoming calls'), findsOneWidget);
     });
 
+    testWidgets('adds a queue agent rule, which only records (S5-14)', (
+      tester,
+    ) async {
+      await openRecordings(tester);
+      await openRules(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Add rule'));
+      await tester.pumpAndSettle();
+      await pickIn(tester, 'Applies to', 'Queue agent');
+      expect(
+        find.textContaining('Records the queue calls this person answers'),
+        findsOneWidget,
+      );
+      // No feature codes, and no "do not record" choice, for an agent rule.
+      expect(find.byKey(const ValueKey('policy-on-demand')), findsNothing);
+      await tester.tap(
+        inDialog(
+          find.widgetWithText(DropdownButtonFormField<String>, 'Action'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Do not record'),
+        findsOneWidget,
+      ); // only the table's row
+      await tester.tap(find.text('Record').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('policy-target-agent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Alice Kim').last);
+      await tester.pumpAndSettle();
+      await tester.tap(inDialog(find.widgetWithText(FilledButton, 'Save')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining('Queue agent 101'), findsOneWidget);
+    });
+
     testWidgets('a rule can allow the in-call feature codes (S5-13)', (
       tester,
     ) async {

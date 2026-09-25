@@ -31,6 +31,8 @@ const EvaluateBodySchema = Type.Object({
   ),
   queueId: OptionalId,
   didId: OptionalId,
+  /** S5-14: the extension that answered a queue call as its agent. */
+  agentId: OptionalId,
 });
 const DecisionSchema = Type.Object({
   record: Type.Boolean(),
@@ -166,9 +168,15 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
     },
     async (request): Promise<Static<typeof DecisionSchema>> => {
       requireToken(request);
-      const { tenantId, direction, extensionIds, queueId, didId } = request.body;
+      const { tenantId, direction, extensionIds, queueId, didId, agentId } = request.body;
       const all = await policies.list({ tenantId });
-      return evaluatePolicies(all, { direction, extensionIds: extensionIds ?? [], queueId, didId });
+      return evaluatePolicies(all, {
+        direction,
+        extensionIds: extensionIds ?? [],
+        queueId,
+        didId,
+        agentId,
+      });
     },
   );
 

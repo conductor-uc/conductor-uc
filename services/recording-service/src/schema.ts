@@ -9,7 +9,7 @@ export interface RecordingServiceDb extends EventTables {
   recording_policies: {
     id: string;
     tenant_id: string;
-    /** `tenant`, `extension`, `queue` or `did`. */
+    /** `tenant`, `extension`, `agent` (S5-14: an extension as a queue agent), `queue` or `did`. */
     scope_type: string;
     /** The extension, queue or DID id; for scope `tenant`, the tenant's own id. */
     scope_id: string;

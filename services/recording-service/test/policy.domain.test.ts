@@ -83,6 +83,67 @@ describe('evaluatePolicies precedence', () => {
     });
   });
 
+  describe('agent scope (S5-14)', () => {
+    const agent = (overrides: Partial<Policy> = {}) =>
+      policy({ scopeType: 'agent', scopeId: 'A1', action: 'record', ...overrides });
+
+    it('matches only a call that agent answered', () => {
+      expect(policyMatches(agent(), call({ queueId: 'Q1' }))).toBe(false);
+      expect(policyMatches(agent(), call({ queueId: 'Q1', agentId: 'A2' }))).toBe(false);
+      expect(policyMatches(agent(), call({ queueId: 'Q1', agentId: 'A1' }))).toBe(true);
+      // The agent's own extension id among the call's extensions is not the agent scope.
+      expect(policyMatches(agent(), call({ extensionIds: ['A1'] }))).toBe(false);
+    });
+
+    it('beats the queue, the DID and the tenant, and loses to an extension rule', () => {
+      const queue = policy({ scopeType: 'queue', scopeId: 'Q1', action: 'no_record' });
+      const did = policy({ scopeType: 'did', scopeId: 'D1', action: 'no_record' });
+      const tenant = policy({ action: 'no_record' });
+      const agentRule = agent();
+      const answered = call({ queueId: 'Q1', didId: 'D1', agentId: 'A1', extensionIds: [] });
+
+      const decided = evaluatePolicies([tenant, did, queue, agentRule], answered);
+      expect(decided).toMatchObject({ record: true, policyId: agentRule.id });
+
+      const extension = policy({ scopeType: 'extension', scopeId: 'E1', action: 'no_record' });
+      expect(
+        evaluatePolicies([queue, agentRule, extension], { ...answered, extensionIds: ['E1'] })
+          .record,
+      ).toBe(false);
+    });
+
+    it('at call setup (no agent yet) the queue rule decides', () => {
+      const queue = policy({ scopeType: 'queue', scopeId: 'Q1', action: 'no_record' });
+      expect(evaluatePolicies([queue, agent()], call({ queueId: 'Q1' })).record).toBe(false);
+    });
+
+    it('can only record, without an announcement or feature codes', () => {
+      const base = {
+        scopeType: 'agent' as const,
+        scopeId: 'A1',
+        direction: 'any' as const,
+        announce: false,
+      };
+      expect(validatePolicy({ ...base, action: 'record' }, 'T1')).toMatchObject({
+        scopeType: 'agent',
+        scopeId: 'A1',
+        action: 'record',
+      });
+      expect(() => validatePolicy({ ...base, action: 'no_record' }, 'T1')).toThrow(
+        InvalidPolicyError,
+      );
+      expect(() => validatePolicy({ ...base, action: 'record', announce: true }, 'T1')).toThrow(
+        /cannot announce/,
+      );
+      expect(() =>
+        validatePolicy({ ...base, action: 'record', allowOnDemand: true }, 'T1'),
+      ).toThrow(/feature codes/);
+      expect(() => validatePolicy({ ...base, scopeId: '', action: 'record' }, 'T1')).toThrow(
+        InvalidPolicyError,
+      );
+    });
+  });
+
   describe('allow on demand (S5-13)', () => {
     it('comes from the deciding rule, so the narrowest rule also decides feature codes', () => {
       const tenant = policy({ action: 'no_record', allowOnDemand: true });

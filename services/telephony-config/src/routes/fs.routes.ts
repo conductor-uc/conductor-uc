@@ -171,6 +171,17 @@ const RecordingControlBodySchema = Type.Object({
   nodeId: Type.Optional(Type.String({ maxLength: 64 })),
 });
 
+/** `/fs/recording/:tenantId/agent-answer` (S5-14): `agent_recording.lua`'s question. */
+const AgentAnswerQuerySchema = Type.Object({
+  queueId: Type.String({ minLength: 1, maxLength: 36 }),
+  /** `cc_agent`: `<extension number>@<tenant domain>`. */
+  agent: Type.String({ minLength: 3, maxLength: 320 }),
+  /** The caller's channel (the queue member), so the recording is found with the call. */
+  callUuid: Type.String({ minLength: 1, maxLength: 64 }),
+  nodeId: Type.Optional(Type.String({ maxLength: 64 })),
+  didId: Type.Optional(Type.String({ maxLength: 36 })),
+});
+
 const FlowQueueQuerySchema = Type.Object({
   /** The flow runner's own `cuc_node_id` — see `handleQueueDial`'s doc comment on why an acquire needs to know who's asking. */
   nodeId: Type.String({ minLength: 1 }),
@@ -1042,6 +1053,7 @@ export function registerFsRoutes(
       callcenterName(callingExtension.number, domain.fqdn),
       status,
       tenantId,
+      opensipsSipUri,
     );
   }
 
@@ -1066,6 +1078,8 @@ export function registerFsRoutes(
     destinationNumber: string,
     domainFqdn: string,
     nodeId: string | undefined,
+    /** S5-14: the DID the call came in on, for an agent-scoped recording decision at answer. */
+    didId?: string,
   ): Promise<string> {
     if (nodeId === undefined || nodeId === '') {
       logger.warn({ tenantId, queueId }, 'dialplan: queue DID hit with no requesting nodeId');
@@ -1104,6 +1118,8 @@ export function registerFsRoutes(
       destinationNumber,
       callcenterName(queueId, domainFqdn),
       tenantId,
+      // S5-14: armed only when recording is wired, like every other recording action.
+      recording === null ? undefined : { queueId, ...(didId === undefined ? {} : { didId }) },
     );
   }
 
@@ -1448,6 +1464,67 @@ export function registerFsRoutes(
       ...featureCodes,
     };
   }
+
+  /**
+   * `GET /fs/recording/:tenantId/agent-answer` (S5-14): an agent answered a queue call.
+   * `agent_recording.lua` asks from the agent's leg (armed by {@link agentAnswerRecordingActions}),
+   * only when the caller is not already being recorded. Decides with the answering agent (an
+   * `agent` rule), the queue, the DID and the tenant, registers the recording to the agent's
+   * extension, and returns the spool path to record the agent's leg into.
+   *
+   * `agent` is `mod_callcenter`'s `cc_agent`, `<extension number>@<tenant domain>`: mapped back to
+   * the extension here, and only within the tenant that domain belongs to. Fails open without the
+   * S5-12 refusal: the caller is already connected to the queue, and refusing the agent's leg would
+   * only offer the call to the next agent.
+   */
+  app.get(
+    '/fs/recording/:tenantId/agent-answer',
+    {
+      config: { public: true },
+      schema: { params: RecordingControlParamsSchema, querystring: AgentAnswerQuerySchema },
+    },
+    async (request, reply) => {
+      if (!authorized(request.headers)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId } = request.params;
+      const { queueId, agent, callUuid, nodeId, didId } = request.query;
+      const none = { action: 'none' as const };
+      if (recording === null) return none;
+
+      const at = agent.lastIndexOf('@');
+      const number = at > 0 ? agent.slice(0, at) : '';
+      const fqdn = at > 0 ? agent.slice(at + 1) : '';
+      if (number === '' || (await readModel.findTenantIdByFqdn(fqdn)) !== tenantId) {
+        logger.warn({ tenantId, agent }, 'recording: agent answer for an agent not in this tenant');
+        return none;
+      }
+      const extension = await readModel.findExtensionByNumber(tenantId, number);
+      const queue = await readModel.findQueueById(queueId);
+      if (extension === undefined || queue === undefined || queue.tenantId !== tenantId) {
+        logger.warn({ tenantId, agent, queueId }, 'recording: agent answer did not resolve');
+        return none;
+      }
+
+      const directive = await decideRecording(recording.client, {
+        tenantId,
+        direction: 'inbound',
+        extensionIds: [],
+        queueId,
+        ...(didId === undefined || didId === '' ? {} : { didId }),
+        agentId: extension.id,
+        callUuid,
+        ...(nodeId === undefined || nodeId === '' ? {} : { nodeId }),
+      });
+      if (directive.kind !== 'record') return none;
+      return {
+        action: 'record' as const,
+        recordingId: directive.recordingId,
+        path: recordingSpoolPath(recording.spoolDir, directive.recordingId),
+      };
+    },
+  );
 
   /**
    * `POST /fs/recording/:tenantId/control` (S5-13): a recording feature code pressed during a call,
@@ -1910,6 +1987,7 @@ export function registerFsRoutes(
           destinationNumber,
           domain.fqdn,
           nodeId,
+          did.id,
         );
       }
 
@@ -2579,7 +2657,11 @@ export function registerFsRoutes(
       });
     }
 
-    return buildCallcenterConfigurationDocument(queueEntries, [...agentEntries.values()]);
+    return buildCallcenterConfigurationDocument(
+      queueEntries,
+      [...agentEntries.values()],
+      opensipsSipUri,
+    );
   });
 
   /**

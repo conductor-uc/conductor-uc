@@ -18491,6 +18491,12 @@
                               {
                                 "type": "string",
                                 "enum": [
+                                  "agent"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
                                   "queue"
                                 ]
                               },
@@ -18599,6 +18605,12 @@
                         "type": "string",
                         "enum": [
                           "extension"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "agent"
                         ]
                       },
                       {
@@ -18730,6 +18742,12 @@
                         {
                           "type": "string",
                           "enum": [
+                            "agent"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
                             "queue"
                           ]
                         },
@@ -18837,6 +18855,12 @@
                         "type": "string",
                         "enum": [
                           "extension"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "agent"
                         ]
                       },
                       {
@@ -18972,6 +18996,12 @@
                           "type": "string",
                           "enum": [
                             "extension"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "agent"
                           ]
                         },
                         {

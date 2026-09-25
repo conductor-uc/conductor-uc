@@ -8,20 +8,23 @@ import '../pbx/resource.dart';
 import 'recordings_api.dart';
 
 /// Which resource a policy scope picks its target from.
+/// An agent rule names the agent's extension.
 const _scopeResource = {
   'extension': 'extensions',
+  'agent': 'extensions',
   'queue': 'queues',
   'did': 'dids',
 };
 
 const _scopeNoun = {
   'extension': 'extension',
+  'agent': 'agent',
   'queue': 'queue',
   'did': 'phone number',
 };
 
 String _titleFor(String scopeType, Json row) => switch (scopeType) {
-  'extension' => extensionsDef.titleOf(row),
+  'extension' || 'agent' => extensionsDef.titleOf(row),
   'queue' => queuesDef.titleOf(row),
   _ => didsDef.titleOf(row),
 };
@@ -106,9 +109,9 @@ class PoliciesPanel extends ConsumerWidget {
             Expanded(
               child: Text(
                 'The narrowest rule that applies to a call decides: an '
-                'extension beats a queue, a queue beats a phone number, a phone '
-                'number beats the whole organization. With no rule, a call is '
-                'not recorded.',
+                'extension beats a queue agent, an agent beats a queue, a queue '
+                'beats a phone number, a phone number beats the whole '
+                'organization. With no rule, a call is not recorded.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
@@ -498,6 +501,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
         if (a['status'] == 'ready' && a['kind'] == 'prompt') a,
     ];
     final recording = _form.action == 'record';
+    final agentRule = _form.scopeType == 'agent';
     return AlertDialog(
       title: Text(widget.policy == null ? 'Add rule' : 'Edit rule'),
       content: SizedBox(
@@ -518,8 +522,29 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                 ],
                 onChanged: _busy
                     ? null
-                    : (v) => _set(scopeType: v, scopeId: () => null),
+                    : (v) => v == 'agent'
+                          // An agent rule only records, with no announcement
+                          // and no feature codes: the service refuses others.
+                          ? _set(
+                              scopeType: v,
+                              scopeId: () => null,
+                              action: 'record',
+                              announce: false,
+                              consent: () => null,
+                              allowOnDemand: false,
+                            )
+                          : _set(scopeType: v, scopeId: () => null),
               ),
+              if (agentRule)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Records the queue calls this person answers as an agent, '
+                    'from the moment they answer. A call the queue or phone '
+                    'number rule already records is not recorded twice.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               if (_form.scopeType != 'tenant')
                 DropdownButtonFormField<String>(
                   key: ValueKey('policy-target-${_form.scopeType}'),
@@ -555,7 +580,8 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                 decoration: const InputDecoration(labelText: 'Action'),
                 items: [
                   for (final e in policyActions.entries)
-                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                    if (!agentRule || e.key == 'record')
+                      DropdownMenuItem(value: e.key, child: Text(e.value)),
                 ],
                 onChanged: _busy
                     ? null
@@ -572,7 +598,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                   'Played to the caller before recording starts.',
                 ),
                 value: _form.announce && recording,
-                onChanged: _busy || !recording
+                onChanged: _busy || !recording || agentRule
                     ? null
                     : (v) => _set(announce: v, consent: () => null),
               ),
@@ -600,27 +626,28 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                   ],
                   onChanged: _busy ? null : (v) => _set(consent: () => v),
                 ),
-              SwitchListTile(
-                key: const ValueKey('policy-on-demand'),
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  recording
-                      ? 'Allow pausing with *2'
-                      : 'Allow recording on demand with *1',
+              if (!agentRule)
+                SwitchListTile(
+                  key: const ValueKey('policy-on-demand'),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    recording
+                        ? 'Allow pausing with *2'
+                        : 'Allow recording on demand with *1',
+                  ),
+                  subtitle: Text(
+                    recording
+                        ? 'During a call this rule records, a person on it can '
+                              'press *2 to pause the recording (for card or '
+                              'medical details) and *2 again to resume. The '
+                              'paused part is silent. Every pause is logged.'
+                        : 'During a call this rule does not record, a person on '
+                              'it can press *1 to start recording and *1 again to '
+                              'stop. Every start and stop is logged.',
+                  ),
+                  value: _form.allowOnDemand,
+                  onChanged: _busy ? null : (v) => _set(allowOnDemand: v),
                 ),
-                subtitle: Text(
-                  recording
-                      ? 'During a call this rule records, a person on it can '
-                            'press *2 to pause the recording (for card or '
-                            'medical details) and *2 again to resume. The '
-                            'paused part is silent. Every pause is logged.'
-                      : 'During a call this rule does not record, a person on '
-                            'it can press *1 to start recording and *1 again to '
-                            'stop. Every start and stop is logged.',
-                ),
-                value: _form.allowOnDemand,
-                onChanged: _busy ? null : (v) => _set(allowOnDemand: v),
-              ),
               const SizedBox(height: 8),
               Text(
                 'Whether you must tell people a call is recorded, and how, '
