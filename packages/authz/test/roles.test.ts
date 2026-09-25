@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { allPermissions, isKnownPermission, SELF_PERMISSIONS } from '../src/permissions.js';
+import {
+  allPermissions,
+  CONFIG_READ_PERMISSIONS,
+  dataClassOf,
+  isKnownPermission,
+  READ_TWINS,
+  SELF_PERMISSIONS,
+} from '../src/permissions.js';
 import { BUILT_IN_ROLES, BUILT_IN_ROLE_IDS, isBuiltInRoleId, roleCatalog } from '../src/roles.js';
 import type { Role } from '../src/types.js';
 
@@ -25,10 +32,11 @@ describe('BUILT_IN_ROLES', () => {
     }
   });
 
-  it('reseller_admin never holds reseller.create or reseller.manage — H3 reserves those to master', () => {
+  it('reseller_admin never holds reseller.create, reseller.manage or reseller.read — H3 reserves those to master', () => {
     const resellerAdmin = BUILT_IN_ROLES.get('reseller_admin');
     expect(resellerAdmin?.permissions.has('reseller.create')).toBe(false);
     expect(resellerAdmin?.permissions.has('reseller.manage')).toBe(false);
+    expect(resellerAdmin?.permissions.has('reseller.read')).toBe(false);
   });
 
   it('reseller_admin holds tenant lifecycle management, per its documented default holder', () => {
@@ -115,6 +123,95 @@ describe('BUILT_IN_ROLES', () => {
   it('no reseller or master-support role holds a self-service permission — there is nothing of their own to see, and voicemail and history are private (H1)', () => {
     for (const roleId of ['reseller_admin', 'reseller_support', 'master_support']) {
       for (const permission of SELF_PERMISSIONS) {
+        expect(BUILT_IN_ROLES.get(roleId as never)?.permissions.has(permission), roleId).toBe(
+          false,
+        );
+      }
+    }
+  });
+});
+
+describe('support roles read configuration (G-10, S1-15)', () => {
+  const writes = (roleId: string) =>
+    [...(BUILT_IN_ROLES.get(roleId as never)?.permissions ?? [])].filter(
+      (p) => Object.hasOwn(READ_TWINS, p) || p.endsWith('.create') || p.endsWith('.suspend'),
+    );
+
+  it('master_support holds every configuration read', () => {
+    const role = BUILT_IN_ROLES.get('master_support');
+    for (const permission of CONFIG_READ_PERMISSIONS) {
+      expect(role?.permissions.has(permission), permission).toBe(true);
+    }
+  });
+
+  it('master_support keeps its read-shaped and private reads, and adds billing.read', () => {
+    const role = BUILT_IN_ROLES.get('master_support');
+    for (const permission of [
+      'org.view',
+      'cdr.read',
+      'analytics.view',
+      'audit.read',
+      'monitor.presence',
+      'billing.read',
+    ]) {
+      expect(role?.permissions.has(permission), permission).toBe(true);
+    }
+  });
+
+  it('master_support holds no write, secret or active-monitoring permission', () => {
+    const role = BUILT_IN_ROLES.get('master_support');
+    expect(writes('master_support')).toEqual([]);
+    for (const permission of role?.permissions ?? []) {
+      expect(dataClassOf(permission), permission).not.toBe('secret');
+    }
+    for (const permission of [
+      'secret.reveal',
+      'cdr.export',
+      'recording.delete',
+      'monitor.barge',
+      'voicemail.access',
+    ]) {
+      expect(role?.permissions.has(permission), permission).toBe(false);
+    }
+  });
+
+  it('reseller_support reads exactly what reseller_admin manages, plus org.view and audit.read', () => {
+    const admin = BUILT_IN_ROLES.get('reseller_admin');
+    const expected = [
+      'org.view',
+      'audit.read',
+      ...[...(admin?.permissions ?? [])].flatMap((p) =>
+        Object.hasOwn(READ_TWINS, p) ? [READ_TWINS[p] as string] : [],
+      ),
+    ];
+    const support = BUILT_IN_ROLES.get('reseller_support');
+    expect([...(support?.permissions ?? [])].sort()).toEqual([...new Set(expected)].sort());
+    for (const permission of ['extension.read', 'tenant.read', 'trunk.read', 'brand.read']) {
+      expect(support?.permissions.has(permission), permission).toBe(true);
+    }
+  });
+
+  it('reseller_support holds no write, no private permission, and not reseller.read (H3)', () => {
+    const role = BUILT_IN_ROLES.get('reseller_support');
+    expect(writes('reseller_support')).toEqual([]);
+    for (const permission of role?.permissions ?? []) {
+      // audit.read is config/private: the audit query keeps private entries from a reseller (G-13).
+      if (permission === 'audit.read') continue;
+      expect(dataClassOf(permission), permission).toBe('config');
+    }
+    expect(role?.permissions.has('reseller.read')).toBe(false);
+  });
+
+  it('tenant_supervisor reads queues and extensions but manages neither', () => {
+    const role = BUILT_IN_ROLES.get('tenant_supervisor');
+    expect(role?.permissions.has('queue.read')).toBe(true);
+    expect(role?.permissions.has('extension.read')).toBe(true);
+    expect(writes('tenant_supervisor')).toEqual([]);
+  });
+
+  it('the admin roles list .manage only; the reads come from the implication', () => {
+    for (const roleId of ['reseller_admin', 'tenant_admin']) {
+      for (const permission of CONFIG_READ_PERMISSIONS) {
         expect(BUILT_IN_ROLES.get(roleId as never)?.permissions.has(permission), roleId).toBe(
           false,
         );

@@ -1,4 +1,9 @@
-import { allPermissions, SELF_PERMISSIONS } from './permissions.js';
+import {
+  allPermissions,
+  CONFIG_READ_PERMISSIONS,
+  READ_TWINS,
+  SELF_PERMISSIONS,
+} from './permissions.js';
 import type { Permission, Role, RoleCatalog } from './types.js';
 
 /**
@@ -21,6 +26,11 @@ function role(id: BuiltInRoleId, permissions: readonly Permission[]): Role {
   return { id, permissions: new Set(permissions) };
 }
 
+/**
+ * The admin roles list management permissions only. Each one implies its
+ * `.read` twin wherever permissions are evaluated (`READ_TWINS`, G-10), so an
+ * admin reads everything it manages without the reads being listed here.
+ */
 const RESELLER_ADMIN_PERMISSIONS: readonly Permission[] = [
   'org.view',
   'tenant.create',
@@ -82,24 +92,57 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
 
 /**
  * "Read everything, no writes" (master_support) and "read config"
- * (reseller_support) describe a read/write split the catalog in 07 §3.3 does
- * not actually carry: every entry there is a management permission
- * (`*.manage`, `*.edit`, …) or one of the small set of genuinely read-shaped
- * ones (`cdr.read`, `analytics.view`, `audit.read`, `monitor.presence`).
- * There is no `tenant.read` or `extension.read` to give a support role, so a
- * support user cannot yet read tenant or extension *records* through a
- * permission — only the operational, read-shaped surfaces the catalog
- * defines. This is a real gap in the initial catalog, not a modeling choice;
- * closing it means adding read counterparts to the `*.manage` permissions,
- * which is a decisions.md-worthy change to 07 §3.3, not something to invent
- * unilaterally here.
+ * (reseller_support), in the catalog's terms (G-10, S1-15). Every
+ * configuration management permission has a `.read` twin, and the list and
+ * view routes declare the twin, so a support role holds reads and nothing a
+ * write route asks for.
+ *
+ * `master_support` holds every configuration read, plus the read-shaped
+ * operational and private surfaces it always had (`cdr.read`,
+ * `analytics.view`, `audit.read`, `monitor.presence`) and the usage-class
+ * `billing.read`. Its private reads are audited like every master access to
+ * private data (SAD §10).
+ *
+ * `reseller_support` holds the reads of exactly what `reseller_admin` manages:
+ * a support person never sees more than their own tier's admin could. That
+ * leaves out `reseller.read` (H3 reserves it to the master), and the tenant-only
+ * `callflow.read` and `recording.policy.read`, which no reseller role manages
+ * either. H1 keeps it out of private data whatever it holds.
  */
-const READ_SHAPED_PERMISSIONS: readonly Permission[] = [
+const MASTER_SUPPORT_PERMISSIONS: readonly Permission[] = [
   'org.view',
   'cdr.read',
   'analytics.view',
   'audit.read',
   'monitor.presence',
+  'billing.read',
+  ...CONFIG_READ_PERMISSIONS,
+];
+
+const RESELLER_SUPPORT_PERMISSIONS: readonly Permission[] = [
+  'org.view',
+  'audit.read',
+  ...RESELLER_ADMIN_PERMISSIONS.flatMap((permission) =>
+    Object.hasOwn(READ_TWINS, permission) ? [READ_TWINS[permission] as Permission] : [],
+  ),
+];
+
+/**
+ * A supervisor watches queues and the people answering them, so it reads the
+ * queue configuration (queues, agents and tiers are all `queue.read`) and the
+ * extension directory the agents and monitored calls refer to. It changes
+ * neither: that stays with `tenant_admin`.
+ */
+const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
+  'org.view',
+  'queue.read',
+  'extension.read',
+  'monitor.presence',
+  'monitor.listen',
+  'monitor.whisper',
+  'monitor.barge',
+  'analytics.view',
+  ...SELF_PERMISSIONS,
 ];
 
 /**
@@ -116,22 +159,11 @@ const READ_SHAPED_PERMISSIONS: readonly Permission[] = [
  */
 export const BUILT_IN_ROLES: ReadonlyMap<BuiltInRoleId, Role> = new Map([
   ['master_admin', role('master_admin', allPermissions())],
-  ['master_support', role('master_support', READ_SHAPED_PERMISSIONS)],
+  ['master_support', role('master_support', MASTER_SUPPORT_PERMISSIONS)],
   ['reseller_admin', role('reseller_admin', RESELLER_ADMIN_PERMISSIONS)],
-  ['reseller_support', role('reseller_support', ['org.view', 'audit.read'])],
+  ['reseller_support', role('reseller_support', RESELLER_SUPPORT_PERMISSIONS)],
   ['tenant_admin', role('tenant_admin', TENANT_ADMIN_PERMISSIONS)],
-  [
-    'tenant_supervisor',
-    role('tenant_supervisor', [
-      'org.view',
-      'monitor.presence',
-      'monitor.listen',
-      'monitor.whisper',
-      'monitor.barge',
-      'analytics.view',
-      ...SELF_PERMISSIONS,
-    ]),
-  ],
+  ['tenant_supervisor', role('tenant_supervisor', TENANT_SUPERVISOR_PERMISSIONS)],
   // Voicemail and recording access for one's own extension/mailbox used to be
   // a per-scope grant (05 §3.2's "own extension, voicemail, and recordings
   // where granted"), and `voicemail.access` still is: a role has no scope of

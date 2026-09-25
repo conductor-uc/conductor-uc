@@ -142,11 +142,14 @@ function expectedResult(
 ): boolean {
   const dataClass = dataClassOf(permission);
 
-  // H3 is unconditional: nobody but master may create or manage a reseller,
-  // whatever the resource relationship. Checked first, matching how
-  // hardRulesPass itself checks every hard rule before anything else.
+  // H3 is unconditional: nobody but master may create, manage or read the
+  // reseller records (`reseller.read`, G-10), whatever the resource
+  // relationship. Checked first, matching how hardRulesPass itself checks
+  // every hard rule before anything else.
   if (
-    (permission === 'reseller.create' || permission === 'reseller.manage') &&
+    (permission === 'reseller.create' ||
+      permission === 'reseller.manage' ||
+      permission === 'reseller.read') &&
     actorType !== 'master'
   ) {
     return false;

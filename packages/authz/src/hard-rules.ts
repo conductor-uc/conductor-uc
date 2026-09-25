@@ -9,10 +9,18 @@ const API_KEY_RESTRICTED_PERMISSIONS: ReadonlySet<Permission> = new Set([
   'apikey.manage',
 ]);
 
-/** The permissions H3 reserves to the master (07 §3.1). */
+/**
+ * The permissions H3 reserves to the master (07 §3.1). `reseller.read` (G-10)
+ * is here too: the reseller records are the master's catalog of its resellers,
+ * and the routes serving them (`GET /v1/resellers`, `/v1/resellers/:id`) have
+ * no ancestry check of their own. H3 kept them master-only while they declared
+ * `reseller.manage`; this keeps them so under the read twin. A reseller sees
+ * its own organization through `org.view`, not through these.
+ */
 const RESELLER_LIFECYCLE_PERMISSIONS: ReadonlySet<Permission> = new Set([
   'reseller.create',
   'reseller.manage',
+  'reseller.read',
 ]);
 
 /**
@@ -53,7 +61,7 @@ export function h2TenantBoundary(actor: Actor, resource: ResourceRef): boolean {
   return !(actor.org.type === 'tenant' && actor.org.id !== resource.org.id);
 }
 
-/** H3: only master actors can create or modify resellers. */
+/** H3: only master actors can create, modify, or read the reseller records. */
 export function h3ResellerLifecycle(actor: Actor, permission: Permission): boolean {
   return !(RESELLER_LIFECYCLE_PERMISSIONS.has(permission) && actor.org.type !== 'master');
 }
@@ -88,8 +96,8 @@ export function h1RouteLevelWall(actorOrgType: OrgType, dataClass: DataClass): b
  * same way it runs {@link h1RouteLevelWall} — before a handler exists, using
  * only the actor's org type and the route's declared permission. Unlike H1,
  * this needs no resource-aware counterpart: H3 was never resource-dependent
- * to begin with (07 §3.1 reserves `reseller.create`/`reseller.manage` to the
- * master unconditionally), so this *is* the full rule, not an approximation
+ * to begin with (07 §3.1 reserves `reseller.create`/`reseller.manage`/
+ * `reseller.read` to the master unconditionally), so this *is* the full rule, not an approximation
  * of one.
  */
 export function h3RouteLevelLifecycle(actorOrgType: OrgType, permission: Permission): boolean {
