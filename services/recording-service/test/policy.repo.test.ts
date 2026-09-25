@@ -14,6 +14,7 @@ const record = (overrides: Partial<ValidPolicy> = {}): ValidPolicy => ({
   action: 'record',
   announce: false,
   consentAssetId: null,
+  allowOnDemand: false,
   ...overrides,
 });
 

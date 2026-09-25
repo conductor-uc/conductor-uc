@@ -21,6 +21,8 @@ export interface RecordingServiceDb extends EventTables {
     announce: boolean;
     /** A media asset (pbx-config-service) to play; null plays the neutral default tone. */
     consent_asset_id: string | null;
+    /** S5-13: feature codes may start/stop (no_record) or pause/resume (record) on its calls. */
+    allow_on_demand: boolean;
     created_at: Date;
     updated_at: Date;
     version: number;
@@ -53,6 +55,12 @@ export interface RecordingServiceDb extends EventTables {
     failure_reason: string | null;
     /** After this the retention sweep deletes the object. Null keeps it indefinitely. */
     retention_date: Date | null;
+    /** S5-13: started by a feature code rather than by a rule. */
+    on_demand: boolean;
+    /** S5-13: when an on-demand recording was stopped by feature code. */
+    stopped_at: Date | null;
+    /** S5-13: JSON text, `[{ from, to }]`; an open interval (`to` null) means paused now. */
+    pause_intervals: string | null;
     created_at: Date;
     updated_at: Date;
     version: number;

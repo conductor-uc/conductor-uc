@@ -18030,7 +18030,10 @@
                           "startedAt",
                           "durationMs",
                           "sizeBytes",
-                          "retentionDate"
+                          "retentionDate",
+                          "onDemand",
+                          "stoppedAt",
+                          "pauses"
                         ],
                         "properties": {
                           "id": {
@@ -18092,6 +18095,36 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "onDemand": {
+                            "type": "boolean"
+                          },
+                          "stoppedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "pauses": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "from",
+                                "to"
+                              ],
+                              "properties": {
+                                "from": {
+                                  "type": "string"
+                                },
+                                "to": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              }
+                            }
                           }
                         }
                       }
@@ -18156,7 +18189,10 @@
                     "startedAt",
                     "durationMs",
                     "sizeBytes",
-                    "retentionDate"
+                    "retentionDate",
+                    "onDemand",
+                    "stoppedAt",
+                    "pauses"
                   ],
                   "properties": {
                     "id": {
@@ -18218,6 +18254,36 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "onDemand": {
+                      "type": "boolean"
+                    },
+                    "stoppedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "pauses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "from",
+                          "to"
+                        ],
+                        "properties": {
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -18401,7 +18467,8 @@
                           "direction",
                           "action",
                           "announce",
-                          "consentAssetId"
+                          "consentAssetId",
+                          "allowOnDemand"
                         ],
                         "properties": {
                           "id": {
@@ -18490,6 +18557,9 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "allowOnDemand": {
+                            "type": "boolean"
                           }
                         }
                       }
@@ -18602,6 +18672,9 @@
                       "null"
                     ],
                     "maxLength": 36
+                  },
+                  "allowOnDemand": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -18633,7 +18706,8 @@
                     "direction",
                     "action",
                     "announce",
-                    "consentAssetId"
+                    "consentAssetId",
+                    "allowOnDemand"
                   ],
                   "properties": {
                     "id": {
@@ -18722,6 +18796,9 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "allowOnDemand": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -18833,6 +18910,9 @@
                       "null"
                     ],
                     "maxLength": 36
+                  },
+                  "allowOnDemand": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -18873,7 +18953,8 @@
                     "direction",
                     "action",
                     "announce",
-                    "consentAssetId"
+                    "consentAssetId",
+                    "allowOnDemand"
                   ],
                   "properties": {
                     "id": {
@@ -18962,6 +19043,9 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "allowOnDemand": {
+                      "type": "boolean"
                     }
                   }
                 }

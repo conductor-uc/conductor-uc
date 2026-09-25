@@ -240,6 +240,7 @@ void main() {
           'action',
           'announce',
           'consentAssetId',
+          'allowOnDemand',
         ]),
       );
     });
@@ -287,6 +288,8 @@ void main() {
           'durationMs',
           'sizeBytes',
           'retentionDate',
+          'onDemand',
+          'pauses',
         ]),
       );
     });

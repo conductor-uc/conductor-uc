@@ -95,6 +95,7 @@ describe.skipIf(skipReason !== undefined)(
             action: 'record',
             announce: true,
             consentAssetId: 'asset-1',
+            allowOnDemand: false,
           },
         );
         await h.policies.create(
@@ -106,6 +107,7 @@ describe.skipIf(skipReason !== undefined)(
             action: 'no_record',
             announce: false,
             consentAssetId: null,
+            allowOnDemand: false,
           },
         );
 
@@ -134,6 +136,7 @@ describe.skipIf(skipReason !== undefined)(
           consentAssetId: null,
           policyId: null,
           reason: 'default',
+          allowOnDemand: false,
         });
       });
 

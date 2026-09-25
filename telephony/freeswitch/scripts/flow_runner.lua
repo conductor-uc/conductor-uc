@@ -453,8 +453,27 @@ seen on a real node (tests/sip/test/recording_flow.test.ts is the check).
 --]]
 local pendingRecording = nil
 
+--[[
+S5-13: arms the recording feature codes (`*1` on demand, `*2` pause) when the
+target's rule allows them, the same actions `/fs/dialplan` adds for a call
+that reaches the target directly (`xml.ts`'s `recordingFeatureCodeActions`).
+Binding a key again replaces the earlier binding, so a hand-off whose rule
+differs from the flow entry's takes over with its own call context.
+--]]
+local function armFeatureCodes(codes)
+  if type(codes) ~= "table" or type(codes.listen) ~= "string" or type(codes.context) ~= "string" then
+    return
+  end
+  session:setVariable("cuc_rec_ctx", codes.context)
+  session:execute("export", "cuc_rec_owner=" .. session:get_uuid())
+  session:setVariable("RECORD_STEREO", "true")
+  session:execute("bind_meta_app", "1 " .. codes.listen .. " s lua::recording_control.lua record")
+  session:execute("bind_meta_app", "2 " .. codes.listen .. " s lua::recording_control.lua pause")
+end
+
 local function applyRecording(instruction, startsOnAnswer)
   if type(instruction) ~= "table" then return "" end
+  armFeatureCodes(instruction.featureCodes)
   -- S5-12: the tenant requires recording and it cannot be set up. The tone
   -- and the cause come from telephony-config; the caller hears the neutral
   -- tone and the call ends. Callers check `session:ready()` after this.
@@ -481,6 +500,9 @@ local function applyRecording(instruction, startsOnAnswer)
 
   if startsOnAnswer then
     pendingRecording = instruction
+    -- Set now, so a feature code pressed during the bridged call (S5-13)
+    -- finds the recording; `settleRecording` unsets it if no phone answered.
+    session:setVariable("cuc_recording_id", instruction.recordingId)
     return "api_on_answer='uuid_record " .. session:get_uuid() .. " start " .. instruction.path .. "'"
   end
   session:execute("record_session", instruction.path)
@@ -489,13 +511,15 @@ local function applyRecording(instruction, startsOnAnswer)
 end
 
 -- After a bridge: if the armed recording started (its file exists), the call
--- is now recorded, and a later hand-off must not start a second one.
+-- is recorded, and a later hand-off must not start a second one. If no phone
+-- answered, it never started, so the call is not marked as recorded.
 local function settleRecording()
   if pendingRecording == nil then return end
   local handle = io.open(pendingRecording.path, "r")
   if handle ~= nil then
     handle:close()
-    session:setVariable("cuc_recording_id", pendingRecording.recordingId)
+  elseif session:ready() then
+    session:execute("unset", "cuc_recording_id")
   end
   pendingRecording = nil
 end

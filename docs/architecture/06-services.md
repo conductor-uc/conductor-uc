@@ -251,6 +251,7 @@ The **billing view** for resellers is pending decision D-013.
 
 - `POST /internal/v1/recordings:evaluate`, with call context in and the decision (plus consent-announcement asset) out. telephony-config caches the result.
 - `GET /internal/v1/recordings/fail-closed-tenants`, the tenants that require recording, for telephony-config's reconciliation (S5-12)
+- `POST /internal/v1/recordings/control`, a feature code pressed during a call (`*1` on demand, `*2` pause), relayed by telephony-config from the node: decides with the call's rules, records the change and its audit event in one transaction, then answers (S5-13)
 - `POST /internal/v1/recordings:upload-url`, used by the node uploader
 - `POST /internal/v1/recordings/{id}:complete`
 

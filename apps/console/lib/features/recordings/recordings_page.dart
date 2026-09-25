@@ -417,8 +417,13 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
                         DataCell(
                           Chip(
                             label: Text(
-                              recordingStatuses['${r['status']}'] ??
-                                  '${r['status']}',
+                              [
+                                recordingStatuses['${r['status']}'] ??
+                                    '${r['status']}',
+                                if (r['onDemand'] == true) 'on demand',
+                                if ((r['pauses'] as List?)?.isNotEmpty ?? false)
+                                  'paused',
+                              ].join(' · '),
                             ),
                           ),
                         ),

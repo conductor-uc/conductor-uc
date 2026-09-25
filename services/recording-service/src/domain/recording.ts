@@ -32,3 +32,58 @@ export function spoolFileName(id: string): string {
 export function downloadFileName(id: string): string {
   return `recording-${id}.wav`;
 }
+
+/**
+ * S5-13: one pause of a recording. `to` is null while it lasts. Paused audio is masked (replaced
+ * by silence) in the file, so the file's timeline still matches the call; these say where.
+ */
+export interface PauseInterval {
+  readonly from: Date;
+  readonly to: Date | null;
+}
+
+/** Reads the stored JSON text; anything unreadable is treated as no pauses. */
+export function parsePauseIntervals(text: string | null): PauseInterval[] {
+  if (text === null || text === '') return [];
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap((entry: unknown) => {
+      if (typeof entry !== 'object' || entry === null) return [];
+      const { from, to } = entry as { from?: unknown; to?: unknown };
+      if (typeof from !== 'string') return [];
+      return [{ from: new Date(from), to: typeof to === 'string' ? new Date(to) : null }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+export function serializePauseIntervals(pauses: readonly PauseInterval[]): string | null {
+  if (pauses.length === 0) return null;
+  return JSON.stringify(
+    pauses.map((p) => ({
+      from: p.from.toISOString(),
+      to: p.to === null ? null : p.to.toISOString(),
+    })),
+  );
+}
+
+export function isPaused(pauses: readonly PauseInterval[]): boolean {
+  return pauses.length > 0 && pauses[pauses.length - 1]!.to === null;
+}
+
+/** Ends the open pause, if there is one, at `now`. */
+export function closeOpenPause(pauses: readonly PauseInterval[], now: Date): PauseInterval[] {
+  if (!isPaused(pauses)) return [...pauses];
+  return [...pauses.slice(0, -1), { from: pauses[pauses.length - 1]!.from, to: now }];
+}
+
+/** Pauses a running recording, or resumes a paused one, at `now`. */
+export function togglePauseIntervals(
+  pauses: readonly PauseInterval[],
+  now: Date,
+): { pauses: PauseInterval[]; paused: boolean } {
+  if (isPaused(pauses)) return { pauses: closeOpenPause(pauses, now), paused: false };
+  return { pauses: [...pauses, { from: now, to: null }], paused: true };
+}

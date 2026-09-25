@@ -211,6 +211,7 @@ describe.skipIf(skipReason !== undefined)(
           action: 'record',
           announce: false,
           consentAssetId: null,
+          allowOnDemand: false,
         },
       );
       const other = (await h.policies.list({ tenantId: 'tenant-b' }))[0]!;
@@ -263,6 +264,44 @@ describe.skipIf(skipReason !== undefined)(
           failClosed: false,
         });
       });
+    });
+
+    it('a rule can allow on-demand recording (S5-13), off unless asked', async () => {
+      const headers = admin();
+      const plain = await send('POST', base, headers, { scopeType: 'tenant', action: 'record' });
+      expect(plain.json<PolicyBody & { allowOnDemand: boolean }>().allowOnDemand).toBe(false);
+
+      const created = await send('POST', base, headers, {
+        scopeType: 'extension',
+        scopeId: 'E1',
+        action: 'no_record',
+        allowOnDemand: true,
+      });
+      expect(created.statusCode, created.body).toBe(201);
+      const body = created.json<PolicyBody & { allowOnDemand: boolean }>();
+      expect(body.allowOnDemand).toBe(true);
+
+      const changed = await send('PUT', `${base}/${body.id}`, headers, {
+        scopeType: 'extension',
+        scopeId: 'E1',
+        action: 'no_record',
+        allowOnDemand: false,
+      });
+      expect(changed.json<{ allowOnDemand: boolean }>().allowOnDemand).toBe(false);
+      const rows = (await send('GET', base, headers)).json<{
+        rows: { id: string; allowOnDemand: boolean }[];
+      }>().rows;
+      expect(rows.find((row) => row.id === body.id)?.allowOnDemand).toBe(false);
+      expect(
+        (
+          await send('POST', base, headers, {
+            scopeType: 'did',
+            scopeId: 'D1',
+            action: 'record',
+            allowOnDemand: 'yes',
+          })
+        ).statusCode,
+      ).toBe(400);
     });
 
     describe('recording required (S5-12, fail closed)', () => {

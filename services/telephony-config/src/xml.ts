@@ -299,6 +299,70 @@ export const RECORDING_UNAVAILABLE_ACTION =
   '<action application="set" data="cuc_recording_status=unavailable"/>';
 
 /**
+ * S5-13 (G-111): the in-call recording feature codes. They are pressed *during* a call, as the
+ * meta key `*` then one digit (`bind_meta_app`), not dialed as a number, so they cannot collide
+ * with the dialed feature codes (`*97` voicemail, `*45`/`*46` agent login and logout): those are
+ * whole destination numbers matched in `/fs/dialplan`, these are DTMF on an established call.
+ *
+ * - `*1` starts an on-demand recording, or stops the on-demand recording running.
+ * - `*2` pauses the call's recording, or resumes it.
+ *
+ * Only armed on a call whose deciding rule allows on demand. On such a call the internal party's
+ * `*` is taken as the start of a feature code and is not passed on to the far end (a remote IVR
+ * that needs `*` will not get it from that party): `bind_meta_app` consumes the meta key and the
+ * digit after it.
+ */
+export const RECORDING_FEATURE_CODES = {
+  /** Start or stop an on-demand recording (`*1`). */
+  record: '1',
+  /** Pause or resume the recording (`*2`). */
+  pause: '2',
+} as const;
+
+/**
+ * Which legs listen for the feature codes (`bind_meta_app`'s LISTEN_TO): the internal party only.
+ * An inbound call's internal party is the bridged (B) leg, an outbound call's is the caller (A),
+ * and on an internal call both parties are the tenant's own people. A caller from outside the
+ * tenant can never start, stop or pause a recording.
+ */
+export function featureCodeListenLegs(direction: 'inbound' | 'outbound' | 'internal'): string {
+  if (direction === 'inbound') return 'b';
+  if (direction === 'outbound') return 'a';
+  return 'ab';
+}
+
+/**
+ * S5-13: the actions that arm the recording feature codes on a call. `contextToken` is the call's
+ * context (`recording-context.ts`), which `recording_control.lua` sends back with each code.
+ *
+ * `cuc_rec_owner` is exported so it reaches the bridged leg too: the Lua script may run on either
+ * leg (it runs on the leg that pressed the code, `bind_meta_app`'s `s`), and always acts on the
+ * owner (this, the A leg), where a rule recording runs and an on-demand one is started, through
+ * `uuid_record`. `RECORD_STEREO` is set here for an on-demand recording started later.
+ *
+ * Verified by unit tests on the strings only; `bind_meta_app`'s argument order is confirmed from
+ * the FreeSWITCH 1.10.12 binary's own usage text (`<key> [a|b|ab] [a|b|o|s|i|1] <app>`).
+ */
+export function recordingFeatureCodeActions(options: {
+  readonly direction: 'inbound' | 'outbound' | 'internal';
+  readonly contextToken: string;
+}): string[] {
+  const listen = featureCodeListenLegs(options.direction);
+  return [
+    `<action application="set" data="${escapeXml(`cuc_rec_ctx=${options.contextToken}`)}"/>`,
+    '<action application="export" data="cuc_rec_owner=${uuid}"/>',
+    '<action application="set" data="RECORD_STEREO=true"/>',
+    `<action application="bind_meta_app" data="${RECORDING_FEATURE_CODES.record} ${listen} s lua::recording_control.lua record"/>`,
+    `<action application="bind_meta_app" data="${RECORDING_FEATURE_CODES.pause} ${listen} s lua::recording_control.lua pause"/>`,
+  ];
+}
+
+/** S5-13: a short beep back to whoever pressed a feature code that took effect. No words. */
+export const FEATURE_CODE_DONE_TONE = 'tone_stream://%(120,60,1000);loops=1';
+/** S5-13: a low double tone for a feature code that did nothing (not allowed, or unavailable). */
+export const FEATURE_CODE_REFUSED_TONE = 'tone_stream://%(150,100,400);loops=2';
+
+/**
  * S5-12: the neutral signal played before a call is refused because its tenant requires recording
  * and the recording could not be set up. A reorder (fast busy) tone: no words, no name, nothing
  * that can be branded, and a sound callers already read as "this call cannot go through now".

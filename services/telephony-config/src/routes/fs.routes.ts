@@ -17,6 +17,7 @@ import { telephonyEvents } from '../events.js';
 import type { OrgClient } from '../org-client.js';
 import type { PbxConfigClient } from '../pbx-config-client.js';
 import type { RecordingClient, RecordingDirective } from '../recording-client.js';
+import { decodeRecordingContext, encodeRecordingContext } from '../recording-context.js';
 import type { ExtensionRow, OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
 import type { CallflowClient } from '../callflow-client.js';
 import { nextRoundRobinStart } from '../ring-group-counter.js';
@@ -41,6 +42,9 @@ import {
   buildVoicemailDialplanDocument,
   callcenterName,
   CONSENT_TONE,
+  FEATURE_CODE_DONE_TONE,
+  FEATURE_CODE_REFUSED_TONE,
+  featureCodeListenLegs,
   FORWARD_HOPS_HEADER,
   injectDialplanActions,
   MAX_FORWARD_HOPS,
@@ -49,6 +53,7 @@ import {
   RECORDING_REFUSAL_TONE,
   RECORDING_UNAVAILABLE_ACTION,
   recordingActions,
+  recordingFeatureCodeActions,
   recordingSpoolPath,
   type CallcenterAgentEntry,
   type CallcenterQueueEntry,
@@ -133,17 +138,38 @@ type FlowRecordingQuery = Static<typeof FlowRecordingQuerySchema>;
  * `record` names the spool file (registered already) and the announcement to play first, if any;
  * `unavailable` means recording-service could not be asked, so the runner flags the call.
  */
+/**
+ * S5-13: present when the target's rule allows feature codes. The runner arms them before bridging:
+ * `bind_meta_app` on `listen`, with `context` as the call's `cuc_rec_ctx`.
+ */
+interface FlowFeatureCodes {
+  readonly featureCodes?: { readonly listen: string; readonly context: string };
+}
+
 type FlowRecordingInstruction =
-  | { readonly action: 'none' }
+  | ({ readonly action: 'none' } & FlowFeatureCodes)
   | { readonly action: 'unavailable' }
   /** S5-12: the tenant requires recording and it cannot be set up: play `tone`, hang up with `cause`. */
   | { readonly action: 'refuse'; readonly tone: string; readonly cause: string }
-  | {
+  | ({
       readonly action: 'record';
       readonly recordingId: string;
       readonly path: string;
       readonly announcement: string | null;
-    };
+    } & FlowFeatureCodes);
+
+/** `/fs/recording/:tenantId/control` (S5-13): `recording_control.lua`'s feature-code request. */
+const RecordingControlParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
+const RecordingControlBodySchema = Type.Object({
+  code: Type.Union([Type.Literal('record'), Type.Literal('pause')]),
+  /** The channel owning the call's recording (`cuc_rec_owner`, the A leg). */
+  callUuid: Type.String({ minLength: 1, maxLength: 64 }),
+  /** `cuc_recording_id` on that channel, when a recording is running. */
+  recordingId: Type.Optional(Type.String({ maxLength: 36 })),
+  /** `cuc_rec_ctx`: the call's context (`recording-context.ts`). */
+  context: Type.String({ minLength: 1, maxLength: 2048 }),
+  nodeId: Type.Optional(Type.String({ maxLength: 64 })),
+});
 
 const FlowQueueQuerySchema = Type.Object({
   /** The flow runner's own `cuc_node_id` — see `handleQueueDial`'s doc comment on why an acquire needs to know who's asking. */
@@ -1312,7 +1338,24 @@ export function registerFsRoutes(
       ...(nodeId === undefined || nodeId === '' ? {} : { nodeId }),
     });
 
-    if (directive.kind === 'none') return document;
+    // S5-13: the rule allows feature codes on this call; arm them with the call's context.
+    const featureCodes =
+      directive.kind !== 'unavailable' && directive.allowOnDemand === true
+        ? recordingFeatureCodeActions({
+            direction: target.direction,
+            contextToken: encodeRecordingContext({
+              tenantId: target.tenantId,
+              direction: target.direction,
+              extensionIds,
+              queueId: target.queueId,
+              didId: target.didId,
+            }),
+          })
+        : [];
+
+    if (directive.kind === 'none') {
+      return featureCodes.length === 0 ? document : injectDialplanActions(document, featureCodes);
+    }
     if (directive.kind === 'unavailable') {
       // S5-12: a tenant that requires recording has its call refused instead of placed
       // unrecorded. The flag is this service's own copy, so it holds while recording-service is
@@ -1326,9 +1369,8 @@ export function registerFsRoutes(
       }
       return injectDialplanActions(document, [RECORDING_UNAVAILABLE_ACTION]);
     }
-    return injectDialplanActions(
-      document,
-      recordingActions({
+    return injectDialplanActions(document, [
+      ...recordingActions({
         recordingId: directive.recordingId,
         spoolDir: recording.spoolDir,
         announce: directive.announce,
@@ -1337,7 +1379,8 @@ export function registerFsRoutes(
             ? mohUrlFor(target.tenantId, directive.consentAssetId)
             : null,
       }),
-    );
+      ...featureCodes,
+    ]);
   }
 
   /**
@@ -1372,7 +1415,24 @@ export function registerFsRoutes(
       ...(nodeId === undefined ? {} : { nodeId }),
     });
 
-    if (directive.kind === 'none') return { action: 'none' };
+    // S5-13: the target's rule allows feature codes; the runner arms them before bridging.
+    const featureCodes =
+      directive.kind !== 'unavailable' && directive.allowOnDemand === true
+        ? {
+            featureCodes: {
+              listen: featureCodeListenLegs('inbound'),
+              context: encodeRecordingContext({
+                tenantId,
+                direction: 'inbound',
+                extensionIds: scope.extensionIds,
+                queueId: scope.queueId,
+                didId,
+              }),
+            },
+          }
+        : {};
+
+    if (directive.kind === 'none') return { action: 'none', ...featureCodes };
     if (directive.kind === 'unavailable') {
       // S5-12: the same refusal as at call setup, carried out by the runner.
       if (await refusesUnrecorded(tenantId, 'inbound', directive.reason)) {
@@ -1385,8 +1445,81 @@ export function registerFsRoutes(
       recordingId: directive.recordingId,
       path: recordingSpoolPath(recording.spoolDir, directive.recordingId),
       announcement: announcementFor(tenantId, directive),
+      ...featureCodes,
     };
   }
+
+  /**
+   * `POST /fs/recording/:tenantId/control` (S5-13): a recording feature code pressed during a call,
+   * from `recording_control.lua`. FreeSWITCH cannot publish audit events, so the script asks here;
+   * this relays to recording-service, which decides with the call's policies, records the change
+   * and audits it in one transaction, and only then answers. The answer tells the script what to
+   * do on the node (`start`/`stop`/`mask`/`unmask` through `uuid_record`, on the spool path) and
+   * which neutral tone to play to whoever pressed. When recording-service cannot answer, nothing
+   * happens (`none`): an action that cannot be audited is not taken.
+   */
+  app.post(
+    '/fs/recording/:tenantId/control',
+    {
+      config: { public: true },
+      schema: { params: RecordingControlParamsSchema, body: RecordingControlBodySchema },
+    },
+    async (request, reply) => {
+      if (!authorized(request.headers)) {
+        reply.code(401);
+        return '';
+      }
+      const { tenantId } = request.params;
+      const { code, callUuid, recordingId, context, nodeId } = request.body;
+      const refused = (reason: string) => ({
+        action: 'none' as const,
+        reason,
+        tone: FEATURE_CODE_REFUSED_TONE,
+      });
+
+      const decoded = decodeRecordingContext(context);
+      if (recording === null || decoded === undefined || decoded.tenantId !== tenantId) {
+        logger.warn({ tenantId, callUuid }, 'recording: feature code with no usable call context');
+        return refused('no_context');
+      }
+
+      let result;
+      try {
+        result = await recording.client.control({
+          tenantId,
+          code,
+          callUuid,
+          ...(recordingId === undefined || recordingId === '' ? {} : { recordingId }),
+          ...(nodeId === undefined || nodeId === '' ? {} : { nodeId }),
+          context: {
+            direction: decoded.direction,
+            extensionIds: decoded.extensionIds,
+            queueId: decoded.queueId,
+            didId: decoded.didId,
+          },
+        });
+      } catch (error) {
+        logger.error(
+          { err: error, tenantId, callUuid, code },
+          'recording: feature code could not reach recording-service; nothing done',
+        );
+        return refused('unavailable');
+      }
+
+      if (result.result === 'refused' || result.recordingId === null) {
+        return refused(result.reason ?? 'refused');
+      }
+      const action = (
+        { started: 'start', stopped: 'stop', paused: 'mask', resumed: 'unmask' } as const
+      )[result.result];
+      return {
+        action,
+        recordingId: result.recordingId,
+        path: recordingSpoolPath(recording.spoolDir, result.recordingId),
+        tone: FEATURE_CODE_DONE_TONE,
+      };
+    },
+  );
 
   app.post('/fs/dialplan', { config: { public: true } }, async (request, reply) => {
     if (!authorized(request.headers)) {

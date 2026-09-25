@@ -100,6 +100,7 @@ void main() {
           'action': 'record',
           'announce': true,
           'consentAssetId': 'media-1',
+          'allowOnDemand': true,
         });
         expect(form.toJson(), {
           'scopeType': 'queue',
@@ -108,7 +109,9 @@ void main() {
           'action': 'record',
           'announce': true,
           'consentAssetId': 'media-1',
+          'allowOnDemand': true,
         });
+        expect(const PolicyForm().toJson()['allowOnDemand'], isFalse);
         expect(
           PolicyForm(
             announce: false,
@@ -218,6 +221,14 @@ void main() {
         expect(find.byTooltip('Download'), findsNWidgets(23));
       },
     );
+
+    testWidgets('marks recordings started on demand, and paused ones (S5-13)', (
+      tester,
+    ) async {
+      await openRecordings(tester);
+      expect(find.text('Ready · on demand'), findsOneWidget);
+      expect(find.text('Ready · paused'), findsOneWidget);
+    });
 
     testWidgets('Load more adds the next page', (tester) async {
       await openRecordings(tester);
@@ -392,6 +403,35 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.text('Queue Support'), findsOneWidget);
       expect(find.text('Incoming calls'), findsOneWidget);
+    });
+
+    testWidgets('a rule can allow the in-call feature codes (S5-13)', (
+      tester,
+    ) async {
+      await openRecordings(tester);
+      await openRules(tester);
+      expect(find.text('Feature codes'), findsOneWidget);
+      expect(find.text('Off'), findsNWidgets(2));
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Add rule'));
+      await tester.pumpAndSettle();
+      await pickIn(tester, 'Applies to', 'Queue');
+      await tester.tap(find.byKey(const ValueKey('policy-target-queue')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Support').last);
+      await tester.pumpAndSettle();
+      // A rule that records offers pausing.
+      expect(find.text('Allow pausing with *2'), findsOneWidget);
+      await pickIn(tester, 'Action', 'Do not record');
+      // A rule that does not record offers recording on demand.
+      expect(find.text('Allow recording on demand with *1'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('policy-on-demand')));
+      await tester.pumpAndSettle();
+      await tester.tap(inDialog(find.widgetWithText(FilledButton, 'Save')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('*1 record'), findsOneWidget);
     });
 
     testWidgets(

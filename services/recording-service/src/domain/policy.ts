@@ -21,6 +21,17 @@
  * 4. **No matching policy means no recording**, and no announcement.
  *
  * A `no_record` policy never announces: nothing is being recorded to consent to.
+ *
+ * ## On demand (S5-13)
+ *
+ * A policy may also *allow on demand*: the people on its calls can use feature codes to start and
+ * stop a recording of their own (on a call the deciding group does not record) or to pause and
+ * resume one (on a call it records). Which group decides is exactly the precedence above, so the
+ * narrowest rule that applies also decides whether feature codes work. Within the deciding group:
+ * a refusal allows on-demand recording only if every tied policy does (starting a recording is the
+ * privacy-reducing act, so a tie leans away from it), while a recording decision allows pause and
+ * resume if any tied policy does (pausing only ever records less). No matching policy allows
+ * nothing.
  */
 
 export const POLICY_SCOPE_TYPES = ['tenant', 'extension', 'queue', 'did'] as const;
@@ -52,6 +63,8 @@ export interface Policy {
   readonly action: PolicyAction;
   readonly announce: boolean;
   readonly consentAssetId: string | null;
+  /** S5-13: feature codes may start/stop (no_record) or pause/resume (record) on its calls. */
+  readonly allowOnDemand: boolean;
 }
 
 /** What telephony-config knows about one call at setup time. */
@@ -70,6 +83,11 @@ export interface Decision {
   readonly consentAssetId: string | null;
   readonly policyId: string | null;
   readonly reason: 'policy' | 'default';
+  /**
+   * S5-13: whether feature codes work on this call: start and stop an on-demand recording when
+   * `record` is false, pause and resume when it is true.
+   */
+  readonly allowOnDemand: boolean;
 }
 
 export const NO_RECORDING: Decision = {
@@ -78,6 +96,7 @@ export const NO_RECORDING: Decision = {
   consentAssetId: null,
   policyId: null,
   reason: 'default',
+  allowOnDemand: false,
 };
 
 export class InvalidPolicyError extends Error {
@@ -117,6 +136,7 @@ export function evaluatePolicies(policies: readonly Policy[], call: CallContext)
       consentAssetId: null,
       policyId: refusal.id,
       reason: 'policy',
+      allowOnDemand: tied.every((policy) => policy.allowOnDemand),
     };
   }
 
@@ -128,6 +148,7 @@ export function evaluatePolicies(policies: readonly Policy[], call: CallContext)
       announcing.find((policy) => policy.consentAssetId !== null)?.consentAssetId ?? null,
     policyId: tied[0]!.id,
     reason: 'policy',
+    allowOnDemand: tied.some((policy) => policy.allowOnDemand),
   };
 }
 
@@ -142,6 +163,7 @@ export interface PolicyInput {
   readonly action: PolicyAction;
   readonly announce: boolean;
   readonly consentAssetId?: string | null | undefined;
+  readonly allowOnDemand?: boolean | undefined;
 }
 
 /** A policy ready to store: `scopeId` resolved and the combination checked. */
@@ -152,6 +174,7 @@ export interface ValidPolicy {
   readonly action: PolicyAction;
   readonly announce: boolean;
   readonly consentAssetId: string | null;
+  readonly allowOnDemand: boolean;
 }
 
 /** Checks a proposed policy. `tenantId` is the scope id of a tenant-wide one. */
@@ -190,5 +213,6 @@ export function validatePolicy(input: PolicyInput, tenantId: string): ValidPolic
     action: input.action,
     announce: input.announce,
     consentAssetId,
+    allowOnDemand: input.allowOnDemand ?? false,
   };
 }

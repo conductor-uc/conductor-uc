@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S5-13 (G-111): the on-demand recording feature code. `*1` starts an
+  on-demand recording where a rule allows it; `*1` again stops it. Then the
+  caller hangs up itself.
+
+  `[field0]`=username, `[field1]`=domain, `[field2]`=destination number.
+  Registers, calls, and presses the code by RFC 4733 DTMF with the image's
+  own pcaps (`/sipp/dtmf_2833_star.pcap` and the digit's). The SDP offers
+  telephone-event/101 so FreeSWITCH negotiates RFC 4733 on this leg.
+
+  Pressing `*` twice in one call relies on the digits between them being
+  different: this image's pcaps each carry their own fixed RTP sequence
+  numbers and timestamps (star 8397-8404 / ts 85760, 1 7984-7991 / ts 13280,
+  2 8042-8049 / ts 23200, read from the files), so the same pcap played twice
+  back to back is dropped as a duplicate (`uac_call_wrong_pin.xml`), but star,
+  digit, star, digit alternates. Unverified live.
+-->
+<scenario name="Register, call, press *1, talk, press *1 again, hang up">
+  <send retrans="500">
+    <![CDATA[
+      REGISTER sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Expires: 300
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="401" auth="true">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      REGISTER sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 2 REGISTER
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Expires: 300
+      [authentication]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true">
+  </recv>
+
+  <send retrans="4000">
+    <![CDATA[
+      INVITE sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      [extraheader]
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0 101
+      a=rtpmap:0 PCMU/8000
+      a=rtpmap:101 telephone-event/8000
+      a=fmtp:101 0-16
+    ]]>
+  </send>
+
+  <recv response="100" optional="true">
+  </recv>
+
+  <recv response="180" optional="true">
+  </recv>
+
+  <recv response="200" rtd="true">
+    <action>
+      <ereg regexp="sip:[^&gt;]*" search_in="hdr" header="Contact:" assign_to="1"/>
+    </action>
+  </recv>
+
+  <send>
+    <![CDATA[
+      ACK [$1] SIP/2.0
+      [last_Via:]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <!-- First press, once the call has settled. -->
+  <pause milliseconds="2000"/>
+  <pause milliseconds="400"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_star.pcap"/></action></nop>
+  <pause milliseconds="400"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_1.pcap"/></action></nop>
+
+  <!-- A few seconds of call, then the second press. -->
+  <pause milliseconds="5000"/>
+  <pause milliseconds="400"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_star.pcap"/></action></nop>
+  <pause milliseconds="400"/>
+  <nop><action><exec play_pcap_audio="/sipp/dtmf_2833_1.pcap"/></action></nop>
+
+  <pause milliseconds="3000"/>
+
+  <send retrans="500">
+    <![CDATA[
+      BYE [$1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 2 BYE
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true">
+  </recv>
+
+</scenario>

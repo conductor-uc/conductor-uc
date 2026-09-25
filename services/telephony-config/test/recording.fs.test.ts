@@ -7,10 +7,18 @@ import {
   createRecordingClient,
   type RecordingCall,
   type RecordingClient,
+  type RecordingControlRequest,
+  type RecordingControlResult,
   type RecordingDirective,
 } from '../src/recording-client.js';
+import { decodeRecordingContext } from '../src/recording-context.js';
 import { registerFsRoutes } from '../src/routes/fs.routes.js';
-import { CONSENT_TONE, RECORDING_REFUSAL_TONE } from '../src/xml.js';
+import {
+  CONSENT_TONE,
+  FEATURE_CODE_DONE_TONE,
+  FEATURE_CODE_REFUSED_TONE,
+  RECORDING_REFUSAL_TONE,
+} from '../src/xml.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
 const skipReason = (await databaseOrSkipReason()) ?? (await redisOrSkipReason());
@@ -34,6 +42,19 @@ class FakeRecording implements RecordingClient {
   failClosedTenants: string[] = [];
   listFailClosedTenants(): Promise<string[]> {
     return Promise.resolve(this.failClosedTenants);
+  }
+  controlCalls: RecordingControlRequest[] = [];
+  controlResult: RecordingControlResult | Error = {
+    result: 'refused',
+    recordingId: null,
+    fileName: null,
+    reason: 'not_allowed',
+  };
+  control(request: RecordingControlRequest): Promise<RecordingControlResult> {
+    this.controlCalls.push(request);
+    return this.controlResult instanceof Error
+      ? Promise.reject(this.controlResult)
+      : Promise.resolve(this.controlResult);
   }
 }
 
@@ -85,6 +106,13 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
     await h?.close();
   });
   afterEach(async () => {
+    fake.controlCalls = [];
+    fake.controlResult = {
+      result: 'refused',
+      recordingId: null,
+      fileName: null,
+      reason: 'not_allowed',
+    };
     await resetSchema(h.db);
     fake.calls = [];
     fake.directive = { kind: 'none' };
@@ -855,6 +883,236 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
       });
       await app2.close();
       expectRefused(response.body);
+    });
+  });
+
+  describe('feature codes: on demand and pause (S5-13)', () => {
+    const bindings = (xml: string) =>
+      apps(xml)
+        .filter((a) => a.app === 'bind_meta_app')
+        .map((a) => a.data);
+    const contextOf = (xml: string) => {
+      const set = apps(xml).find((a) => a.app === 'set' && a.data.startsWith('cuc_rec_ctx='));
+      return set === undefined ? undefined : decodeRecordingContext(set.data.slice(12));
+    };
+
+    it('a rule that allows on demand arms *1 and *2 on an unrecorded internal call, for both parties', async () => {
+      const tenantId = await seedTenant();
+      const callee = await seedExtension(tenantId, '101');
+      const caller = await seedExtension(tenantId, '100');
+      fake.directive = { kind: 'none', allowOnDemand: true };
+
+      const xml = await internal(tenantId);
+      expect(bindings(xml)).toEqual([
+        '1 ab s lua::recording_control.lua record',
+        '2 ab s lua::recording_control.lua pause',
+      ]);
+      const list = apps(xml);
+      expect(list).toContainEqual({ app: 'export', data: 'cuc_rec_owner=${uuid}' });
+      expect(list).toContainEqual({ app: 'set', data: 'RECORD_STEREO=true' });
+      expect(xml).not.toContain('record_session');
+      // Armed before the call is placed.
+      expect(list.findIndex((a) => a.app === 'bind_meta_app')).toBeLessThan(
+        list.findIndex((a) => a.app === 'bridge'),
+      );
+      const context = contextOf(xml);
+      expect(context).toMatchObject({ tenantId, direction: 'internal' });
+      expect([...(context?.extensionIds ?? [])].sort()).toEqual([callee, caller].sort());
+    });
+
+    it('a recorded inbound call arms them for the called party (the B leg) only', async () => {
+      const tenantId = await seedTenant();
+      const trunkId = await seedTrunk(tenantId);
+      const extensionId = await seedExtension(tenantId, '102');
+      const didId = crypto.randomUUID();
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: didId,
+        tenantId,
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'extension',
+        destinationId: extensionId,
+      });
+      fake.directive = { ...record(), allowOnDemand: true };
+
+      const xml = await inbound(trunkId);
+      expect(bindings(xml)).toEqual([
+        '1 b s lua::recording_control.lua record',
+        '2 b s lua::recording_control.lua pause',
+      ]);
+      expect(xml).toContain('execute_on_answer=record_session');
+      expect(contextOf(xml)).toEqual({
+        tenantId,
+        direction: 'inbound',
+        extensionIds: [extensionId],
+        didId,
+      });
+    });
+
+    it('an outbound call arms them for the caller (the A leg)', async () => {
+      const tenantId = await seedTenant();
+      await seedExtension(tenantId, '100');
+      await seedOutbound(tenantId);
+      h.orgClient.limits[tenantId] = { internationalAllowed: true };
+      fake.directive = { kind: 'none', allowOnDemand: true };
+
+      const xml = await internal(tenantId, '+14155552671');
+      expect(bindings(xml)[0]).toBe('1 a s lua::recording_control.lua record');
+    });
+
+    it('no codes without a rule that allows them, or when the decision is unavailable', async () => {
+      const tenantId = await seedTenant();
+      await seedExtension(tenantId, '101');
+      fake.directive = { kind: 'none' };
+      expect(bindings(await internal(tenantId))).toEqual([]);
+      fake.directive = record();
+      expect(bindings(await internal(tenantId))).toEqual([]);
+      fake.directive = { kind: 'unavailable', reason: 'down' };
+      expect(bindings(await internal(tenantId))).toEqual([]);
+    });
+
+    it('a flow hand-off returns the codes for the runner to arm', async () => {
+      const tenantId = await seedTenant();
+      const extensionId = await seedExtension(tenantId, '401');
+      const didId = crypto.randomUUID();
+      fake.directive = { kind: 'none', allowOnDemand: true };
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${tenantId}/extension/${extensionId}?callUuid=c&didId=${didId}&recording=0`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      const body = response.json<{
+        recording: { action: string; featureCodes: { listen: string; context: string } };
+      }>();
+      expect(body.recording.action).toBe('none');
+      expect(body.recording.featureCodes.listen).toBe('b');
+      expect(decodeRecordingContext(body.recording.featureCodes.context)).toEqual({
+        tenantId,
+        direction: 'inbound',
+        extensionIds: [extensionId],
+        didId,
+      });
+    });
+
+    describe('/fs/recording/:tenantId/control', () => {
+      async function press(tenantId: string, body: Record<string, unknown>) {
+        const response = await app.inject({
+          method: 'POST',
+          url: `/fs/recording/${tenantId}/control`,
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            'x-fs-node-token': TOKEN,
+          },
+          // mod_curl labels its JSON body form-urlencoded; the parser sniffs it.
+          payload: JSON.stringify(body),
+        });
+        return response;
+      }
+
+      async function armedContext(tenantId: string): Promise<string> {
+        await seedExtension(tenantId, '101');
+        fake.directive = { kind: 'none', allowOnDemand: true };
+        const xml = await internal(tenantId);
+        return apps(xml)
+          .find((a) => a.data.startsWith('cuc_rec_ctx='))!
+          .data.slice('cuc_rec_ctx='.length);
+      }
+
+      it('relays *1 with the call context and tells the node to start, on the spool path', async () => {
+        const tenantId = await seedTenant();
+        const context = await armedContext(tenantId);
+        fake.controlResult = {
+          result: 'started',
+          recordingId: RECORDING_ID,
+          fileName: `${RECORDING_ID}.wav`,
+          reason: null,
+        };
+
+        const response = await press(tenantId, {
+          code: 'record',
+          callUuid: 'owner-uuid',
+          context,
+          nodeId: 'fs-1',
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        expect(response.json()).toEqual({
+          action: 'start',
+          recordingId: RECORDING_ID,
+          path: `${SPOOL}/${RECORDING_ID}.wav`,
+          tone: FEATURE_CODE_DONE_TONE,
+        });
+        expect(fake.controlCalls).toHaveLength(1);
+        expect(fake.controlCalls[0]).toMatchObject({
+          tenantId,
+          code: 'record',
+          callUuid: 'owner-uuid',
+          nodeId: 'fs-1',
+          context: { direction: 'internal' },
+        });
+        expect(fake.controlCalls[0]?.recordingId).toBeUndefined();
+      });
+
+      it('maps stop, pause and resume to uuid_record stop, mask and unmask', async () => {
+        const tenantId = await seedTenant();
+        const context = await armedContext(tenantId);
+        for (const [result, action] of [
+          ['stopped', 'stop'],
+          ['paused', 'mask'],
+          ['resumed', 'unmask'],
+        ] as const) {
+          fake.controlResult = {
+            result,
+            recordingId: RECORDING_ID,
+            fileName: `${RECORDING_ID}.wav`,
+            reason: null,
+          };
+          const response = await press(tenantId, {
+            code: 'pause',
+            callUuid: 'o',
+            recordingId: RECORDING_ID,
+            context,
+          });
+          expect(response.json()).toMatchObject({ action, path: `${SPOOL}/${RECORDING_ID}.wav` });
+        }
+        expect(fake.controlCalls.at(-1)?.recordingId).toBe(RECORDING_ID);
+      });
+
+      it('a refusal, an unreachable recording-service, or a foreign context does nothing', async () => {
+        const tenantId = await seedTenant();
+        const context = await armedContext(tenantId);
+
+        expect((await press(tenantId, { code: 'record', callUuid: 'o', context })).json()).toEqual({
+          action: 'none',
+          reason: 'not_allowed',
+          tone: FEATURE_CODE_REFUSED_TONE,
+        });
+
+        fake.controlResult = new Error('down');
+        expect(
+          (await press(tenantId, { code: 'record', callUuid: 'o', context })).json(),
+        ).toMatchObject({ action: 'none', reason: 'unavailable' });
+
+        const calls = fake.controlCalls.length;
+        const other = crypto.randomUUID();
+        expect(
+          (await press(other, { code: 'record', callUuid: 'o', context })).json(),
+        ).toMatchObject({ action: 'none', reason: 'no_context' });
+        expect(
+          (await press(tenantId, { code: 'record', callUuid: 'o', context: 'garbage' })).json(),
+        ).toMatchObject({ action: 'none', reason: 'no_context' });
+        expect(fake.controlCalls).toHaveLength(calls);
+      });
+
+      it('needs the node token', async () => {
+        const response = await app.inject({
+          method: 'POST',
+          url: `/fs/recording/${crypto.randomUUID()}/control`,
+          headers: { 'content-type': 'application/json' },
+          payload: { code: 'record', callUuid: 'o', context: 'x' },
+        });
+        expect(response.statusCode).toBe(401);
+      });
     });
   });
 

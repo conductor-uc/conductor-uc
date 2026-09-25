@@ -214,6 +214,102 @@ describe('recording client (S5-02)', () => {
   });
 });
 
+describe('recording client: allow on demand and feature codes (S5-13)', () => {
+  it('passes a rule’s allowOnDemand through on both directives, and leaves it out when false', async () => {
+    const f = fake();
+    const c = client(f, { t: 0 });
+    f.state.decision = { ...f.state.decision, allowOnDemand: true } as typeof f.state.decision;
+    expect(await c.decide(call)).toMatchObject({ kind: 'record', allowOnDemand: true });
+
+    const g = fake();
+    g.state.decision = {
+      record: false,
+      announce: false,
+      consentAssetId: null,
+      policyId: 'P2',
+      allowOnDemand: true,
+    } as typeof g.state.decision;
+    expect(await client(g, { t: 0 }).decide(call)).toEqual({ kind: 'none', allowOnDemand: true });
+
+    const h = fake();
+    h.state.decision = { ...h.state.decision, record: false };
+    expect(await client(h, { t: 0 }).decide(call)).toEqual({ kind: 'none' });
+  });
+
+  it('relays a feature code with the call context and returns the decision', async () => {
+    const seen: { path: string; body: Record<string, unknown> }[] = [];
+    const c = createRecordingClient({
+      baseUrl: 'http://recording-service:8080',
+      internalServiceToken: 'tok',
+      logger: silentLogger(),
+      fetchImpl: (input, init) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        seen.push({
+          path: new URL(url).pathname,
+          body: JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as Record<
+            string,
+            unknown
+          >,
+        });
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              result: 'paused',
+              recordingId: 'R1',
+              fileName: 'R1.wav',
+              reason: null,
+            }),
+          ),
+        );
+      },
+    });
+    const result = await c.control({
+      tenantId: 'T1',
+      code: 'pause',
+      callUuid: 'owner',
+      recordingId: 'R1',
+      context: { direction: 'inbound', extensionIds: ['E1'], didId: 'D1' },
+    });
+    expect(result).toEqual({
+      result: 'paused',
+      recordingId: 'R1',
+      fileName: 'R1.wav',
+      reason: null,
+    });
+    expect(seen).toEqual([
+      {
+        path: '/internal/v1/recordings/control',
+        body: {
+          tenantId: 'T1',
+          code: 'pause',
+          callUuid: 'owner',
+          recordingId: 'R1',
+          nodeId: null,
+          context: { direction: 'inbound', extensionIds: ['E1'], queueId: null, didId: 'D1' },
+        },
+      },
+    ]);
+  });
+
+  it('throws when recording-service fails, so nothing unaudited happens', async () => {
+    const c = createRecordingClient({
+      baseUrl: 'http://recording-service:8080',
+      internalServiceToken: 'tok',
+      logger: silentLogger(),
+      fetchImpl: () => Promise.resolve(new Response('{}', { status: 500 })),
+    });
+    await expect(
+      c.control({
+        tenantId: 'T1',
+        code: 'record',
+        callUuid: 'o',
+        context: { direction: 'internal', extensionIds: [] },
+      }),
+    ).rejects.toThrow('500');
+  });
+});
+
 describe('recording client: the fail-closed tenant list (S5-12)', () => {
   const listClient = (fetchImpl: typeof fetch) =>
     createRecordingClient({

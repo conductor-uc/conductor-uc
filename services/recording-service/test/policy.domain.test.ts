@@ -21,6 +21,7 @@ function policy(overrides: Partial<Policy> = {}): Policy {
     action: 'record',
     announce: false,
     consentAssetId: null,
+    allowOnDemand: false,
     ...overrides,
   };
 }
@@ -78,6 +79,80 @@ describe('evaluatePolicies precedence', () => {
       consentAssetId: 'A1',
       policyId: tenant.id,
       reason: 'policy',
+      allowOnDemand: false,
+    });
+  });
+
+  describe('allow on demand (S5-13)', () => {
+    it('comes from the deciding rule, so the narrowest rule also decides feature codes', () => {
+      const tenant = policy({ action: 'no_record', allowOnDemand: true });
+      const extension = policy({ scopeType: 'extension', scopeId: 'E1', action: 'no_record' });
+      expect(evaluatePolicies([tenant], call()).allowOnDemand).toBe(true);
+      // The extension's own rule decides now, and it does not allow on demand.
+      expect(evaluatePolicies([tenant, extension], call()).allowOnDemand).toBe(false);
+    });
+
+    it('a recording rule that allows it allows pause and resume', () => {
+      const tenant = policy({ action: 'record', allowOnDemand: true });
+      expect(evaluatePolicies([tenant], call())).toMatchObject({
+        record: true,
+        allowOnDemand: true,
+      });
+    });
+
+    it('a tie that refuses allows on-demand recording only if every tied rule does', () => {
+      const e1 = policy({ scopeType: 'extension', scopeId: 'E1', action: 'no_record' });
+      const e2 = policy({
+        scopeType: 'extension',
+        scopeId: 'E2',
+        action: 'no_record',
+        allowOnDemand: true,
+      });
+      const internal = call({ direction: 'internal', extensionIds: ['E1', 'E2'] });
+      expect(evaluatePolicies([e1, e2], internal).allowOnDemand).toBe(false);
+      expect(evaluatePolicies([{ ...e1, allowOnDemand: true }, e2], internal).allowOnDemand).toBe(
+        true,
+      );
+    });
+
+    it('a tie that records allows pause if any tied rule does', () => {
+      const e1 = policy({ scopeType: 'extension', scopeId: 'E1', action: 'record' });
+      const e2 = policy({
+        scopeType: 'extension',
+        scopeId: 'E2',
+        action: 'record',
+        allowOnDemand: true,
+      });
+      const internal = call({ direction: 'internal', extensionIds: ['E1', 'E2'] });
+      expect(evaluatePolicies([e1, e2], internal)).toMatchObject({
+        record: true,
+        allowOnDemand: true,
+      });
+    });
+
+    it('no matching rule allows nothing', () => {
+      expect(evaluatePolicies([], call()).allowOnDemand).toBe(false);
+    });
+
+    it('validation keeps the flag, and defaults it off', () => {
+      expect(
+        validatePolicy(
+          { scopeType: 'tenant', direction: 'any', action: 'no_record', announce: false },
+          'T1',
+        ).allowOnDemand,
+      ).toBe(false);
+      expect(
+        validatePolicy(
+          {
+            scopeType: 'tenant',
+            direction: 'any',
+            action: 'no_record',
+            announce: false,
+            allowOnDemand: true,
+          },
+          'T1',
+        ).allowOnDemand,
+      ).toBe(true);
     });
   });
 

@@ -104,6 +104,7 @@ class PolicyForm {
     this.action = 'record',
     this.announce = false,
     this.consentAssetId,
+    this.allowOnDemand = false,
   });
 
   factory PolicyForm.fromPolicy(Json policy) => PolicyForm(
@@ -115,6 +116,7 @@ class PolicyForm {
     action: '${policy['action']}',
     announce: policy['announce'] == true,
     consentAssetId: policy['consentAssetId'] as String?,
+    allowOnDemand: policy['allowOnDemand'] == true,
   );
 
   final String scopeType;
@@ -124,6 +126,11 @@ class PolicyForm {
   final bool announce;
   final String? consentAssetId;
 
+  /// People on the calls it decides may use the in-call feature codes: `*1`
+  /// starts or stops a recording (when the rule does not record), `*2`
+  /// pauses or resumes one (when it does). Every use is audited.
+  final bool allowOnDemand;
+
   Json toJson() => {
     'scopeType': scopeType,
     'scopeId': ?scopeId,
@@ -131,6 +138,7 @@ class PolicyForm {
     'action': action,
     'announce': announce,
     'consentAssetId': announce ? consentAssetId : null,
+    'allowOnDemand': allowOnDemand,
   };
 }
 

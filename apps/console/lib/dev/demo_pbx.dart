@@ -1574,6 +1574,18 @@ class DemoPbx {
       'retentionDate': ready
           ? start.add(const Duration(days: 90)).toIso8601String()
           : null,
+      'onDemand': i == 4,
+      'stoppedAt': null,
+      'pauses': i == 5
+          ? [
+              {
+                'from': start
+                    .add(const Duration(seconds: 30))
+                    .toIso8601String(),
+                'to': start.add(const Duration(seconds: 50)).toIso8601String(),
+              },
+            ]
+          : <Map<String, dynamic>>[],
     };
   }
 
@@ -1593,6 +1605,7 @@ class DemoPbx {
       'action': 'record',
       'announce': true,
       'consentAssetId': 'media-1',
+      'allowOnDemand': false,
     },
     {
       'id': 'pol-2',
@@ -1602,6 +1615,7 @@ class DemoPbx {
       'action': 'no_record',
       'announce': false,
       'consentAssetId': null,
+      'allowOnDemand': false,
     },
   ];
   var _retentionDays = 90;
@@ -1762,6 +1776,10 @@ class DemoPbx {
         'A consent announcement asset needs announce to be on.',
       );
     }
+    final onDemand = body['allowOnDemand'] ?? false;
+    if (onDemand is! bool) {
+      return _problem(400, 'allowOnDemand must be true or false.');
+    }
     final taken = _policies.any(
       (p) =>
           p['id'] != except &&
@@ -1783,6 +1801,7 @@ class DemoPbx {
       'action': action,
       'announce': announce,
       'consentAssetId': consent,
+      'allowOnDemand': onDemand,
     };
   }
 

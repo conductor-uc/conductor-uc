@@ -136,6 +136,7 @@ class PoliciesPanel extends ConsumerWidget {
                     DataColumn(label: Text('Calls')),
                     DataColumn(label: Text('Action')),
                     DataColumn(label: Text('Announcement')),
+                    DataColumn(label: Text('Feature codes')),
                     DataColumn(label: Text('')),
                   ],
                   rows: [
@@ -163,6 +164,15 @@ class PoliciesPanel extends ConsumerWidget {
                                   : p['consentAssetId'] == null
                                   ? 'Short tone'
                                   : 'Recording',
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              p['allowOnDemand'] != true
+                                  ? 'Off'
+                                  : p['action'] == 'record'
+                                  ? '*2 pause'
+                                  : '*1 record',
                             ),
                           ),
                           DataCell(
@@ -426,6 +436,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
     String? action,
     bool? announce,
     String? Function()? consent,
+    bool? allowOnDemand,
   }) {
     setState(() {
       _form = PolicyForm(
@@ -435,6 +446,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
         action: action ?? _form.action,
         announce: announce ?? _form.announce,
         consentAssetId: consent != null ? consent() : _form.consentAssetId,
+        allowOnDemand: allowOnDemand ?? _form.allowOnDemand,
       );
     });
   }
@@ -588,6 +600,27 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                   ],
                   onChanged: _busy ? null : (v) => _set(consent: () => v),
                 ),
+              SwitchListTile(
+                key: const ValueKey('policy-on-demand'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  recording
+                      ? 'Allow pausing with *2'
+                      : 'Allow recording on demand with *1',
+                ),
+                subtitle: Text(
+                  recording
+                      ? 'During a call this rule records, a person on it can '
+                            'press *2 to pause the recording (for card or '
+                            'medical details) and *2 again to resume. The '
+                            'paused part is silent. Every pause is logged.'
+                      : 'During a call this rule does not record, a person on '
+                            'it can press *1 to start recording and *1 again to '
+                            'stop. Every start and stop is logged.',
+                ),
+                value: _form.allowOnDemand,
+                onChanged: _busy ? null : (v) => _set(allowOnDemand: v),
+              ),
               const SizedBox(height: 8),
               Text(
                 'Whether you must tell people a call is recorded, and how, '

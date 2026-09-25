@@ -39,6 +39,11 @@ const PolicySchema = Type.Object({
   action: ActionSchema,
   announce: Type.Boolean(),
   consentAssetId: Type.Union([Type.String(), Type.Null()]),
+  /**
+   * S5-13: the people on the calls it decides may use feature codes: start and stop a recording
+   * (when it does not record), or pause and resume one (when it does). Every use is audited.
+   */
+  allowOnDemand: Type.Boolean(),
 });
 const PolicyBodySchema = Type.Object({
   scopeType: ScopeTypeSchema,
@@ -48,6 +53,8 @@ const PolicyBodySchema = Type.Object({
   action: ActionSchema,
   announce: Type.Optional(Type.Boolean()),
   consentAssetId: Type.Optional(Type.Union([Type.String({ maxLength: 36 }), Type.Null()])),
+  /** S5-13: defaults to false. */
+  allowOnDemand: Type.Optional(Type.Boolean()),
 });
 const SettingsSchema = Type.Object({
   retentionDays: Type.Number(),
