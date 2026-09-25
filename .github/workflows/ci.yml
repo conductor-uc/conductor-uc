@@ -1,35 +1,26 @@
 name: CI
 
-# One run per change, not two. A pull request is tested when it is opened and
-# on every push to it, and there is deliberately no `push` trigger for `main`:
-# with one, the same suite ran a second time the moment the PR merged. `main`
-# is checked in full by the nightly run below, and by hand with "Run workflow"
-# (`workflow_dispatch`) when a merge needs checking sooner. Keep "Require
-# branches to be up to date before merging" on for `main`, so the run a PR
-# passed was run against the code it merges into.
+# Nightly and on demand only (owner decision, G-110): no run on a pull request or
+# on a push. The suite takes long enough on the self-hosted runner that a run per
+# PR slowed development down more than it helped. Every run tests everything:
+# the nightly run says whether `main` is green, and "Run workflow"
+# (`workflow_dispatch`) runs the same thing by hand when a merge needs checking
+# sooner. CodeQL runs separately and still checks every pull request.
+#
+# The price: a pull request merges untested, and a break shows up at the next
+# nightly run (or a manual one), not before the merge.
 on:
-  pull_request:
   workflow_dispatch:
-  # S2-20 (issue #44): "a nightly full run and a per-PR smoke subset" — the
-  # full `tests/sip` suite (every S1/S2 scenario, ~20+ tests, each with
-  # real SIP transaction timers over real UDP) is too slow to gate every
-  # PR on, but running only the fast S1-14 smoke subset (below) means a
-  # regression in a less-frequently-touched scenario (a queue, a
-  # conference room, voicemail, presence, ...) could sit undetected for a
-  # long time between the PRs that happen to touch that exact area. A
-  # nightly cron run is the middle ground: every scenario gets run at
-  # least once a day without slowing down any individual PR. 06:00 UTC is
-  # simply "outside any of this project's own working hours" — no
-  # significance beyond that.
+  # S2-20 (issue #44): the full `tests/sip` suite runs here too. 06:00 UTC is
+  # simply outside this project's working hours.
   schedule:
     - cron: '0 6 * * *'
 
-# A new push to a PR makes the previous run irrelevant. Nightly and manual runs
-# are never cancelled. Their ref is always `refs/heads/main`, so
-# `github.event_name` in the group key keeps each kind in a lane of its own.
+# A manual run started while another is going queues behind it rather than
+# cancelling it: both test `main`, and a half-finished run tells nobody anything.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -55,7 +46,7 @@ env:
 jobs:
   check:
     name: lint, typecheck, test, build
-    # Self-hosted like `sip-smoke`: the runner is faster than GitHub-hosted
+    # Self-hosted like `sip`: the runner is faster than GitHub-hosted
     # tenancy. It is a long-lived host, not a fresh VM, so anything a step
     # starts by hand must be removed again (see the MinIO step).
     runs-on: self-hosted
@@ -101,10 +92,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          # Turbo's --affected compares against the base branch, so it needs
-          # more than the tip commit.
-          fetch-depth: 0
 
       - name: Install nats-server
         # Every suite that needs a bus starts its own JetStream server from this
@@ -173,36 +160,15 @@ jobs:
       - name: Check formatting
         run: pnpm format:check
 
-      # On a pull request only the affected packages are built and tested; the
-      # nightly and manual runs build and test everything, which is what says
-      # `main` itself is green.
-      #
-      # `--affected` is safe here because turbo.json lists the root configs
-      # (tsconfig.base.json, eslint.config.js, .prettierrc.json,
-      # vitest.shared.ts, .nvmrc) as globalDependencies, so changing one marks
-      # every package affected rather than none. If that list ever drifts, the
-      # nightly full run is the backstop that catches it.
-      - name: Lint, typecheck, test, build (affected)
-        if: github.event_name == 'pull_request'
-        env:
-          # Without this, `--affected` reads the base branch's bare name from
-          # the event, finds no local branch of that name (a PR checkout has
-          # only `origin/<base>`), warns "unable to detect git range,
-          # assuming all files have changed", and quietly runs every package.
-          TURBO_SCM_BASE: origin/${{ github.base_ref }}
-        run: pnpm exec turbo run lint typecheck test build --affected
-
       - name: Lint, typecheck, test, build (all)
-        if: github.event_name != 'pull_request'
         run: pnpm check
 
       - name: Console OpenAPI snapshot is current
         # apps/console/api/openapi.json is dumped from the services' own route
         # schemas, and the console's contract test compares its screens against
         # it. Building every service `dump-openapi.mjs` imports (the eight in its
-        # SOURCES list) first makes this independent of which packages
-        # `--affected` happened to build above. Leave one out and the step only
-        # fails on a pull request that does not touch that service.
+        # SOURCES list) here, rather than relying on the step above, keeps this
+        # step correct on its own; the builds are cache hits after `pnpm check`.
         run: |
           pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service --filter=@cuc/trunk-service --filter=@cuc/voicemail-service --filter=@cuc/cdr-service --filter=@cuc/recording-service --filter=@cuc/api-gateway
           node apps/console/tool/dump-openapi.mjs
@@ -231,17 +197,11 @@ jobs:
         if: always()
         run: docker rm -f minio || true
 
-  # A separate job, not a step in `check` above, so one slow suite does not
-  # hold up the fast feedback loop (real SIP transaction timers over real
-  # UDP make this the slowest thing in the workflow). One job, not two
-  # (`sip-smoke` + a separate nightly job): `schedule` and
-  # `pull_request` never trigger the same workflow run, so there is no
-  # concurrency to gain by splitting, and splitting would mean duplicating
-  # every setup/build/compose-up/teardown/diagnostics step below. The run
-  # step itself branches on `github.event_name` instead — same shape as the
-  # `check` job's own affected-vs-all split above.
-  sip-smoke:
-    name: ${{ github.event_name == 'schedule' && 'SIP full suite (nightly, S2-20)' || 'SIP smoke (S1-14)' }}
+  # A separate job, not a step in `check` above, so the slowest suite (real SIP
+  # transaction timers over real UDP) runs alongside the other jobs instead of
+  # after them.
+  sip:
+    name: SIP full suite (S2-20)
     # Tried moving this to ubuntu-latest on 2026-09-22 to escape the
     # self-hosted runner's slow per-layer Docker overhead (see the timeout
     # comment below). Reverted the same day: the very first hosted run hit
@@ -298,7 +258,7 @@ jobs:
         working-directory: infra/compose
         run: |
           # Clean slate first. This compose project's name is fixed
-          # (`name: conductor-uc`), so every SIP smoke job on this
+          # (`name: conductor-uc`), so every SIP job on this
           # self-hosted runner shares one project, one network and one set
           # of container names. The runner serializes jobs, but only just:
           # observed live on 2026-09-22, one job started **one second**
@@ -316,27 +276,12 @@ jobs:
           docker compose build
           docker compose up -d --wait --wait-timeout 180
 
-      # S2-20 (issue #44): every PR (or manual) run gets only the original S1-14
-      # smoke subset (`scenarios.test.ts` — the job's own name predates this
-      # split and still describes exactly this step). The full suite (this
-      # file plus conference/queue/voicemail/presence/parking/... — every
-      # S1/S2 scenario) only runs on the nightly `schedule` trigger, below.
-      # Same `if:`-branch-on-event_name shape as the `check` job's own
-      # affected-vs-all split above.
-      - name: Run SIP smoke scenarios
-        if: github.event_name != 'schedule'
+      - name: Run full SIP suite
         working-directory: tests/sip
         env:
           # A missing/broken compose stack must fail this job, not report a
           # green run full of skipped tests — same pattern as the `check`
           # job's own REQUIRE_DB_TESTS etc. above.
-          REQUIRE_SIP_TESTS: '1'
-        run: pnpm vitest run test/scenarios.test.ts
-
-      - name: Run full SIP suite (nightly)
-        if: github.event_name == 'schedule'
-        working-directory: tests/sip
-        env:
           REQUIRE_SIP_TESTS: '1'
         run: pnpm vitest run
 
