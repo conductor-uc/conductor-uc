@@ -60,15 +60,14 @@ flowchart LR
   fs -->|CDR JSON| cdr
   cc -->|ESL 8021| fs
   tc -->|MI 8888| osips
-  up -->|internal API| rec
+  up -->|internal API| rec & vm
   up -->|presigned PUT| s3
-  fs -->|voicemail presigned PUT| s3
 ```
 
 There are four groups.
 
 - **The public edge** is two processes. The **API gateway** is the only HTTP entry point: the web console, the REST API, phone provisioning and certificate challenges. **OpenSIPs** is the only SIP entry point: phones register to it, carriers send calls to it, and it hands every call to a FreeSWITCH node.
-- **Media servers** run **FreeSWITCH**, which answers calls, plays prompts, bridges parties, records, runs voicemail and IVR flows, and hosts conferences and queues. Next to each FreeSWITCH runs a **recording uploader** that moves finished recordings off the server.
+- **Media servers** run **FreeSWITCH**, which answers calls, plays prompts, bridges parties, records, runs voicemail and IVR flows, and hosts conferences and queues. Next to each FreeSWITCH runs a **recording uploader** that moves finished call recordings and voicemail messages off the server.
 - **Application services** are twelve Node.js processes. They hold the configuration and business data, and they turn it into what OpenSIPs and FreeSWITCH need. None of them is meant to be reachable from outside.
 - **Data stores** are MariaDB (all persistent data), Redis (live call state, locks and counters, nothing durable), NATS JetStream (events between services) and an S3-compatible object store (audio, images and exports).
 
@@ -122,8 +121,8 @@ The FreeSWITCH pool is read from `OPENSIPS_FS_DESTINATION` **only when OpenSIPs 
 | Image | `safarov/freeswitch:1.10.12` plus this configuration. Runs as root. |
 | Listens | SIP on `FS_SIP_PORT` (5060), bound **only to the address FreeSWITCH detects as its own** (`local_ip_v4`, the interface with the default route); RTP on UDP `FS_RTP_START_PORT`–`FS_RTP_END_PORT` (16384–32768); the **event socket (ESL)** on TCP 8021 on all interfaces. |
 | Accepts | SIP only from `FS_OPENSIPS_CIDR` (the `opensips` ACL); ESL only from 127.0.0.1 and `FS_CLUSTER_CIDR`, plus the password. Both CIDRs default to 127.0.0.1/32, so a node that is not configured refuses everything. |
-| Connects to | telephony-config over HTTP: every call's dialplan, directory and module configuration, call-flow definitions, prompts, voicemail and conference PINs. cdr-service over HTTP (one JSON record per call). Redis (a per-tenant concurrent-call counter). OpenSIPs (outbound legs). Object storage: voicemail messages are meant to be uploaded straight to a presigned URL, but **that upload does not work today**. The message is listed with no audio behind it (plan task S5-16; the fix moves it to the uploader). |
-| Stores | Nothing durable. Recordings are written to `/var/spool/cuc/rec` and moved off by the uploader. Prompts and flow definitions are cached in `/var/cache/cuc/http` and `/var/cache/cuc/flow`, and are safe to lose. |
+| Connects to | telephony-config over HTTP: every call's dialplan, directory and module configuration, call-flow definitions, prompts, voicemail and conference PINs. cdr-service over HTTP (one JSON record per call). Redis (a per-tenant concurrent-call counter). OpenSIPs (outbound legs). Never object storage: it records call recordings and voicemail messages into the spool, and the uploader moves them (S5-16). |
+| Stores | Nothing durable. Call recordings and voicemail messages (`vm-<id>.wav`) are written to `/var/spool/cuc/rec` and moved off by the uploader. Prompts and flow definitions are cached in `/var/cache/cuc/http` and `/var/cache/cuc/flow`, and are safe to lose. |
 | Copies | One per server. Several nodes can run on separate servers ([§6](#6-running-more-than-one-copy)). |
 
 FreeSWITCH holds no tenant configuration. Every call asks telephony-config what to do, so any node can take any call. The exceptions are queues, parking lots and conference rooms, which live in one node's memory while they are in use.
@@ -136,11 +135,13 @@ FreeSWITCH holds no tenant configuration. Every call asks telephony-config what 
 |---|---|
 | Source | `services/recording-service/src/uploader`; same image as recording-service, started with the command `dist/src/uploader/main.js` |
 | Listens | `METRICS_PORT` (9464): `/metrics` (Prometheus) and `/healthz` |
-| Connects to | recording-service's internal API (asks for an upload URL, then reports completion); object storage (HTTP PUT to the presigned URL) |
+| Connects to | recording-service's internal API for call recordings, and voicemail-service's for voicemail messages (asks for an upload URL, then reports completion); object storage (HTTP PUT to the presigned URL) |
 | Stores | Nothing. It reads and deletes files in the spool directory it shares with FreeSWITCH. |
 | Copies | **Exactly one per FreeSWITCH node, on the same server**, sharing the node's spool directory |
 
-It waits until a recording file has stopped changing and its WAV header is closed. Then it uploads the file, has recording-service check the size and MD5 against storage, and only then deletes the local copy. It holds no database or storage credentials.
+It waits until a file has stopped changing and its WAV header is closed. Then it uploads the file, has the owning service check the size and MD5 against storage, and only then deletes the local copy. It holds no database or storage credentials.
+
+The file name says which service owns it: `<uuid>.wav` is a call recording (recording-service), `vm-<uuid>.wav` is a voicemail message `voicemail.lua` recorded (voicemail-service, S5-16). Both services answer the same three calls (`upload-url`, `complete`, `fail`), so both kinds get the same settle, verify, retry and alert behaviour, and the metrics count them together. A voicemail message is listed only once its audio is verified, so it appears about 30 seconds (`SETTLE_SECONDS`) after the caller hangs up. `VOICEMAIL_SERVICE_URL` is required: without it the uploader does not start.
 
 ## 4. Application services
 
@@ -153,7 +154,7 @@ Every one of these listens on `HTTP_PORT` (8080 by default), exposes `/healthz` 
 | **pbx-config-service** | Extensions and SIP passwords, DIDs, ring groups, queues and agents, parking lots, conference rooms, schedules, emergency locations, media assets, per-extension call handling, phones and **phone provisioning files** | `pbx_config_service` (SIP passwords encrypted); object storage: media uploads | org-service, trunk-service, identity-service; NATS | Relay; consumes `org.domain.added` |
 | **trunk-service** | Carrier trunks (credentials encrypted), outbound routes, emergency routes | `trunk_service` | org-service, telephony-config, identity-service; NATS | Relay |
 | **callflow-service** | IVR and auto-attendant flows: drafts, validation, versions, publishing | `callflow_service` | identity-service; NATS | Relay |
-| **voicemail-service** | Mailboxes, PINs (encrypted), greetings, messages, voicemail-to-email settings | `voicemail_service`; object storage: messages and greetings | pbx-config-service, identity-service; NATS | Relay |
+| **voicemail-service** | Mailboxes, PINs (encrypted), greetings, messages, voicemail-to-email settings | `voicemail_service`; object storage: messages and greetings | pbx-config-service, identity-service; NATS | Relay; pending-message sweep (hourly: messages whose audio never arrived are marked failed after 72 h) |
 | **recording-service** | Recording rules, recording metadata, playback and download links, retention | `recording_service`; object storage: recordings | identity-service; NATS | Relay; retention sweep (hourly) |
 | **cdr-service** | Receives a call record from FreeSWITCH for every call; call-record search and CSV export; billing records | `cdr_service`; object storage: exports | org-service, pbx-config-service, identity-service; NATS | Relay; export consumer |
 | **telephony-config** | The bridge to the telephony layer. Keeps its own copy of what calls need (fed by events), answers every FreeSWITCH request, and writes the OpenSIPs tables. **It is the only service FreeSWITCH talks to for configuration.** | `telephony_config`, **plus read-write access to the `opensips` schema** | OpenSIPs MI; Redis; object storage (reads prompts, voicemail audio); pbx-config, trunk, org, voicemail, callflow, call-control and recording services; NATS | Relay; four consumers; reconcile and certificate sync (every 15 min) |
@@ -172,7 +173,7 @@ The folders `analytics-service`, `chat-service`, `fax-service`, `provisioning-se
 | **MariaDB** | 11.4 (the only version tested) | Every service except api-gateway; OpenSIPs | 13 service schemas plus `opensips`. **This is the system of record.** | Yes: back it up |
 | **Redis** | 7 | api-gateway (rate limits), call-control (live calls, node health, leases), telephony-config (ring-group rotation, reads leases), FreeSWITCH (concurrent-call counter), OpenSIPs (loaded, unused) | Only live and short-lived state. If it is flushed or restarted, node health reappears at the next heartbeat (3 s) and rate-limit counters start again. Tracking for calls in progress and their resource leases is lost; rebuilding it is plan task S4-04, not built. | No |
 | **NATS JetStream** | 2.10 | Every service that publishes or consumes events | Events between services. Streams are created by the services at start (limits retention, discard old, 2-minute duplicate window). | Yes, on its data directory. Losing it loses only undelivered events; the outbox tables keep anything not yet published. |
-| **Object storage** | Any S3-compatible service (MinIO in development) | org, pbx-config, voicemail, recording, cdr, telephony-config, media-worker services; the uploader and FreeSWITCH (through presigned URLs); browsers (presigned URLs) | Recordings, voicemail, prompts and hold music, brand images, CSV exports | Yes: back it up or use a provider that replicates |
+| **Object storage** | Any S3-compatible service (MinIO in development) | org, pbx-config, voicemail, recording, cdr, telephony-config, media-worker services; the uploader (through presigned URLs); browsers (presigned URLs) | Recordings, voicemail, prompts and hold music, brand images, CSV exports | Yes: back it up or use a provider that replicates |
 
 Object storage layout: by default one bucket per tenant, named `{STORAGE_BUCKET_PREFIX}-t-{tenant id without hyphens}`, plus `{prefix}-platform` for brand assets. Set `STORAGE_MODE=prefix-per-tenant` if your provider limits the number of buckets. That puts every tenant in `{prefix}-shared` under a `t-{id}/` prefix. Services create buckets when they first need them, and try (but do not require) server-side encryption and a public-access block.
 

@@ -39,7 +39,7 @@ Legend: **Built** exists with tests. **Partial** some of it. **Planned** in the 
 | Speed dial | Yes | Yes | Gap | P3 |
 | Busy lamp field, presence, shared line appearance | Yes | Yes | Gap (planned with the realtime layer) | P2 |
 | Hot desking / login to any phone | Yes | Yes | Gap | P3 |
-| Voicemail: boxes, greetings, PIN, retrieval | Yes | Yes | Partial: the recorded audio does not reach storage (S5-16) | **P1** |
+| Voicemail: boxes, greetings, PIN, retrieval | Yes | Yes | Built. Since S5-16 the node uploader delivers each message's audio and voicemail-service verifies it in storage before listing it (about 30 s after the caller hangs up) | |
 | Voicemail to email with attachment | Yes | Yes | Built (G-107) | |
 | Voicemail transcription | Yes | Yes | Planned (S5-06) | P2 |
 | Message waiting indicator | Yes | Yes | Partial (event has no consumer, G-42; groundwork in G-108) | P2 |
@@ -119,7 +119,7 @@ The first tranche closes the gaps a customer notices on day one of a pilot and t
 | 1c | Console screens for what has an API and no screen: CDR search and export, outbound routes | Removes "API only" gaps with no new back end. |
 | 1d | Call recording (S5-01 to S5-05) | Largest single missing feature. Needs the storage and node uploader work, so it comes after 1a to 1c. |
 | 1e | End-user self-service portal: a person signs in and sees only their own settings, voicemail and history | Turns 1a and 1b into something end users reach without an administrator. |
-| 2a | **Voicemail audio upload fix (S5-16)**, then the recording follow-ups decided with the owner on 2026-09-25: IVR-call recording (S5-11), per-tenant "recording required" (S5-12), on-demand and pause/resume (S5-13), agent-scoped rules (S5-14), and the real-time layer (S5-08) followed by live-call recording buttons (S5-15) | S5-16 is a defect in a shipped feature. The rest are parity items the owner scheduled early (G-111); S5-08 also unblocks BLF, presence and wallboards in tranche 2. |
+| 2a | **Voicemail audio upload fix (S5-16, done)**, then the recording follow-ups decided with the owner on 2026-09-25: IVR-call recording (S5-11), per-tenant "recording required" (S5-12), on-demand and pause/resume (S5-13), agent-scoped rules (S5-14), and the real-time layer (S5-08) followed by live-call recording buttons (S5-15) | S5-16 is a defect in a shipped feature. The rest are parity items the owner scheduled early (G-111); S5-08 also unblocks BLF, presence and wallboards in tranche 2. |
 | 2 | Sequential ring and answering rules by schedule, call pickup, paging, BLF and presence, more phone vendors, WebRTC softphone, fax, SMS, wallboards, sites and feature packages, API keys | Depends on the realtime layer (S5-08) or on tranche 1. |
 | 3 | Video, chat, mobile apps, zero-touch, least-cost routing, porting, attendant console | Large, and least likely to block a pilot. |
 

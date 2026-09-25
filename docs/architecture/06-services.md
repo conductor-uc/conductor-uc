@@ -256,8 +256,10 @@ The **billing view** for resellers is pending decision D-013.
 **Internal API (for the FS Lua voicemail app):**
 
 - Mailbox lookup and PIN check
-- Upload URL for a new message, then `:complete`
+- Create a new message (a `pending` row that names its spool file, `vm-{id}.wav`)
 - List, mark-read, and delete messages
+
+**Internal API (for the node uploader, S5-16):** `POST /internal/v1/voicemail/messages/{id}/upload-url`, `.../complete` (verifies the stored object's size and MD5 before the message becomes ready) and `.../fail`, the same contract as recording-service's, addressed by message id alone. The Lua app records into the node spool and never uploads.
 - Greeting URLs
 
 **Public API:** mailbox settings, messages (listen via presigned URL, delete), greeting upload, and `PUT /v1/tenants/{t}/voicemail/mailboxes/{id}/email-settings` (`voicemail.access`, private data: notification address, attach audio, keep / mark read / delete after emailing; G-107).
@@ -266,7 +268,7 @@ The **billing view** for resellers is pending decision D-013.
 
 **Integrations:**
 
-- On `:complete`, emits `voicemail.message.created` (thin: ids only). notification-service reads the settings, message details and audio through the internal API and sends voicemail-to-email using a brand-aware template (built, G-107).
+- On `complete` (the uploader's, once the audio is verified in storage), emits `voicemail.message.created` (thin: ids only). notification-service reads the settings, message details and audio through the internal API and sends voicemail-to-email using a brand-aware template (built, G-107).
 - MWI is to be sent through the OpenSIPs presence `message-summary` PUBLISH; not wired yet (G-42, G-108).
 - Transcription uses a `TranscriptionProvider` interface with one adapter per vendor (O-3). It is off by default and enabled per tenant or mailbox.
 

@@ -146,7 +146,7 @@ Node types, by stage:
 |---|---|---|
 | Directory, dialplan, config | `telephony-config` | Fetched per call |
 | Prompts, MOH, greetings | S3 via media assets | `http_cache` on the node (a disposable cache) |
-| Voicemail messages | S3 + `voicemail-service` DB | A Lua voicemail app records to the spool, then uploads (D-009). Retrieval works from any node. |
+| Voicemail messages | S3 + `voicemail-service` DB | A Lua voicemail app records to the spool; the node uploader delivers it to voicemail-service, which verifies it in storage (D-009, S5-16). Retrieval works from any node. |
 | Recordings | S3 | Spool, then upload, then delete locally (D-011) |
 | Ring / hunt groups | None (per call) | No affinity needed |
 | Queues (`mod_callcenter`) | In memory, per node | **Affinity:** each queue is leased to one node at a time ([04](04-high-availability.md)) |

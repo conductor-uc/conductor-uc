@@ -288,8 +288,8 @@ networks:
 volumes:
   mariadb-data:
   nats-data:
-  # FreeSWITCH writes recordings here (as root); the uploader (uid 65532) uploads
-  # and deletes them. tmpfs: nothing durable on the media server. 0777, NOT 1777.
+  # FreeSWITCH writes recordings and voicemail messages here (as root); the
+  # uploader (uid 65532) uploads and deletes them. tmpfs: nothing durable on the media server. 0777, NOT 1777.
   recording-spool:
     driver: local
     driver_opts: { type: tmpfs, device: tmpfs, o: 'size=2g,mode=0777' }
@@ -671,11 +671,13 @@ services:
     command: ['dist/src/uploader/main.js']
     depends_on:
       recording-service: { condition: service_healthy }
+      voicemail-service: { condition: service_healthy }
     volumes:
       - recording-spool:/var/spool/cuc/rec
     environment:
       SERVICE_NAME: recording-uploader-fs1
       RECORDING_SERVICE_URL: http://recording-service:8080
+      VOICEMAIL_SERVICE_URL: http://voicemail-service:8080   # voicemail messages (S5-16)
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       SPOOL_DIR: /var/spool/cuc/rec
 ```
@@ -712,7 +714,7 @@ Only if you cannot use a hosted object store. Add this service, create DNS `s3.v
     environment:
       MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_ACCESS_KEY}
-    ports: ['9000:9000']               # public: browsers, FreeSWITCH, uploader
+    ports: ['9000:9000']               # public: browsers, uploader
     volumes:
       - /srv/minio:/data                # durable disk; back it up
       - ./minio-certs:/certs:ro         # public.crt and private.key for s3.voice.example.net
