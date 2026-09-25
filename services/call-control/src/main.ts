@@ -136,7 +136,7 @@ const app = await createServer({
   logger,
 });
 
-registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN);
+registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN, registry);
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));

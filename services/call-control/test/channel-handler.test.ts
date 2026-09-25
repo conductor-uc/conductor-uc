@@ -244,5 +244,87 @@ describe.skipIf(skipReason !== undefined)(
         status: 'Available',
       });
     });
+
+    it('a call from a trunk (no tenant at CHANNEL_CREATE) joins its tenant live calls when a later event names it (S5-08)', async () => {
+      const handler = createChannelHandler({
+        db: h.db.kysely,
+        registry: h.registry,
+        logger: h.logger,
+        callSafetyTtlMs: 6 * 60 * 60 * 1000,
+        heartbeatTtlMs: 10_000,
+      });
+      const callUuid = crypto.randomUUID();
+      const tenantId = crypto.randomUUID();
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_CREATE',
+        'Unique-ID': callUuid,
+        'Caller-Caller-ID-Number': '+15550001111',
+        'Caller-Destination-Number': '+15551234567',
+      });
+      expect(await h.registry.callsForTenant(tenantId)).toEqual([]);
+
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_ANSWER',
+        'Unique-ID': callUuid,
+        variable_cuc_tenant_id: tenantId,
+      });
+
+      expect(await h.registry.callsForTenant(tenantId)).toMatchObject([
+        { callUuid, state: 'answered', from: '+15550001111' },
+      ]);
+      const answered = await h.db.kysely
+        .selectFrom('outbox')
+        .selectAll()
+        .where('type', '=', 'call.channel.answered')
+        .executeTakeFirst();
+      expect(answered?.tenant_id).toBe(tenantId);
+    });
+
+    it('CHANNEL_UNHOLD, RECORD_START and RECORD_STOP update the registry and enqueue their events with the tenant (S5-08)', async () => {
+      const handler = createChannelHandler({
+        db: h.db.kysely,
+        registry: h.registry,
+        logger: h.logger,
+        callSafetyTtlMs: 6 * 60 * 60 * 1000,
+        heartbeatTtlMs: 10_000,
+      });
+      const callUuid = crypto.randomUUID();
+      const tenantId = crypto.randomUUID();
+      const event = (name: string) => ({
+        'Event-Name': name,
+        'Unique-ID': callUuid,
+        'variable_sip_h_X-Tenant-Id': tenantId,
+      });
+      await handler.handleEvent('fs-1', event('CHANNEL_CREATE'));
+      await handler.handleEvent('fs-1', event('CHANNEL_HOLD'));
+      await handler.handleEvent('fs-1', event('CHANNEL_UNHOLD'));
+      expect(await h.registry.getCall(callUuid)).toMatchObject({ state: 'answered' });
+
+      await handler.handleEvent('fs-1', event('RECORD_START'));
+      expect(await h.registry.getCall(callUuid)).toMatchObject({ recording: 'on' });
+      await handler.handleEvent('fs-1', event('RECORD_STOP'));
+      expect(await h.registry.getCall(callUuid)).toMatchObject({ recording: 'off' });
+
+      const rows = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['type', 'tenant_id', 'payload'])
+        .where('type', 'in', [
+          'call.channel.held',
+          'call.channel.unheld',
+          'call.channel.recording_started',
+          'call.channel.recording_stopped',
+        ])
+        .execute();
+      expect(rows.map((r) => r.type).sort()).toEqual([
+        'call.channel.held',
+        'call.channel.recording_started',
+        'call.channel.recording_stopped',
+        'call.channel.unheld',
+      ]);
+      for (const row of rows) {
+        expect(row.tenant_id).toBe(tenantId);
+        expect(parsePayload(row.payload)).toEqual({ callUuid, nodeId: 'fs-1' });
+      }
+    });
   },
 );

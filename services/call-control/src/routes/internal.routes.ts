@@ -2,6 +2,7 @@ import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server } from '@cuc/http';
 
 import type { AffinityManager } from '../affinity/manager.js';
+import type { CallRegistry } from '../redis/registry.js';
 
 const KindSchema = Type.Union([Type.Literal('queue'), Type.Literal('park'), Type.Literal('conf')]);
 
@@ -25,6 +26,27 @@ const AcquireResponseSchema = Type.Object({
   nodeId: Type.String(),
   acquired: Type.Boolean(),
 });
+
+const TenantParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1, maxLength: 64 }),
+});
+
+const LiveCallSchema = Type.Object({
+  callUuid: Type.String(),
+  nodeId: Type.String(),
+  tenantId: Type.String(),
+  direction: Type.Union([Type.Literal('inbound'), Type.Literal('outbound')]),
+  state: Type.Union([Type.Literal('ringing'), Type.Literal('answered'), Type.Literal('held')]),
+  /** Unix milliseconds. */
+  startedAt: Type.Number(),
+  answeredAt: Type.Union([Type.Number(), Type.Null()]),
+  from: Type.String(),
+  to: Type.String(),
+  bridgedTo: Type.Union([Type.String(), Type.Null()]),
+  recording: Type.Union([Type.Literal('on'), Type.Literal('off')]),
+});
+
+const LiveCallsResponseSchema = Type.Object({ calls: Type.Array(LiveCallSchema) });
 
 function bearerToken(header: string | undefined): string | undefined {
   if (header === undefined) return undefined;
@@ -54,6 +76,7 @@ export function registerInternalRoutes(
   app: Server,
   affinity: AffinityManager,
   internalServiceToken: string,
+  registry: CallRegistry,
 ): void {
   function authorized(header: string | undefined): boolean {
     const presented = bearerToken(header);
@@ -111,6 +134,29 @@ export function registerInternalRoutes(
       const { tenantId, kind, resourceId } = request.params;
       const nodeId = await affinity.getOwner(tenantId, kind, resourceId);
       return { nodeId: nodeId ?? null };
+    },
+  );
+
+  /**
+   * `GET /internal/v1/tenants/:tenantId/calls` (06, S5-08): the tenant's live
+   * calls, straight from the Redis registry (04 §3.2). api-gateway's realtime
+   * hub asks for it when someone subscribes to `tenant:{t}:calls` (and to build
+   * presence), then applies `call.channel.*` events on top. Each entry is one
+   * channel; the two legs of a bridged call point at each other by `bridgedTo`.
+   * The parties' numbers are private-class data (07 §3.2): the gateway decides
+   * who may see them, this route only answers the shared service token.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/calls',
+    {
+      config: { public: true },
+      schema: { params: TenantParamsSchema, response: { 200: LiveCallsResponseSchema } },
+    },
+    async (request) => {
+      if (!authorized(request.headers.authorization)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      return { calls: await registry.callsForTenant(request.params.tenantId) };
     },
   );
 }

@@ -24,6 +24,11 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * consumer building a CDR timeline keys everything off `callUuid` and reads
  * `occurredAt` off the envelope itself for the state-transition time, rather
  * than this service repeating `tenantId`/`from`/`to` on every event.
+ *
+ * The tenant does travel on every channel event's envelope (`orgContext.
+ * tenantId`) whenever it is known (S5-08): api-gateway's realtime hub routes
+ * each event to the tenant's live topics by it, and must not have to remember
+ * which tenant a call belonged to.
  */
 export const callEvents = defineEvents({
   'call.channel.created': {
@@ -58,6 +63,30 @@ export const callEvents = defineEvents({
   'call.channel.held': {
     schemaVersion: 1,
     description: 'A channel was placed on hold (ESL CHANNEL_HOLD).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.unheld': {
+    schemaVersion: 1,
+    description: 'A held channel was taken off hold (ESL CHANNEL_UNHOLD).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.recording_started': {
+    schemaVersion: 1,
+    description: 'A recording of the channel started (ESL RECORD_START).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.recording_stopped': {
+    schemaVersion: 1,
+    description: 'A recording of the channel stopped (ESL RECORD_STOP).',
     data: Type.Object({
       callUuid: Type.String({ minLength: 1 }),
       nodeId: Type.String({ minLength: 1 }),

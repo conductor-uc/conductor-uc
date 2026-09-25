@@ -20,6 +20,19 @@ export interface ChannelHandlerOptions {
   readonly heartbeatTtlMs: number;
 }
 
+/** The state changes that carry nothing but the call: which event, and what the registry records. */
+const SIMPLE_TRANSITIONS = {
+  held: { type: 'call.channel.held', fields: { state: 'held' } },
+  unheld: { type: 'call.channel.unheld', fields: { state: 'answered' } },
+  recordingStarted: { type: 'call.channel.recording_started', fields: { recording: 'on' } },
+  recordingStopped: { type: 'call.channel.recording_stopped', fields: { recording: 'off' } },
+} as const;
+
+/** The envelope's tenant, when the channel said (S5-08: the realtime hub routes by it). */
+function orgContextOf(tenantId: string | null): { orgContext?: { tenantId: string } } {
+  return tenantId === null ? {} : { orgContext: { tenantId } };
+}
+
 /**
  * Turns normalized channel actions into their two effects: an outbox row
  * (the durable trail) and a Redis registry mutation (the live, rebuildable
@@ -28,6 +41,12 @@ export interface ChannelHandlerOptions {
  */
 export function createChannelHandler(options: ChannelHandlerOptions): ChannelHandler {
   const { db, registry, logger, callSafetyTtlMs, heartbeatTtlMs } = options;
+
+  // A call from a trunk has no tenant until a later event names it (see
+  // `CallRegistry.attachTenant`).
+  async function attachTenant(callUuid: string, tenantId: string | null): Promise<void> {
+    if (tenantId !== null) await registry.attachTenant(callUuid, tenantId);
+  }
 
   return {
     async handleEvent(nodeId, raw) {
@@ -60,7 +79,9 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
           await enqueueEvent(db, callEvents, {
             type: 'call.channel.answered',
             data: { callUuid: action.callUuid, nodeId: action.nodeId },
+            ...orgContextOf(action.tenantId),
           });
+          await attachTenant(action.callUuid, action.tenantId);
           await registry.updateCall(action.callUuid, {
             state: 'answered',
             answeredAt: action.answeredAt,
@@ -71,17 +92,26 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
           await enqueueEvent(db, callEvents, {
             type: 'call.channel.bridged',
             data: { callUuid: action.callUuid, nodeId: action.nodeId, bridgedTo: action.bridgedTo },
+            ...orgContextOf(action.tenantId),
           });
+          await attachTenant(action.callUuid, action.tenantId);
           await registry.updateCall(action.callUuid, { bridgedTo: action.bridgedTo });
           return;
 
         case 'held':
+        case 'unheld':
+        case 'recordingStarted':
+        case 'recordingStopped': {
+          const { type, fields } = SIMPLE_TRANSITIONS[action.kind];
           await enqueueEvent(db, callEvents, {
-            type: 'call.channel.held',
+            type,
             data: { callUuid: action.callUuid, nodeId: action.nodeId },
+            ...orgContextOf(action.tenantId),
           });
-          await registry.updateCall(action.callUuid, { state: 'held' });
+          await attachTenant(action.callUuid, action.tenantId);
+          await registry.updateCall(action.callUuid, fields);
           return;
+        }
 
         case 'hungup':
           await enqueueEvent(db, callEvents, {
@@ -91,7 +121,7 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
               nodeId: action.nodeId,
               hangupCause: action.hangupCause,
             },
-            ...(action.tenantId === null ? {} : { orgContext: { tenantId: action.tenantId } }),
+            ...orgContextOf(action.tenantId),
           });
           await registry.endCall(action.callUuid, action.nodeId, action.tenantId);
           return;

@@ -21,15 +21,22 @@ export type ChannelAction =
       readonly kind: 'answered';
       readonly callUuid: string;
       readonly nodeId: string;
+      readonly tenantId: string | null;
       readonly answeredAt: string;
     }
   | {
       readonly kind: 'bridged';
       readonly callUuid: string;
       readonly nodeId: string;
+      readonly tenantId: string | null;
       readonly bridgedTo: string;
     }
-  | { readonly kind: 'held'; readonly callUuid: string; readonly nodeId: string }
+  | {
+      readonly kind: 'held' | 'unheld' | 'recordingStarted' | 'recordingStopped';
+      readonly callUuid: string;
+      readonly nodeId: string;
+      readonly tenantId: string | null;
+    }
   | {
       readonly kind: 'hungup';
       readonly callUuid: string;
@@ -84,7 +91,7 @@ export function normalizeEslEvent(
   const callUuid = raw['Unique-ID'];
   if (callUuid === undefined || callUuid === '') return { kind: 'ignored' };
 
-  const tenantId = normalizeTenantId(raw['variable_sip_h_X-Tenant-Id']);
+  const tenantId = tenantIdOf(raw);
 
   switch (eventName) {
     case 'CHANNEL_CREATE': {
@@ -104,14 +111,24 @@ export function normalizeEslEvent(
       };
     }
     case 'CHANNEL_ANSWER':
-      return { kind: 'answered', callUuid, nodeId, answeredAt: eventTimestampMs(raw) };
+      return { kind: 'answered', callUuid, nodeId, tenantId, answeredAt: eventTimestampMs(raw) };
     case 'CHANNEL_BRIDGE': {
       const bridgedTo = raw['Other-Leg-Unique-ID'];
       if (bridgedTo === undefined || bridgedTo === '') return { kind: 'ignored' };
-      return { kind: 'bridged', callUuid, nodeId, bridgedTo };
+      return { kind: 'bridged', callUuid, nodeId, tenantId, bridgedTo };
     }
     case 'CHANNEL_HOLD':
-      return { kind: 'held', callUuid, nodeId };
+      return { kind: 'held', callUuid, nodeId, tenantId };
+    case 'CHANNEL_UNHOLD':
+      return { kind: 'unheld', callUuid, nodeId, tenantId };
+    // `record_session` (the recording dialplan, S5-02) fires these on the
+    // channel it records. UNVERIFIED LIVE, like the callcenter events above:
+    // both are long-standing FreeSWITCH event names, but no test here has run
+    // them against a real node.
+    case 'RECORD_START':
+      return { kind: 'recordingStarted', callUuid, nodeId, tenantId };
+    case 'RECORD_STOP':
+      return { kind: 'recordingStopped', callUuid, nodeId, tenantId };
     case 'CHANNEL_HANGUP_COMPLETE':
       return {
         kind: 'hungup',
@@ -123,6 +140,21 @@ export function normalizeEslEvent(
     default:
       return { kind: 'ignored' };
   }
+}
+
+/**
+ * The channel's tenant: the `X-Tenant-Id` header OpenSIPs set (an extension's
+ * own call), else `cuc_tenant_id`, which every dialplan branch sets
+ * (telephony-config's `tenantIdAction`). A call from a trunk has no header, so
+ * its CHANNEL_CREATE (fired before the dialplan runs) has no tenant; its later
+ * events (answer, bridge, hangup) carry `cuc_tenant_id`, which is how the live
+ * registry learns whose call it is (S5-08).
+ */
+function tenantIdOf(raw: Readonly<Record<string, string>>): string | null {
+  return (
+    normalizeTenantId(raw['variable_sip_h_X-Tenant-Id']) ??
+    normalizeTenantId(raw['variable_cuc_tenant_id'])
+  );
 }
 
 function normalizeTenantId(value: string | undefined): string | null {

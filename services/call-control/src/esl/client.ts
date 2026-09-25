@@ -52,7 +52,7 @@ export interface EslClient {
 // its own subclass to subscribe to it — `mod_event_socket`'s documented
 // convention, not something the other (stock) event names above need.
 const SUBSCRIBE_COMMAND =
-  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_HANGUP_COMPLETE HEARTBEAT CUSTOM callcenter::info';
+  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_UNHOLD RECORD_START RECORD_STOP CHANNEL_HANGUP_COMPLETE HEARTBEAT CUSTOM callcenter::info';
 
 type ConnectionState = 'connecting' | 'authenticating' | 'subscribing' | 'ready';
 
