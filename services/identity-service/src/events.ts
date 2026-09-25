@@ -3,7 +3,11 @@ import { Type, defineEvents } from '@cuc/api-contracts';
 /**
  * identity-service's event contracts.
  *
- * `identity.user.created`, plus the two token-carrying events S3-04 adds.
+ * `identity.user.created`, plus the reset and invitation events S3-04 adds.
+ * Those two carry no token (G-55): notification-service asks for the link over
+ * `POST /internal/v1/orgs/:orgId/{password-resets|invitations}/:id/link` when
+ * it sends the email, so no outbox row, stream message or backup ever holds a
+ * usable credential. Version 1 of both carried the token.
  * Earlier: only `identity.user.created`: it is the only lifecycle event this
  * task's code actually publishes. `identity.user.updated|disabled|deleted`
  * and `identity.grant.changed` are named in 06's catalog for the service as a
@@ -45,33 +49,38 @@ export const identityEvents = defineEvents({
     }),
   },
   'identity.user.password_reset_requested': {
-    schemaVersion: 1,
+    schemaVersion: 2,
     description:
-      'A password reset was requested for an active user. Carries the one-time token ' +
-      "notification-service emails; it is a secret, so this event's subscribers are " +
-      'limited to that delivery path (G-55).',
-    data: Type.Object({
-      userId: Type.String({ minLength: 1 }),
-      orgId: Type.String({ minLength: 1 }),
-      email: Type.String({ minLength: 1 }),
-      token: Type.String({ minLength: 1 }),
-      expiresAt: Type.String({ minLength: 1 }),
-    }),
+      'A password reset was requested for an active user. Carries no token: ' +
+      'notification-service asks identity-service to issue the link when it sends the ' +
+      'email (G-55).',
+    data: Type.Object(
+      {
+        resetId: Type.String({ minLength: 1 }),
+        userId: Type.String({ minLength: 1 }),
+        orgId: Type.String({ minLength: 1 }),
+        email: Type.String({ minLength: 1 }),
+        expiresAt: Type.String({ minLength: 1 }),
+      },
+      { additionalProperties: false },
+    ),
   },
   'identity.invitation.created': {
-    schemaVersion: 1,
+    schemaVersion: 2,
     description:
-      'A user was invited to an org. Carries the one-time acceptance token ' +
-      'notification-service emails (G-55).',
-    data: Type.Object({
-      invitationId: Type.String({ minLength: 1 }),
-      orgId: Type.String({ minLength: 1 }),
-      orgType: Type.String({ minLength: 1 }),
-      resellerId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-      email: Type.String({ minLength: 1 }),
-      displayName: Type.String({ minLength: 1 }),
-      token: Type.String({ minLength: 1 }),
-      expiresAt: Type.String({ minLength: 1 }),
-    }),
+      'A user was invited to an org. Carries no token: notification-service asks ' +
+      'identity-service to issue the link when it sends the email (G-55).',
+    data: Type.Object(
+      {
+        invitationId: Type.String({ minLength: 1 }),
+        orgId: Type.String({ minLength: 1 }),
+        orgType: Type.String({ minLength: 1 }),
+        resellerId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+        email: Type.String({ minLength: 1 }),
+        displayName: Type.String({ minLength: 1 }),
+        expiresAt: Type.String({ minLength: 1 }),
+      },
+      { additionalProperties: false },
+    ),
   },
 });

@@ -27,32 +27,47 @@ export class InvitationConflictError extends Error {
 }
 
 /**
+ * What issuing a reset or invitation link came to. Only `issued` carries a
+ * token; every other outcome means no email should go out.
+ */
+export type LinkIssue =
+  | { readonly status: 'issued'; readonly token: string; readonly expiresAt: Date }
+  | { readonly status: 'not_found' | 'used' | 'expired' | 'user_inactive' };
+
+/**
  * Password-reset and invitation tokens. A token is 256 random bits and only
  * its SHA-256 is stored. Each is single-use: consuming one is an atomic
  * `UPDATE … WHERE used_at IS NULL AND expires_at > now`, so two concurrent
  * requests cannot both succeed.
+ *
+ * A reset request or invitation is created without a token; the token is
+ * issued when notification-service sends the email (G-55), and issuing again
+ * replaces it. A row whose link was never issued has a NULL hash, which no
+ * presented token can match.
  */
 export function createTokenRepo(db: Database<IdentityServiceDb>) {
   return {
     /**
-     * Records a reset token for [user] and publishes the event that carries it
-     * to the mailer, in one transaction: a token that was never announced
-     * would be unreachable, an announced one that was never stored useless.
+     * Records a reset request for [user] and publishes the event that asks for
+     * the email, in one transaction. No token exists yet: it is issued when the
+     * email is sent ({@link issuePasswordResetLink}), so neither the outbox row
+     * nor the stream ever holds one (G-55). The request expires [ttlMinutes]
+     * from now whenever the link is issued.
      */
     async createPasswordReset(
       ctx: DbContext,
       user: User,
       ttlMinutes: number,
-    ): Promise<{ token: string; expiresAt: Date }> {
-      const token = newToken();
+    ): Promise<{ id: string; expiresAt: Date }> {
+      const id = randomUUID();
       const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
       await db.kysely.transaction().execute(async (trx) => {
         await trx
           .insertInto('password_reset_tokens')
           .values({
-            id: randomUUID(),
+            id,
             user_id: user.id,
-            token_hash: hashToken(token),
+            token_hash: null,
             expires_at: expiresAt,
             used_at: null,
             created_at: new Date(),
@@ -61,16 +76,47 @@ export function createTokenRepo(db: Database<IdentityServiceDb>) {
         await enqueueEvent(trx, identityEvents, {
           type: 'identity.user.password_reset_requested',
           data: {
+            resetId: id,
             userId: user.id,
             orgId: user.orgId,
             email: user.email,
-            token,
             expiresAt: expiresAt.toISOString(),
           },
           ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
         });
       });
-      return { token, expiresAt };
+      return { id, expiresAt };
+    },
+
+    /**
+     * Issues the link for reset request [resetId] of a user in [orgId]: a new
+     * token whose hash replaces any earlier one, so a token issued before (for
+     * an email that was retried) stops working. The raw token is returned
+     * once and stored nowhere. Refused when the request is unknown, used or
+     * expired, or its user is no longer active.
+     */
+    async issuePasswordResetLink(orgId: string, resetId: string): Promise<LinkIssue> {
+      return db.kysely.transaction().execute(async (trx) => {
+        const row = await trx
+          .selectFrom('password_reset_tokens as r')
+          .innerJoin('users as u', 'u.id', 'r.user_id')
+          .select(['r.id', 'r.expires_at', 'r.used_at', 'u.org_id', 'u.status'])
+          .where('r.id', '=', resetId)
+          .forUpdate()
+          .executeTakeFirst();
+        if (row === undefined || row.org_id !== orgId) return { status: 'not_found' };
+        if (row.used_at !== null) return { status: 'used' };
+        if (row.expires_at.getTime() <= Date.now()) return { status: 'expired' };
+        if (row.status !== 'active') return { status: 'user_inactive' };
+
+        const token = newToken();
+        await trx
+          .updateTable('password_reset_tokens')
+          .set({ token_hash: hashToken(token) })
+          .where('id', '=', row.id)
+          .execute();
+        return { status: 'issued', token, expiresAt: row.expires_at };
+      });
     },
 
     /** The user a valid, unused, unexpired reset token belongs to, without using it. */
@@ -116,12 +162,11 @@ export function createTokenRepo(db: Database<IdentityServiceDb>) {
         displayName: string;
         invitedBy: string | null;
       },
-      ttlDays: number,
-    ): Promise<{ id: string; token: string; expiresAt: Date; email: string }> {
-      const token = newToken();
+      ttlHours: number,
+    ): Promise<{ id: string; expiresAt: Date; email: string }> {
       const id = randomUUID();
       const email = normalizeEmail(input.email);
-      const expiresAt = new Date(Date.now() + ttlDays * 24 * 60 * 60_000);
+      const expiresAt = new Date(Date.now() + ttlHours * 60 * 60_000);
       await db.kysely.transaction().execute(async (trx) => {
         const open = await trx
           .selectFrom('invitations')
@@ -143,7 +188,8 @@ export function createTokenRepo(db: Database<IdentityServiceDb>) {
             email,
             display_name: input.displayName,
             invited_by: input.invitedBy,
-            token_hash: hashToken(token),
+            // Issued when the email is sent (G-55).
+            token_hash: null,
             expires_at: expiresAt,
             accepted_at: null,
             created_at: new Date(),
@@ -158,13 +204,40 @@ export function createTokenRepo(db: Database<IdentityServiceDb>) {
             resellerId: input.resellerId,
             email,
             displayName: input.displayName,
-            token,
             expiresAt: expiresAt.toISOString(),
           },
           ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
         });
       });
-      return { id, token, expiresAt, email };
+      return { id, expiresAt, email };
+    },
+
+    /**
+     * Issues the link for invitation [invitationId] into [orgId], exactly as
+     * {@link issuePasswordResetLink} does for a reset: a fresh token whose hash
+     * replaces any earlier one, returned once. Refused when the invitation is
+     * unknown, already accepted or expired.
+     */
+    async issueInvitationLink(orgId: string, invitationId: string): Promise<LinkIssue> {
+      return db.kysely.transaction().execute(async (trx) => {
+        const row = await trx
+          .selectFrom('invitations')
+          .select(['id', 'org_id', 'expires_at', 'accepted_at'])
+          .where('id', '=', invitationId)
+          .forUpdate()
+          .executeTakeFirst();
+        if (row === undefined || row.org_id !== orgId) return { status: 'not_found' };
+        if (row.accepted_at !== null) return { status: 'used' };
+        if (row.expires_at.getTime() <= Date.now()) return { status: 'expired' };
+
+        const token = newToken();
+        await trx
+          .updateTable('invitations')
+          .set({ token_hash: hashToken(token) })
+          .where('id', '=', row.id)
+          .execute();
+        return { status: 'issued', token, expiresAt: row.expires_at };
+      });
     },
 
     /** An open invitation for [token], without consuming it. */

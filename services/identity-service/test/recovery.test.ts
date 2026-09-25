@@ -239,15 +239,18 @@ describe.skipIf(skipReason !== undefined)('password reset, invitations, refresh 
       expect(events).toHaveLength(1);
     });
 
+    /** Requests a reset and has its link issued, as notification-service does at send time. */
     async function requestToken(orgId: string): Promise<string> {
-      const issued = await h.auth.requestPasswordReset(
+      const requested = await h.auth.requestPasswordReset(
         { requestId: 'test' },
         orgId,
         'admin@example.com',
       );
-      const first = issued[0];
-      if (first === undefined) throw new Error('no token issued');
-      return first.token;
+      const first = requested[0];
+      if (first === undefined) throw new Error('no reset requested');
+      const link = await h.auth.issuePasswordResetLink(first.orgId, first.resetId);
+      if (link.status !== 'issued') throw new Error(`no link issued: ${link.status}`);
+      return link.token;
     }
 
     it('sets the new password, and the old one stops working', async () => {
@@ -362,6 +365,42 @@ describe.skipIf(skipReason !== undefined)('password reset, invitations, refresh 
       expect(rows[0]!.token_hash).not.toContain(token);
       expect(rows[0]!.token_hash).toMatch(/^[0-9a-f]{64}$/);
     });
+
+    it('publishes an event with ids only: no token, no hash (G-55)', async () => {
+      const orgId = crypto.randomUUID();
+      const user = await makeUser(orgId);
+      const [requested] = await h.auth.requestPasswordReset(
+        { requestId: 'test' },
+        orgId,
+        'admin@example.com',
+      );
+      // No token exists until the email is sent.
+      const row = await h.db.kysely
+        .selectFrom('password_reset_tokens')
+        .selectAll()
+        .executeTakeFirstOrThrow();
+      expect(row.token_hash).toBeNull();
+
+      const [event] = await outboxOf('identity.user.password_reset_requested');
+      const data = (
+        typeof event!.payload === 'string' ? JSON.parse(event!.payload) : event!.payload
+      ) as Record<string, unknown>;
+      expect(Object.keys(data).sort()).toEqual(
+        ['email', 'expiresAt', 'orgId', 'resetId', 'userId'].sort(),
+      );
+      expect(data).toMatchObject({ resetId: requested!.resetId, userId: user.id, orgId });
+      expect(event!.schema_version).toBe(2);
+
+      // Once the link is issued, neither the token nor its hash is in the event.
+      const link = await h.auth.issuePasswordResetLink(orgId, requested!.resetId);
+      if (link.status !== 'issued') throw new Error(link.status);
+      const hash = (
+        await h.db.kysely.selectFrom('password_reset_tokens').selectAll().executeTakeFirstOrThrow()
+      ).token_hash!;
+      const stored = JSON.stringify(await outboxOf('identity.user.password_reset_requested'));
+      expect(stored).not.toContain(link.token);
+      expect(stored).not.toContain(hash);
+    });
   });
 
   describe('invitations', () => {
@@ -392,15 +431,22 @@ describe.skipIf(skipReason !== undefined)('password reset, invitations, refresh 
       });
     }
 
-    /** The token the mailer would receive: the outbox payload is the event's `data`. */
+    /**
+     * The token the mailer would put in the link: it reads the invitation id
+     * from the event and has the link issued at send time (G-55).
+     */
     async function tokenOf(email: string): Promise<string> {
       const events = await outboxOf('identity.invitation.created');
       for (const row of events) {
         const data = (typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload) as {
           email: string;
-          token: string;
+          orgId: string;
+          invitationId: string;
         };
-        if (data.email === email) return data.token;
+        if (data.email !== email) continue;
+        const link = await h.auth.issueInvitationLink(data.orgId, data.invitationId);
+        if (link.status !== 'issued') throw new Error(`no link issued: ${link.status}`);
+        return link.token;
       }
       throw new Error(`no invitation event for ${email}`);
     }
@@ -411,7 +457,35 @@ describe.skipIf(skipReason !== undefined)('password reset, invitations, refresh 
       expect(response.statusCode).toBe(201);
       expect(response.json()).toMatchObject({ email: 'new@example.com' });
       expect(response.body).not.toContain('token');
-      expect(await outboxOf('identity.invitation.created')).toHaveLength(1);
+      const events = await outboxOf('identity.invitation.created');
+      expect(events).toHaveLength(1);
+      // Ids and what the email needs to address the person, never a token (G-55).
+      const data = (
+        typeof events[0]!.payload === 'string' ? JSON.parse(events[0]!.payload) : events[0]!.payload
+      ) as Record<string, unknown>;
+      expect(Object.keys(data).sort()).toEqual(
+        [
+          'displayName',
+          'email',
+          'expiresAt',
+          'invitationId',
+          'orgId',
+          'orgType',
+          'resellerId',
+        ].sort(),
+      );
+      expect(events[0]!.schema_version).toBe(2);
+      const stored = await h.db.kysely.selectFrom('invitations').selectAll().execute();
+      expect(stored[0]!.token_hash).toBeNull();
+    });
+
+    it('lasts 72 hours', async () => {
+      const orgId = crypto.randomUUID();
+      const before = Date.now();
+      const response = await invite(orgId, asActor(orgId, 'tenant'));
+      const expiresAt = new Date(response.json<{ expiresAt: string }>().expiresAt).getTime();
+      expect(expiresAt - before).toBeGreaterThanOrEqual(72 * 60 * 60_000 - 1000);
+      expect(expiresAt - before).toBeLessThanOrEqual(72 * 60 * 60_000 + 5000);
     });
 
     it('refuses to invite into another org', async () => {
