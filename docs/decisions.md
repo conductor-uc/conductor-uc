@@ -15,22 +15,26 @@ Status values:
 | D-003 | Fastify + TypeBox + Kysely + pino + OTel for services | **Accepted** (2026-09-12) | S0 | [09](architecture/09-engineering-conventions.md) |
 | D-004 | NATS JetStream event bus with transactional outbox. Redis is kept out of durable messaging because the SAD makes Redis ephemeral. | **Accepted** (2026-09-12) | S0 | [05 §5](architecture/05-data-architecture.md#5-events) |
 | D-005 | One MariaDB cluster with a schema per service. Tenant isolation through a mandatory `scoped(ctx)` data-access layer. | **Accepted** (2026-09-12) | S0 | [05 §1–2](architecture/05-data-architecture.md) |
-| D-006 | FreeSWITCH gets all directory, dialplan, and module config from `telephony-config` via `mod_xml_curl`. Nodes hold no tenant config. | Proposed | S1 | [03 §3](architecture/03-signaling-and-media.md#3-freeswitch) |
-| D-007 | OpenSIPs is registrar, auth point, and trunk edge (`uac_registrant`, `uac_auth`, `drouting`). FS has no gateways. | Proposed | S1 | [03 §1](architecture/03-signaling-and-media.md#1-division-of-responsibility) |
-| D-008 | Call flows compile to an immutable, versioned JSON IR executed by a Lua runner on FS. The alternative (generating XML dialplan or `ivr.conf` menus) is rejected because it handles branching, loops, and versioning poorly. | Proposed | S2 | [03 §4](architecture/03-signaling-and-media.md#4-call-flows-ivr--auto-attendant) |
-| D-009 | Voicemail audio, greetings, and prompts live centrally in S3. Voicemail runs as a Lua app backed by `voicemail-service`, not stock `mod_voicemail` storage. This is required for non-pinned nodes. | Proposed | S2 | [03 §5](architecture/03-signaling-and-media.md#5-stateless-node-rules-for-features) |
-| D-010 | Queues, parking lots, and conference rooms are pinned to one node at a time through Redis affinity leases | Proposed | S2 (abstraction) / S4 (multi-node) | [04 §3.3](architecture/04-high-availability.md#33-resource-affinity-leases) |
+| D-006 | FreeSWITCH gets all directory, dialplan, and module config from `telephony-config` via `mod_xml_curl`. Nodes hold no tenant config. | **Accepted** (2026-09-25) | S1 | [03 §3](architecture/03-signaling-and-media.md#3-freeswitch) |
+| D-007 | OpenSIPs is registrar, auth point, and trunk edge (`uac_registrant`, `uac_auth`, `drouting`). FS has no gateways. | **Accepted** (2026-09-25) | S1 | [03 §1](architecture/03-signaling-and-media.md#1-division-of-responsibility) |
+| D-008 | Call flows compile to an immutable, versioned JSON IR executed by a Lua runner on FS. The alternative (generating XML dialplan or `ivr.conf` menus) is rejected because it handles branching, loops, and versioning poorly. | **Accepted** (2026-09-25) | S2 | [03 §4](architecture/03-signaling-and-media.md#4-call-flows-ivr--auto-attendant) |
+| D-009 | Voicemail audio, greetings, and prompts live centrally in S3. Voicemail runs as a Lua app backed by `voicemail-service`, not stock `mod_voicemail` storage. This is required for non-pinned nodes. | **Accepted** (2026-09-25) | S2 | [03 §5](architecture/03-signaling-and-media.md#5-stateless-node-rules-for-features) |
+| D-010 | Queues, parking lots, and conference rooms are pinned to one node at a time through Redis affinity leases | **Accepted** (2026-09-25) | S2 (abstraction) / S4 (multi-node) | [04 §3.3](architecture/04-high-availability.md#33-resource-affinity-leases) |
 | D-011 | Recordings go to a transient node spool, then an uploader pushes them to S3 and deletes the local copy. No durable node storage. | **Accepted** (2026-09-25) | S5 | [03 §6](architecture/03-signaling-and-media.md#6-recording-pipeline-summary) |
-| D-012 | Short-lived EdDSA JWT access tokens + rotating refresh cookies. MFA required for master and reseller users. | Proposed | S1 | [07 §2](architecture/07-security-and-permissions.md#2-tokens) |
+| D-012 | Short-lived EdDSA JWT access tokens + rotating refresh cookies. MFA required for master and reseller users. | **Accepted** (2026-09-25) | S1 | [07 §2](architecture/07-security-and-permissions.md#2-tokens) |
 | D-013 | **Reseller access to billing data.** See conflict C-1. | **Accepted** (2026-09-15, issue #95) | S2 | below |
-| D-014 | Five services added to the SAD §7 list: api-gateway, pbx-config-service, telephony-config, call-control, notification-service | Proposed | S1 | [06](architecture/06-services.md) |
-| D-015 | Voicemail storage core is pulled forward from Phase 5 to Stage 2 (email and transcription stay in Stage 5) | Proposed | S2 | [plan](plan/implementation-plan.md) |
+| D-014 | Five services added to the SAD §7 list: api-gateway, pbx-config-service, telephony-config, call-control, notification-service | **Accepted** (2026-09-25) | S1 | [06](architecture/06-services.md) |
+| D-015 | Voicemail storage core is pulled forward from Phase 5 to Stage 2 (email and transcription stay in Stage 5) | **Accepted** (2026-09-25) | S2 | [plan](plan/implementation-plan.md) |
 
 **Stage 0 sign-off (2026-09-12).** D-001, D-003, D-004, and D-005 were accepted together. Three of
 them were already implemented and merged when they were signed off — D-001 in S0-01, D-003 and
 D-005 across S0-02 and S0-03 — so the sign-off records what the code already does. D-004 was
 accepted ahead of S0-04, which is the first task to build on it. Every other *Proposed* decision
 still needs sign-off before the stage in *Needed by*.
+
+**Sign-off of built decisions (2026-09-25).** D-006, D-007, D-008, D-009, D-010, D-012, D-014 and
+D-015 were accepted together by the owner. Each was already implemented and in use; the sign-off records
+what the code does. D-010's multi-node half (OpenSIPs honouring the leases) is still plan task S4-05.
 
 ## 2. Open questions
 
