@@ -15,14 +15,16 @@ Options:
                      leaked. Access tokens signed before now stop verifying at
                      identity-service at once and at api-gateway when its key
                      cache refreshes (JWKS_CACHE_MAX_AGE_MS, default 10
-                     minutes). People are not signed out: the console gets a
-                     new access token with its refresh cookie. Someone midway
+                     minutes). Nobody has to sign in again (refresh cookies
+                     are not affected), but an open console's requests fail
+                     until its next scheduled token refresh (within the
+                     access-token lifetime) or a page reload. Someone midway
                      through a two-step sign-in starts it again.
   --help             Show this text.
 
 Reads the same settings as identity-service (database, CRYPTO_KEKS, ...), so
-run it with that service's environment, e.g. in its container:
-  node dist/src/cli/rotate-signing-key.js --revoke-previous
+run it with that service's environment, for example:
+  docker compose run --rm identity-service dist/src/cli/rotate-signing-key.js
 `;
 
 export interface RotateSigningKeyArgs {

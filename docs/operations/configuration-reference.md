@@ -10,7 +10,8 @@ The rules below apply to all Node.js services, from `packages/config`.
 - An **empty value counts as unset**, so the default applies.
 - Booleans accept `true`, `false`, `1`, `0` (any case). Lists are comma-separated and trimmed. URLs must be absolute (`http://host:port`).
 - "Required" below means there is no default: the service will not start without it.
-- **Secret** variables are masked as `[redacted]` in the configuration each service logs at startup. Nothing reads a secret from a file: there is no `*_FILE` convention. Use your orchestrator's secret mechanism to put the value in the environment.
+- **Secret** variables are masked as `[redacted]` in the configuration each service logs at startup.
+- **Any variable can be read from a file** instead: set `<NAME>_FILE` to the file's path (for example `DB_PASSWORD_FILE=/run/secrets/db_password`, the way Docker and Kubernetes secrets are mounted). The file is read as UTF-8 at startup and trailing whitespace, such as the final newline, is removed. It is meant for secrets, but works for every variable in this reference, including the recording uploader's. A value read from a file is masked in the startup log like any other secret. The service refuses to start if both `<NAME>` and `<NAME>_FILE` are set, or if the file cannot be read or is empty; the error names the variable and the path, never the contents. Variables whose own name ends in `_FILE` (api-gateway's `TLS_CERT_FILE` and `TLS_KEY_FILE`) keep their meaning.
 - Changes take effect only on restart.
 
 ## 2. Secrets to generate
@@ -102,7 +103,11 @@ What it protects: SIP passwords, trunk credentials, voicemail PINs, TLS private 
 
 **If you lose `CRYPTO_KEKS`, every one of those becomes unreadable. Nobody can sign in, phones cannot register, trunks cannot authenticate, and TLS certificates cannot be served.** Store it outside the servers: a password manager, a secrets vault, or a sealed offline copy. Include it in your disaster-recovery plan ([operations §4](operations.md#4-backups-and-restore)).
 
-To introduce a new key, add it with a new version and make it current: `CRYPTO_KEKS=1:<old>,2:<new>` and `CRYPTO_KEK_CURRENT=2`. **Keep the old version listed for as long as any record is encrypted under it.** Nothing re-encrypts existing records, so in practice that means forever. There is no KMS integration: the Vault provider in `packages/crypto` throws "not implemented".
+To introduce a new key, add it with a new version and make it current: `CRYPTO_KEKS=1:<old>,2:<new>` and `CRYPTO_KEK_CURRENT=2`, identically in all five services, and restart them. Each of the five then **re-wraps existing records in the background**: at startup and every 10 minutes it moves records still under an older version to the current one, 100 at a time. Only each record's data key is re-encrypted, so this is quick and a record stays readable throughout. Several copies of a service can run it at once.
+
+**Keep the old version listed until every record has moved.** Each service reports how many of its records are still under an older version in `GET /readyz`, as the `kek_rewrap` check (`"detail": "N values under older key versions"`; it always passes), and logs the count after every pass while it is above 0, then once when it reaches 0. When all five services report `0 values under older key versions`, remove the old version from `CRYPTO_KEKS` and restart them. A record that cannot be moved (its version is already missing from `CRYPTO_KEKS`) is logged with its table and row and keeps being counted. Backups taken before the change still need the old key to be restored ([operations §6](operations.md#6-rotating-secrets)).
+
+There is no KMS integration: the Vault provider in `packages/crypto` throws "not implemented" (deferred, G-116).
 
 ### 3.6 Object storage (org, pbx-config, voicemail, recording, cdr, telephony-config, media-worker)
 
@@ -164,13 +169,14 @@ Groups: base, database (`identity_service`), events, signed headers, crypto.
 | `ACCESS_TOKEN_TTL_SECONDS` | `600` | no | Access-token lifetime |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | no | Sliding session lifetime |
 | `MFA_TICKET_TTL_SECONDS` | `300` | no | Time to enter a two-step code |
-| `SIGNING_KEY_OVERLAP_DAYS` | `7` | no | How long a retired signing key stays published. Nothing rotates keys yet ([operations §6](operations.md#6-rotating-secrets)). |
+| `SIGNING_KEY_OVERLAP_DAYS` | `7` | no | How long a retired signing key stays published, so tokens it signed keep verifying. Keep it longer than `ACCESS_TOKEN_TTL_SECONDS`. |
+| `SIGNING_KEY_ROTATION_DAYS` | `90` | no | Rotate the signing key automatically once it is this old. Every copy checks hourly and 30 s after startup; exactly one rotates. `0` turns automatic rotation off. |
 | `PASSWORD_RESET_TTL_MINUTES` | `60` | no | |
 | `INVITATION_TTL_DAYS` | `7` | no | |
 | `COOKIE_SECURE` | `true` | no | `Secure` flag on the refresh cookie. **Keep `true`** in production (HTTPS only). |
 | `DEV_EXPOSE_TOKENS` | `false` | no | Logs reset and invitation tokens. **Never in production.** |
 
-Signing keys (Ed25519) are generated at first start and stored in its database, encrypted with `CRYPTO_KEKS`.
+Signing keys (Ed25519) are generated at first start and stored in its database, encrypted with `CRYPTO_KEKS`. They rotate automatically (`SIGNING_KEY_ROTATION_DAYS`), and an operator can rotate at any time with the `rotate-signing-key` command, adding `--revoke-previous` if a key may have leaked ([operations §6](operations.md#6-rotating-secrets)). Every copy signs with the new key from its next token; nothing needs a restart.
 
 ### 4.3 org-service
 

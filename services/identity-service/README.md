@@ -57,9 +57,14 @@ private key is envelope-encrypted at rest via `@cuc/crypto`; it is only ever dec
 retiring and generating must not leave zero current keys. A retired key keeps verifying for
 `SIGNING_KEY_OVERLAP_DAYS` (default 7; 07 §2 says "with overlap" but names no duration).
 
-There is no scheduled rotation job — nothing in this codebase runs cron jobs yet. `rotate()` is a
-callable primitive, the same shape `@cuc/crypto`'s `rotate()` took in S0-09; wiring an actual
-90-day schedule is separate infrastructure work.
+Rotation (G-116): `src/signing-key-rotation.ts` checks hourly, and 30 s after startup, whether the
+current key is older than `SIGNING_KEY_ROTATION_DAYS` (default 90, `0` = off) and rotates it if so.
+`rotateIfOlderThan` does the age check inside the rotation's transaction, on the current key's row
+locked with `SELECT … FOR UPDATE`, so any number of copies rotate once between them. `current()`
+reads which key is current on every token it signs (only the decoded key is cached, by id), so no
+copy goes on signing with a retired key. The operator command `rotate-signing-key`
+(`dist/src/cli/rotate-signing-key.js`) rotates now; `--revoke-previous` also sets `revoked_at` on
+every retired key, which removes it from the JWKS at once instead of after the overlap.
 
 ## MFA tickets are not access tokens, on purpose
 
