@@ -6,6 +6,7 @@ import { createLogger, withContext, type Logger } from '@cuc/logger';
 import type { ServerOptions as HttpsServerOptions } from 'node:https';
 import Fastify, { LogController, type FastifyServerOptions } from 'fastify';
 
+import { registerAuthenticationRequirement } from './authentication.js';
 import { registerHardRules } from './authz.js';
 import {
   buildRequestContext,
@@ -49,8 +50,14 @@ export interface CreateServerOptions {
    * A service that serves tenant data or manages people passes one.
    */
   readonly permissions?: PermissionResolver;
-  /** Behind api-gateway this should be true so client IPs are correct. */
-  readonly trustProxy?: boolean;
+  /**
+   * Which peers' `X-Forwarded-*` headers to believe for `request.ip`,
+   * `request.protocol` and `request.host`: false (the default) believes none,
+   * a list believes only those addresses or CIDRs. Only the edge sets it
+   * (api-gateway's `TRUSTED_PROXIES`, G-113); services behind the gateway take
+   * the client address from the signed context instead (`clientIpOf`).
+   */
+  readonly trustProxy?: boolean | readonly string[];
   /**
    * Serve HTTPS with these Node TLS options instead of plain HTTP. Only the edge
    * (api-gateway) sets this; the services behind it stay on the private network.
@@ -76,7 +83,8 @@ const IDENTIFYING_HEADERS = ['server', 'x-powered-by'] as const;
  * Builds a service HTTP server with the platform defaults wired in:
  * request id and trace propagation, a request context, problem+json errors,
  * health and readiness routes, OpenAPI generation, hard rule H1, and the route
- * contract guard.
+ * contract guard. A service that trusts `x-internal-*` headers also refuses
+ * unauthenticated requests on its non-public routes (G-112).
  *
  * Routes still have to declare `permission` and `dataClass`; registering one
  * that does not throws at the registration call, or rejects `app.ready()` when
@@ -115,7 +123,7 @@ export async function createServer(options: CreateServerOptions): Promise<Server
       requestIdLogLabel: 'requestId',
       disableRequestLogging: false,
     }),
-    trustProxy,
+    trustProxy: typeof trustProxy === 'boolean' ? trustProxy : [...trustProxy],
     ...(options.https === undefined ? {} : { https: options.https }),
     ajv: { customOptions: { allErrors: true, removeAdditional: false, coerceTypes: false } },
     ...options.fastify,
@@ -151,6 +159,8 @@ export async function createServer(options: CreateServerOptions): Promise<Server
     done(null, payload);
   });
 
+  // After the context hook above: onRequest hooks run in registration order.
+  if (context.trustInternalHeaders === true) registerAuthenticationRequirement(app);
   registerHardRules(app);
   if (options.permissions !== undefined) registerPermissionGuard(app, options.permissions);
 

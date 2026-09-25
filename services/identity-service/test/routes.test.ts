@@ -75,6 +75,23 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       expect(response.json()).toMatchObject({ status: 'ok' });
     });
 
+    it('records the client address the gateway signed on the session, not its own (G-113)', async () => {
+      const orgId = crypto.randomUUID();
+      await createUserViaInternal(app, orgId, 'tenant');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/login',
+        headers: signInternalHeaders(HEADER_SECRET, { clientIp: '203.0.113.9' }),
+        remoteAddress: '10.0.0.2',
+        payload: { orgId, email: 'admin@example.com', password: 'correct horse battery staple' },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const sessions = await h.db.kysely.selectFrom('sessions').select('ip').execute();
+      expect(sessions).toEqual([{ ip: '203.0.113.9' }]);
+    });
+
     it('returns problem+json for the wrong password, generically', async () => {
       const orgId = crypto.randomUUID();
       await createUserViaInternal(app, orgId, 'tenant');

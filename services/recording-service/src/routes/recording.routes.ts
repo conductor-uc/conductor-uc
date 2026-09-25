@@ -1,5 +1,12 @@
 import type { DbContext } from '@cuc/db';
-import { ProblemError, Type, type RequestContext, type Server, type Static } from '@cuc/http';
+import {
+  clientIpOf,
+  ProblemError,
+  Type,
+  type RequestContext,
+  type Server,
+  type Static,
+} from '@cuc/http';
 import type { Logger } from '@cuc/logger';
 import { MAX_GET_TTL_SECONDS, type Storage } from '@cuc/storage';
 
@@ -129,7 +136,7 @@ export function registerRecordingRoutes(app: Server, deps: RecordingRoutesDeps):
     readonly params: { readonly tenantId: string };
     readonly ip: string;
   }): Promise<Caller> {
-    return resolveCaller(request.context, request.params.tenantId, request.ip, access);
+    return resolveCaller(request.context, request.params.tenantId, clientIpOf(request), access);
   }
 
   async function auditBestEffort(who: Caller, action: string, resource: string): Promise<void> {

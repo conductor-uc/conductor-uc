@@ -134,6 +134,17 @@ export const configSchema = Type.Object({
   /** `redis://host:port` — backs rate limiting (05 §1). */
   REDIS_URL: Env.url(),
 
+  /**
+   * The reverse proxies or load balancers in front of the gateway, as addresses
+   * or CIDRs (`10.0.0.5,10.1.0.0/16`), whose `X-Forwarded-For` and
+   * `X-Forwarded-Proto` are believed (G-113). Empty (the default) believes no
+   * one: the client address is the connection's own, which is right when the
+   * gateway faces the internet directly. The address found here keys the per-IP
+   * rate limit and is signed to the services for audit events and sessions.
+   * A malformed entry stops the gateway at startup.
+   */
+  TRUSTED_PROXIES: Env.list({ default: [] }),
+
   /** Requests from one IP, in one window, before `429`. Applies to every request. */
   RATE_LIMIT_IP_MAX: Env.int({ minimum: 1, default: 300 }),
   RATE_LIMIT_IP_WINDOW_MS: Env.int({ minimum: 1_000, default: 60_000 }),

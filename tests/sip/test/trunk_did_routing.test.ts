@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
-  dockerCurlJson,
+  tenantAdminCurlJson,
   runForeground,
   seedFixtures,
   sipInfraOrSkipReason,
@@ -60,7 +60,8 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
   });
 
   async function createIpTrunk(tenantId: string, ip: string, name: string): Promise<CreatedTrunk> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks`,
       {
@@ -78,7 +79,8 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
     // `ips` is not part of the create body (trunk-service's own dedicated
     // sub-resource, S2-01) — the address-table whitelist a trunk's inbound
     // identification actually depends on is added here, separately.
-    const ipAdded = await dockerCurlJson(
+    const ipAdded = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunk.id}/ips`,
       { cidr: `${ip}/32` },
@@ -89,7 +91,11 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
   }
 
   async function deleteTrunk(tenantId: string, trunkId: string): Promise<void> {
-    await dockerCurlJson('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`);
+    await tenantAdminCurlJson(
+      seed.resellerId,
+      'DELETE',
+      `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`,
+    );
     // `trunk.trunk.deleted` removes the `address` projection asynchronously
     // (event-driven, S2-02) — this gives that a real window to land before
     // the next test's own caller container might recycle this exact IP
@@ -99,14 +105,16 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
   }
 
   async function deleteDid(tenantId: string, didId: string): Promise<void> {
-    await dockerCurlJson(
+    await tenantAdminCurlJson(
+      seed.resellerId,
       'DELETE',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/dids/${didId}`,
     );
   }
 
   async function findExtensionId(tenantId: string, number: string): Promise<string> {
-    const response = await dockerCurlJson(
+    const response = await tenantAdminCurlJson(
+      seed.resellerId,
       'GET',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/extensions`,
     );
@@ -123,7 +131,8 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
     trunkId: string,
     destinationId: string,
   ): Promise<string> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/dids`,
       {

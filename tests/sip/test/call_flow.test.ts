@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
-  dockerCurlJson,
+  tenantAdminCurlJson,
   dockerCurlText,
   dockerCurlUpload,
   seedFixtures,
@@ -54,7 +54,8 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
   });
 
   async function extensionId(tenantId: string, number: string): Promise<string> {
-    const response = await dockerCurlJson(
+    const response = await tenantAdminCurlJson(
+      seed.resellerId,
       'GET',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/extensions`,
     );
@@ -71,13 +72,14 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
     body: unknown,
     status: number,
   ): Promise<{ id: string }> {
-    const response = await dockerCurlJson(method, url, body);
+    const response = await tenantAdminCurlJson(seed.resellerId, method, url, body);
     expect(response.status, `${method} ${url}: ${JSON.stringify(response.json)}`).toBe(status);
     return response.json as { id: string };
   }
 
   async function readyPrompt(tenantId: string): Promise<string> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/media-assets`,
       { kind: 'prompt', label: 'S3-11 menu prompt', contentType: 'audio/mpeg' },
@@ -85,14 +87,16 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
     expect(created.status, JSON.stringify(created.json)).toBe(201);
     const { asset, uploadUrl } = created.json as { asset: { id: string }; uploadUrl: string };
     expect((await dockerCurlUpload(uploadUrl, FIXTURE_PATH, 'audio/mpeg')).status).toBe(200);
-    const finalized = await dockerCurlJson(
+    const finalized = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/media-assets/${asset.id}/finalize`,
     );
     expect(finalized.status, JSON.stringify(finalized.json)).toBe(200);
     const deadline = Date.now() + 30_000;
     for (;;) {
-      const got = await dockerCurlJson(
+      const got = await tenantAdminCurlJson(
+        seed.resellerId,
         'GET',
         `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/media-assets/${asset.id}`,
       );
@@ -202,7 +206,8 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         expect(result.successfulCalls, result.stdout).toBe(1);
 
         await new Promise((resolve) => setTimeout(resolve, 2000));
-        const messages = await dockerCurlJson(
+        const messages = await tenantAdminCurlJson(
+          seed.resellerId,
           'GET',
           `${VOICEMAIL_SERVICE_URL}/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages`,
         );
@@ -213,7 +218,8 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         // tenant exports it. (tests/e2e only starts an export over an empty list.)
         let cdrRows: unknown[] = [];
         for (let attempt = 0; attempt < 15 && cdrRows.length === 0; attempt += 1) {
-          const cdrs = await dockerCurlJson(
+          const cdrs = await tenantAdminCurlJson(
+            seed.resellerId,
             'GET',
             `${CDR_SERVICE_URL}/v1/tenants/${tenantId}/cdrs`,
           );
@@ -225,7 +231,8 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         const cdrId = (cdrRows[0] as { id: string }).id;
 
         const now = Date.now();
-        const created = await dockerCurlJson(
+        const created = await tenantAdminCurlJson(
+          seed.resellerId,
           'POST',
           `${CDR_SERVICE_URL}/v1/tenants/${tenantId}/cdr-exports`,
           {
@@ -238,7 +245,8 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
 
         let downloadUrl: string | null = null;
         for (let attempt = 0; attempt < 30 && downloadUrl === null; attempt += 1) {
-          const polled = await dockerCurlJson(
+          const polled = await tenantAdminCurlJson(
+            seed.resellerId,
             'GET',
             `${CDR_SERVICE_URL}/v1/tenants/${tenantId}/cdr-exports/${exportId}`,
           );
@@ -258,19 +266,22 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
       } finally {
         for (const fn of undo.reverse()) await fn().catch(() => undefined);
         if (didId !== undefined) {
-          await dockerCurlJson(
+          await tenantAdminCurlJson(
+            seed.resellerId,
             'DELETE',
             `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/dids/${didId}`,
           );
         }
         if (trunkId !== undefined) {
-          await dockerCurlJson(
+          await tenantAdminCurlJson(
+            seed.resellerId,
             'DELETE',
             `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`,
           );
           await new Promise((resolve) => setTimeout(resolve, 1500));
         }
-        await dockerCurlJson(
+        await tenantAdminCurlJson(
+          seed.resellerId,
           'DELETE',
           `${VOICEMAIL_SERVICE_URL}/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}`,
         );
@@ -357,7 +368,8 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
       201,
     );
     cleanup(() =>
-      dockerCurlJson(
+      tenantAdminCurlJson(
+        seed.resellerId,
         'DELETE',
         `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/schedules/${created.id}`,
       ),
@@ -459,7 +471,8 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
           201,
         );
         cleanup(() =>
-          dockerCurlJson(
+          tenantAdminCurlJson(
+            seed.resellerId,
             'DELETE',
             `${CALLFLOW_SERVICE_URL}/v1/tenants/${tenantId}/flows/${target.id}`,
           ),

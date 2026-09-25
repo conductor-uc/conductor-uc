@@ -138,7 +138,11 @@ export async function startRoutes(h: Harness): Promise<RoutesHarness> {
   const app = await createServer({
     serviceName: 'recording-service',
     logger: h.logger,
-    context: { trustInternalHeaders: true, internalHeaderSigningSecret: HEADER_SECRET },
+    context: {
+      trustInternalHeaders: true,
+      internalHeaderSigningSecret: HEADER_SECRET,
+      internalServiceToken: INTERNAL_TOKEN,
+    },
   });
   registerPolicyRoutes(app, {
     policies: h.policies,

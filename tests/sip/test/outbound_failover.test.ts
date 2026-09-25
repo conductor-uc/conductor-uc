@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
-  dockerCurlJson,
+  tenantAdminCurlJson,
   runForeground,
   seedFixtures,
   sipInfraOrSkipReason,
@@ -69,7 +69,8 @@ describe.skipIf(skipReason !== undefined)('S2-04 outbound failover', () => {
     port: number,
     name: string,
   ): Promise<CreatedTrunk> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks`,
       { name, authMode: 'ip', host, port, transport: 'udp', codecs: ['PCMU'] },
@@ -79,14 +80,19 @@ describe.skipIf(skipReason !== undefined)('S2-04 outbound failover', () => {
   }
 
   async function deleteTrunk(tenantId: string, trunkId: string): Promise<void> {
-    await dockerCurlJson('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`);
+    await tenantAdminCurlJson(
+      seed.resellerId,
+      'DELETE',
+      `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`,
+    );
   }
 
   async function createOutboundRoute(
     tenantId: string,
     trunkIds: readonly string[],
   ): Promise<CreatedOutboundRoute> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/outbound-routes`,
       { priority: 0, pattern: '+1', trunkIds, strip: 0, prepend: null },
@@ -96,7 +102,8 @@ describe.skipIf(skipReason !== undefined)('S2-04 outbound failover', () => {
   }
 
   async function deleteOutboundRoute(tenantId: string, routeId: string): Promise<void> {
-    await dockerCurlJson(
+    await tenantAdminCurlJson(
+      seed.resellerId,
       'DELETE',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/outbound-routes/${routeId}`,
     );

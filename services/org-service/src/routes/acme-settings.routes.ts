@@ -1,6 +1,6 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { Bus } from '@cuc/events';
-import { ProblemError, Type, type Server } from '@cuc/http';
+import { clientIpOf, ProblemError, Type, type Server } from '@cuc/http';
 
 import type { TermsLookup } from '../acme-terms.js';
 import { InvalidContactEmailError } from '../domain/acme.js';
@@ -107,7 +107,7 @@ export function registerAcmeSettingsRoutes(
         action: 'platform.acme_settings.updated',
         resource: `${saved.directory}:${saved.termsAgreed ? 'terms-agreed' : 'terms-not-agreed'}`,
         dataClass: 'config',
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         requestId: request.context.requestId,
       });
 

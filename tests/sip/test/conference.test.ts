@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
-  dockerCurlJson,
+  tenantAdminCurlJson,
   runForeground,
   seedFixtures,
   sipInfraOrSkipReason,
@@ -54,7 +54,8 @@ describe.skipIf(skipReason !== undefined)('S2-15 conference rooms (live SIPp, G-
     tenantId: string,
     overrides: Record<string, unknown> = {},
   ): Promise<CreatedConferenceRoom> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/conference-rooms`,
       { label: 'S2-20 room', number: '900', maxMembers: 10, ...overrides },
@@ -64,7 +65,8 @@ describe.skipIf(skipReason !== undefined)('S2-15 conference rooms (live SIPp, G-
   }
 
   async function deleteRoom(tenantId: string, id: string): Promise<void> {
-    await dockerCurlJson(
+    await tenantAdminCurlJson(
+      seed.resellerId,
       'DELETE',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/conference-rooms/${id}`,
     );

@@ -24,6 +24,9 @@ const skipReason = dbSkipReason ?? s3SkipReason;
 
 const PLATFORM_CONSOLE_HOSTNAME = 'console.platform.test';
 const TEST_INTERNAL_SECRET = 'test-internal-header-secret';
+const TEST_SERVICE_TOKEN = 'test-internal-service-token';
+/** Most calls here come from a trusted machine caller: who may do what is tested elsewhere (G-112). */
+const asService = { authorization: `Bearer ${TEST_SERVICE_TOKEN}` };
 
 describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
   let db: Database<OrgServiceDb>;
@@ -64,7 +67,11 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
     app = await createServer({
       serviceName: 'org-service',
       logger,
-      context: { trustInternalHeaders: true, internalHeaderSigningSecret: TEST_INTERNAL_SECRET },
+      context: {
+        trustInternalHeaders: true,
+        internalHeaderSigningSecret: TEST_INTERNAL_SECRET,
+        internalServiceToken: TEST_SERVICE_TOKEN,
+      },
     });
     registerBrandRoutes(app, brandsRepo, storage, PLATFORM_CONSOLE_HOSTNAME, orgs);
     await app.ready();
@@ -104,6 +111,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       const response = await app.inject({
         method: 'PUT',
         url: `/v1/resellers/${reseller.id}/brand`,
+        headers: asService,
         payload: { displayName: 'Acme Voice', primaryColor: '#000000', accentColor: '#ffffff' },
       });
 
@@ -117,6 +125,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       const response = await app.inject({
         method: 'PUT',
         url: `/v1/resellers/${reseller.id}/brand`,
+        headers: asService,
         payload: { primaryColor: 'not-a-color' },
       });
 
@@ -129,6 +138,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       const response = await app.inject({
         method: 'PUT',
         url: `/v1/resellers/${reseller.id}/brand`,
+        headers: asService,
         payload: { primaryColor: '#886644', accentColor: '#997755' },
       });
 
@@ -144,6 +154,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       const response = await app.inject({
         method: 'GET',
         url: `/v1/resellers/${reseller.id}/brand`,
+        headers: asService,
       });
 
       expect(response.statusCode).toBe(404);
@@ -154,12 +165,14 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       await app.inject({
         method: 'PUT',
         url: `/v1/resellers/${reseller.id}/brand`,
+        headers: asService,
         payload: { displayName: 'Acme Voice' },
       });
 
       const response = await app.inject({
         method: 'GET',
         url: `/v1/resellers/${reseller.id}/brand`,
+        headers: asService,
       });
 
       expect(response.statusCode).toBe(200);
@@ -174,6 +187,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/brand/assets`,
+        headers: asService,
         payload: { kind: 'logoLight', contentType: 'image/svg+xml' },
       });
 
@@ -196,6 +210,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       const register = await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/console-hostnames`,
+        headers: asService,
         payload: { fqdn: 'portal.acme-brand.com' },
       });
       expect(register.statusCode).toBe(201);
@@ -203,6 +218,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       const list = await app.inject({
         method: 'GET',
         url: `/v1/resellers/${reseller.id}/console-hostnames`,
+        headers: asService,
       });
       const body: { rows: { fqdn: string }[] } = list.json();
       expect(body.rows.map((row) => row.fqdn)).toEqual(['portal.acme-brand.com']);
@@ -213,12 +229,14 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/console-hostnames`,
+        headers: asService,
         payload: { fqdn: 'portal.acme-brand.com' },
       });
 
       const response = await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/console-hostnames`,
+        headers: asService,
         payload: { fqdn: 'portal.acme-brand.com' },
       });
 
@@ -251,6 +269,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/console-hostnames`,
+        headers: asService,
         payload: { fqdn: 'portal.no-brand.example' },
       });
 
@@ -267,11 +286,13 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/console-hostnames`,
+        headers: asService,
         payload: { fqdn: 'portal.acme-brand.com' },
       });
       const uploadRequest = await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/brand/assets`,
+        headers: asService,
         payload: { kind: 'logoLight', contentType: 'image/svg+xml' },
       });
       const asset: { uploadUrl: string; key: string } = uploadRequest.json();
@@ -283,6 +304,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       await app.inject({
         method: 'PUT',
         url: `/v1/resellers/${reseller.id}/brand`,
+        headers: asService,
         payload: {
           displayName: 'Acme Voice',
           primaryColor: '#000000',
@@ -357,6 +379,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       await app.inject({
         method: 'PUT',
         url: `/v1/resellers/${reseller.id}/brand`,
+        headers: asService,
         payload: { displayName: 'Acme Voice', primaryColor: '#4a148c', accentColor: '#ffe082' },
       });
       return { reseller, tenant };

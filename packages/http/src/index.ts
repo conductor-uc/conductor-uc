@@ -1,6 +1,8 @@
+export { registerAuthenticationRequirement } from './authentication.js';
 export { registerHardRules } from './authz.js';
 export {
   buildRequestContext,
+  clientIpOf,
   INTERNAL_CONTEXT_HEADERS,
   INTERNAL_SIGNATURE_HEADER,
   INTERNAL_SIGNATURE_MAX_AGE_MS,

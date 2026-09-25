@@ -12,6 +12,9 @@ import { AdminUserEmailTakenError } from '../src/identity-client.js';
 
 const skipReason = await databaseOrSkipReason();
 const TEST_INTERNAL_SECRET = 'test-internal-header-secret';
+const TEST_SERVICE_TOKEN = 'test-internal-service-token';
+/** Most calls here come from a trusted machine caller: who may do what is tested elsewhere (G-112). */
+const asService = { authorization: `Bearer ${TEST_SERVICE_TOKEN}` };
 
 /**
  * Records every call and returns a fixed, distinct admin user each time.
@@ -71,6 +74,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       context: {
         trustInternalHeaders: true,
         internalHeaderSigningSecret: TEST_INTERNAL_SECRET,
+        internalServiceToken: TEST_SERVICE_TOKEN,
       },
     });
     registerOrgRoutes(app, repo, adminUsers.create);
@@ -118,7 +122,11 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/v1/resellers',
-        headers: signInternalHeaders(TEST_INTERNAL_SECRET, { orgType: 'master' }),
+        headers: signInternalHeaders(TEST_INTERNAL_SECRET, {
+          actorId: 'user-1',
+          actorType: 'user',
+          orgType: 'master',
+        }),
         payload: { slug: 'acme', name: 'Acme Resale', ...ADMIN_BODY },
       });
 
@@ -141,7 +149,11 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/v1/resellers',
-        headers: signInternalHeaders(TEST_INTERNAL_SECRET, { orgType: 'reseller' }),
+        headers: signInternalHeaders(TEST_INTERNAL_SECRET, {
+          actorId: 'user-1',
+          actorType: 'user',
+          orgType: 'reseller',
+        }),
         payload: { slug: 'acme', name: 'Acme', ...ADMIN_BODY },
       });
 
@@ -154,12 +166,14 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       await app.inject({
         method: 'POST',
         url: '/v1/resellers',
+        headers: asService,
         payload: { slug: 'acme', name: 'Acme', ...ADMIN_BODY },
       });
 
       const response = await app.inject({
         method: 'POST',
         url: '/v1/resellers',
+        headers: asService,
         payload: { slug: 'acme', name: 'Acme Again', ...ADMIN_BODY },
       });
 
@@ -174,6 +188,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/v1/resellers',
+        headers: asService,
         payload: {
           slug: 'A',
           name: '',
@@ -193,6 +208,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/v1/resellers',
+        headers: asService,
         payload: { slug: 'acme', name: 'Acme', ...ADMIN_BODY },
       });
 
@@ -218,6 +234,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/tenants`,
+        headers: asService,
         payload: { slug: 'widgets', name: 'Widgets Inc', ...ADMIN_BODY },
       });
 
@@ -237,7 +254,11 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/tenants`,
-        headers: signInternalHeaders(TEST_INTERNAL_SECRET, { orgType: 'reseller' }),
+        headers: signInternalHeaders(TEST_INTERNAL_SECRET, {
+          actorId: 'user-1',
+          actorType: 'user',
+          orgType: 'reseller',
+        }),
         payload: { slug: 'widgets', name: 'Widgets', ...ADMIN_BODY },
       });
 
@@ -248,6 +269,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/v1/resellers/no-such-reseller/tenants',
+        headers: asService,
         payload: { slug: 'widgets', name: 'Widgets', ...ADMIN_BODY },
       });
 
@@ -278,6 +300,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'GET',
         url: `/v1/resellers/${resellerA.id}/tenants`,
+        headers: asService,
       });
 
       expect(response.statusCode).toBe(200);
@@ -298,6 +321,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'PATCH',
         url: `/v1/resellers/${reseller.id}`,
+        headers: asService,
         payload: { name: 'Renamed' },
       });
 
@@ -316,6 +340,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
       const response = await app.inject({
         method: 'PATCH',
         url: `/v1/tenants/${reseller.id}`,
+        headers: asService,
         payload: { name: 'Renamed' },
       });
 
@@ -337,11 +362,19 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
         name: 'Widgets',
       });
 
-      const suspend = await app.inject({ method: 'POST', url: `/v1/tenants/${tenant.id}/suspend` });
+      const suspend = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenant.id}/suspend`,
+        headers: asService,
+      });
       expect(suspend.statusCode).toBe(200);
       expect(suspend.json()).toMatchObject({ status: 'suspended' });
 
-      const resume = await app.inject({ method: 'POST', url: `/v1/tenants/${tenant.id}/resume` });
+      const resume = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenant.id}/resume`,
+        headers: asService,
+      });
       expect(resume.statusCode).toBe(200);
       expect(resume.json()).toMatchObject({ status: 'active' });
     });
@@ -353,11 +386,16 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
         slug: 'acme',
         name: 'Acme',
       });
-      await app.inject({ method: 'POST', url: `/v1/resellers/${reseller.id}/suspend` });
+      await app.inject({
+        method: 'POST',
+        url: `/v1/resellers/${reseller.id}/suspend`,
+        headers: asService,
+      });
 
       const response = await app.inject({
         method: 'POST',
         url: `/v1/resellers/${reseller.id}/suspend`,
+        headers: asService,
       });
 
       expect(response.statusCode).toBe(409);

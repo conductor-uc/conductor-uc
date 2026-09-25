@@ -104,6 +104,8 @@ const app = await createServer({
     ...(config.INTERNAL_HEADER_SIGNING_SECRET === undefined
       ? {}
       : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
+    // Other services and tools calling a protected route directly (G-112).
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
   },
   // Per-request permission checks for people (07 §3.1): without them a signed-in
   // person could manage users, roles and grants, whatever they hold.

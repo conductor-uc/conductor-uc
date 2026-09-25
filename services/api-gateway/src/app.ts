@@ -58,9 +58,11 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     serviceVersion: config.SERVICE_VERSION,
     ...(options.logger === undefined ? {} : { logger: options.logger }),
     logLevel: config.LOG_LEVEL,
-    // The gateway is the edge itself, reached through a load balancer — client
-    // IPs (rate limiting, audit) come from X-Forwarded-For, not the socket.
-    trustProxy: true,
+    // The gateway is the edge. Facing the internet directly (TRUSTED_PROXIES
+    // empty), anyone could send X-Forwarded-For, so the client address (rate
+    // limiting, audit) is the socket's own; behind a load balancer, only the
+    // listed proxies' forwarded headers are believed (G-113).
+    trustProxy: config.TRUSTED_PROXIES.length === 0 ? false : config.TRUSTED_PROXIES,
     // HTTPS when a certificate is configured (TLS_CERT_FILE / TLS_CERT_DIR).
     ...(https === undefined ? {} : { https }),
     // Always false: an external client's own x-internal-* headers must never

@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
-  dockerCurlJson,
+  tenantAdminCurlJson,
   runForeground,
   seedFixtures,
   sipInfraOrSkipReason,
@@ -80,7 +80,8 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
   });
 
   async function findExtension(tenantId: string, number: string): Promise<ExtensionRow> {
-    const response = await dockerCurlJson(
+    const response = await tenantAdminCurlJson(
+      seed.resellerId,
       'GET',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/extensions`,
     );
@@ -92,7 +93,8 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
   }
 
   async function createMailbox(tenantId: string, extensionId: string): Promise<CreatedMailbox> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${VOICEMAIL_SERVICE_URL}/v1/tenants/${tenantId}/voicemail/mailboxes`,
       { extensionId, pin: MAILBOX_PIN },
@@ -102,14 +104,16 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
   }
 
   async function deleteMailbox(tenantId: string, id: string): Promise<void> {
-    await dockerCurlJson(
+    await tenantAdminCurlJson(
+      seed.resellerId,
       'DELETE',
       `${VOICEMAIL_SERVICE_URL}/v1/tenants/${tenantId}/voicemail/mailboxes/${id}`,
     );
   }
 
   async function listMessages(tenantId: string, mailboxId: string): Promise<MessageRow[]> {
-    const response = await dockerCurlJson(
+    const response = await tenantAdminCurlJson(
+      seed.resellerId,
       'GET',
       `${VOICEMAIL_SERVICE_URL}/v1/tenants/${tenantId}/voicemail/mailboxes/${mailboxId}/messages`,
     );
@@ -118,7 +122,8 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
   }
 
   async function createIpTrunk(tenantId: string, ip: string): Promise<{ id: string }> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks`,
       {
@@ -132,7 +137,8 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
     );
     expect(created.status, JSON.stringify(created.json)).toBe(201);
     const trunk = created.json as { id: string };
-    const ipAdded = await dockerCurlJson(
+    const ipAdded = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunk.id}/ips`,
       { cidr: `${ip}/32` },
@@ -142,7 +148,11 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
   }
 
   async function deleteTrunk(tenantId: string, trunkId: string): Promise<void> {
-    await dockerCurlJson('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`);
+    await tenantAdminCurlJson(
+      seed.resellerId,
+      'DELETE',
+      `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`,
+    );
     await new Promise((resolve) => setTimeout(resolve, 1500));
   }
 
@@ -152,7 +162,8 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
     trunkId: string,
     mailboxId: string,
   ): Promise<string> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/dids`,
       { e164, trunkId, destinationType: 'voicemail', destinationId: mailboxId },
@@ -162,7 +173,8 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
   }
 
   async function deleteDid(tenantId: string, didId: string): Promise<void> {
-    await dockerCurlJson(
+    await tenantAdminCurlJson(
+      seed.resellerId,
       'DELETE',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/dids/${didId}`,
     );

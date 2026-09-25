@@ -1,4 +1,4 @@
-import { ProblemError, Type, type Server } from '@cuc/http';
+import { clientIpOf, ProblemError, Type, type RequestContext, type Server } from '@cuc/http';
 
 import {
   InvalidCredentialsError,
@@ -407,10 +407,19 @@ export function registerAuthRoutes(
   );
 }
 
-function metaOf(request: { headers: Record<string, unknown>; ip?: string }): RequestMeta {
+/**
+ * Where a sign-in came from: the client address api-gateway signed into the
+ * context (G-113), not this service's own view of the connection, which is the
+ * gateway. The User-Agent is the gateway's forwarded copy of the client's.
+ */
+function metaOf(request: {
+  headers: Record<string, unknown>;
+  context: RequestContext;
+  ip: string;
+}): RequestMeta {
   const ua = request.headers['user-agent'];
   return {
-    ip: request.ip ?? null,
+    ip: clientIpOf(request),
     ua: typeof ua === 'string' ? ua : null,
   };
 }

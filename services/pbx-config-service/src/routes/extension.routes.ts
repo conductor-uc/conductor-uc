@@ -1,7 +1,14 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { DbContext } from '@cuc/db';
 import type { Bus } from '@cuc/events';
-import { ProblemError, Type, type RequestContext, type Server, type Static } from '@cuc/http';
+import {
+  clientIpOf,
+  ProblemError,
+  Type,
+  type RequestContext,
+  type Server,
+  type Static,
+} from '@cuc/http';
 
 import { InvalidExtensionNumberError } from '../domain/numbering.js';
 import {
@@ -149,7 +156,7 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
     request: {
       readonly context: RequestContext;
       readonly params: { readonly tenantId: string };
-      readonly ip?: string | undefined;
+      readonly ip: string;
     },
     extensionId: string,
     userId: string | null,
@@ -165,7 +172,7 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
       resource: extensionId,
       dataClass: 'config',
       ...(userId === null ? {} : { reason: `linked to user ${userId}` }),
-      ...(request.ip === undefined ? {} : { ip: request.ip }),
+      ip: clientIpOf(request),
       requestId: request.context.requestId,
     });
   }
@@ -296,7 +303,7 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
         resource: request.params.id,
         dataClass: 'secret',
         ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         requestId: request.context.requestId,
       });
 
@@ -341,7 +348,7 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
         resource: request.params.id,
         dataClass: 'secret',
         ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         requestId: request.context.requestId,
       });
 

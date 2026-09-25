@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
-  dockerCurlJson,
+  tenantAdminCurlJson,
   runForeground,
   seedFixtures,
   sipInfraOrSkipReason,
@@ -55,7 +55,8 @@ describe.skipIf(skipReason !== undefined)('S2-14 parking lots (live SIPp, G-48)'
   });
 
   async function createParkingLot(tenantId: string): Promise<CreatedParkingLot> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/parking-lots`,
       { label: 'S2-20 lot', slotStart: 700, slotEnd: 709, timeoutSeconds: 60 },
@@ -65,7 +66,8 @@ describe.skipIf(skipReason !== undefined)('S2-14 parking lots (live SIPp, G-48)'
   }
 
   async function deleteParkingLot(tenantId: string, id: string): Promise<void> {
-    await dockerCurlJson(
+    await tenantAdminCurlJson(
+      seed.resellerId,
       'DELETE',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/parking-lots/${id}`,
     );
