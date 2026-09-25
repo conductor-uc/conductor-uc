@@ -94,6 +94,16 @@ class PbxApi {
     await _dio.delete<Object?>(_path(resource, id), options: _options);
   }
 
+  /// A short-lived address a ready media file's converted audio can be played
+  /// from (`GET .../media-assets/{id}/download-url`, the 16 kHz copy).
+  Future<String> mediaPlayUrl(String assetId) async {
+    final response = await _dio.get<Object?>(
+      _path('media-assets', assetId, 'download-url'),
+      options: _options,
+    );
+    return '${(response.data as Map)['url']}';
+  }
+
   /// Where a phone registers: the server, port, transports and realm for this
   /// tenant (`GET /v1/tenants/{id}/sip-endpoint`).
   Future<Json> sipEndpoint() async {

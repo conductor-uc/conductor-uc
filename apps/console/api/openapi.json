@@ -8704,6 +8704,79 @@
         ]
       }
     },
+    "/v1/tenants/{tenantId}/media-assets/{id}/download-url": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "16k"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "8k"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "variant",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "url",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getMediaAssetDownloadUrl",
+        "tags": [
+          "MediaAssets"
+        ]
+      }
+    },
     "/v1/tenants/{tenantId}/media-assets/{id}/finalize": {
       "post": {
         "parameters": [
