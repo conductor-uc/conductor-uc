@@ -23,6 +23,7 @@ import { createOrgAccess } from './authz/org-access.js';
 import { createOrgClient } from './org-client.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerGrantRoutes } from './routes/grants.routes.js';
+import { registerAccessRoutes } from './routes/access.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerJwksRoute } from './routes/jwks.routes.js';
 import { registerRoleRoutes } from './routes/roles.routes.js';
@@ -152,6 +153,7 @@ registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo);
 const grantRepo = createGrantRepo(db);
 registerGrantRoutes(app, grantRepo);
 registerMeRoutes(app, roleRepo, grantRepo);
+registerAccessRoutes(app, roleRepo, grantRepo, config.INTERNAL_SERVICE_TOKEN);
 registerAuditRoutes(app, auditRepo, orgAccess);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });

@@ -11,6 +11,11 @@ export const MAX_PUT_TTL_SECONDS = 15 * 60;
 export interface PresignOptions {
   /** Clamped to {@link MAX_GET_TTL_SECONDS} / {@link MAX_PUT_TTL_SECONDS}. Defaults to the max. */
   readonly ttlSeconds?: number;
+  /**
+   * `presignGet` only: what the download response's `Content-Disposition` header should say,
+   * e.g. `attachment; filename="x.wav"`, so a browser saves the file instead of playing it.
+   */
+  readonly responseContentDisposition?: string;
 }
 
 export interface PresignPutOptions extends PresignOptions {
