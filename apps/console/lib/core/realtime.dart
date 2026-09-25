@@ -165,6 +165,7 @@ class RealtimeClient {
       socket = await _connect(_url);
     } catch (_) {
       _connecting = false;
+      _markOffline();
       _scheduleReconnect();
       return;
     }
@@ -185,9 +186,7 @@ class RealtimeClient {
     _authenticated = false;
     unawaited(_reading?.cancel());
     _reading = null;
-    for (final controller in _topics.values) {
-      controller.add(const TopicStopped('offline'));
-    }
+    _markOffline();
     if (_stopped) return;
     // A different person or organization: only signing in again helps.
     if (code == 4403) {
@@ -195,6 +194,12 @@ class RealtimeClient {
       return;
     }
     _scheduleReconnect();
+  }
+
+  void _markOffline() {
+    for (final controller in _topics.values) {
+      controller.add(const TopicStopped('offline'));
+    }
   }
 
   void _scheduleReconnect() {

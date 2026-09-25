@@ -202,6 +202,31 @@ void main() {
       },
     );
 
+    test('says it is offline when the connection cannot be opened, and keeps trying', () async {
+      var attempts = 0;
+      final failing = RealtimeClient(
+        connect: (url) async {
+          attempts += 1;
+          if (attempts < 3) throw StateError('refused');
+          return hub.connect(url);
+        },
+        url: Uri.parse('wss://console.example.test/v1/ws'),
+        token: () => token,
+        backoff: (_) => Duration.zero,
+      );
+      addTearDown(failing.dispose);
+      final messages = <TopicMessage>[];
+      final sub = failing.watch('tenant:t1:calls').listen(messages.add);
+      await pumpEventQueue();
+      expect(messages.whereType<TopicStopped>().map((m) => m.code), [
+        'offline',
+        'offline',
+      ]);
+      expect(attempts, 3);
+      expect(hub.last.sent.single['type'], 'auth');
+      await sub.cancel();
+    });
+
     test('stops for good when told the identity changed (4403)', () async {
       final sub = client.watch('tenant:t1:calls').listen((_) {});
       await pumpEventQueue();
