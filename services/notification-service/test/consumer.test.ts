@@ -1,9 +1,11 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { Writable } from 'node:stream';
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabase, migrateToLatest, type Database } from '@cuc/db';
 import { connectBus, type Bus, type EventConsumer } from '@cuc/events';
+import { createLogger } from '@cuc/logger';
 import {
   databaseOrSkipReason,
   natsOrSkipReason,
@@ -18,6 +20,7 @@ import { migrations } from '../migrations/index.js';
 import { createIdentityConsumer } from '../src/consumers/identity.consumer.js';
 import type { MailBrandResponse } from '../src/domain/brand.js';
 import { notificationEvents } from '../src/events.js';
+import { createIdentityClient } from '../src/identity-client.js';
 import { createMailer } from '../src/mailer.js';
 import { createOrgClient } from '../src/org-client.js';
 import type { NotificationServiceDb } from '../src/schema.js';
@@ -74,12 +77,39 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
   let orgDown = false;
   let consumer: EventConsumer;
 
+  /**
+   * The fake identity-service's link route (G-55). Each reset or invitation id
+   * issues [tokens.get(id)] the first time and `${that}-2`, `-3`… after, as a
+   * real one issues a fresh token per call. [refusals] answers 404/409 instead.
+   */
+  const tokens = new Map<string, string>();
+  const linkExpiry = new Map<string, string>();
+  const refusals = new Map<string, { status: number; code?: string }>();
+  const linkCalls: { path: string; authorization: string | undefined }[] = [];
+  let identityDown = false;
+  /** Everything the consumer logged, to check no token ever reaches a log line. */
+  const logLines: string[] = [];
+
+  function captureLogger() {
+    return createLogger({
+      name: 'test',
+      level: 'debug',
+      destination: new Writable({
+        write(chunk: Buffer, _encoding, callback) {
+          logLines.push(chunk.toString());
+          callback();
+        },
+      }),
+    });
+  }
+
   function buildConsumer(smtpPort = SMTP_PORT): EventConsumer {
     return createIdentityConsumer(
       db,
       bus,
-      silentLogger(),
+      captureLogger(),
       createOrgClient({ baseUrl: orgUrl, internalServiceToken: INTERNAL_TOKEN }),
+      createIdentityClient({ baseUrl: orgUrl, internalServiceToken: INTERNAL_TOKEN }),
       createMailer({ host: SMTP_HOST, port: smtpPort, secure: false, fromAddress: NOREPLY }),
       {
         pullTimeoutMs: 1000,
@@ -106,7 +136,47 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
     bus = await connectBus({ servers: [nats.server], logger, name: 'notification-test' });
     await bus.ensureStreams();
 
+    // One fake for both org-service (the brand) and identity-service (the link).
     org = createServer((request, response) => {
+      const link =
+        /^\/internal\/v1\/orgs\/([^/]+)\/(password-resets|invitations)\/([^/]+)\/link$/.exec(
+          request.url ?? '',
+        );
+      if (link !== null) {
+        linkCalls.push({ path: request.url ?? '', authorization: request.headers.authorization });
+        if (identityDown) {
+          response.writeHead(503).end();
+          return;
+        }
+        if (
+          request.method !== 'POST' ||
+          request.headers.authorization !== `Bearer ${INTERNAL_TOKEN}`
+        ) {
+          response.writeHead(401).end();
+          return;
+        }
+        const id = decodeURIComponent(link[3]!);
+        const refusal = refusals.get(id);
+        if (refusal !== undefined) {
+          response
+            .writeHead(refusal.status, { 'content-type': 'application/problem+json' })
+            .end(JSON.stringify(refusal.code === undefined ? {} : { code: refusal.code }));
+          return;
+        }
+        const base = tokens.get(id);
+        if (base === undefined) {
+          response.writeHead(404).end();
+          return;
+        }
+        const count = linkCalls.filter((call) => call.path === request.url).length;
+        response.writeHead(200, { 'content-type': 'application/json' }).end(
+          JSON.stringify({
+            token: count === 1 ? base : `${base}-${String(count)}`,
+            expiresAt: linkExpiry.get(id) ?? new Date(Date.now() + 60 * 60_000).toISOString(),
+          }),
+        );
+        return;
+      }
       const match = /^\/internal\/v1\/orgs\/([^/]+)\/mail-brand$/.exec(request.url ?? '');
       if (orgDown) {
         response.writeHead(503).end();
@@ -141,6 +211,12 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
   beforeEach(async () => {
     brands.clear();
     orgDown = false;
+    identityDown = false;
+    tokens.clear();
+    linkExpiry.clear();
+    refusals.clear();
+    linkCalls.length = 0;
+    logLines.length = 0;
     await clearMailbox();
   });
 
@@ -160,13 +236,19 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
 
   const inOneHour = () => new Date(Date.now() + 60 * 60_000).toISOString();
 
+  /**
+   * Publishes a reset request, as identity-service does: ids only. [token] is
+   * what the fake identity-service then issues for it.
+   */
   async function publishReset(
     orgId: string,
     email: string,
     token: string,
-    opts: { id?: string; expiresAt?: string } = {},
+    opts: { id?: string; resetId?: string; expiresAt?: string } = {},
   ): Promise<string> {
     const id = opts.id ?? crypto.randomUUID();
+    const resetId = opts.resetId ?? crypto.randomUUID();
+    tokens.set(resetId, token);
     await bus.publish({
       id,
       type: 'identity.user.password_reset_requested',
@@ -175,17 +257,26 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
       occurredAt: new Date().toISOString(),
       orgContext: {},
       data: {
+        resetId,
         userId: crypto.randomUUID(),
         orgId,
         email,
-        token,
         expiresAt: opts.expiresAt ?? inOneHour(),
       },
     });
     return id;
   }
 
-  async function publishInvitation(orgId: string, email: string, token: string): Promise<void> {
+  async function publishInvitation(
+    orgId: string,
+    email: string,
+    token: string,
+    invitationId = crypto.randomUUID(),
+  ): Promise<string> {
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60_000).toISOString();
+    tokens.set(invitationId, token);
+    linkExpiry.set(invitationId, expiresAt);
+    const id = crypto.randomUUID();
     await bus.publish({
       id: crypto.randomUUID(),
       type: 'identity.invitation.created',
@@ -193,16 +284,16 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
       occurredAt: new Date().toISOString(),
       orgContext: {},
       data: {
-        invitationId: crypto.randomUUID(),
+        invitationId,
         orgId,
         orgType: 'tenant',
         resellerId: null,
         email,
         displayName: 'Sam Rivera',
-        token,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString(),
+        expiresAt,
       },
     });
+    return id;
   }
 
   it("a reseller's user gets a reset email in that reseller's brand", async () => {
@@ -270,7 +361,8 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
     expect(mail!.subject).toBe('You have been invited');
     expect(mail!.html).toContain('Hello Sam Rivera');
     expect(mail!.html).toContain('https://portal.acme.example/invite?token=inv-tok');
-    expect(mail!.html).toContain('7 days');
+    // The invitation's 72 hours (G-55), as identity-service reports them.
+    expect(mail!.html).toContain('3 days');
   });
 
   async function publishMfaReset(orgId: string, email: string): Promise<void> {
@@ -412,5 +504,146 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
       .where('event_id', '=', id)
       .execute();
     expect(rows).toHaveLength(0);
+  });
+
+  describe('the link is issued at send time (G-55)', () => {
+    const callsFor = (id: string) => linkCalls.filter((call) => call.path.includes(id));
+
+    it('asks identity-service for the link of that reset, in that org, with the service token', async () => {
+      brands.set('tenant-a', ACME);
+      const to = `l-${crypto.randomUUID()}@example.test`;
+      const resetId = crypto.randomUUID();
+      await publishReset('tenant-a', to, 'tok-issued', { resetId });
+      await drain();
+
+      // Filtered: an earlier test's event can be redelivered into this one.
+      expect(callsFor(resetId)).toEqual([
+        {
+          path: `/internal/v1/orgs/tenant-a/password-resets/${resetId}/link`,
+          authorization: `Bearer ${INTERNAL_TOKEN}`,
+        },
+      ]);
+      const [mail] = await emailsTo(to);
+      expect(mail!.text).toContain('https://portal.acme.example/reset/confirm?token=tok-issued');
+    });
+
+    it('asks for an invitation link by invitation id', async () => {
+      brands.set('tenant-a', ACME);
+      const to = `li-${crypto.randomUUID()}@example.test`;
+      const invitationId = crypto.randomUUID();
+      await publishInvitation('tenant-a', to, 'inv-issued', invitationId);
+      await drain();
+
+      expect(callsFor(invitationId).map((call) => call.path)).toEqual([
+        `/internal/v1/orgs/tenant-a/invitations/${invitationId}/link`,
+      ]);
+      expect((await emailsTo(to))[0]!.html).toContain('/invite?token=inv-issued');
+    });
+
+    it('a retried send asks again, and the email carries the fresh token', async () => {
+      brands.set('tenant-a', ACME);
+      const to = `rt-${crypto.randomUUID()}@example.test`;
+      const resetId = crypto.randomUUID();
+      const id = await publishReset('tenant-a', to, 'tok-rt', { resetId });
+
+      // First attempts: each has a link issued, then the relay refuses the
+      // mail. (The back-off can redeliver inside the same pull.)
+      const broken = buildConsumer(1);
+      expect((await drain(broken)).failed).toBeGreaterThan(0);
+      const failedAttempts = callsFor(resetId).length;
+      expect(failedAttempts).toBeGreaterThanOrEqual(1);
+      expect(await emailsTo(to, 300)).toHaveLength(0);
+
+      // Redelivered after the back-off: one more link, which identity-service
+      // made the only one that works, and that is the one emailed.
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      await drain();
+      expect(callsFor(resetId)).toHaveLength(failedAttempts + 1);
+      const [mail] = await emailsTo(to);
+      const fresh = `tok-rt-${String(failedAttempts + 1)}`;
+      expect(mail!.text).toContain(`/reset/confirm?token=${fresh}`);
+      expect(mail!.text).not.toMatch(/token=tok-rt(\s|$)/);
+      const rows = await db.kysely
+        .selectFrom('sent_emails')
+        .selectAll()
+        .where('event_id', '=', id)
+        .execute();
+      expect(rows).toHaveLength(1);
+    });
+
+    for (const [status, code, why] of [
+      [409, 'user_inactive', 'the user was disabled since'],
+      [409, 'link_used', 'the invitation was accepted or the reset used'],
+      [409, 'link_expired', 'it expired in the meantime'],
+      [404, undefined, 'the reset or invitation is gone'],
+    ] as const) {
+      it(`sends nothing, and consumes the event, when ${why} (${String(status)})`, async () => {
+        brands.set('tenant-a', ACME);
+        const to = `rf-${crypto.randomUUID()}@example.test`;
+        const resetId = crypto.randomUUID();
+        refusals.set(resetId, { status, ...(code === undefined ? {} : { code }) });
+        const id = await publishReset('tenant-a', to, 'tok-refused', { resetId });
+        const pass = await drain();
+
+        expect(pass.failed).toBe(0);
+        expect(callsFor(resetId)).toHaveLength(1);
+        expect(await emailsTo(to, 500)).toHaveLength(0);
+        const consumed = await db.kysely
+          .selectFrom('consumed_events')
+          .selectAll()
+          .where('id', '=', id)
+          .execute();
+        expect(consumed).toHaveLength(1);
+        const sent = await db.kysely
+          .selectFrom('sent_emails')
+          .selectAll()
+          .where('event_id', '=', id)
+          .execute();
+        expect(sent).toHaveLength(0);
+        const skipped = logLines.find((line) => line.includes('issued no link'));
+        expect(skipped).toBeDefined();
+        expect(JSON.parse(skipped!)).toMatchObject({ level: 'info', status });
+      });
+    }
+
+    it('sends nothing, and consumes nothing, while identity-service is down', async () => {
+      brands.set('tenant-a', ACME);
+      identityDown = true;
+      const to = `id-${crypto.randomUUID()}@example.test`;
+      const id = await publishReset('tenant-a', to, 'tok-down');
+      const pass = await drain();
+
+      expect(pass.failed).toBeGreaterThan(0);
+      expect(await emailsTo(to, 500)).toHaveLength(0);
+      const consumed = await db.kysely
+        .selectFrom('consumed_events')
+        .selectAll()
+        .where('id', '=', id)
+        .execute();
+      expect(consumed).toHaveLength(0);
+    });
+
+    it('spends no token while org-service is down: the link is asked for last', async () => {
+      orgDown = true;
+      const to = `od-${crypto.randomUUID()}@example.test`;
+      await publishReset('tenant-a', to, 'tok-od');
+      await drain();
+      expect(linkCalls).toHaveLength(0);
+    });
+
+    it('never logs the token or the link', async () => {
+      brands.set('tenant-a', ACME);
+      const to = `lg-${crypto.randomUUID()}@example.test`;
+      await publishReset('tenant-a', to, 'tok-never-logged');
+      await publishInvitation('tenant-a', `i-${to}`, 'inv-never-logged');
+      await drain();
+      await drain();
+
+      expect(await emailsTo(to)).toHaveLength(1);
+      expect(logLines.length).toBeGreaterThan(0);
+      const all = logLines.join('');
+      expect(all).not.toContain('never-logged');
+      expect(all).not.toContain('token=');
+    });
   });
 });

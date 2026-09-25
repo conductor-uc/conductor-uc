@@ -6,22 +6,23 @@ import type { Logger } from '@cuc/logger';
 
 import { brandOf, NEUTRAL_BRAND, type MailBrand } from '../domain/brand.js';
 import { notificationEvents } from '../events.js';
+import type { IdentityClient, IssuedLink } from '../identity-client.js';
 import type { Mailer } from '../mailer.js';
 import type { OrgClient } from '../org-client.js';
 import { renderEmail, validFor, type TemplateName } from '../render.js';
 import type { NotificationServiceDb } from '../schema.js';
 
 interface ResetData {
+  readonly resetId: string;
   readonly orgId: string;
   readonly email: string;
-  readonly token: string;
   readonly expiresAt: string;
 }
 interface InvitationData {
+  readonly invitationId: string;
   readonly orgId: string;
   readonly email: string;
   readonly displayName: string;
-  readonly token: string;
   readonly expiresAt: string;
 }
 
@@ -48,17 +49,27 @@ export interface IdentityConsumerOptions {
  * email is rendered with it or with the neutral presentation, and it goes out
  * through the SMTP relay.
  *
- * A failure anywhere (org-service unreachable, the relay down) throws, so the
- * event is redelivered and retried; only a stale event, whose link has already
- * expired, is dropped without sending. Delivery is at-least-once: a crash
- * between the relay accepting a message and the row being recorded can send
- * it twice.
+ * The reset and invitation events carry no token (G-55). Just before sending,
+ * this asks identity-service to issue the link: a fresh token, returned once,
+ * which replaces any earlier one. So a retried email carries a new link and
+ * the one before it stops working. When identity-service will not issue one
+ * (the reset or invitation is gone, used or expired, or the user was disabled
+ * since) the event is consumed and nothing is sent.
+ *
+ * A failure anywhere else (org-service or identity-service unreachable, the
+ * relay down) throws, so the event is redelivered and retried; only a stale
+ * event, whose link has already expired, is dropped without sending. Delivery
+ * is at-least-once: a crash between the relay accepting a message and the row
+ * being recorded can send it twice, and then only the later email's link works.
+ *
+ * The token and the link are credentials: neither is logged or stored here.
  */
 export function createIdentityConsumer(
   db: Database<NotificationServiceDb>,
   bus: Bus,
   logger: Logger,
   orgClient: OrgClient,
+  identityClient: IdentityClient,
   mailer: Mailer,
   options: IdentityConsumerOptions,
 ): EventConsumer {
@@ -84,17 +95,26 @@ export function createIdentityConsumer(
       let template: TemplateName;
       let data: ResetData | InvitationData | MfaResetData;
       let path: string;
+      /** Issues the one-time link at send time; absent for a notice that carries none. */
+      let issueLink: (() => Promise<IssuedLink>) | undefined;
       switch (envelope.type) {
-        case 'identity.user.password_reset_requested':
+        case 'identity.user.password_reset_requested': {
           template = 'password-reset';
-          data = envelope.data as ResetData;
+          const reset = envelope.data as ResetData;
+          data = reset;
           path = '/reset/confirm';
+          issueLink = () => identityClient.issuePasswordResetLink(reset.orgId, reset.resetId);
           break;
-        case 'identity.invitation.created':
+        }
+        case 'identity.invitation.created': {
           template = 'invitation';
-          data = envelope.data as InvitationData;
+          const invitation = envelope.data as InvitationData;
+          data = invitation;
           path = '/invite';
+          issueLink = () =>
+            identityClient.issueInvitationLink(invitation.orgId, invitation.invitationId);
           break;
+        }
         case 'identity.user.mfa_reset':
           template = 'mfa-reset';
           data = envelope.data as MfaResetData;
@@ -106,7 +126,7 @@ export function createIdentityConsumer(
 
       // A one-time link goes stale; the MFA-reset notice has none, and is
       // worth sending however late it arrives.
-      const expiresAt = 'expiresAt' in data ? new Date(data.expiresAt) : undefined;
+      let expiresAt = 'expiresAt' in data ? new Date(data.expiresAt) : undefined;
       if (expiresAt !== undefined && expiresAt.getTime() <= Date.now()) {
         logger.warn({ eventId: envelope.id, template }, 'link already expired; not sending');
         return;
@@ -117,8 +137,29 @@ export function createIdentityConsumer(
         logger.warn({ orgId: data.orgId, template }, 'org not found; sending neutral');
       }
       const brand: MailBrand = resolved === undefined ? NEUTRAL_BRAND : brandOf(resolved);
+
+      // Issued as late as possible, right before rendering and sending, so a
+      // failure before this point spends no token (G-55).
+      let query = '';
+      if (issueLink !== undefined) {
+        const issued = await issueLink();
+        if (issued.status === 'refused') {
+          logger.info(
+            {
+              eventId: envelope.id,
+              template,
+              orgId: data.orgId,
+              status: issued.httpStatus,
+              ...(issued.code === undefined ? {} : { code: issued.code }),
+            },
+            'identity-service issued no link; not sending',
+          );
+          return;
+        }
+        query = `?token=${encodeURIComponent(issued.token)}`;
+        expiresAt = issued.expiresAt;
+      }
       // The sign-in page carries no credential; the others carry their token.
-      const query = 'token' in data ? `?token=${encodeURIComponent(data.token)}` : '';
       const link = `${linkBase(resolved?.consoleHostname ?? null)}${path}${query}`;
 
       const mail = await renderEmail({

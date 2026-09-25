@@ -7,6 +7,7 @@ import { createLogger } from '@cuc/logger';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createIdentityConsumer } from './consumers/identity.consumer.js';
 import { createVoicemailConsumer } from './consumers/voicemail.consumer.js';
+import { createIdentityClient } from './identity-client.js';
 import { createMailer } from './mailer.js';
 import { createOrgClient } from './org-client.js';
 import type { NotificationServiceDb } from './schema.js';
@@ -68,7 +69,19 @@ const linkOptions = {
     : { consoleUrlOverride: config.CONSOLE_URL_OVERRIDE }),
 };
 
-const consumer = createIdentityConsumer(db, bus, logger, orgClient, mailer, linkOptions);
+const identityClient = createIdentityClient({
+  baseUrl: config.IDENTITY_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+const consumer = createIdentityConsumer(
+  db,
+  bus,
+  logger,
+  orgClient,
+  identityClient,
+  mailer,
+  linkOptions,
+);
 const voicemailConsumer = createVoicemailConsumer(
   db,
   bus,
