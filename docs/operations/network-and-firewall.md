@@ -57,7 +57,7 @@ Every application service listens on 8080. This is the complete list of callers,
 
 | Service (port 8080) | Called by | Over |
 |---|---|---|
-| identity-service | api-gateway (`/v1/auth`, `/v1/orgs`, and JWKS), org-service, pbx-config, trunk, callflow, voicemail, recording and cdr services (permission lookups) | HTTP |
+| identity-service | api-gateway (`/v1/auth`, `/v1/orgs`, and JWKS), org-service, pbx-config, trunk, callflow, voicemail, recording and cdr services (permission lookups), notification-service (reset and invitation links) | HTTP |
 | org-service | api-gateway (`/v1/public`, `/v1/resellers`, `/v1/tenants`, `/v1/session`, `/v1/platform/...`, certificates, ACME challenges), identity, pbx-config, trunk, telephony-config, cdr and notification services | HTTP |
 | pbx-config-service | api-gateway, telephony-config, media-worker, voicemail-service, cdr-service | HTTP |
 | trunk-service | api-gateway, pbx-config-service, telephony-config | HTTP |

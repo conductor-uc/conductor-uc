@@ -83,9 +83,10 @@ export interface AuthRouteOptions {
   readonly cookieSecure?: boolean;
   readonly refreshTokenTtlDays?: number;
   /**
-   * Development only: logs the one-time token of a reset or invitation, for
-   * when no mailer is running. The token is a credential; never enable this
-   * anywhere real.
+   * Development only: issues the link of a new reset or invitation at once and
+   * logs its one-time token, for when no mailer is running. The token is a
+   * credential; never enable this anywhere real. A running notification-service
+   * issues its own link when it sends, and the logged one then stops working.
    */
   readonly devExposeTokens?: boolean;
   /**
@@ -280,15 +281,17 @@ export function registerAuthRoutes(
     },
     async (request, reply) => {
       try {
-        const issued = await auth.requestPasswordReset(
+        const requested = await auth.requestPasswordReset(
           request.context,
           await targetOf(request, request.body.orgId),
           request.body.email,
         );
         if (options.devExposeTokens === true) {
-          for (const one of issued) {
+          for (const one of requested) {
+            const link = await auth.issuePasswordResetLink(one.orgId, one.resetId);
+            if (link.status !== 'issued') continue;
             request.log.warn(
-              { email: one.email, token: one.token },
+              { email: one.email, token: link.token },
               'DEV ONLY: password reset token (no mailer is running)',
             );
           }
@@ -390,10 +393,13 @@ export function registerAuthRoutes(
           request.body,
         );
         if (options.devExposeTokens === true) {
-          request.log.warn(
-            { email: invitation.email, token: invitation.token },
-            'DEV ONLY: invitation token (no mailer is running)',
-          );
+          const link = await auth.issueInvitationLink(target.orgId, invitation.id);
+          if (link.status === 'issued') {
+            request.log.warn(
+              { email: invitation.email, token: link.token },
+              'DEV ONLY: invitation token (no mailer is running)',
+            );
+          }
         }
         return reply.status(201).send({
           id: invitation.id,

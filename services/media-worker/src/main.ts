@@ -41,6 +41,7 @@ const bus = await connectBus({
   servers: config.NATS_SERVERS,
   logger,
   name: config.SERVICE_NAME,
+  streamMaxAgeDays: config.NATS_STREAM_MAX_AGE_DAYS,
   ...(config.NATS_USER === undefined ? {} : { user: config.NATS_USER }),
   ...(config.NATS_PASSWORD === undefined ? {} : { password: config.NATS_PASSWORD }),
 });

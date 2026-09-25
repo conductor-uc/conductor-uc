@@ -88,12 +88,10 @@ describe.skipIf(skipReason !== undefined)('two accounts must not share email and
       payload: { email: EMAIL, displayName: 'Pat' },
     });
     expect(response.statusCode).toBe(201);
-    const events = await h.db.kysely.selectFrom('outbox').selectAll().execute();
-    const row = events.filter((r) => r.type === 'identity.invitation.created').at(-1)!;
-    const data = (typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload) as {
-      token: string;
-    };
-    return data.token;
+    // The link is issued when the email is sent (G-55), as notification-service does.
+    const link = await h.auth.issueInvitationLink(orgId, response.json<{ id: string }>().id);
+    if (link.status !== 'issued') throw new Error(link.status);
+    return link.token;
   }
 
   const accept = (token: string, password: string) =>
@@ -162,17 +160,17 @@ describe.skipIf(skipReason !== undefined)('two accounts must not share email and
   describe('resetting a password', () => {
     async function resetToken(userId: string): Promise<string> {
       const user = await h.users.findById(userId);
-      await h.auth.requestPasswordReset({ requestId: 'test' }, user!.orgId, EMAIL);
-      const rows = await h.db.kysely.selectFrom('outbox').selectAll().execute();
-      for (const row of rows) {
-        if (row.type !== 'identity.user.password_reset_requested') continue;
-        const data = (typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload) as {
-          userId: string;
-          token: string;
-        };
-        if (data.userId === userId) return data.token;
+      const requested = await h.auth.requestPasswordReset(
+        { requestId: 'test' },
+        user!.orgId,
+        EMAIL,
+      );
+      for (const one of requested) {
+        if (one.orgId !== user!.orgId) continue;
+        const link = await h.auth.issuePasswordResetLink(one.orgId, one.resetId);
+        if (link.status === 'issued') return link.token;
       }
-      throw new Error(`no reset event for ${userId}`);
+      throw new Error(`no reset for ${userId}`);
     }
 
     const confirm = (token: string, newPassword: string) =>

@@ -7,6 +7,7 @@ import { createLogger } from '@cuc/logger';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createIdentityConsumer } from './consumers/identity.consumer.js';
 import { createVoicemailConsumer } from './consumers/voicemail.consumer.js';
+import { createIdentityClient } from './identity-client.js';
 import { createMailer } from './mailer.js';
 import { createIdentityClient } from './identity-client.js';
 import { createOrgClient } from './org-client.js';
@@ -42,6 +43,7 @@ const bus = await connectBus({
   servers: config.NATS_SERVERS,
   logger,
   name: config.SERVICE_NAME,
+  streamMaxAgeDays: config.NATS_STREAM_MAX_AGE_DAYS,
   ...(config.NATS_USER === undefined ? {} : { user: config.NATS_USER }),
   ...(config.NATS_PASSWORD === undefined ? {} : { password: config.NATS_PASSWORD }),
 });

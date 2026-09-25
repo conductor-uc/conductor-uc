@@ -40,7 +40,7 @@ export const TEST_TTL = {
   mfaTicketTtlSeconds: 300,
   signingKeyOverlapDays: 7,
   passwordResetTtlMinutes: 60,
-  invitationTtlDays: 7,
+  invitationTtlHours: 72,
 };
 
 export async function startHarness(): Promise<Harness> {

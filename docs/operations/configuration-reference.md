@@ -76,6 +76,8 @@ There is no TLS option for the database connection.
 | `OUTBOX_BATCH_SIZE` | `100` | no | Events published per pass |
 | `OUTBOX_POLL_INTERVAL_MS` | `250` | no | Wait after an empty pass |
 | `OUTBOX_MAX_ATTEMPTS` | `10` | no | After this many failed publishes an event is set aside for an operator |
+| `OUTBOX_RETENTION_DAYS` | `7` | no | Published events older than this are deleted from the service's `outbox` table, hourly and in batches of 1,000. `0` keeps them. Unpublished (including set-aside) events are never deleted. |
+| `NATS_STREAM_MAX_AGE_DAYS` | `7` | no | Every service sets this age limit on **every** stream at startup, including streams that already exist; messages older than it are removed. `0` means no age limit. **Use the same value in every service**, or the last one to start wins. Keep it longer than any consumer outage you would want to recover from without losing events. |
 
 media-worker and notification-service accept the `OUTBOX_*` variables but do not publish events.
 
@@ -175,10 +177,10 @@ Groups: base, database (`identity_service`), events, signed headers, crypto.
 | `SIGNING_KEY_OVERLAP_DAYS` | `7` | no | How long a retired signing key stays published, so tokens it signed keep verifying. Keep it longer than `ACCESS_TOKEN_TTL_SECONDS`. |
 | `SIGNING_KEY_ROTATION_DAYS` | `90` | no | Start rotating the signing key once it has signed for this many days: a new key is published, then promoted after `SIGNING_KEY_PUBLISH_AHEAD_MINUTES`. Every copy checks every 5 minutes and 30 s after startup; exactly one acts. `0` turns automatic rotation off (a key published by `rotate-signing-key` is still promoted on time). |
 | `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` | `15` | no | How long a new signing key is published in the key set before it signs anything. **Must be longer than api-gateway's `JWKS_CACHE_MAX_AGE_MS`** (10 minutes by default), so every gateway has refetched the key set, and holds the new key, before the first token it signed arrives. Raise both together. |
-| `PASSWORD_RESET_TTL_MINUTES` | `60` | no | |
-| `INVITATION_TTL_DAYS` | `7` | no | |
+| `PASSWORD_RESET_TTL_MINUTES` | `60` | no | How long a password-reset request, and its emailed link, works |
+| `INVITATION_TTL_HOURS` | `72` | no | How long an invitation, and its emailed link, works. Replaces `INVITATION_TTL_DAYS`, which is no longer read ([operations §3.2](operations.md#32-procedure)). |
 | `COOKIE_SECURE` | `true` | no | `Secure` flag on the refresh cookie. **Keep `true`** in production (HTTPS only). |
-| `DEV_EXPOSE_TOKENS` | `false` | no | Logs reset and invitation tokens. **Never in production.** |
+| `DEV_EXPOSE_TOKENS` | `false` | no | Issues a new reset or invitation's link at once and logs its token, for a setup with no notification-service. A running notification-service issues its own link when it sends, and the logged one stops working. **Never in production.** |
 
 Signing keys (Ed25519) are generated at first start and stored in its database, encrypted with `CRYPTO_KEKS`. Rotation is published ahead, in two steps: the next key is first added to the key set (`/.well-known/jwks.json`) without signing anything, and only after `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` does it become the key that signs; the previous key stays published for `SIGNING_KEY_OVERLAP_DAYS`. So the gateway never sees a token signed with a key it has not fetched. This happens automatically (`SIGNING_KEY_ROTATION_DAYS`), and an operator can start it at any time with the `rotate-signing-key` command, or switch at once with `--now` or, if a key may have leaked, `--revoke-previous` ([operations §6](operations.md#6-rotating-secrets)). Every copy signs with the new key from its next token after the switch; nothing needs a restart.
 

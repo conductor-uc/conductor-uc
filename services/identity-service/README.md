@@ -28,6 +28,14 @@ widget-shaped sample did not fit.
   (mTLS or a service JWT) does not exist yet. With `firstUserOnly: true` it creates the user only
   while the org has nobody, and otherwise answers 409 `org_has_users` (G-115: re-running the
   bootstrap never adds a second administrator).
+- **Reset and invitation links, issued at send time** (G-55):
+  `POST /internal/v1/orgs/:orgId/password-resets/:resetId/link` and
+  `POST /internal/v1/orgs/:orgId/invitations/:invitationId/link`. The events that ask
+  notification-service for those emails carry ids only; when it sends, it calls one of these, which
+  creates the token, stores its SHA-256 over any earlier one (so a retried email's older link
+  stops working) and returns the raw token once. 404 when the reset or invitation is unknown in
+  that org; 409 `link_used`, `link_expired` or `user_inactive`, and then no email goes out. Same
+  bearer token as above.
 
 ## Done when
 
