@@ -59,7 +59,7 @@ Every service applies its own database migrations **when it starts**, before it 
 1. Read the release's changes, including new entries in `docs/decisions.md`: new required variables, changed ports, changed behaviour.
 2. **Back up** MariaDB (§4.2) and copy `.env`.
 3. Check out the release, rebuild the console (`flutter build web --release --no-web-resources-cdn`) and the images (`docker compose build`), or pull them from your registry.
-4. Add any new variables to `.env`.
+4. Add any new variables to `.env`. For example, notification-service requires `IDENTITY_SERVICE_URL` from the release that tells an org's other admins about two-step resets (G-100); without it the service refuses to start.
 5. Restart in this order, waiting for each group to be healthy:
    1. data stores, only if their version changes;
    2. identity-service and org-service;
