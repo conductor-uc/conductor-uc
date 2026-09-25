@@ -38,7 +38,7 @@ class _DemoAdapter implements HttpClientAdapter {
   ) async {
     final access = _access(options);
     if (access != null) return access;
-    final pbx = _pbx.handle(options);
+    final pbx = _pbx.handle(options, userId: demoUserId(_email));
     if (pbx != null) return pbx;
     switch (options.path) {
       case '/v1/public/brand':
@@ -228,7 +228,7 @@ class _DemoAdapter implements HttpClientAdapter {
         return _problem(403, 'forbidden', 'You cannot see that.');
       }
       return _json({
-        'userId': 'demo-user',
+        'userId': demoUserId(_email),
         'orgId': path.split('/')[3],
         'orgType': _orgType,
         'roleIds': const <String>[],

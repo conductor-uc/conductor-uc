@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
+import '../myphone/my_phone_api.dart';
 import '../pbx/resource.dart';
 import 'voicemail_api.dart';
 
@@ -168,26 +169,79 @@ class MailboxesView extends ConsumerWidget {
 
 /// One mailbox's messages: who called, when, how long, and whether they have
 /// been heard. Playing opens a short-lived address for the recording.
+///
+/// With [mine] it is the signed-in person's own mailbox (`/me/voicemail`):
+/// there is no mailbox to choose, so no back button, and everything goes
+/// through their own routes, which take no mailbox id.
 class MessagesView extends ConsumerWidget {
-  const MessagesView({super.key, required this.mailbox, required this.onBack});
+  const MessagesView({
+    super.key,
+    required this.mailbox,
+    this.onBack,
+    this.mine = false,
+  });
 
   final Json mailbox;
-  final VoidCallback onBack;
+  final VoidCallback? onBack;
+  final bool mine;
 
   String get _id => '${mailbox['id']}';
 
+  MailboxOps? _ops(WidgetRef ref) =>
+      mine ? ref.read(myVoicemailApiProvider) : ref.read(voicemailApiProvider);
+
+  void _refresh(WidgetRef ref) => mine
+      ? ref.invalidate(myMessagesProvider)
+      : ref.invalidate(messagesProvider(_id));
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final messages = ref.watch(messagesProvider(_id));
+    final messages = mine
+        ? ref.watch(myMessagesProvider)
+        : ref.watch(messagesProvider(_id));
     return PageFrame(
       children: [
         PageHeader(
-          title: 'Voicemail: ${mailboxTitle(ref, mailbox)}',
-          leading: IconButton(
-            tooltip: 'Back to mailboxes',
-            icon: const Icon(Icons.arrow_back),
-            onPressed: onBack,
-          ),
+          title: mine
+              ? 'My voicemail'
+              : 'Voicemail: ${mailboxTitle(ref, mailbox)}',
+          subtitle: mine
+              ? '${(mailbox['unreadCount'] as num?)?.toInt() ?? 0} new. '
+                    'Your greeting: '
+                    '${mailbox['greetingStatus'] == 'ready' ? 'custom' : 'default'}. '
+                    'Emailed to: ${mailbox['notifyEmail'] ?? 'nobody'}.'
+              : null,
+          leading: onBack == null
+              ? null
+              : IconButton(
+                  tooltip: 'Back to mailboxes',
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: onBack,
+                ),
+          actions: [
+            if (mine) ...[
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final saved = await showDialog<bool>(
+                    context: context,
+                    builder: (_) =>
+                        EmailSettingsDialog(mailbox: mailbox, mine: true),
+                  );
+                  if (saved == true) ref.invalidate(myMailboxProvider);
+                },
+                icon: const Icon(Icons.forward_to_inbox_outlined),
+                label: const Text('Email settings'),
+              ),
+              OutlinedButton.icon(
+                onPressed: () => showDialog<bool>(
+                  context: context,
+                  builder: (_) => ResetPinDialog(mailbox: mailbox, mine: true),
+                ),
+                icon: const Icon(Icons.password_outlined),
+                label: const Text('Change PIN'),
+              ),
+            ],
+          ],
         ),
         const SizedBox(height: 16),
         Expanded(
@@ -256,12 +310,18 @@ class MessagesView extends ConsumerWidget {
   }
 
   Future<void> _play(BuildContext context, WidgetRef ref, Json m) async {
-    final api = ref.read(voicemailApiProvider);
+    final api = _ops(ref);
     final open = ref.read(openRecordingProvider);
     final messenger = ScaffoldMessenger.of(context);
     if (api == null) return;
     try {
       await open(await api.playUrl(_id, '${m['id']}'));
+      // Hearing your own message marks it read.
+      if (mine && m['isRead'] != true && api is MyPhoneApi) {
+        await api.markRead('${m['id']}');
+        _refresh(ref);
+        ref.invalidate(myMailboxProvider);
+      }
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Could not play it: ${problemMessage(e)}')),
@@ -270,7 +330,7 @@ class MessagesView extends ConsumerWidget {
   }
 
   Future<void> _delete(BuildContext context, WidgetRef ref, Json m) async {
-    final api = ref.read(voicemailApiProvider);
+    final api = _ops(ref);
     final messenger = ScaffoldMessenger.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
@@ -294,7 +354,8 @@ class MessagesView extends ConsumerWidget {
     if (confirmed != true || api == null) return;
     try {
       await api.deleteMessage(_id, '${m['id']}');
-      ref.invalidate(messagesProvider(_id));
+      _refresh(ref);
+      if (mine) ref.invalidate(myMailboxProvider);
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(content: Text('Could not delete it: ${problemMessage(e)}')),
@@ -306,9 +367,16 @@ class MessagesView extends ConsumerWidget {
 /// Where new messages are emailed, whether the recording goes with them, and
 /// what happens to the message afterwards.
 class EmailSettingsDialog extends ConsumerStatefulWidget {
-  const EmailSettingsDialog({super.key, required this.mailbox});
+  const EmailSettingsDialog({
+    super.key,
+    required this.mailbox,
+    this.mine = false,
+  });
 
   final Json mailbox;
+
+  /// The signed-in person's own mailbox, through their own route.
+  final bool mine;
 
   @override
   ConsumerState<EmailSettingsDialog> createState() =>
@@ -340,7 +408,9 @@ class _EmailSettingsDialogState extends ConsumerState<EmailSettingsDialog> {
   }
 
   Future<void> _save() async {
-    final api = ref.read(voicemailApiProvider);
+    final api = widget.mine
+        ? ref.read(myVoicemailApiProvider)
+        : ref.read(voicemailApiProvider);
     final address = _address.text.trim();
     if (_enabled &&
         !RegExp(r'^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$').hasMatch(address)) {
@@ -455,9 +525,12 @@ class _EmailSettingsDialogState extends ConsumerState<EmailSettingsDialog> {
 
 /// Sets a new PIN for phone access to a mailbox.
 class ResetPinDialog extends ConsumerStatefulWidget {
-  const ResetPinDialog({super.key, required this.mailbox});
+  const ResetPinDialog({super.key, required this.mailbox, this.mine = false});
 
   final Json mailbox;
+
+  /// The signed-in person's own mailbox, through their own route.
+  final bool mine;
 
   @override
   ConsumerState<ResetPinDialog> createState() => _ResetPinDialogState();
@@ -480,7 +553,9 @@ class _ResetPinDialogState extends ConsumerState<ResetPinDialog> {
       setState(() => _error = 'The PIN must be 4 to 8 digits.');
       return;
     }
-    final api = ref.read(voicemailApiProvider);
+    final api = widget.mine
+        ? ref.read(myVoicemailApiProvider)
+        : ref.read(voicemailApiProvider);
     if (api == null) return;
     final messenger = ScaffoldMessenger.of(context);
     setState(() {
@@ -511,7 +586,11 @@ class _ResetPinDialogState extends ConsumerState<ResetPinDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('The PIN the mailbox owner enters on a phone.'),
+          Text(
+            widget.mine
+                ? 'The PIN you enter on your phone to hear your messages.'
+                : 'The PIN the mailbox owner enters on a phone.',
+          ),
           const SizedBox(height: 8),
           TextField(
             controller: _pin,

@@ -38,7 +38,7 @@ class DemoPbx {
         },
       ],
       'extensions': [
-        _ext('ext-1', '101', 'Alice Kim'),
+        _ext('ext-1', '101', 'Alice Kim', userId: 'user-4'),
         _ext('ext-2', '102', 'Bob Osei'),
         _ext('ext-3', '103', 'Carol Diaz'),
       ],
@@ -242,10 +242,15 @@ class DemoPbx {
     ],
   };
 
-  static Map<String, dynamic> _ext(String id, String number, String name) => {
+  static Map<String, dynamic> _ext(
+    String id,
+    String number,
+    String name, {
+    String? userId,
+  }) => {
     'id': id,
     'number': number,
-    'userId': null,
+    'userId': userId,
     'displayName': name,
     'callerIdName': null,
     'callerIdNumber': null,
@@ -293,7 +298,12 @@ class DemoPbx {
       r'^/v1/tenants/[^/]+/extensions/([^/]+)/call-handling$',
     ).firstMatch(options.path);
     if (match == null) return null;
-    final id = match.group(1)!;
+    return _callHandlingOf(match.group(1)!, options);
+  }
+
+  /// The read and the replace, for one extension: what both the
+  /// administrator's route and a person's own `/me/call-handling` do.
+  ResponseBody _callHandlingOf(String id, RequestOptions options) {
     final extensions = _rows['extensions']!;
     if (!extensions.any((r) => r['id'] == id)) {
       return _problem(404, 'No extension with that id.');
@@ -532,6 +542,7 @@ class DemoPbx {
     _user('user-1', 'admin@example.test', 'Alex Admin', ['tenant_admin']),
     _user('user-2', 'sam@example.test', 'Sam Support', ['tenant_user']),
     _user('user-3', 'dana@example.test', 'Dana Diaz', []),
+    _user('user-4', 'alice@example.test', 'Alice Kim', ['tenant_user']),
   ];
 
   static Map<String, dynamic> _user(
@@ -1481,7 +1492,160 @@ class DemoPbx {
     return _problem(405, 'Not supported.');
   }
 
-  ResponseBody? handle(RequestOptions options) {
+  Map<String, dynamic>? _extensionOf(String? userId) {
+    for (final e in _rows['extensions']!) {
+      if (userId != null && e['userId'] == userId) return e;
+    }
+    return null;
+  }
+
+  ResponseBody _noExtension() => _problem(
+    404,
+    'No extension is linked to your account yet. Ask an administrator to link one.',
+    code: 'no_linked_extension',
+  );
+
+  /// The signed-in person's own phone (`/v1/tenants/{id}/me/...`), for the
+  /// extension linked to [userId]. It never reads an extension, mailbox or
+  /// number from the request: everything is worked out from who signed in.
+  ResponseBody? _myPhone(RequestOptions options, String? userId) {
+    final match = RegExp(
+      r'^/v1/tenants/[^/]+/me/(extension|directory|call-handling|voicemail|calls)(?:/(.*))?$',
+    ).firstMatch(options.path);
+    if (match == null) return null;
+    final method = options.method.toUpperCase();
+    final extension = _extensionOf(userId);
+    if (extension == null) return _noExtension();
+    final tail = match.group(2);
+    switch (match.group(1)) {
+      case 'extension':
+        return _json({
+          for (final k in const [
+            'id',
+            'number',
+            'displayName',
+            'callerIdName',
+            'callerIdNumber',
+            'voicemailEnabled',
+          ])
+            k: extension[k],
+        });
+      case 'directory':
+        return _json({
+          'rows': [
+            for (final e in _rows['extensions']!)
+              {
+                'id': e['id'],
+                'number': e['number'],
+                'displayName': e['displayName'],
+              },
+          ],
+        });
+      case 'call-handling':
+        return _callHandlingOf('${extension['id']}', options);
+      case 'voicemail':
+        final box = _mailboxes.where(
+          (b) => b['extensionId'] == extension['id'],
+        );
+        if (box.isEmpty) {
+          return _problem(
+            404,
+            'Your extension has no voicemail box yet. Ask an administrator.',
+            code: 'no_mailbox',
+          );
+        }
+        final id = '${box.first['id']}';
+        final suffix = switch (tail) {
+          null => '',
+          'messages' => '/messages',
+          'reset-pin' => '/reset-pin',
+          'email-settings' => '/email-settings',
+          _ when tail.startsWith('messages/') => '/$tail',
+          _ => null,
+        };
+        if (suffix == null) return _problem(404, 'No such route.');
+        // A message can be marked read here; the administrator's routes have no
+        // such thing.
+        final read = RegExp(r'^/messages/([^/]+)/read$').firstMatch(suffix);
+        if (read != null && method == 'POST') {
+          final messages = _messages[id] ?? const [];
+          final at = messages.indexWhere((m) => m['id'] == read.group(1));
+          if (at < 0) {
+            return _problem(404, 'No message with that id in your mailbox.');
+          }
+          messages[at]['isRead'] = true;
+          return ResponseBody.fromString('', 204);
+        }
+        // Same behaviour as the administrator's mailbox routes, on my mailbox.
+        final inner = RequestOptions(
+          path: '/v1/tenants/demo/voicemail/mailboxes/$id$suffix',
+          method: options.method,
+          data: options.data,
+        );
+        final result = _voicemail(inner);
+        if (result == null) return null;
+        // My mailbox has no id of its own to show, and neither has its extension.
+        if (result.statusCode < 400 &&
+            (tail == null || tail == 'email-settings')) {
+          final view = _mailboxView(box.first);
+          return _json({
+            for (final e in view.entries)
+              if (e.key != 'id' && e.key != 'extensionId') e.key: e.value,
+          });
+        }
+        return result;
+      case 'calls':
+        final number = '${extension['number']}';
+        final q = options.queryParameters;
+        final from = q['from'] == null ? null : DateTime.parse('${q['from']}');
+        final to = q['to'] == null ? null : DateTime.parse('${q['to']}');
+        final limit = int.tryParse('${q['limit'] ?? 50}') ?? 50;
+        final after = q['cursor'] == null ? -1 : int.parse('${q['cursor']}');
+        final matching = [
+          for (final (i, c) in _cdrs.indexed)
+            if (i > after &&
+                (c['fromNumber'] == number ||
+                    c['toNumber'] == number ||
+                    c['dialedNumber'] == number) &&
+                (from == null ||
+                    !DateTime.parse('${c['startAt']}').isBefore(from)) &&
+                (to == null ||
+                    !DateTime.parse('${c['startAt']}').isAfter(to)) &&
+                (q['direction'] == null || c['direction'] == q['direction']))
+              (i, c),
+        ];
+        final page = matching.take(limit).toList();
+        return _json({
+          'rows': [
+            for (final (_, c) in page)
+              {
+                for (final k in const [
+                  'id',
+                  'direction',
+                  'startAt',
+                  'answerAt',
+                  'endAt',
+                  'durationSec',
+                  'fromNumber',
+                  'fromName',
+                  'toNumber',
+                  'dialedNumber',
+                  'disposition',
+                ])
+                  k: c[k],
+              },
+          ],
+          'nextCursor': matching.length > page.length
+              ? '${page.last.$1}'
+              : null,
+        });
+    }
+    return null;
+  }
+
+  ResponseBody? handle(RequestOptions options, {String? userId}) {
+    final mine = _myPhone(options, userId);
+    if (mine != null) return mine;
     final orgs = _orgs(options);
     if (orgs != null) return orgs;
     final infra = _domainsAndAssets(options);
@@ -1740,11 +1904,17 @@ class DemoPbx {
         },
       );
 
-  ResponseBody _problem(int status, String detail) => ResponseBody.fromString(
-    jsonEncode({'title': 'Error', 'status': status, 'detail': detail}),
-    status,
-    headers: {
-      Headers.contentTypeHeader: ['application/problem+json'],
-    },
-  );
+  ResponseBody _problem(int status, String detail, {String? code}) =>
+      ResponseBody.fromString(
+        jsonEncode({
+          'title': 'Error',
+          'status': status,
+          'detail': detail,
+          'code': ?code,
+        }),
+        status,
+        headers: {
+          Headers.contentTypeHeader: ['application/problem+json'],
+        },
+      );
 }

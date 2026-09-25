@@ -31,8 +31,6 @@ Map<String, dynamic> _schema(
 
 /// Fields the service accepts that a screen leaves out on purpose.
 const _notExposed = {
-  // Linking an extension to a user belongs with the Users screen.
-  'extensions': {'userId'},
   // A trunk's caller-ID policy is a nested object with no screen yet.
   'trunks': {'callerIdPolicy'},
 };
@@ -659,6 +657,144 @@ void main() {
         containsAll(['id', 'agentId', 'level', 'position']),
       );
       expect((paths['$base/{id}'] as Map), contains('delete'));
+    });
+  });
+
+  group('my phone (end-user self-service)', () {
+    const me = '/v1/tenants/{tenantId}/me';
+    Set<Object?> props(Map<String, dynamic> schema) =>
+        (schema['properties'] as Map).keys.toSet();
+    Map<String, dynamic> op(String path, String method) =>
+        (paths['$me/$path'] as Map)[method] as Map<String, dynamic>;
+
+    test('the routes MyPhoneApi calls exist with the methods it uses', () {
+      const wanted = {
+        'extension': ['get'],
+        'directory': ['get'],
+        'call-handling': ['get', 'put'],
+        'voicemail': ['get'],
+        'voicemail/messages': ['get'],
+        'voicemail/messages/{messageId}/play-url': ['get'],
+        'voicemail/messages/{messageId}/read': ['post'],
+        'voicemail/messages/{messageId}': ['delete'],
+        'voicemail/reset-pin': ['post'],
+        'voicemail/email-settings': ['put'],
+        'calls': ['get'],
+      };
+      for (final e in wanted.entries) {
+        expect(paths, contains('$me/${e.key}'), reason: e.key);
+        for (final method in e.value) {
+          expect(paths['$me/${e.key}'] as Map, contains(method), reason: e.key);
+        }
+      }
+    });
+
+    test('no route takes an extension, mailbox or user id, or a number', () {
+      for (final entry in paths.entries.where(
+        (e) => e.key.startsWith('$me/'),
+      )) {
+        expect(
+          entry.key.replaceAll('{tenantId}', '').replaceAll('{messageId}', ''),
+          isNot(contains('{')),
+          reason: '${entry.key} names something a person should not choose',
+        );
+        for (final operation in (entry.value as Map).values) {
+          final params = [...?((operation as Map)['parameters'] as List?)];
+          for (final p in params.cast<Map>()) {
+            expect(
+              p['name'],
+              isNot(anyOf('number', 'did', 'extensionId', 'userId', 'id')),
+              reason: '${entry.key} takes ${p['name']}',
+            );
+            // The path takes the tenant, and a message inside my own mailbox.
+            if (p['in'] == 'path') {
+              expect(p['name'], anyOf('tenantId', 'messageId'));
+            }
+          }
+        }
+      }
+    });
+
+    test('call handling is the administrator\'s document', () {
+      final mine = _schema(op('call-handling', 'put'));
+      final admin = _schema(
+        (paths['/v1/tenants/{tenantId}/extensions/{extensionId}/call-handling']
+                as Map)['put']
+            as Map<String, dynamic>,
+      );
+      expect(props(mine), props(admin));
+    });
+
+    test('my extension answers with what the screens read', () {
+      final body = _schema(op('extension', 'get'), response: '200');
+      expect(
+        props(body),
+        containsAll(['id', 'number', 'displayName', 'voicemailEnabled']),
+      );
+      expect(props(body), isNot(contains('userId')));
+      expect(props(body), isNot(contains('emergencyLocationId')));
+    });
+
+    test('my mailbox and messages carry what the voicemail screen reads', () {
+      final box = _schema(op('voicemail', 'get'), response: '200');
+      expect(
+        props(box),
+        containsAll([
+          'greetingStatus',
+          'unreadCount',
+          'notifyEmail',
+          'emailAttachAudio',
+          'emailAfter',
+        ]),
+      );
+      expect(props(box), isNot(contains('id')));
+      expect(props(box), isNot(contains('extensionId')));
+      final list = _schema(op('voicemail/messages', 'get'), response: '200');
+      final row = ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+      expect(
+        (row['properties'] as Map).keys,
+        containsAll(['id', 'callerIdName', 'callerIdNumber', 'isRead']),
+      );
+    });
+
+    test('the email settings and PIN bodies are the ones the dialogs send', () {
+      expect(
+        props(_schema(op('voicemail/email-settings', 'put'))),
+        EmailSettings().toJson().keys.toSet(),
+      );
+      expect(props(_schema(op('voicemail/reset-pin', 'post'))), {'pin'});
+    });
+
+    test(
+      'my history filters by what the screen offers, and returns a call',
+      () {
+        final query = [...(op('calls', 'get')['parameters'] as List)]
+            .cast<Map>()
+            .where((p) => p['in'] == 'query')
+            .map((p) => p['name'])
+            .toSet();
+        expect(query, {'from', 'to', 'direction', 'cursor', 'limit'});
+        final list = _schema(op('calls', 'get'), response: '200');
+        final row =
+            ((list['properties'] as Map)['rows'] as Map)['items'] as Map;
+        final call = (row['properties'] as Map).keys.toSet();
+        expect(
+          call,
+          containsAll(['id', 'direction', 'startAt', 'fromNumber', 'toNumber']),
+        );
+        // Nothing an administrator's CDR carries that a person has no use for.
+        expect(call, isNot(contains('trunkId')));
+        expect(call, isNot(contains('recordingIds')));
+        expect(call, isNot(contains('extensionIds')));
+      },
+    );
+
+    test('an extension can be linked to a person in the extension form', () {
+      final body = _schema(
+        (paths['/v1/tenants/{tenantId}/extensions'] as Map)['post']
+            as Map<String, dynamic>,
+      );
+      expect(props(body), contains('userId'));
     });
   });
 

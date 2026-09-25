@@ -6,6 +6,7 @@ import '../../app/session_brand.dart';
 import '../../core/acting.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../myphone/my_phone_api.dart';
 import '../../widgets/brand_header.dart';
 import 'sections.dart';
 
@@ -21,9 +22,15 @@ class ShellPage extends ConsumerWidget {
     final session = ref.watch(sessionProvider);
     final brand = ref.watch(effectiveBrandProvider);
     final acting = ref.watch(actingProvider);
+    final hasPhone = ref.watch(myExtensionProvider).asData?.value != null;
     final sections = session == null
         ? const <Section>[]
-        : visibleSections(session, acting, ref.watch(knownPermissionsProvider));
+        : visibleSections(
+            session,
+            acting,
+            ref.watch(knownPermissionsProvider),
+            hasPhone,
+          );
     final location = GoRouterState.of(context).uri.path;
     final selected = sections.indexWhere((s) => location.startsWith(s.path));
 

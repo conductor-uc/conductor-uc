@@ -56,6 +56,8 @@ class Field {
     this.status = false,
     this.allowEmpty = false,
     this.emptyLabel,
+    this.needs,
+    this.notForReseller = false,
   });
 
   final String key;
@@ -99,6 +101,15 @@ class Field {
 
   /// What the table shows for an empty value instead of a dash.
   final String? emptyLabel;
+
+  /// A permission the field's own data needs (the people a person can be linked
+  /// to are read with `user.manage`); the form leaves the field out without it.
+  final String? needs;
+
+  /// Left out of the form for a reseller, who may not set it (the service
+  /// refuses it): linking a person gives them an extension's voicemail and
+  /// call history, which are private to the tenant.
+  final bool notForReseller;
 
   bool inScope({required bool editing}) =>
       scope == FieldScope.both ||
@@ -202,6 +213,17 @@ const extensionsDef = ResourceDef(
       ref: 'emergency-locations',
       showInList: true,
       help: 'Where emergency services are sent for calls from this extension.',
+    ),
+    Field(
+      'userId',
+      'Person',
+      FieldKind.ref,
+      ref: 'users',
+      needs: 'user.manage',
+      notForReseller: true,
+      help:
+          'Whose phone this is. They can then manage its call handling, '
+          'voicemail and call history themselves. One extension per person.',
     ),
   ],
 );
@@ -828,5 +850,27 @@ const allResources = <ResourceDef>[
   flowsDef,
 ];
 
-ResourceDef resourceByKey(String key) =>
-    allResources.firstWhere((r) => r.key == key);
+/// The people of the tenant, for a picker (an extension's owner). Not a PBX
+/// resource: they are read from identity (`/v1/orgs/{id}/users`), so this is
+/// not in [allResources].
+const peopleDef = ResourceDef(
+  key: 'users',
+  singular: 'Person',
+  plural: 'People',
+  icon: Icons.people_outline,
+  fields: [],
+  title: _personTitle,
+);
+
+String _personTitle(Map<String, dynamic> row) {
+  final name = row['displayName'];
+  final email = row['email'];
+  if (name is String && name.isNotEmpty) {
+    return email is String && email.isNotEmpty ? '$name ($email)' : name;
+  }
+  return '${email ?? row['id']}';
+}
+
+ResourceDef resourceByKey(String key) => key == peopleDef.key
+    ? peopleDef
+    : allResources.firstWhere((r) => r.key == key);

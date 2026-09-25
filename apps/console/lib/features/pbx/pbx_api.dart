@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/acting.dart';
 import '../../core/api_client.dart';
 import '../../core/session.dart';
+import '../users/users_api.dart';
 
 export '../../core/problem.dart' show problemMessage;
 
@@ -218,6 +219,8 @@ final rowsProvider = FutureProvider.family<List<Json>, String>((
   ref,
   resource,
 ) async {
+  // People are identity's, not the PBX's.
+  if (resource == 'users') return ref.watch(usersProvider.future);
   final api = ref.watch(pbxApiProvider);
   if (api == null) return const [];
   return api.list(resource);

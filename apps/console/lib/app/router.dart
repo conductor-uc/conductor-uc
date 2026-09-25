@@ -13,6 +13,8 @@ import '../features/auth/reset_pages.dart';
 import '../features/callflow/builder/flow_builder_page.dart';
 import '../features/callflow/flows_page.dart';
 import '../features/media/media_page.dart';
+import '../features/myphone/my_phone_api.dart';
+import '../features/myphone/my_phone_pages.dart';
 import '../features/orgs/domains_panel.dart';
 import '../features/orgs/reseller_page.dart';
 import '../features/trunks/outbound_routes_page.dart';
@@ -40,11 +42,14 @@ final routerProvider = Provider<GoRouter>((ref) {
   ref.listen(actingProvider, (_, _) => refresh.value++);
   // What the user may see arrives after sign-in; recheck the page they are on.
   ref.listen(permissionsProvider, (_, _) => refresh.value++);
+  // Whether an administrator has an extension of their own (My phone).
+  ref.listen(myExtensionProvider, (_, _) => refresh.value++);
   ref.onDispose(refresh.dispose);
 
   final everySection = {
     for (final list in sectionsByOrgType.values)
       for (final s in list) s.path: s,
+    for (final s in [...myPhoneSections, myPhoneEntry]) s.path: s,
   }.values;
 
   return GoRouter(
@@ -61,13 +66,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         }
         return _signedOutPaths.contains(path) ? null : '/login';
       }
+      final permissions = ref.read(knownPermissionsProvider);
+      final acting = ref.read(actingProvider);
       final sections = visibleSections(
         session,
-        ref.read(actingProvider),
-        ref.read(knownPermissionsProvider),
+        acting,
+        permissions,
+        ref.read(myExtensionProvider).asData?.value != null,
       );
       if (_signedOutPaths.contains(path) || path == '/') {
         return sections.first.path;
+      }
+      // A person with only a phone has no administrator's pages to be told
+      // they may not open: anything else takes them to their own.
+      if (session.orgType == OrgType.tenant &&
+          acting == null &&
+          isSelfOnly(permissions)) {
+        return sections.any((s) => path.startsWith(s.path))
+            ? null
+            : sections.first.path;
       }
       // A section the role does not have is not reachable by URL either: it
       // gets the forbidden page. An address that is no section at all is a
@@ -120,7 +137,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/forbidden',
             builder: (context, state) => const ForbiddenPage(),
           ),
-          for (final s in everySection)
+          GoRoute(
+            path: myPhoneEntry.path,
+            redirect: (context, state) => myPhoneSections.first.path,
+          ),
+          for (final s in everySection.where(
+            (s) => s.path != myPhoneEntry.path,
+          ))
             GoRoute(path: s.path, builder: (context, state) => _pageFor(s)),
         ],
       ),
@@ -139,6 +162,11 @@ Widget _pageFor(Section section) {
   if (section.path == '/certificates') return const CertificatesPage();
   if (section.path == '/media') return const MediaPage();
   if (section.path == '/voicemail') return const VoicemailPage();
+  if (section.path == '/my-phone/call-handling') {
+    return const MyCallHandlingPage();
+  }
+  if (section.path == '/my-phone/voicemail') return const MyVoicemailPage();
+  if (section.path == '/my-phone/history') return const MyCallHistoryPage();
   if (section.path == '/dashboard') return const DashboardPage();
   if (section.path == '/audit') return const AuditPage();
   if (section.path == '/platform-health') return const PlatformHealthPage();
