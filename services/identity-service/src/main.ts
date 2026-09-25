@@ -49,6 +49,7 @@ const bus = await connectBus({
   servers: config.NATS_SERVERS,
   logger,
   name: config.SERVICE_NAME,
+  streamMaxAgeDays: config.NATS_STREAM_MAX_AGE_DAYS,
   ...(config.NATS_USER === undefined ? {} : { user: config.NATS_USER }),
   ...(config.NATS_PASSWORD === undefined ? {} : { password: config.NATS_PASSWORD }),
 });
@@ -82,6 +83,7 @@ const relay = createRelay({
   batchSize: config.OUTBOX_BATCH_SIZE,
   pollIntervalMs: config.OUTBOX_POLL_INTERVAL_MS,
   maxAttempts: config.OUTBOX_MAX_ATTEMPTS,
+  retentionDays: config.OUTBOX_RETENTION_DAYS,
 });
 const relayLoop = relay.run();
 

@@ -1,5 +1,6 @@
 export {
   connectBus,
+  DEFAULT_STREAM_MAX_AGE_DAYS,
   DUPLICATE_WINDOW_MS,
   MSG_ID_HEADER,
   type Bus,
@@ -14,7 +15,13 @@ export {
   type EventHandler,
 } from './consumer.js';
 export { enqueueEvent, envelopeFromRow, type OutboxRow, type PublishRequest } from './outbox.js';
-export { createRelay, type Relay, type RelayOptions, type RelayPass } from './relay.js';
+export {
+  createRelay,
+  DEFAULT_OUTBOX_RETENTION_DAYS,
+  type Relay,
+  type RelayOptions,
+  type RelayPass,
+} from './relay.js';
 export {
   createConsumedEventsTable,
   createEventTables,
