@@ -84,6 +84,24 @@ export const configSchema = Type.Object({
    */
   CALL_CONTROL_URL: Env.url(),
   /**
+   * Base URL for recording-service's internal API, e.g. http://recording-service:8080 (S5-02):
+   * asked at call setup whether the call is recorded.
+   */
+  RECORDING_SERVICE_URL: Env.url(),
+  /**
+   * Where FreeSWITCH writes recordings on its own node, and where that node's uploader looks
+   * (recording-service's `SPOOL_DIR`). Transient: the uploader deletes each file once it is safe in
+   * the tenant's bucket (D-011).
+   */
+  RECORDING_SPOOL_DIR: Env.string({ default: '/var/spool/cuc/rec' }),
+  /**
+   * How long recording-service gets to answer at call setup. Past this the call goes ahead
+   * unrecorded and flagged; a slow policy service must never slow a call noticeably.
+   */
+  RECORDING_POLICY_TIMEOUT_MS: Env.int({ minimum: 50, maximum: 10_000, default: 800 }),
+  /** How long a recording decision is reused. A policy edit takes effect within this time. */
+  RECORDING_POLICY_CACHE_TTL_MS: Env.int({ minimum: 0, default: 30_000 }),
+  /**
    * Shared bearer token pbx-config-service's and trunk-service's
    * `/internal/v1` routes expect (07 §1's precedent, same variable name
    * those services use for the identical purpose against org-service) —
