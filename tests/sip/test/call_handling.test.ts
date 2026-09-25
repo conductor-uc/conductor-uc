@@ -225,6 +225,20 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
     return (response.json as { rows: unknown[] }).rows;
   }
 
+  /**
+   * A voicemail message is listed only once the node uploader has delivered
+   * its audio (S5-16), after the file settles (30 s in compose), so a call
+   * that reached voicemail shows up here with that delay.
+   */
+  async function waitForMessage(tenantId: string, mailboxId: string): Promise<unknown[]> {
+    const deadline = Date.now() + 90_000;
+    for (;;) {
+      const rows = await messages(tenantId, mailboxId);
+      if (rows.length > 0 || Date.now() > deadline) return rows;
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  }
+
   it('do not disturb sends the caller to voicemail, and the phone never rings', async () => {
     await scenario({
       caller: 'trunk_invite_wait_for_bye.xml',
@@ -234,14 +248,14 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
       },
       check: async ({ tenantId, mailboxId }, result) => {
         expect(result.successfulCalls, result.stdout).toBe(1);
-        expect((await messages(tenantId, mailboxId)).length).toBeGreaterThanOrEqual(1);
+        expect((await waitForMessage(tenantId, mailboxId)).length).toBeGreaterThanOrEqual(1);
         expect(
           await uasReceivedCall(UAS_401),
           'the registered phone must not have been called',
         ).toBe(false);
       },
     });
-  }, 120_000);
+  }, 240_000);
 
   it('forward always sends the call to the other extension instead of ringing this one', async () => {
     let target: Awaited<ReturnType<typeof register>> | undefined;
@@ -284,10 +298,10 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
       },
       check: async ({ tenantId, mailboxId }, result) => {
         expect(result.successfulCalls, result.stdout).toBe(1);
-        expect((await messages(tenantId, mailboxId)).length).toBeGreaterThanOrEqual(1);
+        expect((await waitForMessage(tenantId, mailboxId)).length).toBeGreaterThanOrEqual(1);
       },
     });
-  }, 120_000);
+  }, 240_000);
 
   it('forward when unreachable: no phone is registered, and the call goes to voicemail', async () => {
     await scenario({
@@ -295,8 +309,8 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
       handling: () => ({ forwardUnreachable: { type: 'voicemail' } }),
       check: async ({ tenantId, mailboxId }, result) => {
         expect(result.successfulCalls, result.stdout).toBe(1);
-        expect((await messages(tenantId, mailboxId)).length).toBeGreaterThanOrEqual(1);
+        expect((await waitForMessage(tenantId, mailboxId)).length).toBeGreaterThanOrEqual(1);
       },
     });
-  }, 120_000);
+  }, 240_000);
 });
