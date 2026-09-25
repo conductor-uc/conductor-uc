@@ -756,6 +756,25 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
       expectRefused(await inbound(trunkId));
     });
 
+    it('an emergency call is never refused, even when the tenant requires recording and it is unavailable', async () => {
+      const tenantId = await seedTenant();
+      await seedExtension(tenantId, '100');
+      await h.readModel.upsertEmergencyRoute(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        trunkId: await seedTrunk(tenantId),
+        numbers: ['911'],
+      });
+      await requireRecording(tenantId);
+      fake.directive = { kind: 'unavailable', reason: 'recording-service is down' };
+
+      const xml = await internal(tenantId, '911');
+      const names = apps(xml).map((a) => a.app);
+      expect(names).toContain('bridge');
+      expect(names).not.toContain('hangup');
+      expect(xml).not.toContain('cuc_recording_status=refused');
+    });
+
     it('a decision of "no recording needed" is never refused', async () => {
       const tenantId = await seedTenant();
       await seedExtension(tenantId, '101');
