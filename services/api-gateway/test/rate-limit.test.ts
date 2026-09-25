@@ -88,6 +88,57 @@ describe('api-gateway: rate limiting', () => {
     expect(third.headers['retry-after']).toBeDefined();
   });
 
+  it('keys the IP limit on the connection, so a client cannot escape it with X-Forwarded-For (G-113)', async () => {
+    const app = await appWithLimits({
+      RATE_LIMIT_IP_MAX: '1',
+      RATE_LIMIT_IP_WINDOW_MS: '100000',
+      RATE_LIMIT_ACTOR_MAX: '100000',
+    });
+
+    const first = await app.inject({
+      method: 'GET',
+      url: '/v1/public/brand',
+      headers: { 'x-forwarded-for': '203.0.113.1' },
+    });
+    const second = await app.inject({
+      method: 'GET',
+      url: '/v1/public/brand',
+      headers: { 'x-forwarded-for': '203.0.113.2' },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(429);
+  });
+
+  it('keys it on the forwarded client address behind a listed proxy', async () => {
+    const app = await appWithLimits({
+      RATE_LIMIT_IP_MAX: '1',
+      RATE_LIMIT_IP_WINDOW_MS: '100000',
+      RATE_LIMIT_ACTOR_MAX: '100000',
+      TRUSTED_PROXIES: '127.0.0.1',
+    });
+
+    const one = await app.inject({
+      method: 'GET',
+      url: '/v1/public/brand',
+      headers: { 'x-forwarded-for': '203.0.113.1' },
+    });
+    const another = await app.inject({
+      method: 'GET',
+      url: '/v1/public/brand',
+      headers: { 'x-forwarded-for': '203.0.113.2' },
+    });
+    const oneAgain = await app.inject({
+      method: 'GET',
+      url: '/v1/public/brand',
+      headers: { 'x-forwarded-for': '203.0.113.1' },
+    });
+
+    expect(one.statusCode).toBe(200);
+    expect(another.statusCode).toBe(200);
+    expect(oneAgain.statusCode).toBe(429);
+  });
+
   it('applies the IP limit to public routes too, protecting login from brute force', async () => {
     const app = await appWithLimits({
       RATE_LIMIT_IP_MAX: '1',

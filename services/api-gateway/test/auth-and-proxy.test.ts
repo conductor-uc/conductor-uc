@@ -51,6 +51,7 @@ describe('api-gateway: auth + proxy', () => {
           transport: request.headers['x-refresh-transport'] ?? null,
           userAgent: request.headers['user-agent'] ?? null,
           forwardedFor: request.headers['x-forwarded-for'] ?? null,
+          clientIp: request.context.clientIp ?? null,
           forwardedHost: request.headers['x-forwarded-host'] ?? null,
         };
       });
@@ -132,6 +133,9 @@ describe('api-gateway: auth + proxy', () => {
         RECORDING_SERVICE_URL: tenantServices['recording']!.url,
         RATE_LIMIT_IP_MAX: '100000',
         RATE_LIMIT_ACTOR_MAX: '100000',
+        // `inject` connects from 127.0.0.1: these tests play a load balancer
+        // that sets X-Forwarded-For and X-Forwarded-Proto (G-113).
+        TRUSTED_PROXIES: '127.0.0.1',
       }),
       redis,
       jwksUrl: jwks.jwksUrl,
@@ -187,7 +191,10 @@ describe('api-gateway: auth + proxy', () => {
       cookie: 'refresh=old',
       transport: 'cookie',
       userAgent: 'a-browser/1.0',
-      forwardedFor: '203.0.113.9',
+      // The client address travels signed, not as a header a service would
+      // have to decide whether to believe (G-113).
+      forwardedFor: null,
+      clientIp: '203.0.113.9',
     });
     expect(response.headers['set-cookie']).toEqual([
       'refresh=new; Path=/v1/auth; HttpOnly',
@@ -329,6 +336,7 @@ describe('api-gateway: auth + proxy', () => {
         orgType: 'tenant',
         resellerId: 'reseller-3',
         tenantId: 'tenant-9',
+        clientIp: '127.0.0.1',
       },
     });
   });
@@ -441,5 +449,82 @@ describe('api-gateway: auth + proxy', () => {
 
     expect(response.statusCode).toBe(503);
     await unreachable.close();
+  });
+
+  describe('TRUSTED_PROXIES (G-113)', () => {
+    async function gateway(trustedProxies?: string): Promise<Server> {
+      const gw = await buildApp({
+        config: testConfig({
+          IDENTITY_SERVICE_URL: identity.url,
+          ORG_SERVICE_URL: org.url,
+          PBX_CONFIG_SERVICE_URL: tenantServices['pbx']!.url,
+          RATE_LIMIT_IP_MAX: '100000',
+          RATE_LIMIT_ACTOR_MAX: '100000',
+          ...(trustedProxies === undefined ? {} : { TRUSTED_PROXIES: trustedProxies }),
+        }),
+        redis,
+        jwksUrl: jwks.jwksUrl,
+        rateLimitKeyPrefix: redisHandle.keyPrefix,
+        ...baseServerOptions(),
+      });
+      await gw.ready();
+      return gw;
+    }
+
+    function refreshFrom(gw: Server, remoteAddress: string, forwardedFor: string) {
+      return gw.inject({
+        method: 'POST',
+        url: '/v1/auth/refresh',
+        remoteAddress,
+        headers: { 'x-forwarded-for': forwardedFor },
+        payload: {},
+      });
+    }
+
+    it('by default believes no X-Forwarded-For: the client address is the connection', async () => {
+      const gw = await gateway();
+      try {
+        const response = await refreshFrom(gw, '198.51.100.20', '203.0.113.9');
+
+        expect(response.json()).toMatchObject({ clientIp: '198.51.100.20' });
+      } finally {
+        await gw.close();
+      }
+    });
+
+    it('by default believes no X-Forwarded-Proto either', async () => {
+      const gw = await gateway();
+      try {
+        const response = await gw.inject({
+          method: 'GET',
+          url: '/v1/public/provision/yealink/001565aabbcc.cfg',
+          headers: { authorization: 'Basic cGhvbmU6cHc=', 'x-forwarded-proto': 'https' },
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json()).toMatchObject({ code: 'https_required' });
+      } finally {
+        await gw.close();
+      }
+    });
+
+    it('believes a listed proxy, and only that proxy', async () => {
+      const gw = await gateway('10.0.0.0/8, 192.0.2.1');
+      try {
+        const viaCidr = await refreshFrom(gw, '10.1.2.3', '203.0.113.9');
+        const viaAddress = await refreshFrom(gw, '192.0.2.1', '203.0.113.10');
+        const direct = await refreshFrom(gw, '198.51.100.20', '203.0.113.9');
+
+        expect(viaCidr.json()).toMatchObject({ clientIp: '203.0.113.9' });
+        expect(viaAddress.json()).toMatchObject({ clientIp: '203.0.113.10' });
+        expect(direct.json()).toMatchObject({ clientIp: '198.51.100.20' });
+      } finally {
+        await gw.close();
+      }
+    });
+
+    it('refuses to start with a malformed entry', async () => {
+      await expect(gateway('not-an-address')).rejects.toThrow(/invalid IP address/);
+    });
   });
 });
