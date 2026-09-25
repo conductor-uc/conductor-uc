@@ -1,5 +1,6 @@
 import { createServer } from '@cuc/http';
-import type { CreateServerOptions, Server } from '@cuc/http';
+import { createRemotePermissionResolver } from '@cuc/http';
+import type { CreateServerOptions, PermissionResolver, Server } from '@cuc/http';
 import type { Redis } from 'ioredis';
 
 import { createAccessTokenVerifier } from './auth/access-token-verifier.js';
@@ -15,6 +16,10 @@ import { tlsServerOptions } from './tls.js';
 import { createRateLimiter } from './rate-limit/limiter.js';
 import { registerRateLimit } from './rate-limit/hooks.js';
 import { registerProxy } from './routing/proxy.js';
+import { createRealtimeHub, type RealtimeHub } from './realtime/hub.js';
+import { createTopicAuthorizer } from './realtime/authorize.js';
+import { REALTIME_PATH, registerRealtimeRoute } from './realtime/route.js';
+import { createLineageLookup, createLiveCallsSource } from './realtime/sources.js';
 import { buildRouteTable } from './routing/route-table.js';
 import type { ServiceConfig } from './config.js';
 
@@ -31,6 +36,16 @@ export interface BuildAppOptions {
    * `TEST_REDIS_URL` points at one shared server) sets it per app instance.
    */
   readonly rateLimitKeyPrefix?: string;
+  /**
+   * The realtime hub's inputs, when `REALTIME_ENABLED`. The hub is built here;
+   * `onHub` hands it back so the caller can attach the NATS bus once connected
+   * (`main.ts` connects in the background, so NATS being down never stops the
+   * gateway from serving the API). Tests swap in a fake permission resolver.
+   */
+  readonly realtime?: {
+    readonly permissions?: PermissionResolver;
+    readonly onHub?: (hub: RealtimeHub) => void;
+  };
 }
 
 /**
@@ -96,6 +111,7 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
   registerAuthentication(app, {
     verifier,
     publicPrefixes: config.PUBLIC_ROUTE_PREFIXES,
+    selfAuthenticatingPaths: config.REALTIME_ENABLED ? [REALTIME_PATH] : [],
   });
 
   const rateLimitKeyPrefix = options.rateLimitKeyPrefix ?? '';
@@ -141,6 +157,49 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     ],
   });
 
+  // The realtime hub (S5-08). Registered before the proxy's `/v1/*`, though the
+  // more specific route would win either way.
+  if (config.REALTIME_ENABLED) {
+    const internalServiceToken = config.INTERNAL_SERVICE_TOKEN;
+    const callControlUrl = config.CALL_CONTROL_URL;
+    if (internalServiceToken === undefined || callControlUrl === undefined) {
+      throw new Error(
+        'REALTIME_ENABLED needs INTERNAL_SERVICE_TOKEN and CALL_CONTROL_URL (or set REALTIME_ENABLED=false).',
+      );
+    }
+    const hub = createRealtimeHub({
+      verifier,
+      authorizer: createTopicAuthorizer({
+        permissions:
+          options.realtime?.permissions ??
+          createRemotePermissionResolver({
+            baseUrl: config.IDENTITY_SERVICE_URL,
+            internalServiceToken,
+            ttlMs: config.REALTIME_PERMISSION_CACHE_TTL_MS,
+          }),
+        lineage: createLineageLookup({ baseUrl: config.ORG_SERVICE_URL, internalServiceToken }),
+      }),
+      liveCalls: createLiveCallsSource({ baseUrl: callControlUrl, internalServiceToken }),
+      logger: app.log,
+      limits: {
+        authTimeoutMs: config.REALTIME_AUTH_TIMEOUT_MS,
+        maxConnectionsPerIp: config.REALTIME_MAX_CONNECTIONS_PER_IP,
+        maxConnectionsPerUser: config.REALTIME_MAX_CONNECTIONS_PER_USER,
+        maxSubscriptions: config.REALTIME_MAX_SUBSCRIPTIONS,
+        maxMessagesPerMinute: config.REALTIME_MAX_MESSAGES_PER_MINUTE,
+        maxBufferedBytes: config.REALTIME_MAX_BUFFERED_BYTES,
+        heartbeatIntervalMs: config.REALTIME_HEARTBEAT_INTERVAL_MS,
+        permissionRecheckMs: config.REALTIME_PERMISSION_RECHECK_MS,
+      },
+    });
+    await registerRealtimeRoute(app, {
+      hub,
+      allowedHostnames: config.CONSOLE_HOSTNAMES,
+      maxMessageBytes: config.REALTIME_MAX_MESSAGE_BYTES,
+    });
+    options.realtime?.onHub?.(hub);
+  }
+
   registerProxy(app, {
     table,
     timeoutMs: config.PROXY_TIMEOUT_MS,
@@ -162,6 +221,7 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     registerConsoleHosting(app, {
       dir: config.CONSOLE_DIR,
       extraConnectSources: config.CONSOLE_CONNECT_SOURCES,
+      realtime: config.REALTIME_ENABLED,
     });
   }
 

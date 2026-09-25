@@ -120,4 +120,35 @@ describe('consoleContentSecurityPolicy', () => {
   it('allows only its own origin unless told otherwise', () => {
     expect(consoleContentSecurityPolicy()).toContain("connect-src 'self';");
   });
+
+  it('names the live connection origin (the page host, ws/wss) when the realtime hub is on', async () => {
+    const withRealtime = await createServer({
+      serviceName: 'console-hosting-realtime-test',
+      logger: silentLogger(),
+      context: { trustInternalHeaders: false },
+    });
+    const site = mkdtempSync(join(tmpdir(), 'console-host-rt-'));
+    writeFileSync(join(site, 'index.html'), '<!DOCTYPE html>');
+    registerConsoleHosting(withRealtime, { dir: site, realtime: true });
+    await withRealtime.ready();
+    try {
+      const response = await withRealtime.inject({
+        method: 'GET',
+        url: '/',
+        headers: { host: 'console.brand.test' },
+      });
+      expect(String(response.headers['content-security-policy'])).toContain(
+        "connect-src 'self' ws://console.brand.test;",
+      );
+      const odd = await withRealtime.inject({
+        method: 'GET',
+        url: '/',
+        headers: { host: 'bad host;script-src *' },
+      });
+      expect(String(odd.headers['content-security-policy'])).toContain("connect-src 'self';");
+    } finally {
+      await withRealtime.close();
+      rmSync(site, { recursive: true, force: true });
+    }
+  });
 });

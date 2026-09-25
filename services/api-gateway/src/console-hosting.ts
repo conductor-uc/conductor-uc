@@ -3,12 +3,20 @@ import { realpath, stat } from 'node:fs/promises';
 import { extname, join, sep } from 'node:path';
 
 import type { Server } from '@cuc/http';
+import type { FastifyRequest } from 'fastify';
 
 export interface ConsoleHostingOptions {
   /** The built console (`flutter build web` output). */
   readonly dir: string;
   /** Extra origins the console may call besides its own, such as the object store it uploads media to. */
   readonly extraConnectSources?: readonly string[];
+  /**
+   * Allow the console's live connection (`/v1/ws`, S5-08) to its own host.
+   * CSP Level 3 lets `'self'` cover `ws:`/`wss:` to the same host, but not every
+   * browser in use does (older Safari), so the WebSocket origin is named
+   * explicitly: the host the page was asked for, never a wildcard `wss:`.
+   */
+  readonly realtime?: boolean;
 }
 
 const TYPES: Record<string, string> = {
@@ -37,14 +45,17 @@ const TYPES: Record<string, string> = {
  * (`flutter build web --no-web-resources-cdn`), since fetching it from a CDN
  * would need that CDN allowed here.
  */
-export function consoleContentSecurityPolicy(extraConnectSources: readonly string[] = []): string {
+export function consoleContentSecurityPolicy(
+  extraConnectSources: readonly string[] = [],
+  websocketOrigin?: string,
+): string {
   return [
     "default-src 'self'",
     "script-src 'self' 'wasm-unsafe-eval'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
-    `connect-src ${["'self'", ...extraConnectSources].join(' ')}`,
+    `connect-src ${["'self'", ...(websocketOrigin === undefined ? [] : [websocketOrigin]), ...extraConnectSources].join(' ')}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
@@ -65,6 +76,13 @@ export function consoleContentSecurityPolicy(extraConnectSources: readonly strin
  */
 export function registerConsoleHosting(app: Server, options: ConsoleHostingOptions): void {
   const policy = consoleContentSecurityPolicy(options.extraConnectSources);
+  const policyFor = (request: FastifyRequest): string => {
+    if (options.realtime !== true) return policy;
+    // Only a plain host[:port] goes into the header; anything else keeps the base policy.
+    if (!/^[A-Za-z0-9.-]+(:[0-9]{1,5})?$/.test(request.host)) return policy;
+    const scheme = request.protocol === 'https' ? 'wss' : 'ws';
+    return consoleContentSecurityPolicy(options.extraConnectSources, `${scheme}://${request.host}`);
+  };
   let root: string | undefined;
 
   async function rootDir(): Promise<string> {
@@ -109,7 +127,7 @@ export function registerConsoleHosting(app: Server, options: ConsoleHostingOptio
     // The build is not fingerprinted, so it is revalidated every time: cheap with
     // an ETag, and a new release is never masked by a cached old one.
     void reply.header('cache-control', 'no-cache');
-    void reply.header('content-security-policy', policy);
+    void reply.header('content-security-policy', policyFor(request));
     if (request.headers['if-none-match'] === etag) return reply.status(304).send();
 
     void reply.type(TYPES[extname(file.path).toLowerCase()] ?? 'application/octet-stream');
