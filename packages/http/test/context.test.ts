@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  clientIpOf,
   INTERNAL_CONTEXT_HEADERS,
   INTERNAL_SIGNATURE_HEADER,
   parseTraceparent,
@@ -11,12 +12,19 @@ import { signedHeaders, testServer, TEST_INTERNAL_SECRET } from './helpers.js';
 
 const contract = { permission: 'p', dataClass: 'config' } as const;
 
+/**
+ * Most tests here are about building the context, not about who may call a
+ * route, so they read it back from a public route: a protected one refuses an
+ * anonymous or org-only context (G-112, `authentication.test.ts`).
+ */
+const publicContract = { public: true } as const;
+
 /** Runs one request and returns the raw response — some tests need the status, not just a parsed context. */
 async function requestWith(headers: Record<string, string>, trustInternalHeaders?: boolean) {
   const app = await testServer(
     trustInternalHeaders === undefined ? {} : { context: { trustInternalHeaders } },
   );
-  app.get('/v1/x', { config: contract }, (request) => request.context);
+  app.get('/v1/x', { config: publicContract }, (request) => request.context);
   await app.ready();
 
   return app.inject({ method: 'GET', url: '/v1/x', headers });
@@ -116,6 +124,74 @@ describe('request context', () => {
 
     expect(context.actorType).toBeUndefined();
     expect(context.orgType).toBeUndefined();
+  });
+
+  describe('client address (G-113)', () => {
+    it('carries the signed client address through to the context', async () => {
+      const headers = signedHeaders({
+        actorId: 'user-1',
+        actorType: 'user',
+        clientIp: '203.0.113.9',
+      });
+      expect(headers[INTERNAL_CONTEXT_HEADERS.clientIp]).toBe('203.0.113.9');
+
+      const context = await contextFor(headers, true);
+
+      expect(context.clientIp).toBe('203.0.113.9');
+    });
+
+    it('carries it on a request with no actor too, so a sign-in records it', async () => {
+      const context = await contextFor(signedHeaders({ clientIp: '203.0.113.9' }), true);
+
+      expect(context).toMatchObject({ clientIp: '203.0.113.9' });
+      expect(context.actorType).toBeUndefined();
+    });
+
+    it('is covered by the signature: a changed address is refused', async () => {
+      const headers = signedHeaders({
+        actorId: 'user-1',
+        actorType: 'user',
+        clientIp: '203.0.113.9',
+      });
+      headers[INTERNAL_CONTEXT_HEADERS.clientIp] = '198.51.100.1';
+
+      const response = await requestWith(headers, true);
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({ code: 'internal_headers_forged' });
+    });
+
+    it('is covered by the signature: an address added after signing is refused', async () => {
+      const headers = signedHeaders({ actorId: 'user-1', actorType: 'user' });
+      headers[INTERNAL_CONTEXT_HEADERS.clientIp] = '198.51.100.1';
+
+      const response = await requestWith(headers, true);
+
+      expect(response.statusCode).toBe(401);
+    });
+
+    it('is ignored when the service does not trust internal headers', async () => {
+      const context = await contextFor({ [INTERNAL_CONTEXT_HEADERS.clientIp]: '198.51.100.1' });
+
+      expect(context.clientIp).toBeUndefined();
+    });
+
+    it('clientIpOf prefers the signed address and falls back to the connection', async () => {
+      const app = await testServer({ context: { trustInternalHeaders: true } });
+      app.get('/v1/ip', { config: publicContract }, (request) => ({ ip: clientIpOf(request) }));
+      await app.ready();
+
+      const signed = await app.inject({
+        method: 'GET',
+        url: '/v1/ip',
+        headers: signedHeaders({ clientIp: '203.0.113.9' }),
+        remoteAddress: '10.0.0.5',
+      });
+      const direct = await app.inject({ method: 'GET', url: '/v1/ip', remoteAddress: '10.0.0.5' });
+
+      expect(signed.json()).toEqual({ ip: '203.0.113.9' });
+      expect(direct.json()).toEqual({ ip: '10.0.0.5' });
+    });
   });
 
   it('uses header names that name no product, operator, or codebase', () => {
@@ -233,7 +309,7 @@ describe('log correlation', () => {
     await app.inject({
       method: 'GET',
       url: '/v1/x',
-      headers: signedHeaders({ tenantId: 'tenant-a', actorId: 'user-1' }),
+      headers: signedHeaders({ tenantId: 'tenant-a', actorId: 'user-1', actorType: 'user' }),
     });
 
     expect(lines.find((entry) => entry['msg'] === 'handling')).toMatchObject({

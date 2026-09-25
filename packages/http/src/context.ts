@@ -27,6 +27,12 @@ export interface RequestContext {
   readonly orgType?: OrgType;
   readonly resellerId?: string;
   readonly tenantId?: string;
+  /**
+   * The address of the client that reached api-gateway (G-113), as the gateway
+   * saw it. A service's own `request.ip` is the gateway's address, so audit
+   * events and sessions take the client's from here — see `clientIpOf`.
+   */
+  readonly clientIp?: string;
 }
 
 /**
@@ -42,6 +48,7 @@ export const INTERNAL_CONTEXT_HEADERS = {
   orgType: 'x-internal-org-type',
   resellerId: 'x-internal-reseller-id',
   tenantId: 'x-internal-tenant-id',
+  clientIp: 'x-internal-client-ip',
 } as const;
 
 /** Header carrying the caller's request id, echoed back on the response. */
@@ -78,12 +85,24 @@ export interface ContextOptions {
    * a valid `x-internal-signature`, or {@link buildRequestContext} throws
    * {@link ProblemError.unauthorized} — a forged or unsigned context header is
    * rejected, not silently stripped. A request with **no** internal headers at
-   * all still proceeds with an anonymous context: that's an ordinary
-   * unauthenticated request, not a forgery attempt.
+   * all gets an anonymous context (or a `service` one, see
+   * {@link ContextOptions.internalServiceToken}): that's an ordinary
+   * unauthenticated request, not a forgery attempt, and `createServer` refuses
+   * it on every route that declares a permission (G-112).
    */
   readonly trustInternalHeaders?: boolean;
   /** Required whenever `trustInternalHeaders` is true — see {@link ContextOptions.trustInternalHeaders}. */
   readonly internalHeaderSigningSecret?: string;
+  /**
+   * The shared `INTERNAL_SERVICE_TOKEN` (G-112). Only read when
+   * `trustInternalHeaders` is true: a request with no `x-internal-*` headers
+   * that presents `Authorization: Bearer <token>` gets a context with
+   * `actorType: 'service'` and no org, marking it as a trusted machine caller
+   * rather than an anonymous one. A wrong or absent token is not an error
+   * here — the request stays anonymous, and a route that declares a permission
+   * then refuses it (`registerAuthenticationRequirement`).
+   */
+  readonly internalServiceToken?: string;
 }
 
 interface RawInternalFields {
@@ -93,9 +112,14 @@ interface RawInternalFields {
   readonly orgType?: string | undefined;
   readonly resellerId?: string | undefined;
   readonly tenantId?: string | undefined;
+  readonly clientIp?: string | undefined;
 }
 
-/** Fixed field order, so the signer and the verifier build byte-identical strings. */
+/**
+ * Fixed field order, so the signer and the verifier build byte-identical
+ * strings. Adding a field changes the payload for every request, so the
+ * gateway and the services must be upgraded together (G-113).
+ */
 function canonicalPayload(timestamp: string, fields: RawInternalFields): string {
   return [
     timestamp,
@@ -105,6 +129,7 @@ function canonicalPayload(timestamp: string, fields: RawInternalFields): string 
     fields.orgType ?? '',
     fields.resellerId ?? '',
     fields.tenantId ?? '',
+    fields.clientIp ?? '',
   ].join('\n');
 }
 
@@ -127,6 +152,7 @@ export function signInternalHeaders(
     readonly orgType?: OrgType;
     readonly resellerId?: string;
     readonly tenantId?: string;
+    readonly clientIp?: string;
   },
 ): Record<string, string> {
   const timestamp = String(Date.now());
@@ -141,6 +167,7 @@ export function signInternalHeaders(
   if (fields.resellerId !== undefined)
     headers[INTERNAL_CONTEXT_HEADERS.resellerId] = fields.resellerId;
   if (fields.tenantId !== undefined) headers[INTERNAL_CONTEXT_HEADERS.tenantId] = fields.tenantId;
+  if (fields.clientIp !== undefined) headers[INTERNAL_CONTEXT_HEADERS.clientIp] = fields.clientIp;
   return headers;
 }
 
@@ -210,11 +237,17 @@ export function buildRequestContext(
     orgType: header(headers[INTERNAL_CONTEXT_HEADERS.orgType]),
     resellerId: header(headers[INTERNAL_CONTEXT_HEADERS.resellerId]),
     tenantId: header(headers[INTERNAL_CONTEXT_HEADERS.tenantId]),
+    clientIp: header(headers[INTERNAL_CONTEXT_HEADERS.clientIp]),
   };
 
-  // No internal header at all is an ordinary unauthenticated request, not a
-  // forgery attempt — nothing to verify, nothing to reject.
-  if (Object.values(raw).every((value) => value === undefined)) return base;
+  // No internal header at all is not a forgery attempt — nothing to verify,
+  // nothing to reject. It is either another service presenting the shared
+  // token, or an unauthenticated request (which only a public route serves).
+  if (Object.values(raw).every((value) => value === undefined)) {
+    return presentsServiceToken(request, options.internalServiceToken)
+      ? { ...base, actorType: 'service' }
+      : base;
+  }
 
   // A missing secret here is a deployment misconfiguration, not a per-request
   // concern — `createServer` validates it eagerly at startup, so reaching
@@ -239,8 +272,30 @@ export function buildRequestContext(
       orgType: asOrgType(raw.orgType),
       resellerId: raw.resellerId,
       tenantId: raw.tenantId,
+      clientIp: raw.clientIp,
     }),
   };
+}
+
+/**
+ * The address to record for the caller of this request: an audit event's or a
+ * session's `ip` (G-113). Behind api-gateway that is the client address the
+ * gateway signed into the context; the service's own `request.ip` would be the
+ * gateway's. Without one (a direct call from another service, or a service
+ * that does not trust internal headers) it is the connection's own address.
+ */
+export function clientIpOf(request: {
+  readonly context: RequestContext;
+  readonly ip: string;
+}): string {
+  return request.context.clientIp ?? request.ip;
+}
+
+/** `Authorization: Bearer <token>` matching the configured internal service token. */
+function presentsServiceToken(request: FastifyRequest, token: string | undefined): boolean {
+  if (token === undefined || token === '') return false;
+  const match = /^Bearer\s+(\S+)\s*$/i.exec(header(request.headers.authorization) ?? '');
+  return match !== null && secretEquals(token, match[1]!);
 }
 
 function header(value: string | string[] | undefined): string | undefined {

@@ -16,6 +16,7 @@ export function signedHeaders(fields: {
   readonly orgType?: OrgType;
   readonly resellerId?: string;
   readonly tenantId?: string;
+  readonly clientIp?: string;
 }): Record<string, string> {
   return signInternalHeaders(TEST_INTERNAL_SECRET, fields);
 }

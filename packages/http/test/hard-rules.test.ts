@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest';
 import type { OrgType } from '../src/context.js';
 import { signedHeaders, testServer } from './helpers.js';
 
+/** A signed-in person in an org of `orgType` — an org type alone is not a caller (G-112). */
+function actorIn(orgType: OrgType): Record<string, string> {
+  return signedHeaders({ actorId: 'a1', actorType: 'user', orgId: 'o1', orgType });
+}
+
 /** Hard rule H1: the reseller private-data wall (07 §3.1). */
 async function serverWithRoutes() {
   const app = await testServer({ context: { trustInternalHeaders: true } });
@@ -28,7 +33,7 @@ async function get(url: string, orgType?: OrgType) {
   return app.inject({
     method: 'GET',
     url,
-    headers: orgType === undefined ? {} : signedHeaders({ orgType }),
+    headers: orgType === undefined ? {} : actorIn(orgType),
   });
 }
 
@@ -84,7 +89,7 @@ describe('H1 — reseller private-data wall', () => {
     await app.inject({
       method: 'GET',
       url: '/v1/recordings',
-      headers: signedHeaders({ orgType: 'reseller' }),
+      headers: actorIn('reseller'),
     });
 
     expect(handlerRan).toBe(false);
@@ -100,7 +105,7 @@ describe('H1 — reseller private-data wall', () => {
     await app.inject({
       method: 'GET',
       url: '/v1/cdrs',
-      headers: signedHeaders({ orgType: 'reseller' }),
+      headers: actorIn('reseller'),
     });
 
     expect(lines.some((line) => line['msg'] === 'H1: reseller denied private tenant data')).toBe(
@@ -122,7 +127,7 @@ describe('H3 — reseller lifecycle is master-only', () => {
     return app.inject({
       method: 'POST',
       url: '/v1/resellers',
-      headers: orgType === undefined ? {} : signedHeaders({ orgType }),
+      headers: orgType === undefined ? {} : actorIn(orgType),
     });
   }
 
@@ -161,7 +166,7 @@ describe('H3 — reseller lifecycle is master-only', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/v1/resellers/r1/tenants',
-      headers: signedHeaders({ orgType: 'reseller' }),
+      headers: actorIn('reseller'),
     });
 
     expect(response.statusCode).toBe(200);
