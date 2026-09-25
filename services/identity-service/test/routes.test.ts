@@ -242,6 +242,48 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       expect(response.statusCode).toBe(409);
       expect(response.json()).toMatchObject({ code: 'email_taken' });
     });
+
+    it('with firstUserOnly, creates the first user of an empty org', async () => {
+      const orgId = crypto.randomUUID();
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/internal/v1/orgs/${orgId}/admin-user`,
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+        payload: {
+          orgType: 'master',
+          email: 'first@example.com',
+          displayName: 'First',
+          password: 'correct horse battery staple',
+          firstUserOnly: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(await h.users.hasAnyInOrg(orgId)).toBe(true);
+    });
+
+    it('with firstUserOnly, refuses (409 org_has_users) once the org has anyone', async () => {
+      const orgId = crypto.randomUUID();
+      await createUserViaInternal(app, orgId, 'master');
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/internal/v1/orgs/${orgId}/admin-user`,
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+        payload: {
+          orgType: 'master',
+          email: 'second@example.com',
+          displayName: 'Second',
+          password: 'another long password',
+          firstUserOnly: true,
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ code: 'org_has_users' });
+      expect(await h.users.findByOrgAndEmail(orgId, 'second@example.com')).toBeUndefined();
+    });
   });
 
   describe('GET/POST /v1/orgs/:orgId/roles', () => {

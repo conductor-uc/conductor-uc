@@ -22,9 +22,12 @@ widget-shaped sample did not fit.
 - **JWKS** (`GET /.well-known/jwks.json`): the public half of every signing key still valid for
   verification — the current one, plus any retired within the configured overlap window.
 - **The internal admin-creation endpoint** (`POST /internal/v1/orgs/:orgId/admin-user`) — what
-  org-service's `bootstrap-master` CLI calls. Gated by a shared bearer token (`INTERNAL_SERVICE_TOKEN`),
+  org-service calls for a new reseller's or tenant's first admin, and its `bootstrap-master` CLI for
+  the master's. Gated by a shared bearer token (`INTERNAL_SERVICE_TOKEN`),
   matching the precedent 07 §1 sets for FS nodes and OpenSIPs, because real service-to-service auth
-  (mTLS or a service JWT) does not exist yet.
+  (mTLS or a service JWT) does not exist yet. With `firstUserOnly: true` it creates the user only
+  while the org has nobody, and otherwise answers 409 `org_has_users` (G-115: re-running the
+  bootstrap never adds a second administrator).
 
 ## Done when
 

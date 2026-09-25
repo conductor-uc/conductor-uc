@@ -185,6 +185,20 @@ export function createUserRepo(db: Database<IdentityServiceDb>) {
       });
     },
 
+    /**
+     * Whether the org has any user at all. The master bootstrap (G-115) asks
+     * this so that re-running it never adds a second first administrator.
+     */
+    hasAnyInOrg: async (orgId: string): Promise<boolean> => {
+      const row = await users
+        .selectFrom('users')
+        .select('id')
+        .where('org_id', '=', orgId)
+        .limit(1)
+        .executeTakeFirst();
+      return row !== undefined;
+    },
+
     /** Everyone in one org, by email, for the users screen. */
     listByOrg: async (orgId: string): Promise<UserListing[]> => {
       const rows = await users
