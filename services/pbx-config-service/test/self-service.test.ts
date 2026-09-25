@@ -72,7 +72,7 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in pbx-config-s
         internalServiceToken: SERVICE_TOKEN,
         ttlMs: 0,
         fetchImpl: (input) => {
-          const userId = /\/users\/([^/]+)\/permissions$/.exec(String(input))?.[1] ?? '';
+          const userId = /\/users\/([^/]+)\/permissions$/.exec(input as string)?.[1] ?? '';
           const permissions = held[decodeURIComponent(userId)] ?? [];
           return Promise.resolve(
             permissions.length === 0
