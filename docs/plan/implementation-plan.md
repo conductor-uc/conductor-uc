@@ -127,6 +127,7 @@ Stage 3's non-telephony screens can start as soon as Stage 1 lands, in parallel 
 | S1-12 | telephony-config: read model + OpenSIPs projection | S1-03, S1-09, S1-11 |
 | S1-13 | telephony-config: xml_curl directory + dialplan (ext→ext) | S1-12, S1-10 |
 | S1-14 | SIP test harness + M1 scenarios | S1-13 |
+| S1-15 | Read permissions: a `.read` twin for every `.manage`, `.manage` implies `.read`, support roles fixed, console read-only screens (G-10) | S1-06 |
 
 **S1-01 org-service schema.** The `orgs`, `tenant_domains`, `reseller_base_domains`, and `brands` tables. The single-master constraint and parent-type rules. A bootstrap CLI `org-service bootstrap-master` creates the master org and its first admin user. That admin user is created through identity-service's internal API, which is stubbed until S1-05.
 *Done when:* invariant tests reject a tenant under master, a reseller under reseller, and a second master.
