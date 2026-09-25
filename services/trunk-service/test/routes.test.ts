@@ -10,6 +10,7 @@ import { resetSchema, startHarness, type Harness } from './harness.js';
 
 const skipReason = await databaseOrSkipReason();
 const TEST_INTERNAL_SECRET = 'test-internal-header-secret';
+const TEST_SERVICE_TOKEN = 'test-internal-service-token';
 
 /** A status lookup whose answer is set per test — no live telephony-config needed. */
 function fakeTelephonyConfigClient(): TelephonyConfigClient & { status: TrunkStatus | undefined } {
@@ -55,7 +56,11 @@ describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
     app = await createServer({
       serviceName: 'trunk-service',
       logger: h.logger,
-      context: { trustInternalHeaders: true, internalHeaderSigningSecret: TEST_INTERNAL_SECRET },
+      context: {
+        trustInternalHeaders: true,
+        internalHeaderSigningSecret: TEST_INTERNAL_SECRET,
+        internalServiceToken: TEST_SERVICE_TOKEN,
+      },
     });
     registerTrunkRoutes(app, h.trunks, bus, telephony);
     await app.ready();
@@ -73,13 +78,14 @@ describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
     telephony.status = undefined;
   });
 
-  function actorHeaders(tenantId: string) {
+  function actorHeaders(tenantId: string, clientIp?: string) {
     return signInternalHeaders(TEST_INTERNAL_SECRET, {
       actorId: 'user-1',
       actorType: 'user',
       orgId: tenantId,
       orgType: 'tenant',
       tenantId,
+      ...(clientIp === undefined ? {} : { clientIp }),
     });
   }
 
@@ -388,8 +394,10 @@ describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
       const response = await app.inject({
         method: 'POST',
         url: `/v1/tenants/${tenantId}/trunks/${created.id}/reveal`,
-        headers: actorHeaders(tenantId),
+        headers: actorHeaders(tenantId, '203.0.113.9'),
         payload: { reason: 'confirming carrier registration' },
+        // This service sees api-gateway's address; the client's is the signed one (G-113).
+        remoteAddress: '10.0.0.2',
       });
 
       expect(response.statusCode).toBe(200);
@@ -406,6 +414,7 @@ describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
           dataClass: 'secret',
           targetOrgId: tenantId,
           reason: 'confirming carrier registration',
+          ip: '203.0.113.9',
         },
       });
     });
@@ -428,6 +437,30 @@ describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
         payload: {},
       });
 
+      expect(response.statusCode).toBe(401);
+      expect(bus.published).toHaveLength(0);
+    });
+
+    it('rejects a reveal by a machine caller, which is no identified person (G-112)', async () => {
+      const tenantId = crypto.randomUUID();
+      h.resellers.resellerIds[tenantId] = 'reseller-a';
+      const created = await app
+        .inject({
+          method: 'POST',
+          url: `/v1/tenants/${tenantId}/trunks`,
+          headers: { authorization: `Bearer ${TEST_SERVICE_TOKEN}` },
+          payload,
+        })
+        .then((r) => r.json<{ id: string }>());
+
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenantId}/trunks/${created.id}/reveal`,
+        headers: { authorization: `Bearer ${TEST_SERVICE_TOKEN}` },
+        payload: {},
+      });
+
+      expect(created.id).toBeDefined();
       expect(response.statusCode).toBe(401);
       expect(bus.published).toHaveLength(0);
     });

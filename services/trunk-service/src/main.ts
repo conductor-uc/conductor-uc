@@ -86,6 +86,8 @@ const app = await createServer({
     ...(config.INTERNAL_HEADER_SIGNING_SECRET === undefined
       ? {}
       : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
+    // Other services and tools calling a protected route directly (G-112).
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
   },
   permissions: createRemotePermissionResolver({
     baseUrl: config.IDENTITY_SERVICE_URL,

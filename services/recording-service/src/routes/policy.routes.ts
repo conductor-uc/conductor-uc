@@ -1,5 +1,5 @@
 import type { DbContext } from '@cuc/db';
-import { ProblemError, Type, type RequestContext, type Server } from '@cuc/http';
+import { clientIpOf, ProblemError, Type, type RequestContext, type Server } from '@cuc/http';
 import type { Logger } from '@cuc/logger';
 import type { Storage } from '@cuc/storage';
 
@@ -100,7 +100,7 @@ export function registerPolicyRoutes(app: Server, deps: PolicyRoutesDeps): void 
     const caller = await resolveCaller(
       request.context,
       request.params.tenantId,
-      request.ip,
+      clientIpOf(request),
       access,
     );
     requireForTenant(caller, 'recording.policy.manage');

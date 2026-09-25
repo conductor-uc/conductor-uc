@@ -1,6 +1,6 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { Bus } from '@cuc/events';
-import { ProblemError, Type, type Server } from '@cuc/http';
+import { clientIpOf, ProblemError, Type, type Server } from '@cuc/http';
 
 import { InvalidPublicAddressError, recordTypeFor } from '../domain/dns.js';
 import type { CertificateRepo } from '../repo/certificate.repo.js';
@@ -82,7 +82,7 @@ export function registerNetworkRoutes(
         action: 'platform.network_settings.updated',
         resource: publicAddress ?? 'cleared',
         dataClass: 'config',
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         requestId: request.context.requestId,
       });
       return { publicAddress };

@@ -1,7 +1,7 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { DbContext } from '@cuc/db';
 import type { Bus } from '@cuc/events';
-import { ProblemError, selfActor, Type, type Server, type Static } from '@cuc/http';
+import { clientIpOf, ProblemError, selfActor, Type, type Server, type Static } from '@cuc/http';
 
 import { InvalidCallHandlingError } from '../domain/call-handling.js';
 import {
@@ -170,7 +170,7 @@ export function registerMeRoutes(
         resource: extension.id,
         dataClass: 'config',
         reason: 'self-service',
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         requestId: request.context.requestId,
       });
 
