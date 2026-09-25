@@ -532,6 +532,41 @@ void main() {
       );
     });
 
+    testWidgets('turns "recording required" on and off (S5-12)', (
+      tester,
+    ) async {
+      await openRecordings(tester);
+      await openRules(tester);
+      SwitchListTile toggle() => tester.widget<SwitchListTile>(
+        find.byKey(const ValueKey('recording-required')),
+      );
+      expect(toggle().value, isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('recording-required')));
+      await tester.pumpAndSettle();
+      expect(toggle().value, isTrue);
+      expect(
+        find.text('Calls that cannot be recorded are now refused.'),
+        findsOneWidget,
+      );
+      // Retention is untouched.
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('retention-days')))
+            .controller!
+            .text,
+        '90',
+      );
+
+      await tester.tap(find.byKey(const ValueKey('recording-required')));
+      await tester.pumpAndSettle();
+      expect(toggle().value, isFalse);
+      expect(
+        find.text('Calls that cannot be recorded now go ahead unrecorded.'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('says nothing is recorded when there are no rules', (
       tester,
     ) async {

@@ -10,7 +10,7 @@ import {
   type RecordingDirective,
 } from '../src/recording-client.js';
 import { registerFsRoutes } from '../src/routes/fs.routes.js';
-import { CONSENT_TONE } from '../src/xml.js';
+import { CONSENT_TONE, RECORDING_REFUSAL_TONE } from '../src/xml.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
 const skipReason = (await databaseOrSkipReason()) ?? (await redisOrSkipReason());
@@ -30,6 +30,10 @@ class FakeRecording implements RecordingClient {
   }
   unavailableCount(): number {
     return 0;
+  }
+  failClosedTenants: string[] = [];
+  listFailClosedTenants(): Promise<string[]> {
+    return Promise.resolve(this.failClosedTenants);
   }
 }
 
@@ -673,6 +677,184 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
       expect(remote.recording).toBeUndefined();
       expect(fake.calls).toEqual([]);
       delete h.callControl.acquireResults[`${tenantId}:queue:${queueId}`];
+    });
+  });
+
+  describe('recording required: fail closed (S5-12)', () => {
+    const requireRecording = (tenantId: string, on = true) =>
+      h.readModel.upsertRecordingFailClosed(h.db.kysely, tenantId, on);
+
+    const expectRefused = (xml: string) => {
+      const list = apps(xml);
+      expect(list.map((a) => a.app)).toEqual(expect.arrayContaining(['pre_answer', 'playback']));
+      expect(list).toContainEqual({ app: 'set', data: 'cuc_recording_status=refused' });
+      expect(list.find((a) => a.app === 'playback')?.data).toBe(RECORDING_REFUSAL_TONE);
+      expect(list.at(-1)).toEqual({ app: 'hangup', data: 'SERVICE_UNAVAILABLE' });
+      // The tone comes before the hangup, and nothing places the call.
+      const names = list.map((a) => a.app);
+      expect(names.indexOf('pre_answer')).toBeLessThan(names.indexOf('playback'));
+      expect(names).not.toContain('bridge');
+      expect(names).not.toContain('lua');
+      expect(xml).not.toContain('record_session');
+    };
+
+    it('an internal call is refused when the decision is unavailable and the tenant requires recording', async () => {
+      const tenantId = await seedTenant();
+      await seedExtension(tenantId, '101');
+      await requireRecording(tenantId);
+      fake.directive = { kind: 'unavailable', reason: 'recording-service is down' };
+
+      const xml = await internal(tenantId);
+      expectRefused(xml);
+      expect(xml).toContain(`cuc_tenant_id=${tenantId}`);
+      expect(xml).toContain('expression="^101$"');
+    });
+
+    it('an inbound DID call is refused the same way (SIP 503)', async () => {
+      const tenantId = await seedTenant();
+      const trunkId = await seedTrunk(tenantId);
+      const extensionId = await seedExtension(tenantId, '102');
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'extension',
+        destinationId: extensionId,
+      });
+      await requireRecording(tenantId);
+      fake.directive = { kind: 'unavailable', reason: 'register failed' };
+
+      expectRefused(await inbound(trunkId));
+    });
+
+    it('a decision of "no recording needed" is never refused', async () => {
+      const tenantId = await seedTenant();
+      await seedExtension(tenantId, '101');
+      await requireRecording(tenantId);
+      fake.directive = { kind: 'none' };
+
+      const xml = await internal(tenantId);
+      expect(apps(xml).map((a) => a.app)).toContain('bridge');
+      expect(xml).not.toContain('cuc_recording_status');
+    });
+
+    it('a recorded call is placed and recorded as usual', async () => {
+      const tenantId = await seedTenant();
+      await seedExtension(tenantId, '101');
+      await requireRecording(tenantId);
+      fake.directive = record();
+
+      const xml = await internal(tenantId);
+      expect(apps(xml).map((a) => a.app)).toContain('bridge');
+      expect(xml).toContain('execute_on_answer=record_session');
+    });
+
+    it('a tenant that does not require recording (or turned it off) still fails open', async () => {
+      const tenantId = await seedTenant();
+      await seedExtension(tenantId, '101');
+      fake.directive = { kind: 'unavailable', reason: 'down' };
+      expect(await internal(tenantId)).toContain('cuc_recording_status=unavailable');
+
+      await requireRecording(tenantId, true);
+      await requireRecording(tenantId, false);
+      const xml = await internal(tenantId);
+      expect(apps(xml).map((a) => a.app)).toContain('bridge');
+      expect(xml).toContain('cuc_recording_status=unavailable');
+    });
+
+    it('a call into an IVR flow is refused at flow entry', async () => {
+      const tenantId = await seedTenant();
+      const trunkId = await seedTrunk(tenantId);
+      const flowId = crypto.randomUUID();
+      h.callflow.flows[`${tenantId}/${flowId}`] = {
+        flowId,
+        versionId: crypto.randomUUID(),
+        versionNumber: 1,
+        ir: {
+          entryPoints: { main: 'bye' },
+          nodes: { bye: { id: 'bye', type: 'hangup', config: {}, ports: {} } },
+        },
+      };
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: crypto.randomUUID(),
+        tenantId,
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'flow',
+        destinationId: flowId,
+      });
+      await requireRecording(tenantId);
+      fake.directive = { kind: 'unavailable', reason: 'down' };
+
+      expectRefused(await inbound(trunkId));
+    });
+
+    it('a flow hand-off tells the runner to refuse the call', async () => {
+      const tenantId = await seedTenant();
+      const extensionId = await seedExtension(tenantId, '401');
+      await requireRecording(tenantId);
+      fake.directive = { kind: 'unavailable', reason: 'down' };
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/fs/flow/${tenantId}/extension/${extensionId}?callUuid=c&recording=0`,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(response.json<{ recording: unknown }>().recording).toEqual({
+        action: 'refuse',
+        tone: RECORDING_REFUSAL_TONE,
+        cause: 'SERVICE_UNAVAILABLE',
+      });
+    });
+
+    it('with a real client against a dead recording-service, the flag alone refuses the call', async () => {
+      const tenantId = await seedTenant();
+      await seedExtension(tenantId, '101');
+      await requireRecording(tenantId);
+      const app2 = await createServer({ serviceName: 'telephony-config', logger: h.logger });
+      registerFsRoutes(
+        app2,
+        h.db,
+        h.readModel,
+        TOKEN,
+        'opensips:5060',
+        h.logger,
+        h.orgClient,
+        h.pbxConfig,
+        h.storage,
+        h.voicemail,
+        h.redis,
+        h.callflow,
+        h.affinity,
+        h.callControl,
+        'http://telephony-config-test:8080',
+        {
+          client: createRecordingClient({
+            baseUrl: new Server0().url,
+            internalServiceToken: 'x',
+            logger: h.logger,
+            timeoutMs: 200,
+          }),
+          spoolDir: SPOOL,
+        },
+      );
+      await app2.ready();
+      const response = await app2.inject({
+        method: 'POST',
+        url: '/fs/dialplan',
+        headers: { 'content-type': 'application/x-www-form-urlencoded', authorization: BASIC_AUTH },
+        payload: new URLSearchParams({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'Caller-Destination-Number': '101',
+          'variable_sip_h_X-Call-Direction': 'internal',
+          'variable_sip_h_X-Tenant-Id': tenantId,
+          variable_sip_from_user: '100',
+        }).toString(),
+      });
+      await app2.close();
+      expectRefused(response.body);
     });
   });
 

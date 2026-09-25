@@ -1605,6 +1605,7 @@ class DemoPbx {
     },
   ];
   var _retentionDays = 90;
+  var _recordingRequired = false;
 
   /// The recording API (`recording-service`): search, presigned play and
   /// download addresses, delete, the recording rules, and how long recordings
@@ -1614,14 +1615,27 @@ class DemoPbx {
     final path = options.path;
 
     if (RegExp(r'^/v1/tenants/[^/]+/recording-settings$').hasMatch(path)) {
-      if (method == 'GET') return _json({'retentionDays': _retentionDays});
+      Map<String, dynamic> settings() => {
+        'retentionDays': _retentionDays,
+        'failClosed': _recordingRequired,
+      };
+      if (method == 'GET') return _json(settings());
       if (method == 'PUT') {
-        final days = _body(options)['retentionDays'];
-        if (days is! int || days < 0 || days > 3650) {
+        final body = _body(options);
+        final days = body['retentionDays'];
+        final required = body['failClosed'];
+        if (days == null && required == null) {
+          return _problem(400, 'Give retentionDays, failClosed, or both.');
+        }
+        if (days != null && (days is! int || days < 0 || days > 3650)) {
           return _problem(400, 'Retention must be from 0 to 3650 days.');
         }
-        _retentionDays = days;
-        return _json({'retentionDays': _retentionDays});
+        if (required != null && required is! bool) {
+          return _problem(400, 'failClosed must be true or false.');
+        }
+        if (days is int) _retentionDays = days;
+        if (required is bool) _recordingRequired = required;
+        return _json(settings());
       }
       return _problem(405, 'Not supported.');
     }

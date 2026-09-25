@@ -19027,11 +19027,15 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "retentionDays"
+                    "retentionDays",
+                    "failClosed"
                   ],
                   "properties": {
                     "retentionDays": {
                       "type": "number"
+                    },
+                    "failClosed": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -19051,14 +19055,14 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "retentionDays"
-                ],
                 "properties": {
                   "retentionDays": {
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 3650
+                  },
+                  "failClosed": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -19084,11 +19088,15 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "retentionDays"
+                    "retentionDays",
+                    "failClosed"
                   ],
                   "properties": {
                     "retentionDays": {
                       "type": "number"
+                    },
+                    "failClosed": {
+                      "type": "boolean"
                     }
                   }
                 }

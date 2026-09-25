@@ -213,3 +213,36 @@ describe('recording client (S5-02)', () => {
     expect(await c.decide(call)).toEqual({ kind: 'none' });
   });
 });
+
+describe('recording client: the fail-closed tenant list (S5-12)', () => {
+  const listClient = (fetchImpl: typeof fetch) =>
+    createRecordingClient({
+      baseUrl: 'http://recording-service:8080/',
+      internalServiceToken: 'tok',
+      logger: silentLogger(),
+      fetchImpl,
+    });
+
+  it('asks with the internal token and returns the ids', async () => {
+    let seen: { url: string; auth: string | null } | undefined;
+    const c = listClient((input, init) => {
+      seen = {
+        url: typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
+        auth: new Headers(init?.headers).get('authorization'),
+      };
+      return Promise.resolve(new Response(JSON.stringify({ tenantIds: ['T1', 'T2'] })));
+    });
+    expect(await c.listFailClosedTenants()).toEqual(['T1', 'T2']);
+    expect(seen).toEqual({
+      url: 'http://recording-service:8080/internal/v1/recordings/fail-closed-tenants',
+      auth: 'Bearer tok',
+    });
+  });
+
+  it('throws when recording-service cannot answer, so the caller changes nothing', async () => {
+    const c = listClient(() => Promise.resolve(new Response('{}', { status: 503 })));
+    await expect(c.listFailClosedTenants()).rejects.toThrow('503');
+    const odd = listClient(() => Promise.resolve(new Response('{}')));
+    await expect(odd.listFailClosedTenants()).rejects.toThrow('tenant list');
+  });
+});

@@ -182,6 +182,7 @@ Readiness checks:
 | Recording and voicemail spool | Uploader `/metrics`: `cuc_recording_spool_stuck_files`, `cuc_recording_spool_undeletable_files`, `cuc_recording_spool_bytes`, `cuc_recording_upload_failures_total` | stuck or undeletable above 0; spool bytes above half its size |
 | Recording or voicemail loss | Uploader, recording-service and voicemail-service logs | `recording_upload_stuck` or `recording_spool_delete_failed` alerts |
 | Unrecordable calls | telephony-config log: `recording_policy_unavailable` | Any, if recording matters to your tenants |
+| Calls refused for want of a recording | telephony-config log: `recording_required_refused` (tenants with "Recording required" on) | Any: those tenants' calls are failing while recording-service is unreachable |
 | Certificates | Console **Certificates** list; org-service log | A certificate failing, or active and expiring within 20 days (renewal starts at 30) |
 | Email | notification-service log | SMTP errors |
 | Outbox backlog | `/readyz` outbox detail (`N pending`) on each service | Growing steadily (NATS unreachable, or events failing) |
@@ -242,6 +243,7 @@ Logs may contain telephone numbers and tenant identifiers. Treat log storage as 
 | Carrier cannot reach you after registration | `OPENSIPS_SIP_URI` is a private address (it is the contact sent to carriers) | telephony-config environment; `reg_list` |
 | Calls to queues, parking or conferences fail intermittently | Several FreeSWITCH nodes (G-46, S4-05) | Run one media server |
 | No call records | FreeSWITCH cannot reach cdr-service; `FS_CDR_INGEST_TOKEN` mismatch | FreeSWITCH log (json_cdr); cdr-service log |
+| Calls to one tenant fail with a short tone, then 503; other tenants' calls work | The tenant has **Recording required** on (Recordings, Rules) and recording-service is unreachable or slow from telephony-config, or cannot register the recording (its database). Calls no rule records are not affected | telephony-config log `recording_required_refused`; recording-service `/readyz`; `RECORDING_SERVICE_URL`. Restore recording-service; the tenant can also turn the option off |
 | Recordings never appear | No recording rule matches; recording-service unreachable at call setup (`recording_policy_unavailable`); uploader cannot reach recording-service or storage | telephony-config, uploader and recording-service logs; uploader metrics |
 | Voicemail messages never appear, or appear only much later | A message is listed only after the uploader has delivered its audio (about 30 s after the caller hangs up, `SETTLE_SECONDS`). Uploader not running on that node, or it cannot reach voicemail-service (`VOICEMAIL_SERVICE_URL`, 8106 in the distributed layout) or storage; the caller hung up before speaking (the uploader reports `empty_file`) | `ls /var/spool/cuc/rec` in the FreeSWITCH container (`vm-<id>.wav` files waiting); uploader log and metrics; voicemail-service log |
 | Recordings upload but stay in the spool | Spool directory has the sticky bit (`1777`) | `ls -ld /var/spool/cuc/rec` in the FreeSWITCH container must show `drwxrwxrwx`, not `drwxrwxrwt` |

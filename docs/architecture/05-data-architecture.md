@@ -172,7 +172,7 @@ Principal event consumers:
 
 | Consumer | Consumes |
 |---|---|
-| telephony-config | `org.tenant.*`, `org.domain.*`, `org.certificate.issued` (SIP proxy certificates only), `pbx.*`, `trunk.*`, `callflow.flow.published`, `recording.policy.*` |
+| telephony-config | `org.tenant.*`, `org.domain.*`, `org.certificate.issued` (SIP proxy certificates only), `pbx.*`, `trunk.*`, `callflow.flow.published`, `recording.policy.*`, `recording.settings.updated` (S5-12: the tenant's "recording required" flag, copied into its own `recording_settings`) |
 | call-control | `pbx.queue.*`, `pbx.conference.*`, `org.tenant.suspended` (tear down calls) |
 | cdr-service | `call.lost` |
 | chat-service | `identity.user.*`, `org.tenant.*` |

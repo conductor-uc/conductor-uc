@@ -135,6 +135,22 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
     },
   );
 
+  /**
+   * S5-12: every tenant that requires recording (fail closed). telephony-config's reconciliation
+   * makes its own copy of the flag match this, repairing a missed `recording.settings.updated`.
+   */
+  app.get(
+    '/internal/v1/recordings/fail-closed-tenants',
+    {
+      config: { public: true },
+      schema: { response: { 200: Type.Object({ tenantIds: Type.Array(Type.String()) }) } },
+    },
+    async (request) => {
+      requireToken(request);
+      return { tenantIds: await settings.listFailClosedTenantIds({}) };
+    },
+  );
+
   app.post(
     '/internal/v1/recordings/register',
     {

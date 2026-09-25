@@ -259,6 +259,19 @@ export const telephonyEvents = defineEvents({
     data: Type.Object({ emergencyRouteId: Type.String({ minLength: 1 }) }),
   },
   /**
+   * S5-12 (G-111): recording-service's per-tenant settings. Only `failClosed` is used here: it is
+   * copied into `recording_settings` so a call can be refused while recording-service is
+   * unreachable. Must match recording-service's own contract (its `src/events.ts`).
+   */
+  'recording.settings.updated': {
+    schemaVersion: 1,
+    description: "A tenant's recording settings were changed.",
+    data: Type.Object({
+      retentionDays: Type.Number({ minimum: 0 }),
+      failClosed: Type.Boolean(),
+    }),
+  },
+  /**
    * S2-06 (G-1: "a notification hook (email/SMS/console) on every emergency
    * call") — published by this service itself, the first event it ever
    * originates rather than just consumes, from `/fs/dialplan`'s emergency

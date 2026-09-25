@@ -455,6 +455,18 @@ local pendingRecording = nil
 
 local function applyRecording(instruction, startsOnAnswer)
   if type(instruction) ~= "table" then return "" end
+  -- S5-12: the tenant requires recording and it cannot be set up. The tone
+  -- and the cause come from telephony-config; the caller hears the neutral
+  -- tone and the call ends. Callers check `session:ready()` after this.
+  if instruction.action == "refuse" then
+    log("WARNING", "recording is required and cannot be set up; refusing the call")
+    session:setVariable("cuc_recording_status", "refused")
+    if instruction.tone ~= nil and instruction.tone ~= json.null then
+      session:execute("playback", instruction.tone)
+    end
+    session:hangup(instruction.cause or "SERVICE_UNAVAILABLE")
+    return ""
+  end
   if instruction.action == "unavailable" then
     session:setVariable("cuc_recording_status", "unavailable")
     return ""
@@ -499,6 +511,7 @@ function handlers.extension(node)
   end
 
   local legVars = applyRecording(decoded.recording, true)
+  if not session:ready() then return nil end
   bridgeNumbers({ decoded.number }, node.config.ringSeconds, ",", legVars)
   settleRecording()
   if session:getVariable("bridge_hangup_cause") == nil and not session:ready() then return nil end
@@ -527,6 +540,7 @@ function handlers.ring_group(node)
 
   local separator = decoded.strategy == "simultaneous" and "," or "|"
   local legVars = applyRecording(decoded.recording, true)
+  if not session:ready() then return nil end
   bridgeNumbers(decoded.numbers, decoded.ringTimeoutSeconds, separator, legVars)
   settleRecording()
   if not session:ready() then return nil end
@@ -571,6 +585,7 @@ function handlers.queue(node)
   end
 
   applyRecording(decoded.recording, false)
+  if not session:ready() then return nil end
 
   session:execute("callcenter", decoded.queueName)
   if not session:ready() then return nil end

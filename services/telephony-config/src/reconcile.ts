@@ -1,6 +1,7 @@
 import type { Logger } from '@cuc/logger';
 
 import type { PbxConfigClient } from './pbx-config-client.js';
+import type { RecordingClient } from './recording-client.js';
 import type { OpenSipsMiClient } from './opensips-mi-client.js';
 import { parseCidr, registrantKeyFor } from './projection.js';
 import type { OpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
@@ -58,6 +59,12 @@ export function createReconciler(
    * `opensips` projection above is reconciled.
    */
   pbxConfig?: PbxConfigClient,
+  /**
+   * S5-12: when given, each pass also repairs this service's copy of the tenants' "recording
+   * required" (fail-closed) flag from recording-service's own list, so a missed
+   * `recording.settings.updated` heals on the next pass. A failed lookup changes nothing.
+   */
+  recordingSettings?: Pick<RecordingClient, 'listFailClosedTenants'>,
 ) {
   async function reconcileOnce(): Promise<ReconcileReport> {
     const [
@@ -295,11 +302,25 @@ export function createReconciler(
     return total;
   }
 
+  /**
+   * Repairs the local fail-closed flags (S5-12). Returns how many tenants changed. When
+   * recording-service cannot answer, nothing is changed: a stale "required" is safer to keep than
+   * to drop on a failed lookup.
+   */
+  async function reconcileRecordingSettingsOnce(): Promise<number> {
+    if (recordingSettings === undefined) return 0;
+    const tenantIds = await recordingSettings.listFailClosedTenants();
+    const changed = await readModel.syncRecordingFailClosed(tenantIds);
+    if (changed > 0) logger.info({ changed }, 'reconciliation repaired recording-required flags');
+    return changed;
+  }
+
   let timer: NodeJS.Timeout | undefined;
 
   return {
     reconcileOnce,
     reconcileCallHandlingOnce,
+    reconcileRecordingSettingsOnce,
 
     /** Starts the periodic pass. A failed pass logs and tries again next interval. */
     start(intervalMs: number): void {
@@ -309,6 +330,9 @@ export function createReconciler(
         });
         reconcileCallHandlingOnce().catch((error: unknown) => {
           logger.error({ err: error }, 'call handling reconciliation pass failed');
+        });
+        reconcileRecordingSettingsOnce().catch((error: unknown) => {
+          logger.warn({ err: error }, 'recording-required reconciliation pass failed');
         });
       }, intervalMs);
       timer.unref();

@@ -245,10 +245,12 @@ The **billing view** for resellers is pending decision D-013.
 - `/v1/tenants/{t}/recordings` (search)
 - `GET /v1/tenants/{t}/recordings/{id}:url`, which returns a presigned URL after an authorization check and writes an audit entry
 - `DELETE` (requires permission; audited)
+- `/v1/tenants/{t}/recording-settings`: retention days and "recording required" (`failClosed`, S5-12). Each change emits `recording.settings.updated`, which telephony-config copies so it can refuse calls while this service is down.
 
 **Internal:**
 
 - `POST /internal/v1/recordings:evaluate`, with call context in and the decision (plus consent-announcement asset) out. telephony-config caches the result.
+- `GET /internal/v1/recordings/fail-closed-tenants`, the tenants that require recording, for telephony-config's reconciliation (S5-12)
 - `POST /internal/v1/recordings:upload-url`, used by the node uploader
 - `POST /internal/v1/recordings/{id}:complete`
 

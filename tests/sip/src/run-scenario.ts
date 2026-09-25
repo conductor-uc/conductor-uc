@@ -505,6 +505,64 @@ async function opensipsSql(sql: string): Promise<void> {
 }
 
 /**
+ * S5-12: runs a read-only query against telephony-config's own schema as its own DB user and
+ * returns the raw rows (tab-separated, no header). For waiting on something telephony-config
+ * projects from an event, such as a tenant's "recording required" flag, which has no API.
+ */
+export async function telephonyConfigSql(sql: string): Promise<string> {
+  const { stdout } = await execFileAsync('docker', [
+    'exec',
+    mariadbContainer(),
+    'mariadb',
+    '-u',
+    'telephony_config',
+    `-p${envOr('TELEPHONY_CONFIG_SERVICE_DB_PASSWORD', 'dev-telephony-config-password')}`,
+    'telephony_config',
+    '-N',
+    '-B',
+    '-e',
+    sql,
+  ]);
+  return stdout.trim();
+}
+
+/** The recording-service container, which S5-12's test stops to make recording decisions unavailable. */
+export function recordingServiceContainer(): string {
+  return envOr('SIP_TEST_RECORDING_SERVICE_CONTAINER', 'conductor-uc-recording-service-1');
+}
+
+/**
+ * Stops a compose service's container, runs `fn`, and always starts it again, waiting until
+ * `readyUrl` (its `/readyz` on the compose network) answers 200 before returning, so a failing
+ * test never leaves the stack without it.
+ */
+export async function withContainerStopped<T>(
+  container: string,
+  readyUrl: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await execFileAsync('docker', ['stop', container], { timeout: 60_000 });
+  try {
+    return await fn();
+  } finally {
+    await execFileAsync('docker', ['start', container], { timeout: 60_000 });
+    await waitForHttpReady(readyUrl, 90_000);
+  }
+}
+
+/** Polls `url` from the compose network until it answers 200. */
+export async function waitForHttpReady(url: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const response = await dockerCurlJson('GET', url).catch(() => ({ status: 0 }));
+    if (response.status === 200) return;
+    if (Date.now() > deadline)
+      throw new Error(`${url} was not ready within ${String(timeoutMs)} ms`);
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
+/**
  * G-46 (docs/decisions.md): OpenSIPs does not yet act on `X-Affinity-Node`
  * (deferred to S4-05), so once S2-19's round-robin dispatch is real, a
  * *second*, separate call into an already-pinned queue/parking-lot/

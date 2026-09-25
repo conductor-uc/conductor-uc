@@ -13,7 +13,9 @@ import type { Logger } from '@cuc/logger';
  * out is worse than one that misses a recording), made visible three ways: an error log line
  * (`recording_policy_unavailable`), a channel variable on the call (`cuc_recording_status=
  * unavailable`, so it reaches the CDR), and the counters below. A tenant that must never miss a
- * recording would need a fail-closed option per tenant; that is not built (see docs/decisions.md).
+ * recording turns on "recording required" (S5-12, G-111): `/fs/dialplan` then refuses the call
+ * instead. That flag is read from this service's own copy (`recording_settings`, projected from
+ * `recording.settings.updated`), never from recording-service, so it holds while it is down.
  *
  * To keep an outage from adding a timeout to every call, and to keep recording through a short
  * one:
@@ -59,6 +61,12 @@ export interface RecordingClient {
   decide(call: RecordingCall): Promise<RecordingDirective>;
   /** How many calls went unrecorded because recording-service was unavailable, since start. */
   unavailableCount(): number;
+  /**
+   * S5-12: every tenant that requires recording (fail closed), for the reconciliation pass that
+   * repairs this service's own copy of the flag. Throws when recording-service cannot answer:
+   * the caller then leaves its copy as it is.
+   */
+  listFailClosedTenants(): Promise<string[]>;
 }
 
 interface Decision {
@@ -181,6 +189,19 @@ export function createRecordingClient(options: RecordingClientOptions): Recordin
 
   return {
     unavailableCount: () => unavailable,
+
+    async listFailClosedTenants() {
+      const response = await fetchImpl(`${baseUrl}/internal/v1/recordings/fail-closed-tenants`, {
+        headers: { authorization: `Bearer ${options.internalServiceToken}` },
+        signal: AbortSignal.timeout(Math.max(timeoutMs, 5_000)),
+      });
+      if (!response.ok) throw new Error(`recording-service answered ${String(response.status)}`);
+      const body = (await response.json()) as { tenantIds?: unknown };
+      if (!Array.isArray(body.tenantIds)) {
+        throw new Error('recording-service answered without a tenant list');
+      }
+      return body.tenantIds.filter((id): id is string => typeof id === 'string');
+    },
 
     async decide(call) {
       const outcome = await evaluate(call);

@@ -36,6 +36,7 @@ import {
   buildOutboundDialplanDocument,
   buildParkDialplanDocument,
   buildQueueDialplanDocument,
+  buildRecordingRefusalDocument,
   buildRingGroupDialplanDocument,
   buildVoicemailDialplanDocument,
   callcenterName,
@@ -44,6 +45,8 @@ import {
   injectDialplanActions,
   MAX_FORWARD_HOPS,
   NOT_FOUND_DOCUMENT,
+  RECORDING_REFUSAL_CAUSE,
+  RECORDING_REFUSAL_TONE,
   RECORDING_UNAVAILABLE_ACTION,
   recordingActions,
   recordingSpoolPath,
@@ -133,6 +136,8 @@ type FlowRecordingQuery = Static<typeof FlowRecordingQuerySchema>;
 type FlowRecordingInstruction =
   | { readonly action: 'none' }
   | { readonly action: 'unavailable' }
+  /** S5-12: the tenant requires recording and it cannot be set up: play `tone`, hang up with `cause`. */
+  | { readonly action: 'refuse'; readonly tone: string; readonly cause: string }
   | {
       readonly action: 'record';
       readonly recordingId: string;
@@ -1228,6 +1233,36 @@ export function registerFsRoutes(
     }
   }
 
+  /**
+   * S5-12: whether a call whose recording decision is unavailable must be refused, because its
+   * tenant requires recording. Reads this service's own copy of the flag. If even that local read
+   * fails, whether the tenant requires recording cannot be known, so the call goes ahead (the
+   * platform default, fail open), logged as an error.
+   */
+  async function refusesUnrecorded(
+    tenantId: string,
+    direction: string,
+    reason: string,
+  ): Promise<boolean> {
+    let failClosed: boolean;
+    try {
+      failClosed = await readModel.findRecordingFailClosed(tenantId);
+    } catch (error) {
+      logger.error(
+        { err: error, tenantId },
+        'recording: could not read the tenant’s recording-required flag; placing the call',
+      );
+      return false;
+    }
+    if (failClosed) {
+      logger.warn(
+        { alert: 'recording_required_refused', tenantId, direction, err: reason },
+        'recording: the tenant requires recording and it cannot be set up; refusing the call',
+      );
+    }
+    return failClosed;
+  }
+
   /** The announcement to play before a recording starts, or null for none. */
   function announcementFor(
     tenantId: string,
@@ -1279,6 +1314,16 @@ export function registerFsRoutes(
 
     if (directive.kind === 'none') return document;
     if (directive.kind === 'unavailable') {
+      // S5-12: a tenant that requires recording has its call refused instead of placed
+      // unrecorded. The flag is this service's own copy, so it holds while recording-service is
+      // down. A decision of "no recording needed" never gets here, so it is never refused.
+      if (await refusesUnrecorded(target.tenantId, target.direction, directive.reason)) {
+        return buildRecordingRefusalDocument(
+          body['Caller-Context'] ?? 'public',
+          body['Caller-Destination-Number'] ?? '',
+          target.tenantId,
+        );
+      }
       return injectDialplanActions(document, [RECORDING_UNAVAILABLE_ACTION]);
     }
     return injectDialplanActions(
@@ -1328,7 +1373,13 @@ export function registerFsRoutes(
     });
 
     if (directive.kind === 'none') return { action: 'none' };
-    if (directive.kind === 'unavailable') return { action: 'unavailable' };
+    if (directive.kind === 'unavailable') {
+      // S5-12: the same refusal as at call setup, carried out by the runner.
+      if (await refusesUnrecorded(tenantId, 'inbound', directive.reason)) {
+        return { action: 'refuse', tone: RECORDING_REFUSAL_TONE, cause: RECORDING_REFUSAL_CAUSE };
+      }
+      return { action: 'unavailable' };
+    }
     return {
       action: 'record',
       recordingId: directive.recordingId,

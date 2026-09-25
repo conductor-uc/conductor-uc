@@ -69,6 +69,21 @@ describe.skipIf(skipReason !== undefined)(
       }
     });
 
+    it('lists the tenants that require recording (S5-12), token required', async () => {
+      await h.settings.update({ tenantId: 'tenant-fc' }, { failClosed: true });
+      const get = (token: string | null) =>
+        r.app.inject({
+          method: 'GET',
+          url: '/internal/v1/recordings/fail-closed-tenants',
+          headers: token === null ? {} : { authorization: `Bearer ${token}` },
+        });
+      expect((await get(null)).statusCode).toBe(401);
+      expect((await get('wrong')).statusCode).toBe(401);
+      const response = await get(INTERNAL_TOKEN);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ tenantIds: ['tenant-fc'] });
+    });
+
     describe('evaluate', () => {
       it('answers with the winning policy for the call, and the default when none applies', async () => {
         await h.policies.create(

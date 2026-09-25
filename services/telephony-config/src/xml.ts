@@ -299,6 +299,53 @@ export const RECORDING_UNAVAILABLE_ACTION =
   '<action application="set" data="cuc_recording_status=unavailable"/>';
 
 /**
+ * S5-12: the neutral signal played before a call is refused because its tenant requires recording
+ * and the recording could not be set up. A reorder (fast busy) tone: no words, no name, nothing
+ * that can be branded, and a sound callers already read as "this call cannot go through now".
+ */
+export const RECORDING_REFUSAL_TONE = 'tone_stream://%(250,250,480,620);loops=4';
+
+/**
+ * S5-12: the hangup cause for that refusal, the same for every direction. FreeSWITCH sends it as
+ * SIP 503 Service Unavailable. That is the honest answer (a platform service is temporarily
+ * unavailable, and the call may succeed later), a carrier treats it as "try again or elsewhere",
+ * and a phone shows it as a temporary failure rather than a wrong number (404) or a busy line
+ * (486). It is never a 403: nothing about the caller is being refused.
+ */
+export const RECORDING_REFUSAL_CAUSE = 'SERVICE_UNAVAILABLE';
+
+/**
+ * S5-12: the whole dialplan document for a refused call: flag the call for the CDR, give early
+ * media so the caller hears the tone without the call being answered (no billing on an inbound
+ * call, and no 200 OK that would look like a connected call), play the tone, and hang up with
+ * {@link RECORDING_REFUSAL_CAUSE}.
+ */
+export function buildRecordingRefusalDocument(
+  callerContext: string,
+  destinationNumber: string,
+  tenantId: string,
+): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="recording-required-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
+    '          <action application="set" data="cuc_recording_status=refused"/>\n' +
+    '          <action application="pre_answer"/>\n' +
+    `          <action application="playback" data="${escapeXml(RECORDING_REFUSAL_TONE)}"/>\n` +
+    `          <action application="hangup" data="${RECORDING_REFUSAL_CAUSE}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/**
  * Puts `actions` at the start of a dialplan document's first `<condition>`. Every builder that
  * places a call emits exactly one, so the actions run before its bridge or hand-off. Returns the
  * document unchanged when there is no condition to put them in.

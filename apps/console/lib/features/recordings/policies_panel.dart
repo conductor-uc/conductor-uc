@@ -99,6 +99,8 @@ class PoliciesPanel extends ConsumerWidget {
       children: [
         const RetentionCard(),
         const SizedBox(height: 16),
+        const RecordingRequiredCard(),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
@@ -234,7 +236,7 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
     });
     try {
       final saved = await api.saveRetentionDays(days);
-      ref.invalidate(recordingRetentionProvider);
+      ref.invalidate(recordingSettingsProvider);
       ref.invalidate(recordingListProvider);
       if (mounted) {
         setState(() {
@@ -298,6 +300,90 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
                     child: const Text('Save'),
                   ),
               ],
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              ErrorText(_error!),
+            ],
+            if (_notice != null) ...[const SizedBox(height: 8), Text(_notice!)],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Whether calls are refused when their recording cannot be set up
+/// ("recording required", fail closed). Off by default: a call then goes
+/// ahead unrecorded and is flagged.
+class RecordingRequiredCard extends ConsumerStatefulWidget {
+  const RecordingRequiredCard({super.key});
+
+  @override
+  ConsumerState<RecordingRequiredCard> createState() =>
+      _RecordingRequiredCardState();
+}
+
+class _RecordingRequiredCardState extends ConsumerState<RecordingRequiredCard> {
+  bool _busy = false;
+  String? _error;
+  String? _notice;
+
+  Future<void> _save(bool required) async {
+    final api = ref.read(recordingsApiProvider);
+    if (api == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      final saved = await api.saveRecordingRequired(required);
+      ref.invalidate(recordingSettingsProvider);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _notice = saved
+              ? 'Calls that cannot be recorded are now refused.'
+              : 'Calls that cannot be recorded now go ahead unrecorded.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = problemMessage(e);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = ref.watch(recordingSettingsProvider);
+    final canChange = ref.watch(canProvider('recording.policy.manage'));
+    final required = settings.asData?.value.recordingRequired ?? false;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SwitchListTile(
+              key: const ValueKey('recording-required'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Recording required'),
+              subtitle: const Text(
+                'When a call that your rules may record cannot have its '
+                'recording set up, for example because the recording system '
+                'cannot be reached, refuse the call instead of connecting it '
+                'unrecorded. The caller hears a short tone and the call ends. '
+                'Calls your rules do not record are never refused.',
+              ),
+              value: required,
+              onChanged: _busy || !canChange || !settings.hasValue
+                  ? null
+                  : _save,
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),

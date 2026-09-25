@@ -61,6 +61,11 @@ export interface RecordingServiceDb extends EventTables {
     tenant_id: string;
     /** 0 keeps recordings until deleted. */
     retention_days: number;
+    /**
+     * S5-12: refuse a call when the recording its rules may require cannot be set up (this
+     * service unreachable, or the recording not registered). Off by default (fail open).
+     */
+    fail_closed: boolean;
     updated_at: Date;
     version: number;
   };
