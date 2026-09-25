@@ -60,9 +60,30 @@ private key is envelope-encrypted at rest via `@cuc/crypto`; it is only ever dec
 retiring and generating must not leave zero current keys. A retired key keeps verifying for
 `SIGNING_KEY_OVERLAP_DAYS` (default 7; 07 §2 says "with overlap" but names no duration).
 
-There is no scheduled rotation job — nothing in this codebase runs cron jobs yet. `rotate()` is a
-callable primitive, the same shape `@cuc/crypto`'s `rotate()` took in S0-09; wiring an actual
-90-day schedule is separate infrastructure work.
+Rotation (G-116) is published ahead, in two phases, so api-gateway (which caches the JWKS for
+`JWKS_CACHE_MAX_AGE_MS`) never meets a token signed with a key it has not fetched:
+
+1. **Stage**: a *next* key is created with `activated_at` null. `forVerification` (the JWKS)
+   includes it; `current()` does not, so nothing is signed with it.
+2. **Promote**: once it has been published for `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` (default 15,
+   which must exceed the gateway's 10-minute cache), it gets `activated_at` and signs; the previous
+   key is retired and stays published for `SIGNING_KEY_OVERLAP_DAYS`.
+
+`src/signing-key-rotation.ts` calls `advance()` every 5 minutes and 30 s after startup: it promotes
+a next key that is due, or stages one when the current key has signed for
+`SIGNING_KEY_ROTATION_DAYS` (default 90; `0` = never stage, but still promote). Each step runs in one
+transaction that first locks the current key's row by primary key (`SELECT … WHERE id = ? FOR UPDATE`, one row and no gaps, so waiting copies cannot deadlock with the holder's insert) and then reads the next
+key with a second locking read, so any number of copies stage once and promote once between them,
+and there is never more than one next key. `current()` reads which key is current on every token it
+signs (only the decoded key is cached, by id), so every copy switches at promotion and none signs
+with a staged key.
+
+The operator command `rotate-signing-key` (`dist/src/cli/rotate-signing-key.js`) stages by default
+and prints when the key will sign (the timer, or running the command again after that time,
+promotes it). `--now` makes a fresh key current at once (a staged key is retired with the old one),
+accepting a `JWKS_COOLDOWN_MS` window in which a gateway may refuse the new key. `--revoke-previous`
+implies `--now` and also sets `revoked_at` on every earlier key, which removes it from the JWKS at
+once instead of after the overlap.
 
 ## MFA tickets are not access tokens, on purpose
 

@@ -21,6 +21,15 @@ export {
   type MigrationStatus,
 } from './migrate.js';
 export {
+  createRewrapJob,
+  REWRAP_INTERVAL_MS,
+  type CiphertextRewrapper,
+  type RewrapJob,
+  type RewrapJobOptions,
+  type RewrapResult,
+  type RewrapTarget,
+} from './rewrap.js';
+export {
   scopedFor,
   type ScopedDb,
   type ScopedInsertBuilder,

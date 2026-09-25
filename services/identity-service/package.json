@@ -13,6 +13,7 @@
     "start": "node dist/src/main.js",
     "dev": "node --watch dist/src/main.js",
     "migrate": "cuc-db latest --dir dist/migrations",
+    "rotate-signing-key": "node dist/src/cli/rotate-signing-key.js",
     "clean": "rm -rf dist *.tsbuildinfo"
   },
   "dependencies": {

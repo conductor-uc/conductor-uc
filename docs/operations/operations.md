@@ -150,6 +150,7 @@ Readiness checks:
 |---|---|
 | api-gateway | redis |
 | Services with a database | db, bus (NATS), outbox (reports the number of unpublished events, always passes) |
+| org, identity, pbx-config, trunk and voicemail services | also kek_rewrap: records still under an older `CRYPTO_KEKS` version (always passes; see §6) |
 | call-control | db, bus, redis |
 | telephony-config | db, opensips_db, bus, redis, outbox |
 
@@ -182,6 +183,8 @@ Readiness checks:
 
 Most secrets are shared between components that read them only at startup. Rotating one means changing it everywhere and restarting those components together. Requests between them fail in between.
 
+Any secret can be given to the services as a file instead of an environment variable: set `<NAME>_FILE` to its path, for example `DB_PASSWORD_FILE=/run/secrets/db_password` with a Docker or Kubernetes secret mounted there ([configuration reference §1](configuration-reference.md#1-how-the-services-read-their-settings)). Rotating it is then replacing the file and restarting the service; the file is read only at startup.
+
 | Secret | Procedure | Impact |
 |---|---|---|
 | Database passwords | `ALTER USER '<user>'@'%' IDENTIFIED BY '<new>';` in MariaDB, update `.env`, restart that service (for `opensips`: OpenSIPs and telephony-config) | That service restarts |
@@ -189,8 +192,8 @@ Most secrets are shared between components that read them only at startup. Rotat
 | `INTERNAL_HEADER_SIGNING_SECRET` | Update, restart the gateway and the eight services that check it together | API calls fail during the restart |
 | `FS_XML_CURL_TOKEN`, `FS_CDR_INGEST_TOKEN` | Update, restart telephony-config (or cdr-service) and **every FreeSWITCH node** | **Restarting FreeSWITCH drops its calls.** Do it in a quiet period. |
 | `FS_EVENT_SOCKET_PASSWORD` | Update, restart FreeSWITCH nodes and call-control | Same |
-| `CRYPTO_KEKS` | Add a new version and make it current: `CRYPTO_KEKS=1:<old>,2:<new>`, `CRYPTO_KEK_CURRENT=2`. Restart the five services that use it. **Never remove an old version**: nothing re-encrypts existing data. | Services restart |
-| Login-token signing keys | **Not possible yet.** Keys are generated once and never rotated: the code exists but nothing calls it (G-116). | — |
+| `CRYPTO_KEKS` | 1. Add a new version and make it current, identically in the five services that use it (org, identity, pbx-config, trunk, voicemail): `CRYPTO_KEKS=1:<old>,2:<new>`, `CRYPTO_KEK_CURRENT=2`. Restart them. 2. Each re-wraps its existing records under version 2 in the background (at startup, then every 10 minutes). Watch `GET /readyz` on each: the `kek_rewrap` check reads `N values under older key versions`, and the logs repeat the count after each pass. 3. When **all five** report `0 values under older key versions`, remove version 1 (`CRYPTO_KEKS=2:<new>`) and restart them again. Keep the old key with any backup taken before step 3: restoring that backup needs it. | Services restart twice. Nothing else is interrupted: records stay readable while they are re-wrapped. |
+| Login-token signing keys | **Automatic**, published ahead: when the key has signed for `SIGNING_KEY_ROTATION_DAYS` (default 90), identity-service publishes the next key (log: `signing key staged`) and, `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` later (default 15, within 5 minutes), makes it the signing key (log: `signing key rotated`). The old key keeps verifying for `SIGNING_KEY_OVERLAP_DAYS`. **On demand**: `docker compose run --rm identity-service dist/src/cli/rotate-signing-key.js` publishes the next key the same way and prints when it starts signing; identity-service switches to it by itself after that time (running the command again after it also switches). `--now` switches at once instead, skipping publish-ahead. **If a key may have leaked**, use `--revoke-previous`: it switches at once (it implies `--now`) and every earlier key, including one published ahead, leaves the key set. | None for an automatic or default rotation: the gateway already holds the new key when the first token it signed arrives. With `--now`, a gateway that fetched the key set within the last `JWKS_COOLDOWN_MS` (30 s) can refuse new tokens until that time has passed. With `--revoke-previous`, access tokens signed before it stop working at identity-service at once and at the gateway once its key cache refreshes (`JWKS_CACHE_MAX_AGE_MS`, default 10 minutes); nobody has to sign in again, because the refresh cookie is not affected, but an open console's requests fail until it fetches a new token at its next scheduled refresh (within the 10-minute access-token lifetime) or a page reload, and someone midway through a two-step sign-in starts again. |
 | Object storage keys | Create a new key pair at the provider, update `.env`, restart the storage services, then delete the old key | Services restart |
 | ACME account | Handled by org-service | — |
 
@@ -243,7 +246,7 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Security | The gateway trusts client-supplied `X-Forwarded-For` and `X-Forwarded-Proto` | G-113 |
 | Security | OpenSIPs MI and Redis have no authentication; no TLS to MariaDB, Redis or NATS; NATS NKeys ignored | network §6.2 |
 | Security | One shared internal token for all services; FreeSWITCH tokens are static | 07 §1 |
-| Security | Master key is an environment variable; no KMS; login signing keys never rotate | G-116, 07 §5 |
+| Security | Master key comes from an environment variable or a file; no KMS (deferred until a customer or auditor needs one) | G-116, 07 §5 |
 | Security | OpenSIPs TLS private keys stored in clear in the `opensips` schema | 07 §5 |
 | Availability | No HA for OpenSIPs, MariaDB, Redis, NATS; call-control single copy; no FreeSWITCH failure cleanup or synthetic CDRs | S4-03 to S4-07 |
 | Telephony | No media relay: media servers need public addresses; no SRTP | O-7 |

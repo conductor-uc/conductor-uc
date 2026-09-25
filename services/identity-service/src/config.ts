@@ -50,6 +50,22 @@ export const configSchema = Type.Object({
    * that itself lives only 10 minutes.
    */
   SIGNING_KEY_OVERLAP_DAYS: Env.int({ minimum: 0, default: 7 }),
+  /**
+   * Rotate the signing key automatically once it has signed for this many
+   * days (07 §2's 90 days; G-116). Every copy of the service checks every
+   * five minutes and once shortly after startup; exactly one of them acts.
+   * 0 turns automatic staging off; a key staged by `rotate-signing-key` is
+   * still promoted on time.
+   */
+  SIGNING_KEY_ROTATION_DAYS: Env.int({ minimum: 0, default: 90 }),
+  /**
+   * How long a new signing key is published in the JWKS before it signs
+   * anything (G-116). Must be longer than api-gateway's
+   * `JWKS_CACHE_MAX_AGE_MS` (10 minutes by default), so every gateway has
+   * refetched the JWKS, and holds the new key, before the first token it
+   * signed arrives.
+   */
+  SIGNING_KEY_PUBLISH_AHEAD_MINUTES: Env.int({ minimum: 0, default: 15 }),
 
   /** How long an emailed password-reset link works. */
   PASSWORD_RESET_TTL_MINUTES: Env.int({ minimum: 5, default: 60 }),
