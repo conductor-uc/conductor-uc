@@ -87,8 +87,11 @@ after a deploy, each service re-applies the rule to each bucket it touches, the 
 time it touches it. `PutBucketCors` replaces the whole configuration, so repeating it
 is harmless. Like encryption, it is attempted, not required: MinIO answers
 `NotImplemented` (it already allows any origin by default, verified against the test
-MinIO), which logs one warning per bucket per process and nothing else. A bucket that
-does not exist yet (`NoSuchBucket`) is not remembered, so the next touch tries again.
+MinIO). A refusal like that, or `AccessDenied` from a key without the permission,
+holds for every bucket, so the process logs one warning naming the error and stops
+trying for all buckets until it restarts. Any other failure is logged for that bucket
+and not retried. A bucket that does not exist yet (`NoSuchBucket`) is not remembered,
+so the next touch tries again.
 
 ## Lifecycle rules
 

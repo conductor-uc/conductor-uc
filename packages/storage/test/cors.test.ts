@@ -11,6 +11,7 @@ import { BROWSER_CORS_RULE } from '../src/cors.js';
 import { createStorage } from '../src/storage.js';
 
 const TENANT = '0b5c6a52-2f5e-4a7b-9d1c-3f0e8a4b6c7d';
+const OTHER_TENANT = '5e1d2c3b-4a59-4687-8b7a-6c5d4e3f2a1b';
 
 function s3Error(name: string): S3ServiceException {
   return new S3ServiceException({ name, $fault: 'client', $metadata: {}, message: name });
@@ -94,23 +95,73 @@ describe('browser CORS rule (G-80)', () => {
     expect(fake.sent.filter((c) => c instanceof CreateBucketCommand)).toHaveLength(1);
   });
 
-  it('a provider that refuses the rule logs one warning and the presign still succeeds', async () => {
+  for (const refusal of ['NotImplemented', 'AccessDenied']) {
+    it(`a provider-wide refusal (${refusal}) warns once per process and stops trying for every bucket`, async () => {
+      const fake = fakeClient((command) => {
+        if (command instanceof PutBucketCorsCommand) throw s3Error(refusal);
+        return {};
+      });
+      const logger = silentLogger();
+      const warn = vi.spyOn(logger, 'warn');
+      const storage = storageWith(fake.client, logger);
+      const tenant = storage.forTenant(TENANT);
+
+      await tenant.provisionBucket();
+      await expect(tenant.presignPut('x')).resolves.toContain('X-Amz-Signature=');
+      // Other buckets, including concurrent first touches, are not asked at all.
+      await Promise.all([
+        storage.forTenant(OTHER_TENANT).presignPut('x'),
+        storage.forPlatform().presignGet('brand/r1/logo'),
+      ]);
+      await storage.forTenant(OTHER_TENANT).provisionBucket();
+
+      expect(fake.corsCalls()).toHaveLength(1);
+      const corsWarnings = warn.mock.calls.filter((call) =>
+        String(call[1]).includes('browser CORS rule'),
+      );
+      expect(corsWarnings).toHaveLength(1);
+      expect(String(corsWarnings[0]![1])).toContain(refusal);
+      expect(String(corsWarnings[0]![1])).toContain('dns-tls-and-certificates.md');
+    });
+  }
+
+  it('a provider-wide refusal answered to concurrent first touches still warns once', async () => {
     const fake = fakeClient((command) => {
       if (command instanceof PutBucketCorsCommand) throw s3Error('NotImplemented');
       return {};
     });
     const logger = silentLogger();
     const warn = vi.spyOn(logger, 'warn');
-    const tenant = storageWith(fake.client, logger).forTenant(TENANT);
+    const storage = storageWith(fake.client, logger);
 
-    await tenant.provisionBucket();
-    await expect(tenant.presignPut('x')).resolves.toContain('X-Amz-Signature=');
+    await Promise.all([
+      storage.forTenant(TENANT).presignPut('x'),
+      storage.forTenant(OTHER_TENANT).presignPut('x'),
+      storage.forPlatform().presignPut('x'),
+    ]);
 
-    expect(fake.corsCalls()).toHaveLength(1);
-    const corsWarnings = warn.mock.calls.filter((call) =>
-      String(call[1]).includes('browser CORS rule'),
-    );
-    expect(corsWarnings).toHaveLength(1);
+    expect(fake.corsCalls()).toHaveLength(3);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('any other failure warns for that bucket only, and other buckets are still tried', async () => {
+    const fake = fakeClient((command) => {
+      if (command instanceof PutBucketCorsCommand) throw s3Error('InternalError');
+      return {};
+    });
+    const logger = silentLogger();
+    const warn = vi.spyOn(logger, 'warn');
+    const storage = storageWith(fake.client, logger);
+
+    await storage.forTenant(TENANT).presignPut('x');
+    await storage.forTenant(TENANT).presignPut('y'); // not retried for the same bucket
+    await storage.forTenant(OTHER_TENANT).presignPut('x');
+
+    expect(fake.corsCalls().map((c) => c.input.Bucket)).toEqual([
+      storage.forTenant(TENANT).locate('').bucket,
+      storage.forTenant(OTHER_TENANT).locate('').bucket,
+    ]);
+    expect(warn).toHaveBeenCalledTimes(2);
   });
 
   it('a bucket that does not exist yet is tried again on the next touch', async () => {

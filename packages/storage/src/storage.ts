@@ -125,6 +125,13 @@ export function createStorage(options: CreateStorageOptions): Storage {
   const provisioned = makeProvisionCache();
   /** The buckets this process has set the CORS rule on (or tried to), keyed by bucket. */
   const corsApplied = new Map<string, Promise<void>>();
+  /**
+   * Set once the provider has refused `PutBucketCors` for a reason that holds for every
+   * bucket (it does not implement it, or the key may not use it): the error's name. This
+   * process then stops asking, so a store with a thousand tenant buckets logs one warning,
+   * not a thousand.
+   */
+  let corsRefusedBy: string | undefined;
 
   /**
    * Sets {@link BROWSER_CORS_RULE} on `bucket` once per process (G-80). `PutBucketCors`
@@ -133,12 +140,14 @@ export function createStorage(options: CreateStorageOptions): Storage {
    * existed get it, without listing every tenant's bucket: the first time a process
    * provisions a bucket or presigns a URL in it, the rule is (re)applied.
    *
-   * Attempted, not required, like encryption: a provider that refuses it (MinIO answers
-   * `NotImplemented`; it allows any origin by default) logs a warning once and is not
-   * asked again by this process. A bucket that does not exist yet is not remembered, so
-   * the next touch after it is created tries again.
+   * Attempted, not required, like encryption. A provider-wide refusal (MinIO answers
+   * `NotImplemented` since it allows any origin by default; a key without the permission
+   * gets `AccessDenied`) logs one warning and turns the attempt off for the whole process.
+   * Any other failure is logged and not retried for that bucket. A bucket that does not
+   * exist yet is not remembered, so the next touch after it is created tries again.
    */
   function ensureCors(bucket: string): Promise<void> {
+    if (corsRefusedBy !== undefined) return Promise.resolve();
     let pending = corsApplied.get(bucket);
     if (pending === undefined) {
       pending = applyCors(bucket);
@@ -170,9 +179,20 @@ export function createStorage(options: CreateStorageOptions): Storage {
         corsApplied.delete(bucket);
         return;
       }
+      if (isProviderWideRefusal(error)) {
+        // Concurrent first touches of other buckets may land here too; warn only once.
+        if (corsRefusedBy !== undefined) return;
+        corsRefusedBy = error.name;
+        logger.warn(
+          { err: error.message, code: error.name },
+          `The storage provider refused to set the browser CORS rule (${error.name}); not trying again for any bucket until restart. ` +
+            'Browser uploads need the rule unless the store allows any origin itself: see docs/operations/dns-tls-and-certificates.md §6.',
+        );
+        return;
+      }
       logger.warn(
         { err: error instanceof Error ? error.message : String(error) },
-        `Could not set the browser CORS rule on '${bucket}' — this S3-compatible provider may not support it.`,
+        `Could not set the browser CORS rule on '${bucket}'. See docs/operations/dns-tls-and-certificates.md §6.`,
       );
     }
   }
@@ -391,6 +411,19 @@ export function createStorage(options: CreateStorageOptions): Storage {
 function clampTtl(requested: number | undefined, max: number): number {
   if (requested === undefined) return max;
   return Math.min(Math.max(requested, 1), max);
+}
+
+/**
+ * A refusal that will be the same for every bucket: the provider does not implement the
+ * call (MinIO answers `NotImplemented`, HTTP 501), or the key is not allowed to make it.
+ */
+function isProviderWideRefusal(error: unknown): error is S3ServiceException {
+  return (
+    error instanceof S3ServiceException &&
+    (error.name === 'NotImplemented' ||
+      error.name === 'AccessDenied' ||
+      error.$metadata.httpStatusCode === 501)
+  );
 }
 
 function isBucketAlreadyOwned(error: unknown): boolean {
