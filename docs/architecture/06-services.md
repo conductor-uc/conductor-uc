@@ -80,6 +80,7 @@ The WebSocket hub listed above is not present in `services/api-gateway/src` at t
 - `PUT /v1/resellers/{id}/brand`
 - `GET /v1/resellers/{id}/certificates` and `GET /v1/platform/certificates` (`domain.manage`; status and last error per hostname)
 - `GET/PUT /v1/platform/acme-settings` (`domain.manage`; contact address, production or staging, agreement to the CA's terms)
+- `GET/PUT /v1/platform/network-settings` (`domain.manage`, master only; the platform's public IP address or hostname, audited as `platform.network_settings.updated`) and `GET /v1/resellers/{id}/dns-records` (one A, AAAA or CNAME record per name the platform keeps a certificate for, so a reseller knows what to publish; migration 005, table `platform_network`)
 - `GET /v1/public/brand?host=` (unauthenticated; returns reseller brand or `{"neutral": true}`)
 
 **Events:** `org.reseller.created|updated|suspended|resumed|deleted`, `org.tenant.*` (same verbs), `org.domain.added|removed`, `org.brand.updated`, `org.certificate.issued` (a certificate was issued or renewed; carries no key).
@@ -123,6 +124,8 @@ The WebSocket hub listed above is not present in `services/api-gateway/src` at t
 | `GET /v1/public/provision/yealink/{file}` (public; authenticates itself) | `<mac>.cfg` and the model-wide file. HTTP Basic with either the platform-wide credential (`PROVISIONING_USERNAME` + `PROVISIONING_PASSWORD`, set together) or the device's own; every failure is the same 401. The file sets account 1, the transport, and the outbound proxy (or turns it off), and asks the phone to refetch every 1440 minutes. |
 
 Settings: `SIP_PUBLIC_PORT` (5060), `SIP_PUBLIC_TLS_PORT` (5061), `SIP_PUBLIC_TRANSPORTS` (code default `udp,tcp`; compose sets `udp,tcp,tls`; put `tls` first in production), `PROVISIONING_BASE_URL` (unset: provisioning URLs are null). The platform-wide credential does not isolate one tenant's phones from another's (a MAC is not a secret); see G-103. Only Yealink is supported.
+
+**Call handling (G-109):** `GET|PUT /v1/tenants/{t}/extensions/{id}/call-handling` (`extension.manage`, config class): do not disturb, forward always, busy, no answer and unreachable, and up to five simultaneous ring destinations (an extension, a voicemail box or an external E.164 number). Table `extension_call_handling`, event `pbx.call_handling.updated`; telephony-config mirrors it and applies it in the dialplan for calls to that extension (design and safety limits in decisions G-109). Internal routes `GET /internal/v1/tenants/{t}/extensions/{id}/call-handling` and `.../tenants/{t}/call-handling` serve telephony-config.
 
 **Notes:**
 
@@ -191,6 +194,8 @@ Resellers configure trunks for their tenants. Tenant admins can view trunks and,
 
 **Owns:** CDRs, ingestion dedupe, webhook subscriptions.
 
+**Public API:** `GET /v1/tenants/{t}/cdrs` (private data, `cdr.read`; filters for period, direction, number, DID; cursor paging), `GET .../cdrs/{id}`, `POST|GET .../cdr-exports` (`cdr.export`), `GET .../billing-records`. The console has a Call records screen for the first three (G-106).
+
 **Ingest:**
 
 - `POST /ingest/json-cdr` from FS `mod_json_cdr` (shared-token auth; FS retries and falls back to disk; dedupe on `(call_uuid, node)`)
@@ -255,12 +260,14 @@ The **billing view** for resellers is pending decision D-013.
 - List, mark-read, and delete messages
 - Greeting URLs
 
-**Public API:** mailbox settings, messages (listen via presigned URL, delete), greeting upload.
+**Public API:** mailbox settings, messages (listen via presigned URL, delete), greeting upload, and `PUT /v1/tenants/{t}/voicemail/mailboxes/{id}/email-settings` (`voicemail.access`, private data: notification address, attach audio, keep / mark read / delete after emailing; G-107).
+
+**Internal API additions (G-107):** the mailbox response carries the email settings and `unreadCount`; the message response carries caller ID, duration and size; `GET .../messages/{id}/audio` returns the bytes through this service's own storage access, so notification-service holds no bucket credentials.
 
 **Integrations:**
 
-- On `:complete`, emits `voicemail.message.created`. notification-service sends voicemail-to-email with the audio attached, using a brand-aware template.
-- MWI is sent through the OpenSIPs presence `message-summary` PUBLISH.
+- On `:complete`, emits `voicemail.message.created` (thin: ids only). notification-service reads the settings, message details and audio through the internal API and sends voicemail-to-email using a brand-aware template (built, G-107).
+- MWI is to be sent through the OpenSIPs presence `message-summary` PUBLISH; not wired yet (G-42, G-108).
 - Transcription uses a `TranscriptionProvider` interface with one adapter per vendor (O-3). It is off by default and enabled per tenant or mailbox.
 
 ## notification-service
