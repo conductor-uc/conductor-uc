@@ -303,10 +303,19 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
     const oldSecret = secrets.get('boss@acme.test') ?? '';
     expect(oldSecret).not.toBe('');
 
-    const done = await master.call<{ mfaEnrolled: boolean }>(
+    // The master confirms with a code from their own authenticator (G-100 step-up).
+    const unconfirmed = await master.call<{ code: string }>(
       'POST',
       `/v1/orgs/${resellerId}/users/${boss?.id ?? ''}/mfa-reset`,
       {},
+    );
+    expect(unconfirmed.status, unconfirmed.text).toBe(401);
+    expect(unconfirmed.json.code).toBe('step_up_required');
+
+    const done = await master.call<{ mfaEnrolled: boolean }>(
+      'POST',
+      `/v1/orgs/${resellerId}/users/${boss?.id ?? ''}/mfa-reset`,
+      { stepUpCode: totp(secrets.get(MASTER_EMAIL) ?? '') },
     );
     expect(done.status, done.text).toBe(200);
     expect(done.json.mfaEnrolled).toBe(false);
