@@ -375,13 +375,17 @@ export const FEATURE_CODE_REFUSED_TONE = 'tone_stream://%(150,100,400);loops=2';
 export const RECORDING_REFUSAL_TONE = 'tone_stream://%(250,250,480,620);loops=4';
 
 /**
- * S5-12: the hangup cause for that refusal, the same for every direction. FreeSWITCH sends it as
- * SIP 503 Service Unavailable. That is the honest answer (a platform service is temporarily
- * unavailable, and the call may succeed later), a carrier treats it as "try again or elsewhere",
- * and a phone shows it as a temporary failure rather than a wrong number (404) or a busy line
- * (486). It is never a 403: nothing about the caller is being refused.
+ * S5-12: the hangup cause for that refusal, the same for every direction. FreeSWITCH answers
+ * OpenSIPs with SIP 503 (Q.850 cause 41, in the `Reason` header), and OpenSIPs, as RFC 3261 §16.7
+ * requires of a proxy, passes a 503 on to the caller as 500 ("Service Unavailable"). Either way it
+ * is a temporary server-side failure: the honest answer (a platform service is unavailable, and the
+ * call may succeed later), one a carrier may retry or route elsewhere, and one a phone shows as a
+ * temporary failure rather than a wrong number (404) or a busy line (486). It is never a 403:
+ * nothing about the caller is being refused. Not `SERVICE_UNAVAILABLE` (cause 63), despite the
+ * name: FreeSWITCH sends that as 480 "Temporarily Unavailable", which reads as the callee being
+ * away (both found by live test).
  */
-export const RECORDING_REFUSAL_CAUSE = 'SERVICE_UNAVAILABLE';
+export const RECORDING_REFUSAL_CAUSE = 'NORMAL_TEMPORARY_FAILURE';
 
 /**
  * S5-12: the whole dialplan document for a refused call: flag the call for the CDR, give early

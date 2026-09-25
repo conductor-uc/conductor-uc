@@ -39,7 +39,8 @@ const UAS_401 = 'sip-test-recreq-uas-401';
  * - With the flag on and recording-service up, a call no rule records is placed as usual: a
  *   decision of "no recording needed" is never refused.
  * - With the flag on and recording-service stopped, a carrier call to a DID for 401 (which has a
- *   record rule) hears a neutral tone as early media and is refused with 503; 401 never rings.
+ *   record rule) hears a neutral tone as early media and is refused with SIP 500 (FreeSWITCH's 503, which
+ *   OpenSIPs relays as 500, RFC 3261 §16.7); 401 never rings.
  * - With the flag off and recording-service stopped, the same call goes ahead unrecorded (the
  *   default, fail open).
  */
@@ -240,9 +241,9 @@ describe.skipIf(skipReason !== undefined)('S5-12 recording required (live SIPp)'
         );
         policyId = policy.id;
 
-        // 2. Required, service stopped: refused with 503 after the tone; 401 never rings.
+        // 2. Required, service stopped: refused with 500 after the tone; 401 never rings.
         await carrierCall({
-          scenario: 'trunk_invite_expect_503.xml',
+          scenario: 'trunk_invite_expect_500.xml',
           during: withRecordingServiceDown,
           check: async ({ tenantId: t, didId, result }) => {
             expect(result.successfulCalls, result.stdout).toBe(1);

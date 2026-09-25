@@ -483,7 +483,7 @@ local function applyRecording(instruction, startsOnAnswer)
     if instruction.tone ~= nil and instruction.tone ~= json.null then
       session:execute("playback", instruction.tone)
     end
-    session:hangup(instruction.cause or "SERVICE_UNAVAILABLE")
+    session:hangup(instruction.cause or "NORMAL_TEMPORARY_FAILURE")
     return ""
   end
   if instruction.action == "unavailable" then

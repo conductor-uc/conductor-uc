@@ -4,8 +4,10 @@
   S5-12 (G-111): a carrier call refused because its tenant requires recording
   and the recording cannot be set up. telephony-config's refusal document
   gives early media (`pre_answer`, so a 183 may arrive first) for a neutral
-  tone, then hangs up with SERVICE_UNAVAILABLE, which FreeSWITCH sends as
-  503. The call is never answered: a 200 here fails the scenario.
+  tone, then hangs up with NORMAL_TEMPORARY_FAILURE. FreeSWITCH sends that as
+  503, and OpenSIPs, as RFC 3261 §16.7 requires of a proxy, passes a 503 on as
+  500, so the carrier sees 500. The call is never answered: a 200 here fails
+  the scenario.
 
   Same leading pause as `trunk_invite.xml` (the trunk and DID are provisioned
   with this container's IP during it), and the same optional 100 as
@@ -14,7 +16,7 @@
 
   `[field0]`=caller user, `[field1]`=R-URI/To domain, `[field2]`=dialed DID.
 -->
-<scenario name="Trunk INVITE to a DID refused with 503 after a tone">
+<scenario name="Trunk INVITE to a DID refused with 500 after a tone">
   <pause milliseconds="6000"/>
 
   <send retrans="4000">
@@ -49,7 +51,7 @@
   <recv response="183" optional="true">
   </recv>
 
-  <recv response="503" timeout="20000">
+  <recv response="500" timeout="20000">
   </recv>
 
   <send>

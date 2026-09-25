@@ -717,7 +717,7 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
       expect(list.map((a) => a.app)).toEqual(expect.arrayContaining(['pre_answer', 'playback']));
       expect(list).toContainEqual({ app: 'set', data: 'cuc_recording_status=refused' });
       expect(list.find((a) => a.app === 'playback')?.data).toBe(RECORDING_REFUSAL_TONE);
-      expect(list.at(-1)).toEqual({ app: 'hangup', data: 'SERVICE_UNAVAILABLE' });
+      expect(list.at(-1)).toEqual({ app: 'hangup', data: 'NORMAL_TEMPORARY_FAILURE' });
       // The tone comes before the hangup, and nothing places the call.
       const names = list.map((a) => a.app);
       expect(names.indexOf('pre_answer')).toBeLessThan(names.indexOf('playback'));
@@ -738,7 +738,7 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
       expect(xml).toContain('expression="^101$"');
     });
 
-    it('an inbound DID call is refused the same way (SIP 503)', async () => {
+    it('an inbound DID call is refused the same way (a temporary failure)', async () => {
       const tenantId = await seedTenant();
       const trunkId = await seedTrunk(tenantId);
       const extensionId = await seedExtension(tenantId, '102');
@@ -851,7 +851,7 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
       expect(response.json<{ recording: unknown }>().recording).toEqual({
         action: 'refuse',
         tone: RECORDING_REFUSAL_TONE,
-        cause: 'SERVICE_UNAVAILABLE',
+        cause: 'NORMAL_TEMPORARY_FAILURE',
       });
     });
 
