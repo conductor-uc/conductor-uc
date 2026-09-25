@@ -107,4 +107,94 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
 
     expect(await h.registry.callsForNode('fs-load')).toHaveLength(0);
   });
+
+  describe('live calls by tenant (S5-08)', () => {
+    async function create(
+      tenantId: string | null,
+      fields: { from?: string; to?: string; startedAt?: number } = {},
+    ): Promise<string> {
+      const callUuid = crypto.randomUUID();
+      await h.registry.createCall(
+        {
+          callUuid,
+          nodeId: 'fs-1',
+          tenantId,
+          direction: 'inbound',
+          state: 'ringing',
+          startedAt: String(fields.startedAt ?? Date.now()),
+          from: fields.from ?? '101',
+          to: fields.to ?? '102',
+        },
+        60_000,
+      );
+      return callUuid;
+    }
+
+    it('lists only the tenant own calls, oldest first, with their current state', async () => {
+      const tenantId = crypto.randomUUID();
+      const other = crypto.randomUUID();
+      const second = await create(tenantId, { startedAt: 2_000, from: '103' });
+      const first = await create(tenantId, { startedAt: 1_000 });
+      await create(other);
+      await h.registry.updateCall(first, { state: 'answered', answeredAt: '1500' });
+      await h.registry.updateCall(first, { bridgedTo: second, recording: 'on' });
+
+      const calls = await h.registry.callsForTenant(tenantId);
+
+      expect(calls.map((c) => c.callUuid)).toEqual([first, second]);
+      expect(calls[0]).toEqual({
+        callUuid: first,
+        nodeId: 'fs-1',
+        tenantId,
+        direction: 'inbound',
+        state: 'answered',
+        startedAt: 1_000,
+        answeredAt: 1_500,
+        from: '101',
+        to: '102',
+        bridgedTo: second,
+        recording: 'on',
+      });
+      expect(calls[1]).toMatchObject({ state: 'ringing', answeredAt: null, recording: 'off' });
+    });
+
+    it('drops index entries whose call has gone (safety TTL passed with no hangup seen)', async () => {
+      const tenantId = crypto.randomUUID();
+      const gone = await create(tenantId);
+      const live = await create(tenantId);
+      await h.redis.del(`${h.keyPrefix}call:${gone}`);
+
+      expect((await h.registry.callsForTenant(tenantId)).map((c) => c.callUuid)).toEqual([live]);
+      expect(await h.redis.smembers(`${h.keyPrefix}tenant:${tenantId}:calls`)).toEqual([live]);
+    });
+
+    it('attaches a tenant to a call created without one, once, and never moves it', async () => {
+      const tenantId = crypto.randomUUID();
+      const callUuid = await create(null);
+      expect(await h.registry.callsForTenant(tenantId)).toEqual([]);
+
+      expect(await h.registry.tenantOf(callUuid)).toBeNull();
+      // The first attach returns the call as it stands; a later one returns nothing.
+      expect(await h.registry.attachTenant(callUuid, tenantId)).toMatchObject({
+        callUuid,
+        tenantId,
+        state: 'ringing',
+      });
+      expect(await h.registry.attachTenant(callUuid, crypto.randomUUID())).toBeUndefined();
+
+      expect((await h.registry.callsForTenant(tenantId)).map((c) => c.callUuid)).toEqual([
+        callUuid,
+      ]);
+      expect(await h.registry.getCall(callUuid)).toMatchObject({ tenant: tenantId });
+      expect(await h.registry.tenantOf(callUuid)).toBe(tenantId);
+    });
+
+    it('does not recreate a call that has already ended when a late update or attach arrives', async () => {
+      const callUuid = crypto.randomUUID();
+      await h.registry.updateCall(callUuid, { recording: 'off' });
+      expect(await h.registry.attachTenant(callUuid, crypto.randomUUID())).toBeUndefined();
+      expect(await h.registry.getCall(callUuid)).toBeUndefined();
+      expect(await h.registry.tenantOf(callUuid)).toBeNull();
+    });
+  });
 });

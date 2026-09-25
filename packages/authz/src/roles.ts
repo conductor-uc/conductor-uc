@@ -84,6 +84,7 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
   'cdr.export',
   'voicemail.access',
   'monitor.presence',
+  'monitor.calls',
   'analytics.view',
   'audit.read',
   'apikey.manage',
@@ -99,7 +100,8 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
  *
  * `master_support` holds every configuration read, plus the read-shaped
  * operational and private surfaces it always had (`cdr.read`,
- * `analytics.view`, `audit.read`, `monitor.presence`) and the usage-class
+ * `analytics.view`, `audit.read`, `monitor.presence`), watching live calls
+ * (`monitor.calls`, S5-08: passive, unlike listen/whisper/barge), and the usage-class
  * `billing.read`. Its private reads are audited like every master access to
  * private data (SAD §10).
  *
@@ -115,6 +117,7 @@ const MASTER_SUPPORT_PERMISSIONS: readonly Permission[] = [
   'analytics.view',
   'audit.read',
   'monitor.presence',
+  'monitor.calls',
   'billing.read',
   ...CONFIG_READ_PERMISSIONS,
 ];
@@ -138,6 +141,7 @@ const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
   'queue.read',
   'extension.read',
   'monitor.presence',
+  'monitor.calls',
   'monitor.listen',
   'monitor.whisper',
   'monitor.barge',

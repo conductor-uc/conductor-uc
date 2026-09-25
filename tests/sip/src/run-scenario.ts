@@ -415,6 +415,53 @@ export async function tenantAdminHeaders(
 }
 
 /**
+ * A fresh `tenant_admin` of `tenantId` with a password (`seed.ts`'s
+ * `createSignInAdmin`), for a test that signs in through api-gateway.
+ */
+export async function createSignInAdmin(
+  tenantId: string,
+  resellerId: string,
+): Promise<{ userId: string; email: string; password: string }> {
+  const env = sipTestEnv();
+  const { stdout } = await execFileAsync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      env.network,
+      '-v',
+      `${REPO_ROOT}:/repo`,
+      '-w',
+      '/repo/tests/sip',
+      '-e',
+      `IDENTITY_DB_HOST=${envOr('SIP_TEST_DB_HOST', 'mariadb')}`,
+      '-e',
+      `IDENTITY_DB_PORT=${envOr('SIP_TEST_DB_PORT', '3306')}`,
+      '-e',
+      'IDENTITY_DB_USER=identity_service',
+      '-e',
+      `IDENTITY_DB_PASSWORD=${envOr('IDENTITY_SERVICE_DB_PASSWORD', 'dev-identity-password')}`,
+      '-e',
+      'IDENTITY_DB_NAME=identity_service',
+      'node:22',
+      'node',
+      'dist/src/seed.js',
+      'sign-in-admin',
+      tenantId,
+      resellerId,
+    ],
+    { maxBuffer: 16 * 1024 * 1024 },
+  );
+  const start = stdout.lastIndexOf('\n{');
+  return JSON.parse(start === -1 ? stdout : stdout.slice(start + 1)) as {
+    userId: string;
+    email: string;
+    password: string;
+  };
+}
+
+/**
  * {@link dockerCurlJson} as the administrator of the tenant the
  * `/v1/tenants/{tenantId}/…` URL names ({@link tenantAdminHeaders}). A service
  * refuses a protected route to a caller with no identity (G-112), so every

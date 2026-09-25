@@ -198,6 +198,7 @@ services:
     environment:
       # ... as in the all-in-one file, but:
       REDIS_URL: redis://${DATA_IP}:6379
+      # x-nats already points at data-1 (step 2), for the realtime hub.
 
   opensips:
     # as in the all-in-one file (network_mode: host), except:
@@ -209,7 +210,7 @@ services:
       OPENSIPS_FS_DESTINATION: sip:203.0.113.21:5060,sip:203.0.113.22:5060
 ```
 
-The gateway's `*_SERVICE_URL` values come from `x-urls` (app-1's private addresses). It still needs `./src/apps/console/build/web` and `./bootstrap-tls` on this server.
+The gateway's `*_SERVICE_URL` values, and `CALL_CONTROL_URL` for the realtime hub (`http://${APP_IP}:8110`), come from `x-urls` (app-1's private addresses); `NATS_SERVERS` comes from `x-nats` (data-1). It still needs `./src/apps/console/build/web` and `./bootstrap-tls` on this server.
 
 ### 4.4 media-N
 
@@ -313,7 +314,7 @@ Use your cloud provider's security groups or host firewalls. The rules below are
 
 | Port | Protocol | From | Why |
 |---|---|---|---|
-| 8101–8107, 8110 | TCP | 10.10.0.10 (gateway) and 10.10.0.50 (monitoring) | API services; call-control only for monitoring |
+| 8101–8107, 8110 | TCP | 10.10.0.10 (gateway) and 10.10.0.50 (monitoring) | API services; call-control for the gateway's realtime hub (live calls) and monitoring |
 | 8106 | TCP | 10.10.0.21, 10.10.0.22 | voicemail-service, from the uploaders (voicemail messages) |
 | 8107 | TCP | 10.10.0.21, 10.10.0.22 | recording-service, from the uploaders |
 | 8108 | TCP | 10.10.0.10, 10.10.0.21, 10.10.0.22, 10.10.0.50 | cdr-service: gateway, and CDRs from FreeSWITCH |
@@ -321,7 +322,7 @@ Use your cloud provider's security groups or host firewalls. The rules below are
 | 8111, 8112 | TCP | 10.10.0.50 | Health checks only |
 | 22 | TCP | 198.51.100.0/24 | Administration |
 
-Services on app-1 call each other through its own Docker network, so the table only lists callers from other servers. The gateway calls identity-service (8101) and org-service (8102) for more than proxying (tokens, certificates, ACME), which the 8101–8107 rule covers. It does not call call-control; that port is open to monitoring only.
+Services on app-1 call each other through its own Docker network, so the table only lists callers from other servers. The gateway calls identity-service (8101) and org-service (8102) for more than proxying (tokens, certificates, ACME, and the realtime hub's permission and org lookups), which the 8101–8107 rule covers, and call-control (8110) for a tenant's live calls when someone opens the Monitoring page (S5-08).
 
 ### data-1 (10.10.0.41)
 
@@ -329,7 +330,7 @@ Services on app-1 call each other through its own Docker network, so the table o
 |---|---|---|---|
 | 3306 | TCP | 10.10.0.31 (services), 10.10.0.10 (OpenSIPs) | MariaDB |
 | 6379 | TCP | 10.10.0.10 (gateway, OpenSIPs), 10.10.0.31 (call-control, telephony-config), 10.10.0.21, 10.10.0.22 (FreeSWITCH) | Redis (**no authentication**) |
-| 4222 | TCP | 10.10.0.31 | NATS |
+| 4222 | TCP | 10.10.0.31, 10.10.0.10 (gateway: the realtime hub reads call events) | NATS |
 | 8222 | TCP | 10.10.0.50 | NATS monitoring (publish it only if you use it) |
 | 22 | TCP | 198.51.100.0/24 | Administration |
 
@@ -346,7 +347,9 @@ done
 for src in 10.10.0.10 10.10.0.31 10.10.0.21 10.10.0.22; do
   sudo iptables -I DOCKER-USER -p tcp -s "$src" --dport 6379 -j RETURN
 done
-sudo iptables -I DOCKER-USER -p tcp -s 10.10.0.31 --dport 4222 -j RETURN
+for src in 10.10.0.31 10.10.0.10; do
+  sudo iptables -I DOCKER-USER -p tcp -s "$src" --dport 4222 -j RETURN
+done
 sudo iptables -A DOCKER-USER -p tcp -m multiport --dports 3306,6379,4222 -j DROP
 ```
 
@@ -368,7 +371,7 @@ backend pbx_config
     server app2 10.10.0.32:8103 check
 ```
 
-That load balancer is itself a single point of failure unless you make it redundant (keepalived and a floating address). The platform does not provide one. Scale the gateway the same way on the edge, behind a layer-4 balancer that passes TLS through. A layer-4 balancer cannot set `X-Forwarded-For`, so the gateway sees the balancer's address for every client ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)). A balancer that terminates TLS and sets the header must be listed in `TRUSTED_PROXIES`.
+That load balancer is itself a single point of failure unless you make it redundant (keepalived and a floating address). The platform does not provide one. Scale the gateway the same way on the edge, behind a layer-4 balancer that passes TLS through. A layer-4 balancer cannot set `X-Forwarded-For`, so the gateway sees the balancer's address for every client ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)). A balancer that terminates TLS and sets the header must be listed in `TRUSTED_PROXIES`. Either kind must let the console's WebSocket (`/v1/ws`) through: pass the upgrade, and keep idle connections open longer than 30 seconds. No sticky sessions are needed; each gateway copy reads every call event itself and serves its own connections ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)).
 
 Database connections grow with copies: each copy of each service opens up to `DB_POOL_SIZE` (10) connections. Raise MariaDB's `max_connections` accordingly.
 

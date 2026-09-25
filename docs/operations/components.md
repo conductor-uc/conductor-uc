@@ -45,7 +45,7 @@ flowchart LR
     s3[(S3-compatible object storage)]
   end
 
-  browser -->|HTTPS| gw
+  browser -->|HTTPS, WebSocket| gw
   phone -->|HTTPS provisioning| gw
   le -->|HTTP-01 on 80| gw
   phone -->|SIP| osips
@@ -55,6 +55,8 @@ flowchart LR
   browser -->|presigned HTTPS| s3
 
   gw --> identity & org & pbx & trunk & callflow & vm & rec & cdr
+  gw -->|live calls| cc
+  gw -->|call events| nats
   osips <-->|SIP| fs
   fs -->|xml_curl, Lua HTTP| tc
   fs -->|CDR JSON| cdr
@@ -66,7 +68,7 @@ flowchart LR
 
 There are four groups.
 
-- **The public edge** is two processes. The **API gateway** is the only HTTP entry point: the web console, the REST API, phone provisioning and certificate challenges. **OpenSIPs** is the only SIP entry point: phones register to it, carriers send calls to it, and it hands every call to a FreeSWITCH node.
+- **The public edge** is two processes. The **API gateway** is the only HTTP entry point: the web console, the REST API, the console's live connection (WebSocket), phone provisioning and certificate challenges. **OpenSIPs** is the only SIP entry point: phones register to it, carriers send calls to it, and it hands every call to a FreeSWITCH node.
 - **Media servers** run **FreeSWITCH**, which answers calls, plays prompts, bridges parties, records, runs voicemail and IVR flows, and hosts conferences and queues. Next to each FreeSWITCH runs a **recording uploader** that moves finished call recordings and voicemail messages off the server.
 - **Application services** are twelve Node.js processes. They hold the configuration and business data, and they turn it into what OpenSIPs and FreeSWITCH need. None of them is meant to be reachable from outside.
 - **Data stores** are MariaDB (all persistent data), Redis (live call state, locks and counters, nothing durable), NATS JetStream (events between services) and an S3-compatible object store (audio, images and exports).
@@ -79,13 +81,15 @@ There are four groups.
 |---|---|
 | Source | `services/api-gateway`; image from `services/api-gateway/Dockerfile` (distroless Node 22, runs as uid 65532, no shell) |
 | Listens | `HTTP_PORT` (default 8080). This listener serves HTTPS if any certificate source is configured, otherwise plain HTTP. It never serves both on one port. If `HTTP_REDIRECT_PORT` is set, it also opens a plain-HTTP listener that answers ACME HTTP-01 challenges and redirects everything else to HTTPS. |
-| Serves | `/v1/*` proxied to the eight API services; `/.well-known/acme-challenge/*`; `/v1/platform/health` (master administrators only); `/healthz`, `/readyz`, `/openapi.json`; the built web console when `CONSOLE_DIR` is set. |
-| Connects to | Redis (rate-limit counters, required); identity, org, pbx-config, callflow, voicemail, cdr, trunk and recording services over HTTP; org-service's internal certificate and ACME-challenge routes. |
-| Stores | Nothing. It caches certificates and the login-token signing keys in memory. |
-| Background work | None. |
-| Copies | Any number. Rate-limit counters live in Redis, so copies share them. |
+| Serves | `/v1/*` proxied to the eight API services; `/v1/ws`, the realtime hub (a WebSocket, S5-08); `/.well-known/acme-challenge/*`; `/v1/platform/health` (master administrators only); `/healthz`, `/readyz`, `/openapi.json`; the built web console when `CONSOLE_DIR` is set. |
+| Connects to | Redis (rate-limit counters, required); identity, org, pbx-config, callflow, voicemail, cdr, trunk and recording services over HTTP; org-service's internal certificate, ACME-challenge and org-lineage routes; identity-service's permission lookup and call-control's live calls (for the realtime hub); **NATS** (the realtime hub reads `call.*` events and publishes audit records; not required to start: the gateway serves the API without it and keeps retrying). |
+| Stores | Nothing. It caches certificates, the login-token signing keys, org lineage and (for 5 s) permissions in memory. |
+| Background work | The realtime hub: one ordered NATS consumer per process, a ping to every open WebSocket every 30 s, and a permission recheck of every subscription every 30 s. |
+| Copies | Any number. Rate-limit counters live in Redis, so copies share them. Each copy reads every call event itself and serves only its own WebSockets, so live connections need no sticky sessions; the load balancer must allow WebSocket upgrades ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)). |
 
 It checks the access token on every request (EdDSA, keys published by identity-service), applies per-IP and per-user rate limits, and forwards the request with signed `x-internal-*` headers that tell the service who is calling. It forwards only `/v1/*`. The services' `/internal/v1/*` routes can never be reached through it.
+
+The realtime hub (`/v1/ws`) streams live calls and presence to the console. Each subscription is authorized like an API request (tenant boundary and org ancestry, the reseller private-data wall, the topic's permission) and checked again every 30 seconds, and a private one (live calls) is audited. See [06 api-gateway](../architecture/06-services.md#realtime-hub-s5-08).
 
 It believes `X-Forwarded-For` and `X-Forwarded-Proto` only from the proxies listed in `TRUSTED_PROXIES` (none by default), and signs the client address it settles on into the forwarded headers, for audit events and sessions. See [network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers).
 
@@ -172,7 +176,7 @@ The folders `analytics-service`, `chat-service`, `fax-service`, `provisioning-se
 |---|---|---|---|---|
 | **MariaDB** | 11.4 (the only version tested) | Every service except api-gateway; OpenSIPs | 13 service schemas plus `opensips`. **This is the system of record.** | Yes: back it up |
 | **Redis** | 7 | api-gateway (rate limits), call-control (live calls, node health, leases), telephony-config (ring-group rotation, reads leases), FreeSWITCH (concurrent-call counter), OpenSIPs (loaded, unused) | Only live and short-lived state. If it is flushed or restarted, node health reappears at the next heartbeat (3 s) and rate-limit counters start again. Tracking for calls in progress and their resource leases is lost; rebuilding it is plan task S4-04, not built. | No |
-| **NATS JetStream** | 2.10 | Every service that publishes or consumes events | Events between services. Streams are created by the services at start (limits retention, discard old, 2-minute duplicate window). | Yes, on its data directory. Losing it loses only undelivered events; the outbox tables keep anything not yet published. |
+| **NATS JetStream** | 2.10 | Every service that publishes or consumes events; api-gateway (reads call events with an ephemeral consumer) | Events between services. Streams are created by the services at start (limits retention, discard old, 2-minute duplicate window). | Yes, on its data directory. Losing it loses only undelivered events; the outbox tables keep anything not yet published. |
 | **Object storage** | Any S3-compatible service (MinIO in development) | org, pbx-config, voicemail, recording, cdr, telephony-config, media-worker services; the uploader (through presigned URLs); browsers (presigned URLs) | Recordings, voicemail, prompts and hold music, brand images, CSV exports | Yes: back it up or use a provider that replicates |
 
 Object storage layout: by default one bucket per tenant, named `{STORAGE_BUCKET_PREFIX}-t-{tenant id without hyphens}`, plus `{prefix}-platform` for brand assets. Set `STORAGE_MODE=prefix-per-tenant` if your provider limits the number of buckets. That puts every tenant in `{prefix}-shared` under a `t-{id}/` prefix. Services create buckets when they first need them, and try (but do not require) server-side encryption and a public-access block.
@@ -183,7 +187,7 @@ What the code allows today. "Safe" means the code guards against two copies doin
 
 | Component | More than one copy? | Why |
 |---|---|---|
-| api-gateway | **Safe** | Stateless; rate limits in Redis |
+| api-gateway | **Safe** | Stateless; rate limits in Redis. Each copy's realtime hub reads every event and serves its own WebSockets; connection limits are per copy. |
 | identity, org, pbx-config, trunk, callflow, voicemail, cdr services | **Safe** | Stateless HTTP; the relay claims outbox rows with `FOR UPDATE SKIP LOCKED`; consumers share one durable consumer per service and deduplicate by event id; migrations take a lock. org-service's certificate worker leases each job. |
 | recording-service | **Works, with duplicated work** | The hourly retention sweep has no lock, so every copy runs it. Deleting an object twice is harmless. Not tested. |
 | telephony-config | **Works, with duplicated work** | The reconcile and certificate-sync timers run in every copy with no lock. The work is idempotent. Not tested. |
@@ -205,6 +209,6 @@ A service runs its migrations and connects to NATS before it listens, so it exit
 3. pbx-config-service, trunk-service, callflow-service, voicemail-service, recording-service, cdr-service, media-worker, notification-service.
 4. call-control, then telephony-config.
 5. OpenSIPs (needs the `opensips` schema to exist), FreeSWITCH nodes, recording uploaders.
-6. api-gateway.
+6. api-gateway. Its realtime hub waits for NATS in the background, so the gateway starts without it; live subscriptions are refused as unavailable until NATS and the `CALL` stream (created by call-control) are there.
 
 telephony-config starts without recording-service: if it cannot get a recording decision, it places the call unrecorded and flags it.

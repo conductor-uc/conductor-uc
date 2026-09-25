@@ -57,13 +57,48 @@ Every service:
 | `HTTP_REDIRECT_PORT` | Plain-HTTP listener (port 80 in production): answers `/.well-known/acme-challenge/<token>` from org-service, redirects everything else with 308 to HTTPS. |
 | `HSTS_MAX_AGE_SECONDS` | Default one year; 0 turns `Strict-Transport-Security` off. Sent only when the request arrived over HTTPS. |
 | `REQUIRE_HTTPS_FOR_PROVISIONING` | Default on: phone provisioning over plain HTTP gets a 403 (the file carries a SIP password). Development over `http://localhost` turns it off. |
-| `CONSOLE_DIR`, `CONSOLE_CONNECT_SOURCES` | Serve the built Flutter web console (`flutter build web --release --no-web-resources-cdn`) under a strict Content-Security-Policy; other origins the console may call (the object store) are listed in `CONSOLE_CONNECT_SOURCES`. Unknown extension-less paths get `index.html`. |
+| `CONSOLE_DIR`, `CONSOLE_CONNECT_SOURCES` | Serve the built Flutter web console (`flutter build web --release --no-web-resources-cdn`) under a strict Content-Security-Policy; other origins the console may call (the object store) are listed in `CONSOLE_CONNECT_SOURCES`. Unknown extension-less paths get `index.html`. With the realtime hub on, the policy's `connect-src` also names `wss://` (or `ws://`) plus the host the page was requested on, since not every browser lets `'self'` cover WebSockets. |
 
 Responses carry `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy` and `Permissions-Policy`; API responses are `Cache-Control: no-store`. Route table entries added for certificates and provisioning: `/v1/platform/acme-settings`, `/v1/platform/certificates` (org), `/v1/public/provision`, `/v1/tenants/*/devices`, `/v1/tenants/*/sip-endpoint` (pbx).
 
-The WebSocket hub listed above is not present in `services/api-gateway/src` at the time of writing.
+### Realtime hub (S5-08)
 
-**Must not** contain business logic or authorization decisions beyond authentication and coarse route-level checks. Services authorize.
+`GET /v1/ws` is a WebSocket on the same listener as the API (`services/api-gateway/src/realtime/`). It streams live calls, presence and queue state to the console, filtered per subscriber with the same rules as every route. On by default (`REALTIME_ENABLED`); it needs NATS, `CALL_CONTROL_URL` and `INTERNAL_SERVICE_TOKEN`.
+
+**Connecting.** Before the upgrade, a browser's `Origin` must be the gateway's own host or a `CONSOLE_HOSTNAMES` entry (403 otherwise), and the address must be under `REALTIME_MAX_CONNECTIONS_PER_IP` (429). A plain `GET` gets 426. The route is public at the HTTP layer because a browser cannot send `Authorization` on a WebSocket and a token in the URL would be logged; the hub authenticates the first message instead.
+
+**Protocol, version 1.** Every frame is one JSON text message with a `type`.
+
+| Direction | Message | Meaning |
+|---|---|---|
+| client → | `{type:"auth", token}` | The access token. First message, within `REALTIME_AUTH_TIMEOUT_MS`; sent again with a fresh token before the old one expires. |
+| client → | `{type:"subscribe", topic, id?}`, `{type:"unsubscribe", topic, id?}` | `id` is echoed back. Subscribing again to a held topic replaces it (a fresh snapshot). |
+| ← server | `{type:"authenticated", v:1, expiresAt}` | After each accepted `auth`. |
+| ← server | `{type:"subscribed", topic, id?}`, then `{type:"snapshot", topic, data}`, then `{type:"event", topic, event}` … | The current state, then each change after it, in order. |
+| ← server | `{type:"unsubscribed", topic, id?, code?}` | After an `unsubscribe`, or, with `code`, when the server ends a subscription (`permission_denied` after a revocation; `unavailable` when the event feed was lost: subscribe again later). |
+| ← server | `{type:"error", code, message, topic?, id?}` | A refused request: `bad_message`, `unknown_type`, `unknown_topic`, `not_subscribed`, `too_many_subscriptions`, `forbidden` (tenant boundary or ancestry), `reseller_private_data_denied` (H1), `permission_denied`, `unavailable`. |
+
+Close codes: 4401 (`Authentication required`, `Invalid token`, `Session expired`: get a fresh token and reconnect), 4403 (`Identity changed`: a later token named someone else; sign in again), 1001 (gateway shutting down: reconnect), 1008 (too many messages), 1009 (frame over `REALTIME_MAX_MESSAGE_BYTES`), 1013 (too many connections for the person, or the client fell more than `REALTIME_MAX_BUFFERED_BYTES` behind). Reasons are plain and never name the product. The gateway pings every `REALTIME_HEARTBEAT_INTERVAL_MS` and drops a connection that did not answer the last ping.
+
+**Topics.** Each declares a permission and a data class, as a route does:
+
+| Topic | Permission | Class | Snapshot → events |
+|---|---|---|---|
+| `tenant:{t}:calls` | `monitor.calls` | private | `{calls:[LiveCall]}` → `call.started {call}`, `call.updated {callUuid, changes}`, `call.ended {callUuid, hangupCause}` |
+| `tenant:{t}:presence` | `monitor.presence` | config | `{extensions:[{extension, state}]}` (non-idle only) → `presence.changed {extension, state}`; state `ringing`, `on_call` or `idle` |
+| `tenant:{t}:queues` | `queue.read` | config | none yet → reserved for queue and agent state (wallboards, S7-06); nothing publishes to it yet |
+
+A `LiveCall` is one channel (leg): `callUuid`, `direction` (`inbound`: the leg called in to the media node; `outbound`: the node placed it), `state` (`ringing`, `answered`, `held`), `from`, `to`, `startedAt`, `answeredAt`, `bridgedTo` (the other leg), `recording` (`on`, `off`; `paused` is reserved for S5-13). The media node is not sent. Record, stop and pause buttons (S5-15) read `recording` and act by `callUuid`.
+
+**Authorization.** On subscribe, and again every `REALTIME_PERMISSION_RECHECK_MS`: org ancestry with H2 (a tenant's people reach only their tenant; a reseller its own tenants, asked of org-service's `/internal/v1/orgs/{id}/lineage` and cached; the master any tenant), then H1 (a reseller never gets a private topic), then the topic's permission through identity-service's `/internal/v1/orgs/{org}/users/{user}/permissions` (`@cuc/http`'s `createRemotePermissionResolver`, cached `REALTIME_PERMISSION_CACHE_TTL_MS`). A lookup that fails refuses (`unavailable`). A revoked permission ends the subscription within the recheck interval plus the cache TTL. Every subscription to a private topic is audited (`audit.event.recorded`, action `realtime.calls.subscribed`, published directly as other reads are); if it cannot be audited it is refused.
+
+**Events.** The hub reads the `CALL` stream (`call.>`) with an ordered consumer: ephemeral, owned by the gateway process, starting at new messages. Each event is routed by `orgContext.tenantId` to that tenant's topics and sent only to their subscribers; an event with no tenant goes nowhere. A `calls` subscription starts with call-control's `GET /internal/v1/tenants/{t}/calls`, and events arriving meanwhile wait until the snapshot is sent. Presence is derived from the same calls (see below). If the feed stops, every subscription is ended with `unavailable` and clients subscribe again when it is back.
+
+**Presence, as built.** No service can read extension state yet: registrations (`usrloc`) and BLF dialog state (`presence`, S2-17) live in OpenSIPs' own tables, and do-not-disturb in call handling. So presence is derived from live calls: a leg's extension is its caller for an inbound leg and its callee for an outbound one, when that number has an extension's shape (2 to 6 digits), so an outside number never appears. `idle` means "on no call we can see", not "registered". Registration, DND and offline states are G-119.
+
+**Replicas.** Each gateway replica runs its own hub: it reads every event itself and serves only its own sockets, so replicas need no coordination and load balancers need no sticky sessions, only WebSocket upgrade support and an idle timeout above the heartbeat interval. A client that reconnects to another replica subscribes again and gets a fresh snapshot. Connection limits are per replica.
+
+**Must not** contain business logic or authorization decisions beyond authentication and coarse route-level checks. Services authorize. The realtime hub is the one place the gateway authorizes data itself, because it relays events rather than proxying to the service that owns them; it does so with the shared rules (`@cuc/authz`'s H1, identity-service's permission lookup), never rules of its own.
 
 ## org-service
 
@@ -186,10 +221,10 @@ Resellers configure trunks for their tenants. Tenant admins can view trunks and,
 - `POST /internal/v1/calls/{uuid}:eavesdrop` with `{mode: listen|whisper|barge, supervisorExtensionId}`
 - `:hangup`, `:transfer`
 - `POST /internal/v1/originate`
-- `GET /internal/v1/tenants/{t}/calls` (live calls from Redis)
+- `GET /internal/v1/tenants/{t}/calls` (live calls from Redis, one entry per leg; built in S5-08 for api-gateway's realtime hub)
 - `POST /internal/v1/nodes/{id}:drain`
 
-**Emits:** `call.channel.created|answered|bridged|held|hungup`, `call.lost`, `call.queue.*` (from `mod_callcenter` events), `call.conference.*`, `call.park.*`. Events are rate-shaped per tenant.
+**Emits:** `call.channel.created|identified|answered|bridged|held|unheld|recording_started|recording_stopped|hungup`, with the tenant in `orgContext` whenever it is known. A call from a trunk has no tenant at `created` and learns it from `cuc_tenant_id` (which the dialplan exports to every leg it bridges to) on its later events; a leg that never names its tenant takes the tenant of the leg bridged to it. The first time a channel's tenant becomes known after `created`, `call.channel.identified` carries the whole call as it stands, before the event that named the tenant, so a live view that routes by tenant sees the call start before it changes. Each node's ESL events are handled one at a time in the order FreeSWITCH raised them, and outbox ids are UUIDv7 increasing within a process, so the bus carries a call's events in order. Also `call.lost`, `call.queue.*` (from `mod_callcenter` events), `call.conference.*`, `call.park.*`. Events are rate-shaped per tenant.
 
 **Monitoring:** `mode=listen` originates a call to the supervisor's own SIP device on the node that owns the target call, then runs `eavesdrop(targetUuid)`. `whisper` sets `eavesdrop_whisper_aleg` or `_bleg`. `barge` uses `three_way`. Browser-based listening would need WebRTC, which is out of scope (O-14).
 

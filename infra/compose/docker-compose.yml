@@ -825,6 +825,14 @@ services:
         condition: service_started
       recording-service:
         condition: service_started
+      # S5-08: the realtime hub reads call events from NATS and asks
+      # call-control for a tenant's live calls. The gateway still starts and
+      # serves the API with NATS down (it keeps retrying), but waiting avoids
+      # refusing the first live subscriptions.
+      nats:
+        condition: service_healthy
+      call-control:
+        condition: service_started
     ports:
       - '${GATEWAY_PORT:-8080}:8080'
     environment:
@@ -850,6 +858,10 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       REQUIRE_HTTPS_FOR_PROVISIONING: ${REQUIRE_HTTPS_FOR_PROVISIONING:-false}
       HSTS_MAX_AGE_SECONDS: ${HSTS_MAX_AGE_SECONDS:-0}
+      # S5-08: the realtime hub (`/v1/ws`). The token above also authenticates
+      # its calls to identity-service, org-service and call-control.
+      NATS_SERVERS: nats://nats:4222
+      CALL_CONTROL_URL: http://call-control:8080
     healthcheck: *node-healthcheck
 
   notification-service:
