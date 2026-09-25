@@ -215,7 +215,7 @@ describe('createRemotePermissionResolver', () => {
     const fetchImpl = vi.fn(() =>
       Promise.resolve(body === null ? new Response(null, { status: 404 }) : Response.json(body)),
     );
-    const resolve = resolver(fetchImpl as never);
+    const resolve = resolver(fetchImpl);
     expect(await resolve(actor, 'self.settings')).toBe(false);
     body = { permissions: ['self.settings'] };
     expect(await resolve(actor, 'self.settings')).toBe(true);
