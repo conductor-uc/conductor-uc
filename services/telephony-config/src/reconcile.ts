@@ -1,5 +1,6 @@
 import type { Logger } from '@cuc/logger';
 
+import type { PbxConfigClient } from './pbx-config-client.js';
 import type { OpenSipsMiClient } from './opensips-mi-client.js';
 import { parseCidr, registrantKeyFor } from './projection.js';
 import type { OpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
@@ -50,6 +51,13 @@ export function createReconciler(
   logger: Logger,
   /** This OpenSIPs cluster's own SIP URI (`config.ts`'s `OPENSIPS_SIP_URI`) — see `projection.ts`'s `registrantKeyFor`. */
   opensipsSipUri: string,
+  /**
+   * Parity 1a: when given, each pass also re-checks every active tenant's
+   * mirrored call handling against pbx-config-service, so a missed
+   * `pbx.call_handling.updated` heals on the next pass. Omitted, only the
+   * `opensips` projection above is reconciled.
+   */
+  pbxConfig?: PbxConfigClient,
 ) {
   async function reconcileOnce(): Promise<ReconcileReport> {
     const [
@@ -259,16 +267,48 @@ export function createReconciler(
     return report;
   }
 
+  /**
+   * Repairs the local call-handling mirror from pbx-config-service, one
+   * active tenant at a time. A tenant whose lookup fails is logged and left
+   * as it is (never cleared on an error), and the pass carries on.
+   */
+  async function reconcileCallHandlingOnce(): Promise<{ upserted: number; removed: number }> {
+    const total = { upserted: 0, removed: 0 };
+    if (pbxConfig === undefined) return total;
+    const tenants = (await readModel.listTenants()).filter((t) => t.status === 'active');
+    for (const tenant of tenants) {
+      try {
+        const desired = await pbxConfig.listCallHandling(tenant.id);
+        const result = await readModel.syncCallHandlingForTenant(tenant.id, desired);
+        total.upserted += result.upserted;
+        total.removed += result.removed;
+      } catch (error) {
+        logger.warn(
+          { tenantId: tenant.id, err: error },
+          'call handling reconciliation failed for a tenant',
+        );
+      }
+    }
+    if (total.upserted + total.removed > 0) {
+      logger.info(total, 'reconciliation repaired call handling drift');
+    }
+    return total;
+  }
+
   let timer: NodeJS.Timeout | undefined;
 
   return {
     reconcileOnce,
+    reconcileCallHandlingOnce,
 
     /** Starts the periodic pass. A failed pass logs and tries again next interval. */
     start(intervalMs: number): void {
       timer = setInterval(() => {
         reconcileOnce().catch((error: unknown) => {
           logger.error({ err: error }, 'reconciliation pass failed');
+        });
+        reconcileCallHandlingOnce().catch((error: unknown) => {
+          logger.error({ err: error }, 'call handling reconciliation pass failed');
         });
       }, intervalMs);
       timer.unref();

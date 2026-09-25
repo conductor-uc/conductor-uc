@@ -215,6 +215,12 @@ if mode == "leave" then
   leaveMessage()
 elseif mode == "retrieve" then
   retrieveMessages()
+elseif mode == nil or mode == "" then
+  -- Parity 1a: the call-handling dialplan runs this as a fallback whose
+  -- arguments come from a channel variable, which is empty when the cause the
+  -- call failed with has no voicemail configured. Nothing to do: just end.
+  freeswitch.consoleLog("INFO", "voicemail.lua: no mode given; ending the call\n")
+  session:hangup()
 else
   freeswitch.consoleLog("ERR", "voicemail.lua: unknown mode '" .. tostring(mode) .. "'\n")
   session:hangup()

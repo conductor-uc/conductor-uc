@@ -22,6 +22,7 @@ import type {
   AffinityKind,
   CallControlClient,
 } from '../src/call-control-client.js';
+import type { CallHandlingConfig } from '../src/domain/call-handling.js';
 import type { OrgClient } from '../src/org-client.js';
 import type {
   AgentConfig,
@@ -142,6 +143,10 @@ export interface FakePbxConfigClient extends PbxConfigClient {
   conferencePins: Record<string, string>;
   /** Keyed by `scheduleId` — whether that schedule is open; a missing key is a schedule that does not exist. */
   schedulesOpen: Record<string, boolean | undefined>;
+  /** Keyed by extension id — an extension with no entry has no call handling configured. */
+  callHandling: Record<string, { tenantId: string; settings: CallHandlingConfig }>;
+  /** Makes `listCallHandling` fail for these tenants, to exercise the reconciler's error path. */
+  callHandlingListFailsFor: Set<string>;
 }
 
 /** A digest-credential/DID/emergency-location/media-asset/ring-group/queue/agent/tier/parking-lot/conference-room lookup whose answers are set per test — no live pbx-config-service needed. */
@@ -159,6 +164,8 @@ function fakePbxConfigClient(): FakePbxConfigClient {
     conferenceRooms: {},
     conferencePins: {},
     schedulesOpen: {},
+    callHandling: {},
+    callHandlingListFailsFor: new Set(),
     findCredential: (_tenantId: string, extensionId: string) =>
       Promise.resolve(state.credentials[extensionId]),
     findDid: (_tenantId: string, didId: string) => Promise.resolve(state.dids[didId]),
@@ -179,6 +186,18 @@ function fakePbxConfigClient(): FakePbxConfigClient {
       Promise.resolve(state.conferencePins[conferenceRoomId] === pin),
     isScheduleOpen: (_tenantId: string, scheduleId: string) =>
       Promise.resolve(state.schedulesOpen[scheduleId]),
+    findCallHandling: (_tenantId: string, extensionId: string) =>
+      Promise.resolve(state.callHandling[extensionId]?.settings),
+    listCallHandling: (tenantId: string) => {
+      if (state.callHandlingListFailsFor.has(tenantId)) {
+        return Promise.reject(new Error('pbx-config-service is down'));
+      }
+      return Promise.resolve(
+        Object.entries(state.callHandling)
+          .filter(([, v]) => v.tenantId === tenantId)
+          .map(([extensionId, v]) => ({ extensionId, settings: v.settings })),
+      );
+    },
   };
   return state;
 }
@@ -246,6 +265,10 @@ function fakeTrunkConfigClient(): FakeTrunkConfigClient {
 export interface FakeOrgClient extends OrgClient {
   countries: Record<string, string>;
   limits: Record<string, Record<string, unknown>>;
+  /** Tenants whose `findLimits` rejects, as if org-service were down. */
+  limitsFailFor: Set<string>;
+  /** How many times `findLimits` has been called. */
+  limitsCalls: number;
   /** The certificates org-service "holds", by hostname — set per test. */
   certificates: Record<
     string,
@@ -258,8 +281,15 @@ function fakeOrgClient(): FakeOrgClient {
   const state: FakeOrgClient = {
     countries: {},
     limits: {},
+    limitsFailFor: new Set(),
+    limitsCalls: 0,
     findCountry: (tenantId: string) => Promise.resolve(state.countries[tenantId]),
-    findLimits: (tenantId: string) => Promise.resolve(state.limits[tenantId]),
+    findLimits: (tenantId: string) => {
+      state.limitsCalls += 1;
+      if (state.limitsFailFor.has(tenantId))
+        return Promise.reject(new Error('org-service is down'));
+      return Promise.resolve(state.limits[tenantId]);
+    },
     certificates: {},
     listSipCertificates: () =>
       Promise.resolve(
@@ -641,6 +671,7 @@ export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void
   await db.kysely.deleteFrom('agents').execute();
   await db.kysely.deleteFrom('parking_lots').execute();
   await db.kysely.deleteFrom('conference_rooms').execute();
+  await db.kysely.deleteFrom('extension_call_handling').execute();
   await db.kysely.deleteFrom('dids').execute();
   await db.kysely.deleteFrom('outbound_routes').execute();
   await db.kysely.deleteFrom('emergency_routes').execute();

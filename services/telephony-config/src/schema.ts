@@ -278,4 +278,16 @@ export interface TelephonyConfigDb extends EventTables {
     created_at: Date;
     updated_at: Date;
   };
+  /**
+   * Parity 1a: local mirror of pbx-config-service's `extension_call_handling`
+   * (`011_add_extension_call_handling.ts`). `settings` is one
+   * `domain/call-handling.ts` `CallHandlingConfig` as JSON (parsed or text
+   * depending on the driver). No row means nothing is configured.
+   */
+  extension_call_handling: {
+    extension_id: string;
+    tenant_id: string;
+    settings: unknown;
+    updated_at: Date;
+  };
 }

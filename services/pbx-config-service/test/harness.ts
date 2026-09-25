@@ -15,6 +15,7 @@ import {
   type TestS3Handle,
 } from '@cuc/testing';
 
+import { createCallHandlingRepo, type CallHandlingRepo } from '../src/repo/call-handling.repo.js';
 import { createDeviceRepo, type DeviceRepo } from '../src/repo/device.repo.js';
 import { createDidRepo, type DidRepo } from '../src/repo/did.repo.js';
 import {
@@ -53,6 +54,7 @@ export interface Harness {
   readonly queueTiers: QueueTierRepo;
   readonly parkingLots: ParkingLotRepo;
   readonly schedules: ScheduleRepo;
+  readonly callHandling: CallHandlingRepo;
   readonly conferenceRooms: ConferenceRoomRepo;
   readonly domains: FakeTenantDomains;
   readonly trunks: FakeTrunkLookup;
@@ -133,6 +135,7 @@ export async function startHarness(): Promise<Harness> {
   const queueTiers = createQueueTierRepo(db);
   const parkingLots = createParkingLotRepo(db);
   const schedules = createScheduleRepo(db);
+  const callHandling = createCallHandlingRepo(db);
   const conferenceRooms = createConferenceRoomRepo(db, kek);
 
   return {
@@ -150,6 +153,7 @@ export async function startHarness(): Promise<Harness> {
     queueTiers,
     parkingLots,
     schedules,
+    callHandling,
     conferenceRooms,
     domains,
     trunks,
@@ -198,6 +202,7 @@ export async function resetSchema(db: Database<PbxConfigServiceDb>): Promise<voi
   await db.kysely.deleteFrom('schedules').execute();
   await db.kysely.deleteFrom('conference_rooms').execute();
   await db.kysely.deleteFrom('devices').execute();
+  await db.kysely.deleteFrom('extension_call_handling').execute();
   await db.kysely.deleteFrom('sip_credentials').execute();
   await db.kysely.deleteFrom('extensions').execute();
   await db.kysely.deleteFrom('emergency_locations').execute();

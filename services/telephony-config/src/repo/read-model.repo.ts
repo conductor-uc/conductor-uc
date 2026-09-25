@@ -1,3 +1,4 @@
+import { parseCallHandling, type CallHandlingConfig } from '../domain/call-handling.js';
 import { randomUUID } from 'node:crypto';
 
 import type { Database } from '@cuc/db';
@@ -977,6 +978,102 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
         .where('tenant_id', '=', tenantId)
         .where('number', '=', number)
         .executeTakeFirst();
+    },
+
+    /** Upserts an extension's call handling (parity 1a), keyed by extension id. */
+    async upsertCallHandling(
+      trx: Executor,
+      row: { extensionId: string; tenantId: string; settings: CallHandlingConfig },
+    ): Promise<void> {
+      const settings = JSON.stringify(row.settings);
+      const now = new Date();
+      await trx
+        .insertInto('extension_call_handling')
+        .values({
+          extension_id: row.extensionId,
+          tenant_id: row.tenantId,
+          settings,
+          updated_at: now,
+        })
+        .onDuplicateKeyUpdate({ tenant_id: row.tenantId, settings, updated_at: now })
+        .execute();
+    },
+
+    async deleteCallHandling(trx: Executor, extensionId: string): Promise<void> {
+      await trx
+        .deleteFrom('extension_call_handling')
+        .where('extension_id', '=', extensionId)
+        .execute();
+    },
+
+    /** What `/fs/dialplan` reads on a call to an extension; undefined when none is configured. */
+    async findCallHandling(extensionId: string): Promise<CallHandlingConfig | undefined> {
+      const row = await db.kysely
+        .selectFrom('extension_call_handling')
+        .select('settings')
+        .where('extension_id', '=', extensionId)
+        .executeTakeFirst();
+      return row === undefined ? undefined : parseCallHandling(row.settings);
+    },
+
+    async listCallHandlingForTenant(
+      tenantId: string,
+    ): Promise<{ extensionId: string; settings: CallHandlingConfig }[]> {
+      const rows = await db.kysely
+        .selectFrom('extension_call_handling')
+        .select(['extension_id', 'settings'])
+        .where('tenant_id', '=', tenantId)
+        .execute();
+      return rows.map((r) => ({
+        extensionId: r.extension_id,
+        settings: parseCallHandling(r.settings),
+      }));
+    },
+
+    /**
+     * Makes the tenant's mirrored call handling exactly `desired` (what
+     * pbx-config-service says it is now): upserts rows that are missing or
+     * differ, deletes rows it no longer has. Returns how many it repaired,
+     * for the reconciler's log.
+     */
+    async syncCallHandlingForTenant(
+      tenantId: string,
+      desired: readonly { extensionId: string; settings: CallHandlingConfig }[],
+    ): Promise<{ upserted: number; removed: number }> {
+      const currentRows = await db.kysely
+        .selectFrom('extension_call_handling')
+        .select(['extension_id', 'settings'])
+        .where('tenant_id', '=', tenantId)
+        .execute();
+      const current = new Map(
+        currentRows.map(
+          (r) => [r.extension_id, JSON.stringify(parseCallHandling(r.settings))] as const,
+        ),
+      );
+      let upserted = 0;
+      let removed = 0;
+      const wanted = new Set<string>();
+      const now = new Date();
+      for (const row of desired) {
+        wanted.add(row.extensionId);
+        const settings = JSON.stringify(row.settings);
+        if (current.get(row.extensionId) === settings) continue;
+        await db.kysely
+          .insertInto('extension_call_handling')
+          .values({ extension_id: row.extensionId, tenant_id: tenantId, settings, updated_at: now })
+          .onDuplicateKeyUpdate({ tenant_id: tenantId, settings, updated_at: now })
+          .execute();
+        upserted += 1;
+      }
+      for (const extensionId of current.keys()) {
+        if (wanted.has(extensionId)) continue;
+        await db.kysely
+          .deleteFrom('extension_call_handling')
+          .where('extension_id', '=', extensionId)
+          .execute();
+        removed += 1;
+      }
+      return { upserted, removed };
     },
 
     /** ISO 3166-1 alpha-2, or `undefined` if not yet known (`org-client.ts`'s own comment on when that happens). */

@@ -16,7 +16,7 @@ import { isOutboundCallAllowed, parseFraudLimits } from '../domain/fraud-limits.
 import { telephonyEvents } from '../events.js';
 import type { OrgClient } from '../org-client.js';
 import type { PbxConfigClient } from '../pbx-config-client.js';
-import type { OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
+import type { ExtensionRow, OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
 import type { CallflowClient } from '../callflow-client.js';
 import { nextRoundRobinStart } from '../ring-group-counter.js';
 import type { TelephonyConfigDb } from '../schema.js';
@@ -27,6 +27,7 @@ import {
   buildAgentStatusDialplanDocument,
   buildCallcenterConfigurationDocument,
   buildConferenceDialplanDocument,
+  buildCallHandlingDialplanDocument,
   buildDialplanDocument,
   buildDirectoryDocument,
   buildEmergencyDialplanDocument,
@@ -37,11 +38,18 @@ import {
   buildRingGroupDialplanDocument,
   buildVoicemailDialplanDocument,
   callcenterName,
+  FORWARD_HOPS_HEADER,
+  MAX_FORWARD_HOPS,
   NOT_FOUND_DOCUMENT,
   type CallcenterAgentEntry,
   type CallcenterQueueEntry,
+  type CallHandlingPlan,
   type EmergencyLocationDetail,
+  type FallbackTarget,
+  type PlanLeg,
+  type PlanTarget,
 } from '../xml.js';
+import type { CallHandlingConfig, CallHandlingDestination } from '../domain/call-handling.js';
 
 /**
  * S2-16: dials the calling extension's own mailbox retrieval menu. An
@@ -535,67 +543,106 @@ export function registerFsRoutes(
    * why that can happen) degrades to trunk-policy-only caller ID rather
    * than blocking the call.
    */
-  async function handleOutboundDial(
-    body: Record<string, string>,
-    tenantId: string,
-    destinationNumber: string,
-    callerContext: string,
-  ): Promise<string> {
+  /**
+   * The tenant-level inputs to any outbound dial, fetched once per call and
+   * only when something actually dials out: the tenant's country, and (lazily,
+   * and memoized) its live toll-fraud limits. Shared by an ordinary outbound
+   * call and by an external call-forward or simultaneous-ring leg, so both go
+   * through the identical checks (07 §6).
+   */
+  interface OutboundPolicy {
+    readonly tenantId: string;
+    readonly country: string;
+    /** `undefined` when they could not be fetched: the caller fails the dial closed. */
+    limits(): Promise<ReturnType<typeof parseFraudLimits> | undefined>;
+  }
+
+  async function outboundPolicyFor(tenantId: string): Promise<OutboundPolicy | undefined> {
     const country = await readModel.findTenantCountry(tenantId);
     if (country === undefined) {
       logger.info({ tenantId }, 'dialplan: tenant has no known country; cannot normalize outbound');
-      return NOT_FOUND_DOCUMENT;
-    }
-
-    const normalized = normalizeToE164(destinationNumber, country);
-    if (normalized === undefined) {
-      logger.info({ tenantId, destinationNumber }, 'dialplan: could not normalize to E.164');
-      return NOT_FOUND_DOCUMENT;
+      return undefined;
     }
 
     // S2-05 (07 §6: "International calling off by default. Country and
     // prefix allow-lists per tenant."). Fetched live, not cached
     // (`org-client.ts`'s own comment on why) — a genuine failure to reach
-    // org-service fails this call closed too, the same as any other lookup
-    // miss in this function, not a silent "assume unlimited."
-    let rawLimits: Record<string, unknown> | undefined;
-    try {
-      rawLimits = await orgClient.findLimits(tenantId);
-    } catch (error) {
-      logger.warn(
-        { tenantId, error: error instanceof Error ? error.message : String(error) },
-        'dialplan: could not fetch fraud limits; failing the call closed',
-      );
-      return NOT_FOUND_DOCUMENT;
+    // org-service fails the dial closed, the same as any other lookup
+    // miss, not a silent "assume unlimited."
+    let memo: Promise<ReturnType<typeof parseFraudLimits> | undefined> | undefined;
+    return {
+      tenantId,
+      country,
+      limits: () => {
+        memo ??= orgClient.findLimits(tenantId).then(
+          (rawLimits) => parseFraudLimits(rawLimits ?? {}),
+          (error: unknown) => {
+            logger.warn(
+              { tenantId, error: error instanceof Error ? error.message : String(error) },
+              'dialplan: could not fetch fraud limits; failing the call closed',
+            );
+            return undefined;
+          },
+        );
+        return memo;
+      },
+    };
+  }
+
+  /** Everything `buildOutboundDialplanDocument` and a forwarded external leg need to place one outbound call. */
+  interface OutboundDial {
+    readonly normalized: string;
+    readonly domainFqdn: string;
+    readonly drGroupId: number;
+    readonly callerId: CallerId | null;
+    readonly maxConcurrentChannels: number | null;
+  }
+
+  /**
+   * The outbound decision for one destination: normalize to E.164, apply the
+   * tenant's toll-fraud policy, pick an outbound route, and resolve caller ID
+   * (extension, then a bound DID, then the trunk's policy) for
+   * `callingExtension`. `undefined` means the call must not be placed.
+   *
+   * For an ordinary outbound call `callingExtension` is whoever dialled; for a
+   * forward it is the extension that forwards, so a forwarded call presents
+   * the forwarder's identity and never the original caller's.
+   */
+  async function planOutboundDial(
+    policy: OutboundPolicy,
+    destinationNumber: string,
+    callingExtension: ExtensionRow | undefined,
+  ): Promise<OutboundDial | undefined> {
+    const { tenantId, country } = policy;
+    const normalized = normalizeToE164(destinationNumber, country);
+    if (normalized === undefined) {
+      logger.info({ tenantId, destinationNumber }, 'dialplan: could not normalize to E.164');
+      return undefined;
     }
-    const limits = parseFraudLimits(rawLimits ?? {});
+
+    const limits = await policy.limits();
+    if (limits === undefined) return undefined;
     const destCountry = destinationCountry(normalized);
     if (!isOutboundCallAllowed(limits, country, destCountry)) {
       logger.info(
         { tenantId, destCountry, tenantCountry: country },
         'dialplan: international call blocked by tenant policy',
       );
-      return NOT_FOUND_DOCUMENT;
+      return undefined;
     }
 
     const routes = await readModel.findOutboundRoutesForTenant(tenantId);
     const route = findBestOutboundRoute(routes, normalized);
     if (route === undefined) {
       logger.info({ tenantId, normalized }, 'dialplan: no outbound route matches this number');
-      return NOT_FOUND_DOCUMENT;
+      return undefined;
     }
 
     const domain = await readModel.findDomain(db.kysely, tenantId);
     if (domain === undefined) {
       logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
-      return NOT_FOUND_DOCUMENT;
+      return undefined;
     }
-
-    const callingNumber = body['variable_sip_from_user'];
-    const callingExtension =
-      callingNumber === undefined || callingNumber === ''
-        ? undefined
-        : await readModel.findExtensionByNumber(tenantId, callingNumber);
 
     const extensionCallerId: CallerId | null =
       callingExtension === undefined
@@ -614,19 +661,219 @@ export function registerFsRoutes(
         ? null
         : { name: primaryTrunk.callerIdName, number: primaryTrunk.callerIdNumber };
 
-    const callerId = resolveOutboundCallerId(extensionCallerId, didCallerId, trunkCallerId);
-    const drGroupId = await readModel.findOrCreateDrGroupId(db.kysely, tenantId);
+    return {
+      normalized,
+      domainFqdn: domain.fqdn,
+      drGroupId: await readModel.findOrCreateDrGroupId(db.kysely, tenantId),
+      callerId: resolveOutboundCallerId(extensionCallerId, didCallerId, trunkCallerId),
+      maxConcurrentChannels: limits.maxConcurrentChannels,
+    };
+  }
+
+  async function handleOutboundDial(
+    body: Record<string, string>,
+    tenantId: string,
+    destinationNumber: string,
+    callerContext: string,
+  ): Promise<string> {
+    const policy = await outboundPolicyFor(tenantId);
+    if (policy === undefined) return NOT_FOUND_DOCUMENT;
+
+    const callingNumber = body['variable_sip_from_user'];
+    const callingExtension =
+      callingNumber === undefined || callingNumber === ''
+        ? undefined
+        : await readModel.findExtensionByNumber(tenantId, callingNumber);
+
+    const outbound = await planOutboundDial(policy, destinationNumber, callingExtension);
+    if (outbound === undefined) return NOT_FOUND_DOCUMENT;
 
     return buildOutboundDialplanDocument(
       callerContext,
       destinationNumber,
-      normalized,
-      domain.fqdn,
+      outbound.normalized,
+      outbound.domainFqdn,
       opensipsSipUri,
-      drGroupId,
-      callerId,
+      outbound.drGroupId,
+      outbound.callerId,
       tenantId,
-      limits.maxConcurrentChannels,
+      outbound.maxConcurrentChannels,
+    );
+  }
+
+  /**
+   * How many forwards a call has already been through, from the header every
+   * forwarding leg carries (`FORWARD_HOPS_HEADER`). Missing is 0. A value that
+   * is not a plain non-negative integer is treated as the cap, not as 0: the
+   * header can be set by anything upstream, and unreadable must not mean
+   * "forward freely".
+   */
+  function forwardHopsOf(body: Record<string, string>): number {
+    const raw = body[`variable_sip_h_${FORWARD_HOPS_HEADER}`];
+    if (raw === undefined || raw === '') return 0;
+    return /^\d{1,3}$/.test(raw) ? Number(raw) : MAX_FORWARD_HOPS;
+  }
+
+  /**
+   * Whether forwarding must be switched off for this call: it has been
+   * forwarded `MAX_FORWARD_HOPS` times already, or (a call from a trunk) it
+   * presents one of this tenant's own numbers as caller ID, which is what a
+   * forward that went out to the PSTN and came straight back looks like when
+   * the carrier does not preserve the hop header. Do not disturb still applies.
+   */
+  async function forwardingSuppressed(
+    body: Record<string, string>,
+    tenantId: string,
+    fromTrunk: boolean,
+    hops: number,
+  ): Promise<boolean> {
+    if (hops >= MAX_FORWARD_HOPS) {
+      logger.warn({ tenantId, hops }, 'dialplan: forward hop cap reached; not forwarding');
+      return true;
+    }
+    if (!fromTrunk) return false;
+    const callerNumber = body['Caller-Caller-ID-Number'];
+    if (callerNumber === undefined || callerNumber === '') return false;
+    const e164 = callerNumber.startsWith('+') ? callerNumber : `+${callerNumber}`;
+    const own = await readModel.findDidByE164(tenantId, e164);
+    if (own !== undefined) {
+      logger.warn(
+        { tenantId, didId: own.id },
+        'dialplan: caller ID is one of the tenant’s own numbers; treating as a forwarding loop',
+      );
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * The dialplan for a call to an extension that has call handling saved
+   * (parity 1a): do not disturb, forward always, busy / no answer /
+   * unreachable, and simultaneous ring. Only reached when a row exists; an
+   * extension with none takes the original path in the caller unchanged.
+   *
+   * A destination that cannot be resolved (an extension since deleted or in
+   * another tenant, a mailbox that does not exist, an external number the
+   * tenant's policy or outbound routes refuse) is dropped, never guessed at:
+   * an unresolvable forward-always leaves the extension ringing, and an
+   * unresolvable conditional forward falls back to the extension's own
+   * voicemail if it has one. Forwarded internal legs are dialled straight to
+   * the phone through OpenSIPs, so the target's own call handling is not
+   * applied: forwarding is one level deep, which is what rules out extension
+   * loops. External legs go through `planOutboundDial`, the same policy an
+   * ordinary outbound call gets, attributed to the tenant and carrying the
+   * forwarding extension's caller ID.
+   */
+  async function handleExtensionWithCallHandling(
+    body: Record<string, string>,
+    tenantId: string,
+    extension: ExtensionRow,
+    handling: CallHandlingConfig,
+    callerContext: string,
+    destinationNumber: string,
+    domainFqdn: string,
+    fromTrunk: boolean,
+  ): Promise<string> {
+    const hops = forwardHopsOf(body);
+    const suppressed = await forwardingSuppressed(body, tenantId, fromTrunk, hops);
+
+    const ownMailbox = await voicemailClient.findMailboxByExtension(tenantId, extension.id);
+    const ownVoicemail: FallbackTarget | null =
+      ownMailbox === undefined ? null : { kind: 'voicemail', mailboxId: ownMailbox.id };
+
+    let policyPromise: Promise<OutboundPolicy | undefined> | undefined;
+    const placed: { external: OutboundDial | undefined } = { external: undefined };
+
+    async function externalLeg(e164: string): Promise<PlanLeg | undefined> {
+      policyPromise ??= outboundPolicyFor(tenantId);
+      const policy = await policyPromise;
+      if (policy === undefined) return undefined;
+      const outbound = await planOutboundDial(policy, e164, extension);
+      if (outbound === undefined) return undefined;
+      placed.external = outbound;
+      return {
+        kind: 'external',
+        normalizedNumber: outbound.normalized,
+        drGroupId: outbound.drGroupId,
+        callerId: outbound.callerId,
+      };
+    }
+
+    async function legFor(d: CallHandlingDestination): Promise<PlanLeg | undefined> {
+      if (d.type === 'external') return externalLeg(d.e164);
+      if (d.type !== 'extension') return undefined;
+      const target = await readModel.findExtensionById(d.extensionId);
+      if (target === undefined || target.tenantId !== tenantId || target.id === extension.id) {
+        logger.warn(
+          { tenantId, extensionId: d.extensionId },
+          'call handling: destination extension not found',
+        );
+        return undefined;
+      }
+      return { kind: 'internal', number: target.number, forwarded: true };
+    }
+
+    async function targetFor(
+      d: CallHandlingDestination | null,
+    ): Promise<FallbackTarget | undefined> {
+      if (d === null || suppressed) return undefined;
+      if (d.type === 'voicemail') {
+        const id = d.extensionId ?? extension.id;
+        if (id === extension.id) return ownVoicemail ?? undefined;
+        const owner = await readModel.findExtensionById(id);
+        if (owner === undefined || owner.tenantId !== tenantId) return undefined;
+        const mailbox = await voicemailClient.findMailboxByExtension(tenantId, owner.id);
+        return mailbox === undefined ? undefined : { kind: 'voicemail', mailboxId: mailbox.id };
+      }
+      const leg = await legFor(d);
+      return leg === undefined ? undefined : { kind: 'bridge', legs: [leg] };
+    }
+
+    let dnd: PlanTarget | null = null;
+    if (handling.dnd) {
+      dnd =
+        handling.dndAction === 'voicemail' && ownVoicemail !== null
+          ? ownVoicemail
+          : { kind: 'busy' };
+    }
+
+    const forwardAlways = dnd === null ? ((await targetFor(handling.forwardAlways)) ?? null) : null;
+
+    const ringLegs: PlanLeg[] = [{ kind: 'internal', number: extension.number, forwarded: false }];
+    if (dnd === null && forwardAlways === null && !suppressed) {
+      for (const d of handling.simultaneousRing) {
+        const leg = await legFor(d);
+        if (leg !== undefined) ringLegs.push(leg);
+      }
+    }
+
+    const conditional = async (
+      d: CallHandlingDestination | null,
+    ): Promise<FallbackTarget | null> =>
+      dnd !== null || forwardAlways !== null ? null : ((await targetFor(d)) ?? ownVoicemail);
+    const onBusy = await conditional(handling.forwardBusy);
+    const onNoAnswer = await conditional(handling.forwardNoAnswer);
+    const onUnreachable = await conditional(handling.forwardUnreachable);
+
+    const plan: CallHandlingPlan = {
+      hops,
+      dnd,
+      forwardAlways,
+      ringLegs,
+      ringSeconds: handling.noAnswerSeconds,
+      onBusy,
+      onNoAnswer,
+      onUnreachable,
+      maxConcurrentChannels: placed.external?.maxConcurrentChannels ?? null,
+    };
+
+    return buildCallHandlingDialplanDocument(
+      callerContext,
+      destinationNumber,
+      domainFqdn,
+      opensipsSipUri,
+      tenantId,
+      plan,
     );
   }
 
@@ -1030,6 +1277,22 @@ export function registerFsRoutes(
       // busy fallback rather than a plain hangup — fetched live (the same
       // "not cached, correction takes effect on the next call" reasoning as
       // S2-05's fraud limits and S2-06's emergency location).
+      // Parity 1a: an extension with call handling saved takes its own
+      // builder; one without is exactly what it was before.
+      const callHandling = await readModel.findCallHandling(extension.id);
+      if (callHandling !== undefined) {
+        return handleExtensionWithCallHandling(
+          body,
+          tenantId,
+          extension,
+          callHandling,
+          callerContext,
+          destinationNumber,
+          domain.fqdn,
+          false,
+        );
+      }
+
       const mailbox = await voicemailClient.findMailboxByExtension(tenantId, extension.id);
       return buildDialplanDocument(
         callerContext,
@@ -1138,6 +1401,20 @@ export function registerFsRoutes(
             'dialplan: DID’s destination extension no longer exists',
           );
           return NOT_FOUND_DOCUMENT;
+        }
+
+        const callHandling = await readModel.findCallHandling(extension.id);
+        if (callHandling !== undefined) {
+          return handleExtensionWithCallHandling(
+            body,
+            trunk.tenantId,
+            extension,
+            callHandling,
+            callerContext,
+            destinationNumber,
+            domain.fqdn,
+            true,
+          );
         }
 
         return buildDialplanDocument(

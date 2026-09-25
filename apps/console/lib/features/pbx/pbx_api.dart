@@ -136,6 +136,28 @@ class PbxApi {
     return (response.data as Map).cast<String, dynamic>();
   }
 
+  /// An extension's call handling: do not disturb, forwarding and simultaneous
+  /// ring (`GET .../extensions/{id}/call-handling`). Never 404s for an existing
+  /// extension: nothing configured reads as everything off.
+  Future<Json> callHandling(String extensionId) async {
+    final response = await _dio.get<Object?>(
+      _path('extensions', extensionId, 'call-handling'),
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  /// Replaces an extension's call handling (`PUT`); the service checks the
+  /// numbers and destinations and answers 400 with what is wrong.
+  Future<Json> saveCallHandling(String extensionId, Json body) async {
+    final response = await _dio.put<Object?>(
+      _path('extensions', extensionId, 'call-handling'),
+      data: body,
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   /// The tenant's emergency route, or null when it has none (404).
   Future<Json?> emergencyRoute() async {
     try {

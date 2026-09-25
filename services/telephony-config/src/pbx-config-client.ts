@@ -11,6 +11,8 @@
  * S1-09) — real service-to-service auth does not exist yet.
  */
 
+import { parseCallHandling, type CallHandlingConfig } from './domain/call-handling.js';
+
 export interface DigestCredential {
   readonly extensionId: string;
   /** The extension's current dialable number — S1-13's `/fs/dialplan` matches on this. */
@@ -208,6 +210,12 @@ export interface PbxConfigClient {
    * Undefined when the schedule does not exist in that tenant (a 404).
    */
   isScheduleOpen(tenantId: string, scheduleId: string): Promise<boolean | undefined>;
+  /** An extension's call handling (parity 1a). Undefined when nothing is configured for it (a 404). */
+  findCallHandling(tenantId: string, extensionId: string): Promise<CallHandlingConfig | undefined>;
+  /** Every extension in the tenant that has call handling configured, for reconciliation. */
+  listCallHandling(
+    tenantId: string,
+  ): Promise<{ extensionId: string; settings: CallHandlingConfig }[]>;
 }
 
 export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfigClient {
@@ -528,6 +536,64 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
 
       const body = (await response.json()) as { open: boolean };
       return body.open;
+    },
+
+    async findCallHandling(
+      tenantId: string,
+      extensionId: string,
+    ): Promise<CallHandlingConfig | undefined> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/extensions/${encodeURIComponent(extensionId)}/call-handling`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the call handling lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      return parseCallHandling(await response.json());
+    },
+
+    async listCallHandling(
+      tenantId: string,
+    ): Promise<{ extensionId: string; settings: CallHandlingConfig }[]> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/call-handling`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the call handling list (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+
+      const body = (await response.json()) as {
+        rows: ({ extensionId: string } & Record<string, unknown>)[];
+      };
+      return body.rows.map((row) => ({
+        extensionId: row.extensionId,
+        settings: parseCallHandling(row),
+      }));
     },
   };
 }

@@ -269,6 +269,96 @@ class DemoPbx {
   final _rows = <String, List<Map<String, dynamic>>>{};
 
   /// Queue tiers by queue id.
+  /// Call handling by extension id; an extension with no entry has none set.
+  final _callHandling = <String, Map<String, dynamic>>{};
+
+  static Map<String, dynamic> _noCallHandling() => {
+    'dnd': false,
+    'dndAction': 'voicemail',
+    'forwardAlways': null,
+    'forwardBusy': null,
+    'forwardNoAnswer': null,
+    'noAnswerSeconds': 20,
+    'forwardUnreachable': null,
+    'simultaneousRing': <Object>[],
+  };
+
+  static final _e164 = RegExp(r'^\+[1-9]\d{6,14}$');
+
+  /// `GET`/`PUT .../extensions/{id}/call-handling`, checking what the service
+  /// checks: numbers in E.164, destinations that exist, no forwarding to
+  /// itself, at most five extra rings.
+  ResponseBody? _callHandlingRoute(RequestOptions options) {
+    final match = RegExp(
+      r'^/v1/tenants/[^/]+/extensions/([^/]+)/call-handling$',
+    ).firstMatch(options.path);
+    if (match == null) return null;
+    final id = match.group(1)!;
+    final extensions = _rows['extensions']!;
+    if (!extensions.any((r) => r['id'] == id)) {
+      return _problem(404, 'No extension with that id.');
+    }
+    final method = options.method.toUpperCase();
+    if (method == 'GET') {
+      return _json(_callHandling[id] ?? _noCallHandling());
+    }
+    if (method != 'PUT') return _problem(405, 'Not supported.');
+
+    final body = _body(options);
+    String? check(Object? d, String field, {bool ring = false}) {
+      if (d == null) return null;
+      if (d is! Map) return '$field: not a destination.';
+      switch (d['type']) {
+        case 'extension':
+          final target = d['extensionId'];
+          if (target == id) {
+            return '$field: an extension cannot forward to itself '
+                '(a forwarding loop).';
+          }
+          if (!extensions.any((r) => r['id'] == target)) {
+            return "Extension '$target' does not exist in this tenant.";
+          }
+        case 'voicemail':
+          if (ring) return '$field: voicemail cannot be a ring destination.';
+          final target = d['extensionId'];
+          if (target != null && !extensions.any((r) => r['id'] == target)) {
+            return "Extension '$target' does not exist in this tenant.";
+          }
+        case 'external':
+          if (!_e164.hasMatch('${d['e164']}')) {
+            return "$field: '${d['e164']}' is not an E.164 number "
+                '(a leading +, then 7 to 15 digits).';
+          }
+        default:
+          return '$field: unknown destination type.';
+      }
+      return null;
+    }
+
+    final ring = [...?(body['simultaneousRing'] as List?)];
+    final seconds = body['noAnswerSeconds'] ?? 20;
+    final problems = [
+      check(body['forwardAlways'], 'forwardAlways'),
+      check(body['forwardBusy'], 'forwardBusy'),
+      check(body['forwardNoAnswer'], 'forwardNoAnswer'),
+      check(body['forwardUnreachable'], 'forwardUnreachable'),
+      for (var i = 0; i < ring.length; i++)
+        check(ring[i], 'simultaneousRing[$i]', ring: true),
+      if (ring.length > 5) 'simultaneousRing takes at most 5 destinations.',
+      if (seconds is! int || seconds < 5 || seconds > 120)
+        'noAnswerSeconds must be a whole number of 5-120 seconds.',
+    ].whereType<String>();
+    if (problems.isNotEmpty) return _problem(400, problems.first);
+
+    final saved = {
+      ..._noCallHandling(),
+      for (final k in _noCallHandling().keys)
+        if (body.containsKey(k)) k: body[k],
+    };
+    _callHandling[id] = saved;
+    return _json(saved);
+  }
+
   final _queueTiers = <String, List<Map<String, dynamic>>>{
     'q-1': [
       {
@@ -1402,6 +1492,8 @@ class DemoPbx {
     if (certs != null) return certs;
     final phone = _phone(options);
     if (phone != null) return phone;
+    final callHandling = _callHandlingRoute(options);
+    if (callHandling != null) return callHandling;
     final voicemail = _voicemail(options);
     if (voicemail != null) return voicemail;
     final media = _media(options);

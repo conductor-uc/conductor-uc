@@ -20,6 +20,7 @@ import { createQueueRepo } from './repo/queue.repo.js';
 import { createAgentRepo } from './repo/agent.repo.js';
 import { createQueueTierRepo } from './repo/queue-tier.repo.js';
 import { createParkingLotRepo } from './repo/parking-lot.repo.js';
+import { createCallHandlingRepo } from './repo/call-handling.repo.js';
 import { createScheduleRepo } from './repo/schedule.repo.js';
 import { createConferenceRoomRepo } from './repo/conference-room.repo.js';
 import { registerDidRoutes } from './routes/did.routes.js';
@@ -29,6 +30,8 @@ import { registerExtensionRoutes } from './routes/extension.routes.js';
 import { registerProvisionRoutes } from './routes/provision.routes.js';
 import { parseSipTransports, registerSipEndpointRoutes } from './routes/sip-endpoint.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
+import { registerCallHandlingInternalRoutes } from './routes/call-handling-internal.routes.js';
+import { registerCallHandlingRoutes } from './routes/call-handling.routes.js';
 import { registerScheduleInternalRoutes } from './routes/schedule-internal.routes.js';
 import { registerMediaAssetRoutes } from './routes/media-asset.routes.js';
 import { registerRingGroupRoutes } from './routes/ring-group.routes.js';
@@ -108,6 +111,7 @@ const agentRepo = createAgentRepo(db);
 const queueTierRepo = createQueueTierRepo(db);
 const parkingLotRepo = createParkingLotRepo(db);
 const scheduleRepo = createScheduleRepo(db);
+const callHandlingRepo = createCallHandlingRepo(db);
 const conferenceRoomRepo = createConferenceRoomRepo(db, kek);
 
 const domainConsumer = createDomainConsumer(db, bus, logger, extensionRepo);
@@ -134,6 +138,7 @@ app.addReadinessCheck('outbox', async () => {
 });
 
 registerExtensionRoutes(app, extensionRepo, bus);
+registerCallHandlingRoutes(app, callHandlingRepo, bus);
 const sipEdge = {
   port: config.SIP_PUBLIC_PORT,
   tlsPort: config.SIP_PUBLIC_TLS_PORT,
@@ -179,6 +184,7 @@ registerInternalRoutes(
   config.INTERNAL_SERVICE_TOKEN,
 );
 registerScheduleInternalRoutes(app, scheduleRepo, config.INTERNAL_SERVICE_TOKEN);
+registerCallHandlingInternalRoutes(app, callHandlingRepo, config.INTERNAL_SERVICE_TOKEN);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
