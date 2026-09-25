@@ -102,7 +102,7 @@ It believes `X-Forwarded-For` and `X-Forwarded-Proto` only from the proxies list
 
 What it does on each request:
 
-1. **Flood protection (`pike`):** more than 30 requests in 2 seconds from one source IP blocks that IP for 120 seconds. This applies to every source, including FreeSWITCH nodes and carriers.
+1. **Flood protection (`pike`):** more than 30 requests in 2 seconds from one source IP blocks that IP for 120 seconds. FreeSWITCH nodes and addresses listed on a trunk are exempt (G-117); phones and unknown sources are not.
 2. **Phones:** digest authentication against `subscriber`, registration into `location`, and presence subscriptions (BLF).
 3. **Carriers:** calls from a trunk's IP addresses are recognised through the `address` table. Registration-based trunks register out through `uac_registrant`.
 4. **To FreeSWITCH:** every call is sent round-robin to a FreeSWITCH node from dispatcher set 1, with the tenant (`X-Tenant-Id`), direction and trunk added as headers.
@@ -160,7 +160,7 @@ Every one of these listens on `HTTP_PORT` (8080 by default), exposes `/healthz` 
 | **telephony-config** | The bridge to the telephony layer. Keeps its own copy of what calls need (fed by events), answers every FreeSWITCH request, and writes the OpenSIPs tables. **It is the only service FreeSWITCH talks to for configuration.** | `telephony_config`, **plus read-write access to the `opensips` schema** | OpenSIPs MI; Redis; object storage (reads prompts, voicemail audio); pbx-config, trunk, org, voicemail, callflow, call-control and recording services; NATS | Relay; four consumers; reconcile and certificate sync (every 15 min) |
 | **call-control** | Connects to every FreeSWITCH event socket, tracks live calls and node health in Redis, and hands out the leases that pin a queue, parking lot or conference to one node | `call_control` (outbox only); Redis: calls, nodes, leases | **FreeSWITCH ESL on every node**; Redis; NATS | ESL connections; heartbeats; lease renewals; relay |
 | **media-worker** | Transcodes uploaded prompts and hold music with ffmpeg. Kept apart because it handles untrusted files. | `media_worker` (outbox and consumed events only); object storage | pbx-config-service; NATS | Consumes `pbx.media_asset.finalize_requested` |
-| **notification-service** | Sends every email: invitations, password resets, two-step resets, voicemail-to-email. Branded per reseller. | `notification_service` (sent-mail log) | **SMTP relay**; org-service; voicemail-service; NATS | Identity and voicemail consumers |
+| **notification-service** | Sends every email: invitations, password resets, two-step resets, voicemail-to-email. Branded per reseller. | `notification_service` (sent-mail log) | **SMTP relay**; org-service; identity-service (issues each reset or invitation link at send time); voicemail-service; NATS | Identity and voicemail consumers |
 
 media-worker and notification-service serve only their health endpoints. None of their routes is called by anything else.
 

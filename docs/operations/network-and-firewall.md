@@ -57,7 +57,7 @@ Every application service listens on 8080. This is the complete list of callers,
 
 | Service (port 8080) | Called by | Over |
 |---|---|---|
-| identity-service | api-gateway (`/v1/auth`, `/v1/orgs`, and JWKS), org-service, pbx-config, trunk, callflow, voicemail, recording and cdr services (permission lookups) | HTTP |
+| identity-service | api-gateway (`/v1/auth`, `/v1/orgs`, and JWKS), org-service, pbx-config, trunk, callflow, voicemail, recording and cdr services (permission lookups), notification-service (reset and invitation links) | HTTP |
 | org-service | api-gateway (`/v1/public`, `/v1/resellers`, `/v1/tenants`, `/v1/session`, `/v1/platform/...`, certificates, ACME challenges), identity, pbx-config, trunk, telephony-config, cdr and notification services | HTTP |
 | pbx-config-service | api-gateway, telephony-config, media-worker, voicemail-service, cdr-service | HTTP |
 | trunk-service | api-gateway, pbx-config-service, telephony-config | HTTP |
@@ -167,11 +167,18 @@ The gateway takes the client's address from the connection itself, and ignores `
 
 Never list an address that ordinary clients can connect from: whatever it sends in `X-Forwarded-For` is believed.
 
-### 6.4 SIP flood protection hits trusted peers too
+### 6.4 SIP flood protection
 
-OpenSIPs' `pike` module blocks any source that sends more than 30 SIP requests in 2 seconds, for 120 seconds. It has no allow list, so it counts FreeSWITCH nodes and carriers as well. A busy FreeSWITCH node (outbound legs plus OPTIONS replies) or a carrier delivering many calls at once can be blocked, which drops calls. Watch OpenSIPs' log for `pike: blocking flood from`. Raising the threshold means editing `opensips.cfg.template` (`reqs_density_per_unit`).
+OpenSIPs' `pike` module blocks any source that sends more than 30 SIP requests in 2 seconds, for 120 seconds. Since G-117 it applies only to sources OpenSIPs does not already trust:
 
-There is also a fixed limit of 10 new calls per second per tenant from phones (G-31), and FreeSWITCH accepts at most 30 new sessions per second and 1,000 in total per node (`switch.conf.xml`).
+- **Exempt:** FreeSWITCH nodes (the dispatcher list, matched by address and port) and every address listed on a trunk (the same `address` table that authenticates IP-based trunks). A busy media server or a carrier delivering a burst of calls is no longer blocked. For a registration-based trunk whose carrier sends calls from fixed addresses, add those addresses to the trunk to exempt them.
+- **Protected:** phones and every unknown source.
+
+Watch OpenSIPs' log for `pike: blocking flood from`. A block from an address you expected to be exempt means it is missing from the trunk (or from `OPENSIPS_FS_DESTINATION`). To lift a block early: `opensips-cli -o communication_type=http -o url=http://127.0.0.1:8888/mi -x mi pike_rm <address>` inside the OpenSIPs container. Raising the threshold means editing `opensips.cfg.template` (`reqs_density_per_unit`). `tests/sip/test/flood_protection.test.ts` proves both halves live.
+
+Repeated authentication failures (password guessing) are not blocked beyond pike's rate limit (G-118, later).
+
+There is also a limit of 10 new calls per second per tenant from phones (G-31), and FreeSWITCH accepts at most 30 new sessions per second and 1,000 in total per node (`switch.conf.xml`).
 
 ### 6.5 Phones behind NAT
 

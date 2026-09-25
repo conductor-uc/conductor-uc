@@ -82,6 +82,16 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('We email them'), findsOneWidget);
+    expect(find.textContaining('other administrators know'), findsOneWidget);
+    // The admin confirms with a code from their own authenticator (step-up).
+    expect(
+      find.textContaining('code from your own authenticator'),
+      findsOneWidget,
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('step-up-code')),
+      '123456',
+    );
     await tester.tap(find.widgetWithText(FilledButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -91,6 +101,47 @@ void main() {
     );
     // There is now nothing left to reset.
     expect(inRow(tester, 'sam@example.test', reset), findsNothing);
+  });
+
+  testWidgets('the reset is not sent without a 6-digit code', (tester) async {
+    await openSection(tester, 'Users');
+    final reset = find.byTooltip('Reset two-step verification');
+    await tapIn(tester, 'sam@example.test', reset);
+    await tester.tap(find.widgetWithText(FilledButton, 'Reset'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Enter the 6-digit code from your authenticator app.'),
+      findsOneWidget,
+    );
+    // Still open, and nothing changed.
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(inRow(tester, 'sam@example.test', reset), findsOneWidget);
+  });
+
+  testWidgets('a wrong code is explained and can be tried again', (
+    tester,
+  ) async {
+    await openSection(tester, 'Users');
+    final reset = find.byTooltip('Reset two-step verification');
+    await tapIn(tester, 'sam@example.test', reset);
+    final code = find.byKey(const ValueKey('step-up-code'));
+    await tester.enterText(code, '000000');
+    await tester.tap(find.widgetWithText(FilledButton, 'Reset'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('That code did not work'), findsOneWidget);
+    expect(
+      find.text('Reset two-step verification for Sam Support?'),
+      findsOneWidget,
+    );
+
+    await tester.enterText(code, '123456');
+    await tester.tap(find.widgetWithText(FilledButton, 'Reset'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Two-step verification reset for Sam Support.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('cancelling the reset changes nothing', (tester) async {

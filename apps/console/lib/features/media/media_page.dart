@@ -11,6 +11,7 @@ import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource.dart';
 import '../pbx/resource_page.dart';
+import '../voicemail/voicemail_api.dart' show openRecordingProvider;
 import 'file_source.dart';
 
 /// Sends the file's bytes to the presigned URL the service handed out. The
@@ -85,6 +86,21 @@ class _MediaPageState extends ConsumerState<MediaPage> {
     }
   }
 
+  /// Opens a ready recording's audio in a new tab, where the browser plays it.
+  Future<void> _play(Json row) async {
+    final api = ref.read(pbxApiProvider);
+    final open = ref.read(openRecordingProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    if (api == null) return;
+    try {
+      await open(await api.mediaPlayUrl('${row['id']}'));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not play it: ${problemMessage(e)}')),
+      );
+    }
+  }
+
   Future<void> _upload() async {
     await showDialog<bool>(
       context: context,
@@ -102,6 +118,15 @@ class _MediaPageState extends ConsumerState<MediaPage> {
     });
     return ResourceView(
       def: mediaAssetsDef,
+      // Only a converted recording has audio to play.
+      rowActions: (context, ref, row) => [
+        if (row['status'] == 'ready')
+          IconButton(
+            tooltip: 'Play',
+            icon: const Icon(Icons.play_arrow),
+            onPressed: () => _play(row),
+          ),
+      ],
       headerActions: [
         if (ref.watch(canProvider('media.manage')))
           FilledButton.icon(

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  G-117: 80 OPTIONS to the proxy itself, back to back, each waiting for its
+  200. OpenSIPs' flood protection (`pike`) blocks a source past 30 requests in
+  2 seconds, so the call completes only if the source is exempt: an address
+  listed on a trunk, or a FreeSWITCH node. From an unknown source the block
+  drops a request partway through, the `recv` times out and the call fails.
+
+  The leading pause gives the test time to register this container's address
+  on a trunk and for telephony-config to reload OpenSIPs' address table.
+
+  `[field0]`=caller user, `[field1]`=the proxy's SIP domain (`opensips`).
+-->
+<scenario name="OPTIONS burst">
+  <pause milliseconds="8000"/>
+
+  <nop>
+    <action>
+      <assign assign_to="1" value="0"/>
+    </action>
+  </nop>
+
+  <label id="1"/>
+
+  <send>
+    <![CDATA[
+      OPTIONS sip:[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field1]>
+      Call-ID: [call_id]
+      CSeq: [cseq] OPTIONS
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" timeout="2000">
+  </recv>
+
+  <nop>
+    <action>
+      <add assign_to="1" value="1"/>
+      <test assign_to="2" variable="1" compare="less_than" value="80"/>
+    </action>
+  </nop>
+
+  <nop next="1" test="2"/>
+</scenario>

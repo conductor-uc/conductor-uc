@@ -69,16 +69,21 @@ export const configSchema = Type.Object({
 
   /** How long an emailed password-reset link works. */
   PASSWORD_RESET_TTL_MINUTES: Env.int({ minimum: 5, default: 60 }),
-  /** How long an emailed invitation link works. */
-  INVITATION_TTL_DAYS: Env.int({ minimum: 1, default: 7 }),
+  /**
+   * How long an invitation, and so its emailed link, works (G-55: three days,
+   * down from seven). Replaces `INVITATION_TTL_DAYS`, which is no longer read.
+   */
+  INVITATION_TTL_HOURS: Env.int({ minimum: 1, default: 72 }),
   /**
    * Adds `Secure` to the refresh cookie (07 §2). Turn off only for a local
    * plain-HTTP dev setup, where a browser would otherwise refuse to store it.
    */
   COOKIE_SECURE: Env.bool({ default: true }),
   /**
-   * Development only: log reset and invitation tokens when no mailer is
-   * running. They are credentials; leave this off everywhere real.
+   * Development only: when a reset or invitation is created, issue its link
+   * at once and log the token, for when no mailer is running. They are
+   * credentials; leave this off everywhere real. A running notification-service
+   * issues a fresh link when it sends, which makes the logged one stop working.
    */
   DEV_EXPOSE_TOKENS: Env.bool({ default: false }),
 });

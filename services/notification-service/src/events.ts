@@ -7,20 +7,25 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * import each other's source (05 §1.1) — so a schema change there needs the
  * same change here.
  *
- * The reset and invitation events carry a one-time token, which is a
- * credential (G-55); the MFA-reset event carries none.
+ * None of them carries a credential. The reset and invitation events carry
+ * ids only (G-55, version 2): the one-time token is issued by identity-service
+ * when this service sends the email (`identity-client.ts`).
  */
 export const notificationEvents = defineEvents({
   'identity.user.password_reset_requested': {
-    schemaVersion: 1,
-    description: 'A password reset was requested for an active user.',
-    data: Type.Object({
-      userId: Type.String({ minLength: 1 }),
-      orgId: Type.String({ minLength: 1 }),
-      email: Type.String({ minLength: 1 }),
-      token: Type.String({ minLength: 1 }),
-      expiresAt: Type.String({ minLength: 1 }),
-    }),
+    schemaVersion: 2,
+    description:
+      'A password reset was requested for an active user. Carries no token; the link is issued at send time.',
+    data: Type.Object(
+      {
+        resetId: Type.String({ minLength: 1 }),
+        userId: Type.String({ minLength: 1 }),
+        orgId: Type.String({ minLength: 1 }),
+        email: Type.String({ minLength: 1 }),
+        expiresAt: Type.String({ minLength: 1 }),
+      },
+      { additionalProperties: false },
+    ),
   },
   'identity.user.mfa_reset': {
     schemaVersion: 1,
@@ -33,18 +38,20 @@ export const notificationEvents = defineEvents({
     }),
   },
   'identity.invitation.created': {
-    schemaVersion: 1,
-    description: 'A user was invited to an org.',
-    data: Type.Object({
-      invitationId: Type.String({ minLength: 1 }),
-      orgId: Type.String({ minLength: 1 }),
-      orgType: Type.String({ minLength: 1 }),
-      resellerId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-      email: Type.String({ minLength: 1 }),
-      displayName: Type.String({ minLength: 1 }),
-      token: Type.String({ minLength: 1 }),
-      expiresAt: Type.String({ minLength: 1 }),
-    }),
+    schemaVersion: 2,
+    description: 'A user was invited to an org. Carries no token; the link is issued at send time.',
+    data: Type.Object(
+      {
+        invitationId: Type.String({ minLength: 1 }),
+        orgId: Type.String({ minLength: 1 }),
+        orgType: Type.String({ minLength: 1 }),
+        resellerId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+        email: Type.String({ minLength: 1 }),
+        displayName: Type.String({ minLength: 1 }),
+        expiresAt: Type.String({ minLength: 1 }),
+      },
+      { additionalProperties: false },
+    ),
   },
   'voicemail.message.created': {
     schemaVersion: 1,

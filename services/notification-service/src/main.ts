@@ -7,7 +7,9 @@ import { createLogger } from '@cuc/logger';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createIdentityConsumer } from './consumers/identity.consumer.js';
 import { createVoicemailConsumer } from './consumers/voicemail.consumer.js';
+import { createIdentityClient } from './identity-client.js';
 import { createMailer } from './mailer.js';
+import { createIdentityClient } from './identity-client.js';
 import { createOrgClient } from './org-client.js';
 import type { NotificationServiceDb } from './schema.js';
 import { createVoicemailClient } from './voicemail-client.js';
@@ -41,6 +43,7 @@ const bus = await connectBus({
   servers: config.NATS_SERVERS,
   logger,
   name: config.SERVICE_NAME,
+  streamMaxAgeDays: config.NATS_STREAM_MAX_AGE_DAYS,
   ...(config.NATS_USER === undefined ? {} : { user: config.NATS_USER }),
   ...(config.NATS_PASSWORD === undefined ? {} : { password: config.NATS_PASSWORD }),
 });
@@ -67,7 +70,19 @@ const linkOptions = {
     : { consoleUrlOverride: config.CONSOLE_URL_OVERRIDE }),
 };
 
-const consumer = createIdentityConsumer(db, bus, logger, orgClient, mailer, linkOptions);
+const identityClient = createIdentityClient({
+  baseUrl: config.IDENTITY_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+const consumer = createIdentityConsumer(
+  db,
+  bus,
+  logger,
+  orgClient,
+  identityClient,
+  mailer,
+  linkOptions,
+);
 const voicemailConsumer = createVoicemailConsumer(
   db,
   bus,

@@ -7,6 +7,7 @@ import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
 import { createAuthService } from './auth/auth-service.js';
+import { createStepUp } from './auth/step-up.js';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createKekRewrapJob } from './kek-rewrap.js';
 import { createAuditConsumer } from './consumers/audit.consumer.js';
@@ -28,6 +29,7 @@ import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerGrantRoutes } from './routes/grants.routes.js';
 import { registerAccessRoutes } from './routes/access.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
+import { registerLinkRoutes } from './routes/links.routes.js';
 import { registerPermissionsInternalRoutes } from './routes/permissions.routes.js';
 import { registerJwksRoute } from './routes/jwks.routes.js';
 import { registerRoleRoutes } from './routes/roles.routes.js';
@@ -49,6 +51,7 @@ const bus = await connectBus({
   servers: config.NATS_SERVERS,
   logger,
   name: config.SERVICE_NAME,
+  streamMaxAgeDays: config.NATS_STREAM_MAX_AGE_DAYS,
   ...(config.NATS_USER === undefined ? {} : { user: config.NATS_USER }),
   ...(config.NATS_PASSWORD === undefined ? {} : { password: config.NATS_PASSWORD }),
 });
@@ -82,6 +85,7 @@ const relay = createRelay({
   batchSize: config.OUTBOX_BATCH_SIZE,
   pollIntervalMs: config.OUTBOX_POLL_INTERVAL_MS,
   maxAttempts: config.OUTBOX_MAX_ATTEMPTS,
+  retentionDays: config.OUTBOX_RETENTION_DAYS,
 });
 const relayLoop = relay.run();
 
@@ -160,7 +164,7 @@ const authService = createAuthService({
   mfaTicketTtlSeconds: config.MFA_TICKET_TTL_SECONDS,
   signingKeyOverlapDays: config.SIGNING_KEY_OVERLAP_DAYS,
   passwordResetTtlMinutes: config.PASSWORD_RESET_TTL_MINUTES,
-  invitationTtlDays: config.INVITATION_TTL_DAYS,
+  invitationTtlHours: config.INVITATION_TTL_HOURS,
 });
 
 const orgClient = createOrgClient({
@@ -177,8 +181,11 @@ registerAuthRoutes(app, authService, {
 });
 registerJwksRoute(app, signingKeyRepo, config.SIGNING_KEY_OVERLAP_DAYS);
 registerInternalRoutes(app, userRepo, roleRepo, config.INTERNAL_SERVICE_TOKEN);
+registerLinkRoutes(app, authService, config.INTERNAL_SERVICE_TOKEN);
 registerRoleRoutes(app, roleRepo, orgAccess, userRepo, permissionLookup);
-registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo);
+// G-100: sensitive actions are confirmed with the acting person's own code.
+const stepUp = createStepUp({ mfa: mfaRepo, kek });
+registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo, stepUp);
 registerGrantRoutes(app, grantRepo, orgAccess, permissionLookup);
 registerPermissionsInternalRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
 registerMeRoutes(app, roleRepo, grantRepo);

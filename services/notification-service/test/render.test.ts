@@ -142,6 +142,58 @@ describe('renderEmail', () => {
   });
 });
 
+describe('the notice to the other admins of a two-step reset (G-100)', () => {
+  const signIn = 'https://portal.acme.example/login';
+  const input = {
+    email: 'ann@example.test',
+    name: 'Ann',
+    link: signIn,
+    about: { name: 'Rae Okafor', email: 'rae@example.test' },
+  } as const;
+
+  it('names who was reset, says why the reader is told, and links to sign-in', async () => {
+    const mail = await renderEmail({ template: 'mfa-reset-admin', brand: ACME, ...input });
+    expect(mail.subject).toBe('Two-step verification was reset for someone in your organization');
+    for (const part of [mail.html, mail.text]) {
+      expect(part).toContain('Ann');
+      expect(part).toContain('Rae Okafor');
+      expect(part).toContain('rae@example.test');
+      expect(part).toContain('you are an administrator');
+      expect(part).toContain(signIn);
+    }
+    expect(mail.html).toContain('Acme Voice');
+  });
+
+  it('is neutral without a brand', async () => {
+    const mail = await renderEmail({
+      template: 'mfa-reset-admin',
+      brand: NEUTRAL_BRAND,
+      ...input,
+      link: 'https://console.platform.test/login',
+    });
+    expect(mail.html).not.toContain('Acme');
+    expect(mail.html).not.toMatch(/<img/i);
+    expect(mail.html.toLowerCase()).not.toContain('conductor');
+    expect(mail.text.toLowerCase()).not.toContain('conductor');
+  });
+
+  it('escapes the names it shows', async () => {
+    const mail = await renderEmail({
+      template: 'mfa-reset-admin',
+      brand: ACME,
+      ...input,
+      about: { name: '<script>x</script>', email: 'rae@example.test' },
+    });
+    expect(mail.html).not.toContain('<script>x</script>');
+  });
+
+  it('refuses to render without the person it is about', async () => {
+    await expect(
+      renderEmail({ template: 'mfa-reset-admin', brand: ACME, email: 'a@x.test', link: signIn }),
+    ).rejects.toThrow(/needs the person/);
+  });
+});
+
 describe('validFor', () => {
   const now = new Date('2026-01-01T00:00:00Z');
   const after = (ms: number) => new Date(now.getTime() + ms);

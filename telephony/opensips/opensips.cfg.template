@@ -97,8 +97,9 @@ modparam("httpd", "port", ${OPENSIPS_MI_PORT})
 loadmodule "mi_http.so"
 
 #### Flood protection (03 §2 / the plan's own S1-11 line names this
-#### explicitly). Applied to every UDP/TCP request before anything else
-#### does real work — see route{}'s first block.
+#### explicitly). Applied to every UDP/TCP request from a source this proxy
+#### does not already trust, before anything else does real work — see
+#### route{}'s first block for the exemptions (G-117).
 loadmodule "pike.so"
 modparam("pike", "sampling_time_unit", 2)
 modparam("pike", "reqs_density_per_unit", 30)
@@ -257,10 +258,20 @@ modparam("cachedb_redis", "cachedb_url", "${OPENSIPS_REDIS_URL}")
 ####### Routing Logic ########
 
 route{
-    # Flood protection first — before any other work happens (pike).
-    if (!pike_check_req()) {
-        xlog("L_WARN", "pike: blocking flood from $si\n");
-        exit;
+    # Flood protection (pike) first, for every source except the peers this
+    # proxy already trusts (G-117): FreeSWITCH nodes (dispatcher set 1, matched
+    # by address and port, exactly as the "request from FS" branch below does)
+    # and addresses listed on a trunk (the permissions `address` table, group
+    # 1, the same rows that authenticate IP-based trunks). A busy media server
+    # or a carrier delivering a burst of calls would otherwise be blocked for
+    # `remove_latency` seconds, failing every call through it. Both lookups
+    # are in-memory caches, so they cost about as much as pike itself. Phones
+    # and unknown sources stay fully protected.
+    if (!ds_is_in_list("$si", $sp) && !check_source_address(1)) {
+        if (!pike_check_req()) {
+            xlog("L_WARN", "pike: blocking flood from $si\n");
+            exit;
+        }
     }
 
     if (!mf_process_maxfwd_header(10)) {

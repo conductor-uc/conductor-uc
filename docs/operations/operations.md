@@ -35,7 +35,7 @@ docker compose exec mariadb mariadb -uroot -p"$MARIADB_ROOT_PASSWORD"
 
 The master organisation and its first administrator are created once, with one command ([all-in-one §9](deploy-all-in-one.md#9-bootstrap-the-platform)); running it again changes nothing. After that, everything is done in the console: the master creates resellers and resellers create tenants. Creating a reseller or tenant also creates its first administrator, with the email and initial password entered in the form (no invitation email is sent; pass the password on securely). Further people are invited from **Users**, which does send an email. Reseller domains follow [DNS/TLS §7](dns-tls-and-certificates.md#7-adding-a-resellers-domain-runbook).
 
-If a master administrator loses their two-step device, another master administrator can reset it in the console (**Users**, **Reset two-step verification**). If there is no other, the bootstrap command will not help (it creates an administrator only while the master has nobody). Create a second master administrator with identity-service's internal call instead, from a throwaway container on the private network:
+If a master administrator loses their two-step device, another master administrator can reset it in the console (**Users**, **Reset two-step verification**). The resetting administrator confirms with a current code from **their own** authenticator app (step-up, G-100), so an administrator without two-step verification of their own cannot reset anyone's, and five wrong codes lock the confirmation for 15 minutes. The person is emailed, and so are the organisation's other administrators. If there is no other, the bootstrap command will not help (it creates an administrator only while the master has nobody). Create a second master administrator with identity-service's internal call instead, from a throwaway container on the private network:
 
 ```sh
 set -a; . ./.env; set +a
@@ -46,7 +46,7 @@ docker run --rm --network voice_backplane curlimages/curl -sS \
   -d '{"orgType":"master","email":"second@example.net","displayName":"Second administrator","password":"<at least 12 characters>"}'
 ```
 
-A `201` response means the person exists with the `master_admin` role. Sign in as them and reset the first administrator's two-step verification. The password is on the command line here, so clear your shell history afterwards.
+A `201` response means the person exists with the `master_admin` role. Sign in as them: as a master user they set up their own authenticator app at that first sign-in, which is what lets them confirm the reset. Then reset the first administrator's two-step verification, entering the new administrator's own current code when asked. The password is on the command line here, so clear your shell history afterwards.
 
 ## 3. Upgrades
 
@@ -59,7 +59,7 @@ Every service applies its own database migrations **when it starts**, before it 
 1. Read the release's changes, including new entries in `docs/decisions.md`: new required variables, changed ports, changed behaviour.
 2. **Back up** MariaDB (§4.2) and copy `.env`.
 3. Check out the release, rebuild the console (`flutter build web --release --no-web-resources-cdn`) and the images (`docker compose build`), or pull them from your registry.
-4. Add any new variables to `.env`.
+4. Add any new variables to `.env`. For example, notification-service requires `IDENTITY_SERVICE_URL` from the release that tells an org's other admins about two-step resets (G-100); without it the service refuses to start.
 5. Restart in this order, waiting for each group to be healthy:
    1. data stores, only if their version changes;
    2. identity-service and org-service;
@@ -73,11 +73,18 @@ Every service applies its own database migrations **when it starts**, before it 
 
 **Releases that change the signed identity headers** (the first is the one that added the client address to them, G-113; its release notes say so): the gateway and the eight services that trust those headers (identity, org, pbx-config, trunk, callflow, voicemail, recording, cdr) must run the same version. While one side is old, every request through the gateway is answered 401 `internal_headers_forged`. Upgrade them together, in one step, and expect the API to be unavailable until both sides are restarted. The same release makes those services refuse a request that reaches them directly without signed headers or `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>` (G-112): check that any script or tool of your own that calls a service's port directly sends the token. It also stops the gateway believing `X-Forwarded-For` and `X-Forwarded-Proto` unless you list your proxies in `TRUSTED_PROXIES` ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)); set it before upgrading if the gateway sits behind a load balancer.
 
+**The release that issues reset and invitation links at send time** (G-55; its release notes say so):
+
+- `INVITATION_TTL_DAYS` is renamed `INVITATION_TTL_HOURS`, and invitations now last **72 hours** by default instead of 7 days. The old variable is ignored; if you set it, set `INVITATION_TTL_HOURS` instead (for example `168` to keep seven days). Invitations made before the upgrade keep their expiry.
+- notification-service needs a new required variable, `IDENTITY_SERVICE_URL` (the all-in-one and distributed files already pass it through `x-urls`; add it if you wrote your own). It must reach identity-service's port.
+- The password-reset and invitation events change version. **Upgrade identity-service and notification-service in the same step.** A reset or invitation requested in the few seconds while one is old and the other new is not emailed (notification-service logs `terminating event that does not match its contract` at error). The person can ask for a new reset. An invitation that was not emailed can be sent again only once it expires, so avoid inviting people during the upgrade. Links emailed before the upgrade keep working until they expire.
+- Two new settings apply to every service: `OUTBOX_RETENTION_DAYS` and `NATS_STREAM_MAX_AGE_DAYS`, both 7 by default ([configuration §3.3](configuration-reference.md#33-events-every-service-except-api-gateway)). At first start, every service deletes the events it published more than 7 days ago (on an old installation, the first run takes a while; it works in batches and does not block anything), and every stream gets a 7-day age limit, so messages older than that are removed from NATS at once. Make sure no consumer is stopped with a backlog older than 7 days before upgrading, or set a larger `NATS_STREAM_MAX_AGE_DAYS` in every service first.
+
 What a restart costs:
 
 | Restarting | Effect |
 |---|---|
-| An application service | Requests to it fail for a few seconds. Events wait in NATS and are processed afterwards. |
+| An application service | Requests to it fail for a few seconds. Events wait in NATS and are processed afterwards (for up to `NATS_STREAM_MAX_AGE_DAYS`, 7 days by default). |
 | telephony-config | **New calls fail while it is down**: FreeSWITCH asks it for every call. |
 | call-control | Live-call tracking and resource leases restart. Calls continue. |
 | api-gateway | Console and API unavailable for a few seconds. Signed-in users stay signed in. |
@@ -97,6 +104,8 @@ What a restart costs:
 | Bootstrap TLS files, MinIO certificates | Needed to start the gateway and MinIO | With `.env` | On renewal |
 
 Not needed: Redis (live state only), NATS (undelivered events stay in the services' outbox tables; losing the stream loses at most events already published but not yet consumed), FreeSWITCH, OpenSIPs and the gateway (no state of their own).
+
+Event retention (G-55): each service deletes events from its `outbox` table 7 days after publishing them (`OUTBOX_RETENTION_DAYS`), and NATS removes a message 7 days after it arrived, consumed or not (`NATS_STREAM_MAX_AGE_DAYS`). So a consumer stopped for longer than that loses the events it missed. No event carries a password-reset or invitation token: the token is created when the email is sent and only its hash is stored, so neither a dump nor a NATS store holds a usable one.
 
 There is no backup tooling in the platform (release-readiness task, not started). Nothing checks that backups work, so test restores.
 
@@ -169,13 +178,15 @@ Readiness checks:
 | FreeSWITCH nodes | `ds_list` shows each node active; `fs_cli -x status` on each | Any node inactive |
 | Registrations | `ul_dump` count, trended | Sudden drop |
 | Trunk registrations | `reg_list` | A trunk not registered |
-| Flood blocks | OpenSIPs log: `pike: blocking flood from` | Any, from a carrier or media server address |
+| Flood blocks | OpenSIPs log: `pike: blocking flood from` | Any from an address you expected to be exempt (a carrier or media server): it is missing from its trunk or from `OPENSIPS_FS_DESTINATION` |
 | Recording and voicemail spool | Uploader `/metrics`: `cuc_recording_spool_stuck_files`, `cuc_recording_spool_undeletable_files`, `cuc_recording_spool_bytes`, `cuc_recording_upload_failures_total` | stuck or undeletable above 0; spool bytes above half its size |
 | Recording or voicemail loss | Uploader, recording-service and voicemail-service logs | `recording_upload_stuck` or `recording_spool_delete_failed` alerts |
 | Unrecordable calls | telephony-config log: `recording_policy_unavailable` | Any, if recording matters to your tenants |
 | Certificates | Console **Certificates** list; org-service log | A certificate failing, or active and expiring within 20 days (renewal starts at 30) |
 | Email | notification-service log | SMTP errors |
 | Outbox backlog | `/readyz` outbox detail (`N pending`) on each service | Growing steadily (NATS unreachable, or events failing) |
+| Consumers stopped | A consumer service not ready, or `nats consumer report <stream>` showing unprocessed messages | Any consumer down for more than a day: after `NATS_STREAM_MAX_AGE_DAYS` (7 days) its missed events are gone |
+| Reset and invitation emails skipped | notification-service log: `identity-service issued no link; not sending` (info) | Many at once: identity-service refusing links (the reset was used or expired, the user disabled, the invitation accepted) is normal one at a time |
 | NATS | `http://<nats>:8222/jsz` (if you publish monitoring) | Stream or consumer errors; storage full |
 | MariaDB | Your usual MariaDB monitoring | Connections near `max_connections`; replication lag if used; disk |
 | Disk | Host monitoring | MariaDB and NATS volumes above 80% |
@@ -224,7 +235,7 @@ Logs may contain telephone numbers and tenant identifiers. Treat log storage as 
 | Phones get 429 | Many phones behind one address rebooting together (limit 300 per minute per IP) | Raise `RATE_LIMIT_IP_MAX` |
 | Phones cannot register | DNS for the tenant domain; wrong credentials; OpenSIPs has not received the tenant's domain yet (telephony-config projection); flood block | `ul_dump`; OpenSIPs log; telephony-config log |
 | Registered phones don't receive calls | Phone behind NAT sending a private Contact ([network §6.5](network-and-firewall.md#65-phones-behind-nat)) | `ul_dump` shows the contact address |
-| Calls fail with 503 | No FreeSWITCH node active in dispatcher; node refusing OpenSIPs (ACL `FS_OPENSIPS_CIDR`); the node flood-blocked by pike | `ds_list`; FreeSWITCH log (`acl` rejections); OpenSIPs log (`pike`) |
+| Calls fail with 503 | No FreeSWITCH node active in dispatcher; node refusing OpenSIPs (ACL `FS_OPENSIPS_CIDR`) | `ds_list`; FreeSWITCH log (`acl` rejections); OpenSIPs log (`pike`) |
 | Calls connect but no audio, or one-way audio | FreeSWITCH advertising a private address (1:1 NAT without `FS_EXTERNAL_RTP_IP`); RTP range blocked; carrier or phone NAT | `sofia status profile internal` (`Ext-RTP-IP`); firewall; packet capture on the RTP range |
 | Calls to extensions fail, FreeSWITCH log shows xml_curl errors | telephony-config unreachable from FreeSWITCH; `FS_XML_CURL_TOKEN` mismatch; `SELF_URL` ≠ `TELEPHONY_CONFIG_URL` | FreeSWITCH log; telephony-config log (401s) |
 | Outbound calls fail | No outbound route; trunk not registered; carrier rejects the caller ID; tenant fraud limits | `reg_list`, `dr_gw_status`; OpenSIPs and telephony-config logs |
@@ -253,7 +264,7 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Telephony | No media relay: media servers need public addresses; no SRTP | O-7 |
 | Telephony | Queues, parking and conferences unreliable with more than one media server | G-46, S4-05 |
 | Telephony | Media server list fixed at OpenSIPs start; no weights or draining | S4-02 |
-| Telephony | Flood protection has no allow list for carriers and media servers; per-tenant call rate fixed at 10 per second | network §6.4, G-31 |
+| Telephony | Per-tenant call rate fixed at 10 per second; repeated SIP authentication failures not blocked | G-31, G-118 |
 | Telephony | Phones behind NAT not verified | network §6.5 |
 | Telephony | Only Yealink auto-provisioning, not verified on hardware | G-103 |
 | Operations | No production manifests; no backup tooling; no metrics beyond the uploader; no tracing | S4-11, release readiness |

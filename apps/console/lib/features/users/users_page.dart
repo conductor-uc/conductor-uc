@@ -5,6 +5,8 @@ import '../../core/acting.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../widgets/page.dart';
+import '../auth/auth_errors.dart';
+import '../auth/auth_scaffold.dart' show FormMessage;
 import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart';
 import 'users_api.dart';
@@ -224,44 +226,25 @@ class UsersPage extends ConsumerWidget {
     UsersTarget target,
     Json user,
   ) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Reset two-step verification for ${user['displayName']}?'),
-        content: const Text(
-          'Use this when they have lost their phone. They are signed out everywhere '
-          'and asked to set up a new authenticator app the next time they sign in. '
-          'We email them to say it happened.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Reset'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true || !context.mounted) return;
     final api = ref.read(usersApiForProvider(target));
     if (api == null) return;
     final messenger = ScaffoldMessenger.of(context);
-    try {
-      await api.resetMfa(user);
-      ref.invalidate(usersForProvider(target));
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            'Two-step verification reset for ${user['displayName']}.',
-          ),
+    final done = await showDialog<bool>(
+      context: context,
+      builder: (_) => ResetMfaDialog(
+        user: user,
+        reset: (code) => api.resetMfa(user, stepUpCode: code),
+      ),
+    );
+    if (done != true) return;
+    ref.invalidate(usersForProvider(target));
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Two-step verification reset for ${user['displayName']}.',
         ),
-      );
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
-    }
+      ),
+    );
   }
 
   Future<void> _setStatus(
@@ -282,5 +265,125 @@ class UsersPage extends ConsumerWidget {
             .showSnackBar(SnackBar(content: Text(problemMessage(e))));
       }
     }
+  }
+}
+
+/// Confirms resetting someone's two-step verification. The admin enters a
+/// current code from their own authenticator app (step-up, G-100): a signed-in
+/// session alone is not enough to remove someone's second factor. The dialog
+/// stays open on a wrong code, and closes with `true` once the reset is done.
+class ResetMfaDialog extends StatefulWidget {
+  const ResetMfaDialog({super.key, required this.user, required this.reset});
+
+  final Json user;
+
+  /// Performs the reset with the admin's code; throws on refusal.
+  final Future<Object?> Function(String code) reset;
+
+  @override
+  State<ResetMfaDialog> createState() => _ResetMfaDialogState();
+}
+
+class _ResetMfaDialogState extends State<ResetMfaDialog> {
+  final _code = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  /// Nothing to enter a code with: the account has no authenticator of its own.
+  bool _cannot = false;
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final code = _code.text.replaceAll(RegExp(r'\s'), '');
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      setState(
+        () => _error = 'Enter the 6-digit code from your authenticator app.',
+      );
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.reset(code);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _cannot = problemCode(e) == 'step_up_not_enrolled';
+        _error = switch (problemCode(e)) {
+          'step_up_required' =>
+            'Enter the 6-digit code from your authenticator app.',
+          'step_up_invalid' =>
+            'That code did not work, or it was already used. Wait for the '
+                'next code in your authenticator app and try again.',
+          'step_up_locked' =>
+            'Too many wrong codes. Wait 15 minutes, then try again.',
+          'step_up_not_enrolled' =>
+            'Your own account has no two-step verification, so you cannot '
+                'confirm this. Ask another administrator to do it.',
+          _ => problemMessage(e),
+        };
+      });
+      if (!_cannot) _code.clear();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(
+        'Reset two-step verification for ${widget.user['displayName']}?',
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Use this when they have lost their phone. They are signed out '
+              'everywhere and asked to set up a new authenticator app the next '
+              'time they sign in. We email them to say it happened, and let '
+              "the organization's other administrators know.",
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'To confirm, enter the current code from your own authenticator '
+              'app.',
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              key: const ValueKey('step-up-code'),
+              controller: _code,
+              autofocus: true,
+              enabled: !_busy && !_cannot,
+              keyboardType: TextInputType.number,
+              autofillHints: const [AutofillHints.oneTimeCode],
+              decoration: const InputDecoration(labelText: 'Your code'),
+              onSubmitted: (_) => _busy ? null : _submit(),
+            ),
+            if (_error != null) FormMessage(_error!, isError: true),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _busy || _cannot ? null : _submit,
+          child: const Text('Reset'),
+        ),
+      ],
+    );
   }
 }

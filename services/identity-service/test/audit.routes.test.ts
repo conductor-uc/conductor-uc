@@ -159,6 +159,94 @@ describe.skipIf(skipReason !== undefined)('audit-service HTTP routes', () => {
     expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
   });
 
+  describe('private-data rows (G-13)', () => {
+    /** One tenant's trail: a config change, and the master playing a recording. */
+    async function seedTenantTrail(): Promise<void> {
+      await db.kysely.transaction().execute(async (trx) => {
+        await repo.insert(trx, randomUUID(), new Date(), {
+          actorType: 'user',
+          actorId: 'tenant-admin',
+          actorOrgId: 'tenant-1',
+          targetOrgId: 'tenant-1',
+          action: 'extension.update',
+          resource: 'extension:1001',
+          dataClass: 'config',
+        });
+        await repo.insert(trx, randomUUID(), new Date(), {
+          actorType: 'user',
+          actorId: 'master-user-1',
+          actorOrgId: 'master-1',
+          targetOrgId: 'tenant-1',
+          action: 'recording.play',
+          resource: 'recording:r1',
+          dataClass: 'private',
+          reason: 'support ticket 42',
+        });
+      });
+    }
+
+    async function actionsSeenBy(
+      orgId: string,
+      orgType: 'master' | 'reseller' | 'tenant',
+      trailOf = 'tenant-1',
+    ): Promise<string[]> {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/orgs/${trailOf}/audit-events`,
+        headers: actor(orgId, orgType),
+      });
+      expect(response.statusCode).toBe(200);
+      return response
+        .json<{ rows: { action: string }[] }>()
+        .rows.map((r) => r.action)
+        .sort();
+    }
+
+    it('a reseller reading its tenant’s trail sees the config changes, not the private rows', async () => {
+      await seedTenantTrail();
+      expect(await actionsSeenBy('reseller-1', 'reseller')).toEqual(['extension.update']);
+    });
+
+    it('the tenant still sees the master’s access to its private data', async () => {
+      await seedTenantTrail();
+      expect(await actionsSeenBy('tenant-1', 'tenant')).toEqual([
+        'extension.update',
+        'recording.play',
+      ]);
+    });
+
+    it('the master sees every row', async () => {
+      await seedTenantTrail();
+      expect(await actionsSeenBy('master-1', 'master')).toEqual([
+        'extension.update',
+        'recording.play',
+      ]);
+    });
+
+    it('a reseller’s own trail leaves out private rows too', async () => {
+      await db.kysely.transaction().execute(async (trx) => {
+        await repo.insert(trx, randomUUID(), new Date(), {
+          actorType: 'user',
+          actorId: 'master-user-1',
+          actorOrgId: 'master-1',
+          targetOrgId: 'reseller-1',
+          action: 'cdr.export',
+          resource: 'cdr:export-1',
+          dataClass: 'private',
+        });
+        await repo.insert(trx, randomUUID(), new Date(), {
+          actorType: 'user',
+          actorId: 'user-1',
+          actorOrgId: 'reseller-1',
+          action: 'brand.update',
+          resource: 'brand:reseller-1',
+          dataClass: 'config',
+        });
+      });
+      expect(await actionsSeenBy('reseller-1', 'reseller', 'reseller-1')).toEqual(['brand.update']);
+    });
+  });
+
   it('declares permission and dataClass (CLAUDE.md rule 3)', () => {
     const route = app.registeredRoutes.find((r) => r.url === '/v1/orgs/:orgId/audit-events');
     expect(route?.permission).toBe('audit.read');

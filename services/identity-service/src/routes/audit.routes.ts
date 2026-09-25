@@ -35,7 +35,10 @@ const AuditEventSchema = Type.Object({
  * block `reseller_admin`/`reseller_support` outright, even though they hold
  * `audit.read` and are entitled to their own org's trail. The real
  * visibility rule is enforced in the query (`AuditRepo.listForOrg`), not by
- * this declaration.
+ * this declaration: when the reader is a reseller, rows of the `private`
+ * class (who played a recording, who exported call records) are left out,
+ * so H1 holds for the trail too. Tenants still see the master's access to
+ * their private data (07 §4), and the master sees everything it may reach.
  *
  * Which org's trail may be read is checked with [OrgAccess] (S3-05): the
  * actor's own, or one beneath them.
@@ -58,7 +61,11 @@ export function registerAuditRoutes(app: Server, repo: AuditRepo, access: OrgAcc
       }
       // Own org, or (master, reseller) one beneath the actor: never anyone else's.
       const org = await access.resolve(request.context, request.params.orgId);
-      const events = await repo.listForOrg(org.orgId, limit);
+      // G-13: a reseller reading a trail (its tenants', or its own) never sees
+      // the private-data rows in it. Tenants and the master see every row.
+      const events = await repo.listForOrg(org.orgId, limit, {
+        excludePrivate: request.context.orgType === 'reseller',
+      });
       return {
         rows: events.map((event) => ({ ...event, at: event.at.toISOString() })),
       };

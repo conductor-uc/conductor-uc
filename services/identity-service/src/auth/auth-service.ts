@@ -4,10 +4,10 @@ import type { DbContext } from '@cuc/db';
 import { generateTotpSecret, verifyTotpCode } from '../domain/totp.js';
 import { assertPasswordDistinct } from './ambiguity.js';
 import { assertPasswordStrength, verifyPassword } from '../domain/password.js';
-import type { MfaRepo } from '../repo/mfa.repo.js';
+import { mfaSecretAssociatedData, type MfaRepo } from '../repo/mfa.repo.js';
 import type { SessionRepo } from '../repo/session.repo.js';
 import type { SigningKeyRepo } from '../repo/signing-key.repo.js';
-import type { TokenRepo } from '../repo/token.repo.js';
+import type { LinkIssue, TokenRepo } from '../repo/token.repo.js';
 import type { User, UserRepo } from '../repo/user.repo.js';
 import {
   signAccessToken,
@@ -124,7 +124,7 @@ export interface AuthServiceOptions {
   readonly mfaTicketTtlSeconds: number;
   readonly signingKeyOverlapDays: number;
   readonly passwordResetTtlMinutes: number;
-  readonly invitationTtlDays: number;
+  readonly invitationTtlHours: number;
 }
 
 /**
@@ -146,7 +146,7 @@ export function createAuthService(options: AuthServiceOptions) {
     mfaTicketTtlSeconds,
     signingKeyOverlapDays,
     passwordResetTtlMinutes,
-    invitationTtlDays,
+    invitationTtlHours,
   } = options;
 
   /** 07 §1: MFA is required for master and reseller users. */
@@ -225,7 +225,7 @@ export function createAuthService(options: AuthServiceOptions) {
 
       if (!user.mfaEnrolled) {
         const secret = generateTotpSecret(orgDisplayName(user), user.email);
-        const secretEnc = await encrypt(kek, secret.base32, mfaEncAssociatedDataForUser(user.id));
+        const secretEnc = await encrypt(kek, secret.base32, mfaSecretAssociatedData(user.id));
         const factor = await mfa.createPending(user.id, secretEnc);
         const key = await signingKeys.current();
         const enrollmentTicket = await signTicket(
@@ -273,7 +273,7 @@ export function createAuthService(options: AuthServiceOptions) {
       const secretBase32 = await decryptString(
         kek,
         factor.secretEnc,
-        mfaEncAssociatedDataForUser(claims.sub),
+        mfaSecretAssociatedData(claims.sub),
       );
       if (!verifyTotpCode(secretBase32, code)) throw new InvalidMfaCodeError();
 
@@ -307,7 +307,7 @@ export function createAuthService(options: AuthServiceOptions) {
       const secretBase32 = await decryptString(
         kek,
         factor.secretEnc,
-        mfaEncAssociatedDataForUser(user.id),
+        mfaSecretAssociatedData(user.id),
       );
       if (!verifyTotpCode(secretBase32, code)) throw new InvalidMfaCodeError();
 
@@ -357,22 +357,33 @@ export function createAuthService(options: AuthServiceOptions) {
     /**
      * Starts a password reset. Says nothing about whether the account exists:
      * the caller answers 202 either way, so this cannot be used to find out
-     * who has an account. Returns the token only so a dev-mode flag can log it
-     * when no mailer is running; it is never part of an HTTP response.
+     * who has an account. No token exists yet: notification-service has the
+     * link issued when it sends the email (G-55). Returns the requests only so
+     * a dev-mode flag can issue and log a link when no mailer is running;
+     * nothing here is ever part of an HTTP response.
      */
     async requestPasswordReset(
       ctx: DbContext,
       target: OrgTarget | string,
       email: string,
-    ): Promise<{ token: string; email: string }[]> {
+    ): Promise<{ resetId: string; orgId: string; email: string }[]> {
       // Every matching account gets its own link, each naming its own org, so
       // an address shared across orgs needs no org from the requester.
-      const issued = [];
+      const requested = [];
       for (const user of (await activeCandidates(target, email)).slice(0, 25)) {
-        const { token } = await tokens.createPasswordReset(ctx, user, passwordResetTtlMinutes);
-        issued.push({ token, email: user.email });
+        const { id } = await tokens.createPasswordReset(ctx, user, passwordResetTtlMinutes);
+        requested.push({ resetId: id, orgId: user.orgId, email: user.email });
       }
-      return issued;
+      return requested;
+    },
+
+    /**
+     * Issues the emailed link of a reset request: a fresh token, the only one
+     * that works from now on, returned once (G-55). What
+     * `POST /internal/v1/orgs/:orgId/password-resets/:resetId/link` answers.
+     */
+    async issuePasswordResetLink(orgId: string, resetId: string): Promise<LinkIssue> {
+      return tokens.issuePasswordResetLink(orgId, resetId);
     },
 
     /**
@@ -417,8 +428,13 @@ export function createAuthService(options: AuthServiceOptions) {
           displayName: input.displayName,
           invitedBy: actor.userId,
         },
-        invitationTtlDays,
+        invitationTtlHours,
       );
+    },
+
+    /** As {@link issuePasswordResetLink}, for an invitation. */
+    async issueInvitationLink(orgId: string, invitationId: string): Promise<LinkIssue> {
+      return tokens.issueInvitationLink(orgId, invitationId);
     },
 
     /** Who an invitation is for, so the accept page can say so. */
@@ -460,13 +476,6 @@ export function createAuthService(options: AuthServiceOptions) {
       return verifyAccessToken(token, keys);
     },
   };
-
-  function mfaEncAssociatedDataForUser(userId: string): string {
-    // A fixed string, not the factor id: at enrollment time no factor row
-    // exists yet to bind to, and rebinding to the user id keeps encrypt/decrypt
-    // symmetric across both call sites.
-    return `mfa_factors.secret_enc:user:${userId}`;
-  }
 }
 
 async function verifyOrTicketError<T>(run: () => Promise<T>): Promise<T> {

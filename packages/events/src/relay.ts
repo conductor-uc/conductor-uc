@@ -15,7 +15,24 @@ export interface RelayOptions<TDb extends EventTables = EventTables> {
   readonly pollIntervalMs?: number;
   /** Attempts before a row is parked for an operator. */
   readonly maxAttempts?: number;
+  /**
+   * Published rows older than this many days are deleted
+   * (`OUTBOX_RETENTION_DAYS`, G-55). 0 keeps them. Defaults to
+   * {@link DEFAULT_OUTBOX_RETENTION_DAYS}.
+   */
+  readonly retentionDays?: number;
+  /** How often `run()` deletes expired rows. */
+  readonly cleanupIntervalMs?: number;
+  /** Rows one delete statement removes, so no sweep holds locks for long. */
+  readonly cleanupBatchSize?: number;
 }
+
+/**
+ * How long a published outbox row is kept (G-55). A week is plenty to
+ * investigate a delivery problem, and the row is otherwise a second, permanent
+ * copy of the event's payload.
+ */
+export const DEFAULT_OUTBOX_RETENTION_DAYS = 7;
 
 export interface RelayPass {
   readonly published: number;
@@ -31,6 +48,13 @@ export interface Relay {
   stop(): void;
   /** Unpublished rows still waiting, for the outbox-lag metric (09 §4). */
   lag(): Promise<number>;
+  /**
+   * Deletes published rows older than the retention period, in batches.
+   * Returns how many went. `run()` calls it once at start and then every
+   * `cleanupIntervalMs`. Unpublished rows, parked ones included, are never
+   * deleted.
+   */
+  purgePublished(): Promise<number>;
 }
 
 /**
@@ -47,12 +71,27 @@ export interface Relay {
  * out as `Nats-Msg-Id`, so the server collapses a republish inside the stream's
  * duplicate window; and the consumer records ids in `consumed_events`, which
  * outlives both the window and any restart.
+ *
+ * **Published rows do not stay for ever.** Once a row has been on the stream
+ * for `retentionDays` it is deleted (G-55): past that point it is only a second
+ * copy of a payload that has already been delivered, and it would otherwise
+ * sit in every backup. Every copy of a service sweeps; the deletes are
+ * idempotent, so two sweeping at once only share the work.
  */
 export function createRelay<TDb extends EventTables>(options: RelayOptions<TDb>): Relay {
   // See `eventTablesOf` in ./outbox.ts: Kysely cannot resolve its overloads
   // against a generic schema, so the relay works with the concrete event tables.
   const db = options.db as unknown as Kysely<EventTables>;
-  const { bus, logger, batchSize = 100, pollIntervalMs = 250, maxAttempts = 10 } = options;
+  const {
+    bus,
+    logger,
+    batchSize = 100,
+    pollIntervalMs = 250,
+    maxAttempts = 10,
+    retentionDays = DEFAULT_OUTBOX_RETENTION_DAYS,
+    cleanupIntervalMs = 60 * 60_000,
+    cleanupBatchSize = 1000,
+  } = options;
 
   let running = false;
   let stopped = false;
@@ -144,6 +183,42 @@ export function createRelay<TDb extends EventTables>(options: RelayOptions<TDb>)
     }
   }
 
+  async function purgePublished(): Promise<number> {
+    if (retentionDays <= 0) return 0;
+    const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60_000);
+    let deleted = 0;
+    // One bounded statement at a time, oldest first, until a batch comes back
+    // short. `outbox_unpublished_idx` leads with `published_at`, so each is a
+    // range scan, and NULL (unpublished) never matches `<`.
+    for (;;) {
+      const result = await db
+        .deleteFrom('outbox')
+        .where('published_at', '<', cutoff)
+        .orderBy('published_at', 'asc')
+        .limit(cleanupBatchSize)
+        .executeTakeFirst();
+      const count = Number(result.numDeletedRows);
+      deleted += count;
+      if (count < cleanupBatchSize || stopped) break;
+    }
+    if (deleted > 0) logger.info({ deleted, retentionDays }, 'old published outbox rows deleted');
+    return deleted;
+  }
+
+  let nextCleanupAt = 0;
+
+  async function cleanupIfDue(): Promise<void> {
+    if (retentionDays <= 0 || Date.now() < nextCleanupAt) return;
+    nextCleanupAt = Date.now() + cleanupIntervalMs;
+    try {
+      await purgePublished();
+    } catch (error) {
+      // Housekeeping: a failure waits for the next interval and never stops
+      // the relay publishing.
+      logger.warn({ err: error }, 'outbox cleanup failed; will retry');
+    }
+  }
+
   return {
     async runOnce() {
       const rows = await claim();
@@ -164,9 +239,10 @@ export function createRelay<TDb extends EventTables>(options: RelayOptions<TDb>)
       if (running) throw new Error('This relay is already running.');
       running = true;
       stopped = false;
-      logger.info({ batchSize, pollIntervalMs }, 'outbox relay started');
+      logger.info({ batchSize, pollIntervalMs, retentionDays }, 'outbox relay started');
 
       while (!stopped) {
+        await cleanupIfDue();
         try {
           const pass = await this.runOnce();
           if (pass.published + pass.duplicates + pass.failed > 0) continue;
@@ -197,6 +273,8 @@ export function createRelay<TDb extends EventTables>(options: RelayOptions<TDb>)
         .executeTakeFirst();
       return Number(row?.waiting ?? 0);
     },
+
+    purgePublished,
   };
 }
 

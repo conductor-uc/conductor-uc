@@ -179,6 +179,62 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     });
   });
 
+  describe('GET /internal/v1/orgs/:orgId/admins (G-100)', () => {
+    async function person(orgId: string, email: string, role?: string, disabled = false) {
+      const user = await h.users.create(
+        { requestId: 'test' },
+        {
+          orgId,
+          orgType: 'tenant',
+          resellerId: 'reseller-1',
+          email,
+          displayName: email.split('@')[0]!,
+          password: 'correct horse battery staple',
+        },
+      );
+      if (role !== undefined) await h.roles.assignRole(user.id, role, orgId);
+      if (disabled) {
+        await h.users.update({ requestId: 'test' }, orgId, user.id, { status: 'disabled' });
+      }
+      return user;
+    }
+
+    it("lists the org's active administrators, and nobody else", async () => {
+      const orgId = crypto.randomUUID();
+      const other = crypto.randomUUID();
+      const ann = await person(orgId, 'ann@example.com', 'tenant_admin');
+      const bea = await person(orgId, 'bea@example.com', 'tenant_admin');
+      await person(orgId, 'cal@example.com', 'tenant_user');
+      await person(orgId, 'dot@example.com');
+      await person(orgId, 'eve@example.com', 'tenant_admin', true);
+      await person(other, 'fay@example.com', 'tenant_admin');
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/internal/v1/orgs/${orgId}/admins`,
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({
+        rows: [
+          { userId: ann.id, email: 'ann@example.com', displayName: 'ann' },
+          { userId: bea.id, email: 'bea@example.com', displayName: 'bea' },
+        ],
+      });
+    });
+
+    it('needs the internal service token', async () => {
+      for (const headers of [{}, { authorization: 'Bearer not-the-token' }]) {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/internal/v1/orgs/${crypto.randomUUID()}/admins`,
+          headers,
+        });
+        expect(response.statusCode).toBe(401);
+      }
+    });
+  });
+
   describe('POST /internal/v1/orgs/:orgId/admin-user', () => {
     it('rejects a request with no bearer token', async () => {
       const response = await app.inject({

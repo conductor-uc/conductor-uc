@@ -27,4 +27,17 @@ export const eventsEnvSchema = Type.Object({
     default: 10,
     description: 'Publish attempts before a row is parked for an operator.',
   }),
+  OUTBOX_RETENTION_DAYS: Env.int({
+    minimum: 0,
+    default: 7,
+    description:
+      'Published outbox rows older than this many days are deleted by the relay (G-55). 0 keeps them.',
+  }),
+  NATS_STREAM_MAX_AGE_DAYS: Env.int({
+    minimum: 0,
+    maximum: 3650,
+    default: 7,
+    description:
+      'Messages older than this many days leave every JetStream stream (G-55). 0 keeps them until a size limit applies. Set the same value in every service.',
+  }),
 });

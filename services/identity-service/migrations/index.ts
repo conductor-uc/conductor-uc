@@ -5,6 +5,7 @@ import * as rolesAndGrants from './002_roles_and_grants.js';
 import * as auditEvents from './003_audit_events.js';
 import * as resetAndInvitations from './004_reset_and_invitations.js';
 import * as signingKeyRotation from './005_signing_key_rotation.js';
+import * as stepUp from './006_step_up.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -21,4 +22,5 @@ export const migrations: Record<string, Migration> = {
   '003_audit_events': auditEvents,
   '004_reset_and_invitations': resetAndInvitations,
   '005_signing_key_rotation': signingKeyRotation,
+  '006_step_up': stepUp,
 };

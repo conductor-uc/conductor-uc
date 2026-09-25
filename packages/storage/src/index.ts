@@ -7,6 +7,7 @@ export {
   tenantShortId,
   type ObjectLocation,
 } from './bucket-naming.js';
+export { BROWSER_CORS_RULE } from './cors.js';
 export { storageEnvSchema, storageFromConfig } from './config.js';
 export {
   createStorage,

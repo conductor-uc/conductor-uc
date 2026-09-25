@@ -184,6 +184,82 @@ describe.skipIf(skipReason !== undefined)('relay', () => {
     expect(await relay.lag()).toBe(0);
   });
 
+  describe('retention of published rows (G-55)', () => {
+    const DAY = 24 * 60 * 60_000;
+
+    /** Publishes [count] rows, then backdates their publish time by [ageDays]. */
+    async function publishedRows(count: number, ageDays: number): Promise<string[]> {
+      const tenantId = randomUUID();
+      const ids: string[] = [];
+      for (let index = 0; index < count; index += 1) {
+        ids.push((await createExtension(harness, tenantId, `7${String(index)}`)).eventId);
+      }
+      await harness.db.kysely
+        .updateTable('outbox')
+        .set({ published_at: new Date(Date.now() - ageDays * DAY) })
+        .where('id', 'in', ids)
+        .execute();
+      return ids;
+    }
+
+    async function remaining(): Promise<string[]> {
+      const rows = await harness.db.kysely.selectFrom('outbox').select('id').execute();
+      return rows.map((r) => r.id);
+    }
+
+    it('deletes published rows older than the retention period, in batches', async () => {
+      const old = await publishedRows(5, 8);
+      const recent = await publishedRows(2, 6);
+      const { eventId: unpublished } = await createExtension(harness, randomUUID(), '7999');
+      // Unpublished for a long time: parked, not delivered. Never deleted.
+      await harness.db.kysely
+        .updateTable('outbox')
+        .set({ created_at: new Date(Date.now() - 30 * DAY), attempts: 99 })
+        .where('id', '=', unpublished)
+        .execute();
+
+      const relay = createRelay({
+        db: harness.db.kysely,
+        bus: harness.bus,
+        logger: harness.logger,
+        retentionDays: 7,
+        cleanupBatchSize: 2,
+      });
+
+      expect(await relay.purgePublished()).toBe(old.length);
+      expect((await remaining()).sort()).toEqual([...recent, unpublished].sort());
+      expect(await relay.purgePublished()).toBe(0);
+    });
+
+    it('keeps everything when the retention is 0', async () => {
+      const old = await publishedRows(3, 400);
+      const relay = createRelay({
+        db: harness.db.kysely,
+        bus: harness.bus,
+        logger: harness.logger,
+        retentionDays: 0,
+      });
+
+      expect(await relay.purgePublished()).toBe(0);
+      expect((await remaining()).sort()).toEqual([...old].sort());
+    });
+
+    it('sweeps from the running loop, without anyone asking', async () => {
+      await publishedRows(3, 10);
+      const relay = createRelay({
+        db: harness.db.kysely,
+        bus: harness.bus,
+        logger: harness.logger,
+        pollIntervalMs: 20,
+      });
+
+      const loop = relay.run();
+      await waitFor(async () => (await remaining()).length === 0);
+      relay.stop();
+      await loop;
+    });
+  });
+
   describe('run and stop', () => {
     it('drains the outbox and then stops on request', async () => {
       const tenantId = randomUUID();

@@ -5,6 +5,7 @@ import { fileKekFromConfig, type KekProvider } from '@cuc/crypto';
 import { silentLogger, startTestDatabase, type TestDatabaseHandle } from '@cuc/testing';
 
 import { createAuthService } from '../src/auth/auth-service.js';
+import { createStepUp, type StepUp } from '../src/auth/step-up.js';
 import { createGrantRepo, type GrantRepo } from '../src/repo/grant.repo.js';
 import { createMfaRepo, type MfaRepo } from '../src/repo/mfa.repo.js';
 import { createRoleRepo, type RoleRepo } from '../src/repo/role.repo.js';
@@ -23,6 +24,7 @@ export interface Harness {
   readonly roles: RoleRepo;
   readonly grants: GrantRepo;
   readonly auth: ReturnType<typeof createAuthService>;
+  readonly stepUp: StepUp;
   readonly handle: TestDatabaseHandle;
   close(): Promise<void>;
 }
@@ -38,7 +40,7 @@ export const TEST_TTL = {
   mfaTicketTtlSeconds: 300,
   signingKeyOverlapDays: 7,
   passwordResetTtlMinutes: 60,
-  invitationTtlDays: 7,
+  invitationTtlHours: 72,
 };
 
 export async function startHarness(): Promise<Harness> {
@@ -77,6 +79,7 @@ export async function startHarness(): Promise<Harness> {
     roles,
     grants,
     auth,
+    stepUp: createStepUp({ mfa, kek }),
     handle,
     async close() {
       await db.destroy();

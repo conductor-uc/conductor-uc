@@ -104,13 +104,16 @@ The WebSocket hub listed above is not present in `services/api-gateway/src` at t
 
 **Internal:** `POST /internal/v1/authz/check` (batch). Services normally evaluate authorization with the `@cuc/authz` library against the token's claims plus a cached grant set, and call this endpoint only for fine-grained grants that aren't in the token.
 
-**Events:** `identity.user.created|updated|disabled|deleted`, `identity.user.password_reset_requested`, `identity.grant.changed`.
+**Reset and invitation links (G-55):** `POST /internal/v1/orgs/{orgId}/password-resets/{resetId}/link` and `POST /internal/v1/orgs/{orgId}/invitations/{invitationId}/link`, called by notification-service with the service token when it sends the email. A reset request or invitation is created without a token; this call creates one, stores its SHA-256 in place of any earlier one (so the link of an email that was retried stops working) and returns the raw token once, with the request's own expiry: `200 {token, expiresAt}`. `404` when there is no such reset or invitation in that org; `409` `link_used`, `link_expired` or `user_inactive`. No event, outbox row or backup holds a usable token.
+
+**Events:** `identity.user.created|updated|disabled|deleted`, `identity.user.password_reset_requested`, `identity.invitation.created`, `identity.user.mfa_reset`, `identity.grant.changed`. The reset and invitation events carry ids only (version 2, G-55).
+
 
 ## pbx-config-service
 
 **Owns:** extensions, SIP credentials, devices, DIDs, ring and hunt groups, queues and agents, parking lots, conference rooms, schedules, media assets, emergency locations.
 
-**Public API:** `/v1/tenants/{t}/extensions`, `/devices`, `/sip-endpoint`, `/dids`, `/ring-groups`, `/queues`, `/parking-lots`, `/conference-rooms`, `/schedules`, `/media-assets` (upload via presigned URL, then `:finalize`, which transcodes to 8 kHz/16 kHz WAV).
+**Public API:** `/v1/tenants/{t}/extensions`, `/devices`, `/sip-endpoint`, `/dids`, `/ring-groups`, `/queues`, `/parking-lots`, `/conference-rooms`, `/schedules`, `/media-assets` (upload via presigned URL, then `:finalize`, which transcodes to 8 kHz/16 kHz WAV; `/{id}/download-url` plays a ready one back, G-80).
 
 **Events:** `pbx.{entity}.created|updated|deleted` for each entity above.
 
@@ -279,6 +282,8 @@ The **billing view** for resellers is pending decision D-013.
 Templates are brand-aware: the renderer receives a resolved brand, or NEUTRAL. Templates: voicemail, fax received, password reset, invitation, recording-export-ready, and system alerts to reseller support contacts.
 
 **Consumes:** the events listed in [05 §5](05-data-architecture.md#5-events).
+
+**Calls:** org-service for the brand of each email; identity-service to issue the one-time token of a password-reset or invitation link, just before sending it (G-55). When identity-service refuses (`404`/`409`: the reset or invitation is gone, used or expired, or the user was disabled since), the event is consumed and no email is sent. A retried send asks again and emails the fresh link. The token is never logged or stored.
 
 ## chat-service
 

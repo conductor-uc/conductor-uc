@@ -59,6 +59,11 @@ export interface IdentityServiceDb extends EventTables {
      */
     confirmed_at: Date | null;
     created_at: Date;
+    /** The TOTP time step of the last code accepted as a step-up (G-100); a replay names no later one. */
+    last_step_up_step: ColumnType<number | null, number | null | undefined, number | null>;
+    /** Wrong step-up codes since the window that `step_up_failed_at` started. */
+    step_up_failures: ColumnType<number, number | undefined, number>;
+    step_up_failed_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
   };
 
   sessions: {
@@ -174,8 +179,11 @@ export interface IdentityServiceDb extends EventTables {
   password_reset_tokens: {
     id: string;
     user_id: string;
-    /** SHA-256 of the emailed token. The raw token is never stored. */
-    token_hash: string;
+    /**
+     * SHA-256 of the emailed token; the raw token is never stored. NULL until
+     * notification-service asks for the link, at send time (G-55).
+     */
+    token_hash: string | null;
     expires_at: Date;
     used_at: Date | null;
     created_at: Date;
@@ -190,8 +198,8 @@ export interface IdentityServiceDb extends EventTables {
     email: string;
     display_name: string;
     invited_by: string | null;
-    /** SHA-256 of the emailed token. */
-    token_hash: string;
+    /** SHA-256 of the emailed token. NULL until the link is issued, at send time (G-55). */
+    token_hash: string | null;
     expires_at: Date;
     accepted_at: Date | null;
     created_at: Date;
