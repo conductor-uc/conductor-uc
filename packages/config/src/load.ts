@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import type { Static, TObject } from 'typebox';
 import { Check, Convert, Default, Errors } from 'typebox/value';
 
@@ -16,6 +18,16 @@ export interface LoadConfigOptions {
  * blank by an orchestrator falls back to its default instead of failing as a
  * zero-length string.
  *
+ * Any declared variable `NAME` can instead be read from a file named by
+ * `NAME_FILE` (G-116), the convention Docker and Kubernetes secrets use: the
+ * file is read as UTF-8 and trailing whitespace (the newline an editor or
+ * `echo` leaves) is removed. It is meant for secrets, but applies to every
+ * variable because one rule is easier to remember than a list. Setting both
+ * `NAME` and `NAME_FILE`, naming a file that cannot be read, or naming an empty
+ * file stops startup. A schema that itself declares `NAME_FILE` (api-gateway's
+ * `TLS_CERT_FILE`, say) keeps that variable's own meaning, and the value read
+ * from a file is redacted exactly like one from the environment.
+ *
  * Throws {@link ConfigError} listing every problem at once, so a misconfigured
  * deployment does not have to be fixed one variable per restart. The returned
  * object is frozen.
@@ -32,20 +44,82 @@ export function loadConfig<T extends TObject>(
 ): Readonly<Static<T>> {
   const env = options.env ?? process.env;
   const raw: Record<string, unknown> = {};
+  const fileIssues: ConfigIssue[] = [];
+  const unresolved = new Set<string>();
 
   for (const [key, property] of Object.entries(schema.properties)) {
-    const value = env[key];
+    const resolved = resolveValue(schema, env, key);
+    if ('issue' in resolved) {
+      fileIssues.push(resolved.issue);
+      unresolved.add(key);
+      continue;
+    }
+    const { value } = resolved;
     if (value === undefined || value === '') continue;
     raw[key] = isArraySchema(property) ? splitList(value) : value;
   }
 
   const candidate = Default(schema, Convert(schema, raw)) as Static<T>;
 
-  if (!Check(schema, candidate)) {
-    throw new ConfigError(collectIssues(schema, candidate));
+  if (fileIssues.length > 0 || !Check(schema, candidate)) {
+    // A variable whose file could not be read would otherwise also be reported
+    // as "required but not set", which points at the wrong fix.
+    const issues = collectIssues(schema, candidate).filter(
+      (issue) => !unresolved.has(issue.variable),
+    );
+    throw new ConfigError(
+      [...fileIssues, ...issues].sort((a, b) => a.variable.localeCompare(b.variable)),
+    );
   }
 
   return Object.freeze(candidate);
+}
+
+/** The suffix naming a file to read a variable from (G-116). */
+const FILE_SUFFIX = '_FILE';
+
+/**
+ * The value for `key`: from the environment, or from the file `${key}_FILE`
+ * names. Issues never carry the file's contents, only its path and the reason.
+ */
+function resolveValue(
+  schema: TObject,
+  env: Readonly<Record<string, string | undefined>>,
+  key: string,
+): { value: string | undefined } | { issue: ConfigIssue } {
+  const direct = env[key];
+  const fileVariable = `${key}${FILE_SUFFIX}`;
+  // The schema's own `NAME_FILE` variable means whatever that schema says, not
+  // "read NAME from here".
+  if (Object.hasOwn(schema.properties, fileVariable)) return { value: direct };
+
+  const path = env[fileVariable];
+  if (path === undefined || path === '') return { value: direct };
+
+  if (direct !== undefined && direct !== '') {
+    return {
+      issue: {
+        variable: key,
+        message: `is set both directly and through ${fileVariable}; set only one of them`,
+      },
+    };
+  }
+
+  let contents: string;
+  try {
+    contents = readFileSync(path, 'utf8');
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? 'unknown error';
+    return {
+      issue: { variable: fileVariable, message: `cannot read the file '${path}' (${code})` },
+    };
+  }
+
+  const value = contents.trimEnd();
+  if (value === '') {
+    return { issue: { variable: fileVariable, message: `the file '${path}' is empty` } };
+  }
+  return { value };
 }
 
 function splitList(value: string): string[] {
