@@ -42,6 +42,9 @@ interface FileState {
   nextAttemptAt: number;
   lastError: string | null;
   lastStuckLogAt: number;
+  /** The service already holds this recording (or was told it is empty); only the local copy is left to delete. */
+  settled: boolean;
+  lastDeleteErrorLogAt: number;
 }
 
 export interface UploaderMetrics {
@@ -50,6 +53,8 @@ export interface UploaderMetrics {
   readonly spoolBytes: number;
   /** Files past `stuckMs`: the alert signal. Zero when healthy. */
   readonly stuckFiles: number;
+  /** Files the service already holds that could not be deleted from the spool: also an alert. */
+  readonly undeletableFiles: number;
   readonly oldestFileAgeSeconds: number;
   readonly uploadedTotal: number;
   readonly failedAttemptsTotal: number;
@@ -90,6 +95,7 @@ export function createUploader(options: UploaderOptions) {
     spoolFiles: 0,
     spoolBytes: 0,
     stuckFiles: 0,
+    undeletableFiles: 0,
     oldestFileAgeSeconds: 0,
     uploadedTotal: 0,
     failedAttemptsTotal: 0,
@@ -98,7 +104,14 @@ export function createUploader(options: UploaderOptions) {
   function stateFor(name: string): FileState {
     let state = states.get(name);
     if (state === undefined) {
-      state = { attempts: 0, nextAttemptAt: 0, lastError: null, lastStuckLogAt: 0 };
+      state = {
+        attempts: 0,
+        nextAttemptAt: 0,
+        lastError: null,
+        lastStuckLogAt: 0,
+        settled: false,
+        lastDeleteErrorLogAt: 0,
+      };
       states.set(name, state);
     }
     return state;
@@ -131,7 +144,38 @@ export function createUploader(options: UploaderOptions) {
     }
   }
 
-  /** Uploads one file. Resolves 'uploaded' / 'dropped' (file removed) or throws to be retried. */
+  /**
+   * Deletes a spool file whose recording the service already holds. True when it is gone. A failure
+   * is not an upload failure (the service must not be asked again) but it is an alert: the node is
+   * keeping audio it must not keep (CLAUDE.md rule 5), and the spool fills. Seen live: a spool
+   * directory with the sticky bit, where the uploader may not delete FreeSWITCH's files.
+   */
+  async function removeLocal(name: string, state: FileState): Promise<boolean> {
+    try {
+      await unlink(join(spoolDir, name));
+      return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
+      state.settled = true;
+      state.lastError = error instanceof Error ? error.message : String(error);
+      const current = now();
+      if (current - state.lastDeleteErrorLogAt >= stuckLogIntervalMs) {
+        state.lastDeleteErrorLogAt = current;
+        logger.error(
+          {
+            alert: 'recording_spool_delete_failed',
+            recordingId: name.slice(0, -4),
+            code: (error as NodeJS.ErrnoException).code,
+            err: state.lastError,
+          },
+          'uploader: a recording is safely stored but could not be deleted from the node',
+        );
+      }
+      return false;
+    }
+  }
+
+  /** Uploads one file. Resolves 'uploaded' / 'dropped' (the service knows it is empty) or throws to be retried. The caller deletes it. */
   async function upload(
     name: string,
     path: string,
@@ -145,8 +189,7 @@ export function createUploader(options: UploaderOptions) {
     if (size < MIN_AUDIO_FILE_BYTES) {
       // No audio was ever written (the call never got media). Tell the service and drop it.
       await api.fail(recordingId, 'empty_file');
-      await unlink(path);
-      logger.info({ recordingId }, 'uploader: dropped an empty spool file');
+      logger.info({ recordingId }, 'uploader: dropping an empty spool file');
       return 'dropped';
     }
 
@@ -183,7 +226,6 @@ export function createUploader(options: UploaderOptions) {
     if (after.size !== size || after.mtimeMs !== mtimeMs) {
       throw new TransientUploadError('the file changed while it was being uploaded.');
     }
-    await unlink(path);
     return 'uploaded';
   }
 
@@ -194,9 +236,16 @@ export function createUploader(options: UploaderOptions) {
     result: { uploaded: number; failed: number },
   ): Promise<void> {
     const state = stateFor(name);
+    if (state.settled) {
+      // Only the delete is left; the service is not asked again.
+      if (await removeLocal(name, state)) {
+        states.delete(name);
+        logger.info({ recordingId: name.slice(0, -4) }, 'uploader: spool file deleted on retry');
+      }
+      return;
+    }
     try {
       const outcome = await upload(name, join(spoolDir, name), size, mtimeMs);
-      states.delete(name);
       if (outcome === 'uploaded') {
         uploadedTotal += 1;
         result.uploaded += 1;
@@ -205,12 +254,17 @@ export function createUploader(options: UploaderOptions) {
           'uploader: recording uploaded',
         );
       }
+      if (await removeLocal(name, state)) states.delete(name);
     } catch (error) {
       if (error instanceof AlreadyUploadedError) {
         // The service already holds this recording; the spool copy is a duplicate.
-        await unlink(join(spoolDir, name)).catch(() => undefined);
-        states.delete(name);
-        logger.warn({ recordingId: name.slice(0, -4) }, 'uploader: dropped a duplicate spool file');
+        if (await removeLocal(name, state)) {
+          states.delete(name);
+          logger.warn(
+            { recordingId: name.slice(0, -4) },
+            'uploader: dropped a duplicate spool file',
+          );
+        }
         return;
       }
       state.attempts += 1;
@@ -300,7 +354,9 @@ export function createUploader(options: UploaderOptions) {
       let remainingBytes = 0;
       let remainingOldestMs = 0;
       let stuckFiles = 0;
+      let undeletableFiles = 0;
       for (const name of remaining) {
+        if (states.get(name)?.settled === true) undeletableFiles += 1;
         const info = await stat(join(spoolDir, name)).catch(() => undefined);
         if (info === undefined) continue;
         remainingBytes += info.size;
@@ -328,6 +384,7 @@ export function createUploader(options: UploaderOptions) {
         spoolFiles: remaining.length,
         spoolBytes: remainingBytes,
         stuckFiles,
+        undeletableFiles,
         oldestFileAgeSeconds: Math.round(remainingOldestMs / 1000),
         uploadedTotal,
         failedAttemptsTotal,
@@ -374,6 +431,9 @@ export function renderMetrics(metrics: UploaderMetrics): string {
     '# HELP cuc_recording_spool_stuck_files Recordings on the node longer than the stuck threshold. Alert when above zero.',
     '# TYPE cuc_recording_spool_stuck_files gauge',
     `cuc_recording_spool_stuck_files ${String(metrics.stuckFiles)}`,
+    '# HELP cuc_recording_spool_undeletable_files Recordings already stored that could not be deleted from the node spool. Alert when above zero.',
+    '# TYPE cuc_recording_spool_undeletable_files gauge',
+    `cuc_recording_spool_undeletable_files ${String(metrics.undeletableFiles)}`,
     '# HELP cuc_recording_spool_oldest_file_age_seconds Age of the oldest spool file.',
     '# TYPE cuc_recording_spool_oldest_file_age_seconds gauge',
     `cuc_recording_spool_oldest_file_age_seconds ${String(metrics.oldestFileAgeSeconds)}`,

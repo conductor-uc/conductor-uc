@@ -265,12 +265,15 @@ export function recordingSpoolPath(spoolDir: string, recordingId: string): strin
 
 /**
  * The actions that start a recording, in order: mark the channel, play the announcement first if the
- * policy says so, then `record_session` to the spool.
+ * policy says so, then arm `record_session` to start, into the spool, when the call is answered.
  *
  * - `pre_answer` lets the caller hear the announcement before the call is answered, without answering
  *   (and so without starting billing on an inbound call that nobody picks up).
- * - `RECORD_ANSWER_REQ` keeps the recording from starting until the call is answered, so ringing and the
- *   announcement are not in the file; `RECORD_STEREO` puts each party on its own channel.
+ * - `record_session` is not run directly: on a call that is not answered yet, FreeSWITCH pre-answers
+ *   the channel to attach the recorder (seen live: `Pre-Answer` right before `record_session`), which
+ *   sends 183 early media to the caller before anyone picks up, so the caller hears silence instead of
+ *   ringback. `execute_on_answer` runs it at answer instead, so ringing and the announcement are not in
+ *   the file either. `RECORD_STEREO` puts each party on its own channel.
  * - `recording_follow_transfer` keeps recording across an attended transfer.
  */
 export function recordingActions(recording: RecordingDialplan): string[] {
@@ -285,9 +288,8 @@ export function recordingActions(recording: RecordingDialplan): string[] {
   }
   actions.push(
     '<action application="set" data="RECORD_STEREO=true"/>',
-    '<action application="set" data="RECORD_ANSWER_REQ=true"/>',
     '<action application="set" data="recording_follow_transfer=true"/>',
-    `<action application="record_session" data="${escapeXml(recordingSpoolPath(recording.spoolDir, recording.recordingId))}"/>`,
+    `<action application="set" data="${escapeXml(`execute_on_answer=record_session ${recordingSpoolPath(recording.spoolDir, recording.recordingId)}`)}"/>`,
   );
   return actions;
 }

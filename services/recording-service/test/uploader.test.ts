@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto';
-import { appendFile, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
+import {
+  appendFile,
+  chmod,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  utimes,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -363,6 +372,44 @@ describe.skipIf(skipReason !== undefined)(
       });
       for (const done of [a, b, c, dup]) expect(await status(done.id)).toBe('ready');
       expect(await readFile(join(spool, 'notes.txt'), 'utf8')).toBe('not a recording');
+    });
+
+    it('alerts when a stored recording cannot be deleted from the spool, and only retries the delete', async () => {
+      // Seen live: a sticky-bit spool where the uploader may not delete FreeSWITCH's files.
+      await fresh();
+      const file = await spoolFile(wav());
+      let apiCalls = 0;
+      const counting: FetchLike = (input, init) => {
+        apiCalls += 1;
+        return fetch(input, init);
+      };
+      const { logger, lines } = capturingLogger();
+      const uploader = build({ apiFetch: counting, logger });
+
+      await chmod(spool, 0o555);
+      try {
+        expect(await uploader.scanOnce()).toMatchObject({ uploaded: 1, failed: 0 });
+        expect(await status(file.id)).toBe('ready');
+        expect(await spoolNames()).toEqual([`${file.id}.wav`]);
+        const alert = lines.find((l) => l.fields['alert'] === 'recording_spool_delete_failed');
+        expect(alert?.level).toBe('error');
+        expect(uploader.metrics()).toMatchObject({ undeletableFiles: 1, uploadedTotal: 1 });
+        expect(renderMetrics(uploader.metrics())).toContain(
+          'cuc_recording_spool_undeletable_files 1',
+        );
+
+        // Later scans do not upload it again or ask the service about it.
+        const asked = apiCalls;
+        expect(await uploader.scanOnce()).toMatchObject({ uploaded: 0, failed: 0 });
+        expect(apiCalls).toBe(asked);
+      } finally {
+        await chmod(spool, 0o755);
+      }
+
+      // Once the delete is possible, it happens, and the alert clears.
+      await uploader.scanOnce();
+      expect(await spoolNames()).toEqual([]);
+      expect(uploader.metrics()).toMatchObject({ undeletableFiles: 0, uploadedTotal: 1 });
     });
 
     it('holds a file whose recording the service does not know, and alerts if it stays', async () => {

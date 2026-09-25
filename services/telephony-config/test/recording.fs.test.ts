@@ -198,11 +198,14 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
 
       const xml = await internal(tenantId);
       const list = apps(xml);
-      expect(list).toContainEqual({ app: 'record_session', data: `${SPOOL}/${RECORDING_ID}.wav` });
+      expect(list).toContainEqual({
+        app: 'set',
+        data: `execute_on_answer=record_session ${SPOOL}/${RECORDING_ID}.wav`,
+      });
       expect(list).toContainEqual({ app: 'set', data: `cuc_recording_id=${RECORDING_ID}` });
-      expect(list.findIndex((a) => a.app === 'record_session')).toBeLessThan(
-        list.findIndex((a) => a.app === 'bridge'),
-      );
+      expect(
+        list.findIndex((a) => a.data.startsWith('execute_on_answer=record_session')),
+      ).toBeLessThan(list.findIndex((a) => a.app === 'bridge'));
       expect(list.some((a) => a.app === 'playback')).toBe(false);
 
       // Asked with the call's real context: both extensions, direction, and the call uuid.
@@ -238,8 +241,9 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
         `http_cache://http://fs-node:${TOKEN}@telephony-config-test:8080/fs/media/${tenantId}/asset-7/8k.wav`,
       );
       expect(names.indexOf('pre_answer')).toBeLessThan(names.indexOf('playback'));
-      expect(names.indexOf('playback')).toBeLessThan(names.indexOf('record_session'));
-      expect(names.indexOf('record_session')).toBeLessThan(names.indexOf('bridge'));
+      const armed = list.findIndex((a) => a.data.startsWith('execute_on_answer=record_session'));
+      expect(names.indexOf('playback')).toBeLessThan(armed);
+      expect(armed).toBeLessThan(names.indexOf('bridge'));
     });
 
     it('with consent and no asset: plays the neutral tone', async () => {
@@ -338,8 +342,8 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
         extensionIds: [caller],
       });
       expect(apps(xml)).toContainEqual({
-        app: 'record_session',
-        data: `${SPOOL}/${RECORDING_ID}.wav`,
+        app: 'set',
+        data: `execute_on_answer=record_session ${SPOOL}/${RECORDING_ID}.wav`,
       });
       expect(xml).toContain('cuc_call_direction=outbound');
     });
@@ -369,9 +373,8 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
         extensionIds: [extensionId],
       });
       expect(fake.calls[0]?.queueId).toBeUndefined();
-      expect(apps(xml).map((a) => a.app)).toEqual(
-        expect.arrayContaining(['record_session', 'bridge']),
-      );
+      expect(apps(xml).map((a) => a.app)).toContain('bridge');
+      expect(xml).toContain('execute_on_answer=record_session');
     });
 
     it('a DID to a ring group: records with the DID', async () => {
@@ -441,8 +444,10 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
         didId,
         nodeId: 'fs-1',
       });
-      const list = apps(xml).map((a) => a.app);
-      expect(list.indexOf('record_session')).toBeLessThan(list.indexOf('callcenter'));
+      const list = apps(xml);
+      const armed = list.findIndex((a) => a.data.startsWith('execute_on_answer=record_session'));
+      expect(armed).toBeGreaterThanOrEqual(0);
+      expect(armed).toBeLessThan(list.findIndex((a) => a.app === 'callcenter'));
     });
 
     it('a DID that is not the tenant’s or does not resolve is never asked about', async () => {

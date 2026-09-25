@@ -19,21 +19,28 @@ const TENANT = '0e7a9d2c-1111-4222-8333-444455556666';
 const base = { recordingId: ID, spoolDir: SPOOL, announce: false, consentUrl: null };
 
 describe('recording actions (S5-02)', () => {
-  it('records to the spool with stereo, answer-required, and the opaque id as the whole file name', () => {
+  it('records to the spool in stereo from answer, with the opaque id as the whole file name', () => {
     expect(recordingActions(base)).toEqual([
       `<action application="set" data="cuc_recording_id=${ID}"/>`,
       '<action application="set" data="RECORD_STEREO=true"/>',
-      '<action application="set" data="RECORD_ANSWER_REQ=true"/>',
       '<action application="set" data="recording_follow_transfer=true"/>',
-      `<action application="record_session" data="${SPOOL}/${ID}.wav"/>`,
+      `<action application="set" data="execute_on_answer=record_session ${SPOOL}/${ID}.wav"/>`,
     ]);
+  });
+
+  it('never runs record_session before answer, which would pre-answer the call and kill ringback', () => {
+    for (const announce of [false, true]) {
+      const actions = recordingActions({ ...base, announce });
+      expect(actions.some((a) => a.includes('application="record_session"'))).toBe(false);
+    }
   });
 
   it('plays the announcement before recording starts, without answering the call', () => {
     const actions = recordingActions({ ...base, announce: true });
     const names = actions.map((a) => /application="([^"]+)"/.exec(a)?.[1]);
-    expect(names).toEqual(['set', 'pre_answer', 'playback', 'set', 'set', 'set', 'record_session']);
-    expect(names.indexOf('playback')).toBeLessThan(names.indexOf('record_session'));
+    expect(names).toEqual(['set', 'pre_answer', 'playback', 'set', 'set', 'set']);
+    const armed = actions.findIndex((a) => a.includes('execute_on_answer=record_session'));
+    expect(names.indexOf('playback')).toBeLessThan(armed);
     expect(names).not.toContain('answer');
   });
 
@@ -123,7 +130,9 @@ describe('injecting into a dialplan document', () => {
       expect(applications.slice(0, actions.length)).toEqual(
         actions.map((a) => /application="([^"]+)"/.exec(a)?.[1]),
       );
-      const record = applications.indexOf('record_session');
+      const record = [...inner.matchAll(/<action [^>]*>/g)].findIndex((m) =>
+        m[0].includes('execute_on_answer=record_session'),
+      );
       const dial = applications.findIndex((a) => a === 'bridge' || a === 'callcenter');
       expect(record).toBeGreaterThanOrEqual(0);
       expect(dial).toBeGreaterThan(record);

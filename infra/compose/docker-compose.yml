@@ -837,19 +837,21 @@ volumes:
   # The node spool recordings are written to before upload (S5-03). tmpfs-backed, so it is
   # never durable (CLAUDE.md rule 5, D-011), yet shared between a FreeSWITCH node and its
   # uploader sidecar, which a plain `tmpfs:` mount cannot do across two containers. The size
-  # bounds the spool; 1777 lets FreeSWITCH write and the non-root uploader delete.
+  # bounds the spool. 0777 and not 1777: FreeSWITCH writes as root, and with the sticky bit
+  # the non-root uploader could upload those files but never delete them (seen live). Only
+  # the node and its own uploader mount the volume.
   recording-spool:
     driver: local
     driver_opts:
       type: tmpfs
       device: tmpfs
-      o: size=512m,mode=1777
+      o: size=512m,mode=0777
   recording-spool-2:
     driver: local
     driver_opts:
       type: tmpfs
       device: tmpfs
-      o: size=512m,mode=1777
+      o: size=512m,mode=0777
   opensips-tls:
   mariadb-data:
   redis-data:
