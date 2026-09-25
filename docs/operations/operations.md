@@ -87,7 +87,7 @@ What a restart costs:
 | An application service | Requests to it fail for a few seconds. Events wait in NATS and are processed afterwards (for up to `NATS_STREAM_MAX_AGE_DAYS`, 7 days by default). |
 | telephony-config | **New calls fail while it is down**: FreeSWITCH asks it for every call. |
 | call-control | Live-call tracking and resource leases restart. Calls continue. |
-| api-gateway | Console and API unavailable for a few seconds. Signed-in users stay signed in. |
+| api-gateway | Console and API unavailable for a few seconds. Signed-in users stay signed in. Open live views (Monitoring) are closed with 1001 and reconnect by themselves. |
 | **OpenSIPs** | **Calls being set up fail, and in-dialog requests for existing calls may fail** (dialog state is reloaded from the database). Registrations survive (stored in MariaDB). |
 | **FreeSWITCH** | **Every call on that node drops.** Recordings in progress are lost; finished ones still in the spool are uploaded after restart if the spool volume survived. The spool is tmpfs, so on a server reboot they are lost too. |
 
@@ -159,7 +159,7 @@ Readiness checks:
 
 | Service | Checks |
 |---|---|
-| api-gateway | redis |
+| api-gateway | redis. NATS is deliberately not a readiness check: the API works without it. When the realtime hub cannot read events, live subscriptions are refused as unavailable and the gateway logs `realtime feed not reading; retrying` or `realtime hub cannot reach NATS yet`. |
 | Services with a database | db, bus (NATS), outbox (reports the number of unpublished events, always passes) |
 | org, identity, pbx-config, trunk and voicemail services | also kek_rewrap: records still under an older `CRYPTO_KEKS` version (always passes; see §6) |
 | call-control | db, bus, redis |

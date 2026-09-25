@@ -75,6 +75,7 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 | `cdr.read` / `cdr.export` | private | Tenant admin |
 | `voicemail.access` | private | Mailbox owner; grantable per `mailbox` |
 | `monitor.presence` | config | Tenant users (tenant-wide) |
+| `monitor.calls` | private | Tenant admin, tenant supervisor, master support: watching the tenant's live calls (the realtime `calls` topic, S5-08, G-119) |
 | `monitor.listen` / `monitor.whisper` / `monitor.barge` | private | Tenant supervisors, **scoped to target extensions or queues** |
 | `analytics.view` | private | Tenant admin / supervisor |
 | `audit.read` | config/private | Org admins (private entries are visible only to the tenant and the master) |
@@ -84,7 +85,7 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 
 Monitoring is a "who can do this to whom" check. A grant `monitor.barge` scoped to `queue:Q1` lets its holder barge calls where the target channel is an agent of Q1 **or** the call is in Q1. `call-control` evaluates this against the live call record in Redis.
 
-Built-in roles: `master_admin`, `master_support` (read everything, no writes: every `.read`, plus `cdr.read`, `analytics.view`, `audit.read`, `monitor.presence` and `billing.read`, its private reads audited), `reseller_admin`, `reseller_support` (read config: the `.read` twin of everything `reseller_admin` manages, plus `audit.read`; H1 still blocks private data), `tenant_admin`, `tenant_supervisor` (monitoring, `analytics.view`, and `queue.read`/`extension.read` for the queues and agents it supervises), `tenant_user` (own extension, voicemail, and recordings where granted). Custom roles are per org.
+Built-in roles: `master_admin`, `master_support` (read everything, no writes: every `.read`, plus `cdr.read`, `analytics.view`, `audit.read`, `monitor.presence`, `monitor.calls` and `billing.read`, its private reads audited), `reseller_admin`, `reseller_support` (read config: the `.read` twin of everything `reseller_admin` manages, plus `audit.read`; H1 still blocks private data), `tenant_admin` (which also watches live calls, `monitor.calls`), `tenant_supervisor` (monitoring including `monitor.calls`, `analytics.view`, and `queue.read`/`extension.read` for the queues and agents it supervises), `tenant_user` (own extension, voicemail, and recordings where granted). Custom roles are per org.
 
 ## 4. Audit
 
