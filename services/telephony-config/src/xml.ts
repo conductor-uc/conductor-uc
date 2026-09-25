@@ -634,6 +634,11 @@ export function buildFlowDialplanDocument(
   entryPoint: string,
   tenantDomain: string,
   opensipsSipUri: string,
+  /**
+   * S5-11: the DID the call came in on. The runner passes it back when it hands the call to an
+   * extension, ring group or queue, so the recording decision there still sees the DID's rules.
+   */
+  didId?: string,
 ): string {
   const vars: readonly (readonly [string, string])[] = [
     ['cuc_tenant_id', tenantId],
@@ -643,6 +648,7 @@ export function buildFlowDialplanDocument(
     // variable, not just the global one `vars.xml` already defines —
     // `tenantIdAction`'s own doc comment (this file) has the full story.
     ['cuc_node_id', '$${cuc_node_id}'],
+    ...(didId === undefined ? [] : [['cuc_did_id', didId] as const]),
   ];
 
   return (

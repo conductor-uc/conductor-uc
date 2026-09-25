@@ -460,6 +460,222 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
     });
   });
 
+  describe('calls through an IVR flow (S5-11)', () => {
+    async function seedFlowDid(tenantId: string, trunkId: string): Promise<string> {
+      const flowId = crypto.randomUUID();
+      h.callflow.flows[`${tenantId}/${flowId}`] = {
+        flowId,
+        versionId: crypto.randomUUID(),
+        versionNumber: 1,
+        ir: {
+          entryPoints: { main: 'bye' },
+          nodes: { bye: { id: 'bye', type: 'hangup', config: {}, ports: {} } },
+        },
+      };
+      const didId = crypto.randomUUID();
+      await h.readModel.upsertDid(h.db.kysely, {
+        id: didId,
+        tenantId,
+        e164: '+15551234567',
+        trunkId,
+        destinationType: 'flow',
+        destinationId: flowId,
+      });
+      return didId;
+    }
+
+    async function seedQueue(tenantId: string): Promise<string> {
+      const queueId = crypto.randomUUID();
+      await h.readModel.upsertQueue(h.db.kysely, {
+        id: queueId,
+        tenantId,
+        label: 'Support',
+        strategy: 'round-robin',
+        mohMediaAssetId: null,
+        maxWaitSeconds: 0,
+        announcePosition: false,
+        announceFrequencySeconds: null,
+        noAgentDestinationType: null,
+        noAgentDestinationId: null,
+      });
+      return queueId;
+    }
+
+    const lookup = async (path: string) => {
+      const response = await app.inject({
+        method: 'GET',
+        url: path,
+        headers: { authorization: BASIC_AUTH },
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response.json<Record<string, unknown>>();
+    };
+
+    it('flow entry: asks with the DID only, arms the recording before the flow answers, and passes the DID to the runner', async () => {
+      const tenantId = await seedTenant();
+      const trunkId = await seedTrunk(tenantId);
+      const didId = await seedFlowDid(tenantId, trunkId);
+      fake.directive = record();
+
+      const xml = await inbound(trunkId);
+      expect(fake.calls).toHaveLength(1);
+      expect(fake.calls[0]).toMatchObject({ tenantId, direction: 'inbound', didId });
+      expect(fake.calls[0]?.extensionIds).toEqual([]);
+      expect(fake.calls[0]?.queueId).toBeUndefined();
+
+      const list = apps(xml);
+      const armed = list.findIndex((a) => a.data.startsWith('execute_on_answer=record_session'));
+      expect(armed).toBeGreaterThanOrEqual(0);
+      // Armed before `answer`, so the recording starts when the flow answers (IVR included).
+      expect(armed).toBeLessThan(list.findIndex((a) => a.app === 'answer'));
+      expect(list).toContainEqual({ app: 'set', data: `cuc_recording_id=${RECORDING_ID}` });
+      expect(list).toContainEqual({ app: 'set', data: `cuc_did_id=${didId}` });
+      expect(list.some((a) => a.app === 'lua' && a.data.startsWith('flow_runner.lua'))).toBe(true);
+    });
+
+    it('flow entry with no rule: the flow document is unchanged apart from the DID', async () => {
+      const tenantId = await seedTenant();
+      const trunkId = await seedTrunk(tenantId);
+      await seedFlowDid(tenantId, trunkId);
+      fake.directive = { kind: 'none' };
+
+      const xml = await inbound(trunkId);
+      expect(fake.calls).toHaveLength(1);
+      expect(xml).not.toContain('record_session');
+      expect(xml).not.toContain('cuc_recording');
+    });
+
+    it('hand-off to an extension: decides with the extension and the DID, and returns the instruction', async () => {
+      const tenantId = await seedTenant();
+      const extensionId = await seedExtension(tenantId, '401');
+      const didId = crypto.randomUUID();
+      fake.directive = record();
+
+      const body = await lookup(
+        `/fs/flow/${tenantId}/extension/${extensionId}?callUuid=flow-call-1&didId=${didId}&nodeId=fs-1&recording=0`,
+      );
+      expect(body).toEqual({
+        number: '401',
+        recording: {
+          action: 'record',
+          recordingId: RECORDING_ID,
+          path: `${SPOOL}/${RECORDING_ID}.wav`,
+          announcement: null,
+        },
+      });
+      expect(fake.calls).toEqual([
+        {
+          tenantId,
+          direction: 'inbound',
+          extensionIds: [extensionId],
+          didId,
+          callUuid: 'flow-call-1',
+          nodeId: 'fs-1',
+        },
+      ]);
+    });
+
+    it('hand-off with an announcement: names the tenant asset, or the neutral tone', async () => {
+      const tenantId = await seedTenant();
+      const extensionId = await seedExtension(tenantId, '401');
+      const url = `/fs/flow/${tenantId}/extension/${extensionId}?callUuid=c&recording=0`;
+
+      fake.directive = record({ announce: true, consentAssetId: 'asset-9' });
+      expect((await lookup(url)).recording).toMatchObject({
+        action: 'record',
+        announcement: `http_cache://http://fs-node:${TOKEN}@telephony-config-test:8080/fs/media/${tenantId}/asset-9/8k.wav`,
+      });
+
+      fake.directive = record({ announce: true, consentAssetId: null });
+      expect((await lookup(url)).recording).toMatchObject({ announcement: CONSENT_TONE });
+    });
+
+    it('hand-off while already recording: no decision, no second recording', async () => {
+      const tenantId = await seedTenant();
+      const extensionId = await seedExtension(tenantId, '401');
+      fake.directive = record();
+
+      const body = await lookup(
+        `/fs/flow/${tenantId}/extension/${extensionId}?callUuid=c&recording=1`,
+      );
+      expect(body.recording).toEqual({ action: 'none' });
+      expect(fake.calls).toEqual([]);
+    });
+
+    it('hand-off with no rule, or the service unreachable', async () => {
+      const tenantId = await seedTenant();
+      const extensionId = await seedExtension(tenantId, '401');
+      const url = `/fs/flow/${tenantId}/extension/${extensionId}?callUuid=c&recording=0`;
+
+      fake.directive = { kind: 'none' };
+      expect((await lookup(url)).recording).toEqual({ action: 'none' });
+
+      fake.directive = { kind: 'unavailable', reason: 'down' };
+      expect((await lookup(url)).recording).toEqual({ action: 'unavailable' });
+    });
+
+    it('a runner that does not ask gets the plain lookup and nothing is decided', async () => {
+      const tenantId = await seedTenant();
+      const extensionId = await seedExtension(tenantId, '401');
+      fake.directive = record();
+
+      expect(await lookup(`/fs/flow/${tenantId}/extension/${extensionId}`)).toEqual({
+        number: '401',
+      });
+      expect(fake.calls).toEqual([]);
+    });
+
+    it('hand-off to a ring group: decides with the DID (there is no ring-group scope)', async () => {
+      const tenantId = await seedTenant();
+      const ext1 = await seedExtension(tenantId, '101');
+      const groupId = crypto.randomUUID();
+      await h.readModel.upsertRingGroup(h.db.kysely, {
+        id: groupId,
+        tenantId,
+        label: 'Sales',
+        strategy: 'simultaneous',
+        memberExtensionIds: JSON.stringify([ext1]),
+        ringTimeoutSeconds: 20,
+        noAnswerDestinationType: null,
+        noAnswerDestinationId: null,
+      });
+      const didId = crypto.randomUUID();
+      fake.directive = record();
+
+      const body = await lookup(
+        `/fs/flow/${tenantId}/ring-group/${groupId}?callUuid=c&didId=${didId}&recording=0`,
+      );
+      expect(body).toMatchObject({ numbers: ['101'], recording: { action: 'record' } });
+      expect(fake.calls[0]).toMatchObject({ direction: 'inbound', didId, extensionIds: [] });
+    });
+
+    it('hand-off to a queue: decides with the queue and the DID, only when the queue is local', async () => {
+      const tenantId = await seedTenant();
+      const queueId = await seedQueue(tenantId);
+      const didId = crypto.randomUUID();
+      fake.directive = record();
+
+      const body = await lookup(
+        `/fs/flow/${tenantId}/queue/${queueId}?nodeId=fs-1&callUuid=c&didId=${didId}&recording=0`,
+      );
+      expect(body).toMatchObject({ isLocal: true, recording: { action: 'record' } });
+      expect(fake.calls[0]).toMatchObject({ queueId, didId, nodeId: 'fs-1' });
+
+      fake.calls = [];
+      h.callControl.acquireResults[`${tenantId}:queue:${queueId}`] = {
+        nodeId: 'fs-2',
+        acquired: false,
+      };
+      const remote = await lookup(
+        `/fs/flow/${tenantId}/queue/${queueId}?nodeId=fs-1&callUuid=c&recording=0`,
+      );
+      expect(remote).toMatchObject({ isLocal: false });
+      expect(remote.recording).toBeUndefined();
+      expect(fake.calls).toEqual([]);
+      delete h.callControl.acquireResults[`${tenantId}:queue:${queueId}`];
+    });
+  });
+
   describe('calls that are never recorded here', () => {
     it('voicemail retrieval, agent login and DIDs to voicemail are not offered for recording', async () => {
       const tenantId = await seedTenant();

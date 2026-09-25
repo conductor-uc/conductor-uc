@@ -321,12 +321,14 @@ cause list, `buildDialplanDocument` already uses for its voicemail fallback
 (`sip_route_uri`), exactly as every other bridge this platform builds does,
 so the edge stays the only thing that decides where a registered AOR lives.
 --]]
-local function bridgeNumbers(numbers, timeoutSeconds, separator)
+local function bridgeNumbers(numbers, timeoutSeconds, separator, legVars)
   local domain = session:getVariable("cuc_tenant_domain")
   local routeUri = session:getVariable("cuc_opensips_sip_uri")
+  local extra = ""
+  if legVars ~= nil and legVars ~= "" then extra = "," .. legVars end
   local legs = {}
   for i, number in ipairs(numbers) do
-    legs[i] = "{sip_route_uri=sip:" .. routeUri .. "}sofia/internal/" .. number .. "@" .. domain
+    legs[i] = "{sip_route_uri=sip:" .. routeUri .. extra .. "}sofia/internal/" .. number .. "@" .. domain
   end
 
   session:setVariable("continue_on_fail", "NORMAL_CLEARING,USER_BUSY,NO_ANSWER,ORIGINATOR_CANCEL,UNALLOCATED_NUMBER")
@@ -402,15 +404,103 @@ local function hairpinTransfer(targetNodeId)
   session:execute("bridge", "{sip_route_uri=sip:" .. tostring(routeUri) .. "}sofia/internal/" .. tenantId .. "@" .. tostring(domain))
 end
 
+-- ---------------------------------------------------------------------------
+-- Recording at the hand-off (S5-11 (b), G-111)
+--
+-- When the flow hands the call to an extension, ring group or queue, the
+-- lookup for that target also carries the recording decision for it:
+-- telephony-config asks recording-service (the same precedence rules as a
+-- call that reaches the target directly) and answers with an instruction.
+-- No policy logic lives here; this script only carries the instruction out.
+--
+-- A call already being recorded (tenant or DID rules at flow entry, or an
+-- earlier hand-off) says so (`recording=1`), and gets no second recording.
+-- ---------------------------------------------------------------------------
+
+local function isSet(value)
+  return value ~= nil and value ~= "" and value ~= "_undef_"
+end
+
+-- The query string that asks for a recording decision with a lookup.
+local function recordingQuery()
+  local query = "callUuid=" .. session:get_uuid() .. "&nodeId=" .. ownNodeId()
+  local didId = session:getVariable("cuc_did_id")
+  if isSet(didId) then query = query .. "&didId=" .. didId end
+  if isSet(session:getVariable("cuc_recording_id")) then
+    query = query .. "&recording=1"
+  else
+    query = query .. "&recording=0"
+  end
+  return query
+end
+
+--[[
+Carries out a hand-off's recording instruction. The call is already answered
+(the flow answered it), so running `record_session` directly is safe here: the
+S5-02 lesson (a direct `record_session` pre-answers an unanswered call and
+kills ringback) does not apply to an answered channel.
+
+`startsOnAnswer` (extension and ring-group targets) arms the recording on
+this channel to start only when a called phone answers, through the B leg's
+own `api_on_answer`, so ringing, and a caller who gives up and falls through
+to voicemail, are not recorded under the extension's rule. Queues record from
+the hand-off, like a DID straight to a queue does (the caller is answered and
+waiting). Returns the leg variables to add to the bridge, or "".
+
+UNVERIFIED LIVE: `api_on_answer` on a bridged leg running `uuid_record` for
+this (the A) channel is FreeSWITCH's documented variable and API, not yet
+seen on a real node (tests/sip/test/recording_flow.test.ts is the check).
+--]]
+local pendingRecording = nil
+
+local function applyRecording(instruction, startsOnAnswer)
+  if type(instruction) ~= "table" then return "" end
+  if instruction.action == "unavailable" then
+    session:setVariable("cuc_recording_status", "unavailable")
+    return ""
+  end
+  if instruction.action ~= "record" or instruction.path == nil then return "" end
+
+  if instruction.announcement ~= nil and instruction.announcement ~= json.null then
+    session:execute("playback", instruction.announcement)
+  end
+  session:setVariable("RECORD_STEREO", "true")
+  session:setVariable("recording_follow_transfer", "true")
+
+  if startsOnAnswer then
+    pendingRecording = instruction
+    return "api_on_answer='uuid_record " .. session:get_uuid() .. " start " .. instruction.path .. "'"
+  end
+  session:execute("record_session", instruction.path)
+  session:setVariable("cuc_recording_id", instruction.recordingId)
+  return ""
+end
+
+-- After a bridge: if the armed recording started (its file exists), the call
+-- is now recorded, and a later hand-off must not start a second one.
+local function settleRecording()
+  if pendingRecording == nil then return end
+  local handle = io.open(pendingRecording.path, "r")
+  if handle ~= nil then
+    handle:close()
+    session:setVariable("cuc_recording_id", pendingRecording.recordingId)
+  end
+  pendingRecording = nil
+end
+
 function handlers.extension(node)
-  local resolved = httpGet("/fs/flow/" .. tenantId .. "/extension/" .. node.config.extensionId)
+  local resolved = httpGet(
+    "/fs/flow/" .. tenantId .. "/extension/" .. node.config.extensionId .. "?" .. recordingQuery()
+  )
   local decoded = resolved ~= nil and json.decode(resolved) or nil
   if decoded == nil or decoded.number == nil then
     log("ERR", "extension node '" .. node.id .. "' could not resolve its extension")
     return node.ports.noAnswer
   end
 
-  bridgeNumbers({ decoded.number }, node.config.ringSeconds, ",")
+  local legVars = applyRecording(decoded.recording, true)
+  bridgeNumbers({ decoded.number }, node.config.ringSeconds, ",", legVars)
+  settleRecording()
   if session:getVariable("bridge_hangup_cause") == nil and not session:ready() then return nil end
   return node.ports.noAnswer
 end
@@ -426,7 +516,9 @@ rings every leg at once (simultaneous), `|` rings them in order (sequential,
 and what `round_robin`/`random` become once the ordering has been applied).
 --]]
 function handlers.ring_group(node)
-  local resolved = httpGet("/fs/flow/" .. tenantId .. "/ring-group/" .. node.config.ringGroupId)
+  local resolved = httpGet(
+    "/fs/flow/" .. tenantId .. "/ring-group/" .. node.config.ringGroupId .. "?" .. recordingQuery()
+  )
   local decoded = resolved ~= nil and json.decode(resolved) or nil
   if decoded == nil or decoded.numbers == nil or #decoded.numbers == 0 then
     log("ERR", "ring_group node '" .. node.id .. "' could not resolve its members")
@@ -434,7 +526,9 @@ function handlers.ring_group(node)
   end
 
   local separator = decoded.strategy == "simultaneous" and "," or "|"
-  bridgeNumbers(decoded.numbers, decoded.ringTimeoutSeconds, separator)
+  local legVars = applyRecording(decoded.recording, true)
+  bridgeNumbers(decoded.numbers, decoded.ringTimeoutSeconds, separator, legVars)
+  settleRecording()
   if not session:ready() then return nil end
   return node.ports.noAnswer
 end
@@ -463,7 +557,7 @@ against a real FreeSWITCH process.
 --]]
 function handlers.queue(node)
   local resolved = httpGet(
-    "/fs/flow/" .. tenantId .. "/queue/" .. node.config.queueId .. "?nodeId=" .. ownNodeId()
+    "/fs/flow/" .. tenantId .. "/queue/" .. node.config.queueId .. "?" .. recordingQuery()
   )
   local decoded = resolved ~= nil and json.decode(resolved) or nil
   if decoded == nil or decoded.queueName == nil then
@@ -475,6 +569,8 @@ function handlers.queue(node)
     hairpinTransfer(decoded.nodeId)
     return nil
   end
+
+  applyRecording(decoded.recording, false)
 
   session:execute("callcenter", decoded.queueName)
   if not session:ready() then return nil end
