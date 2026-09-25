@@ -805,6 +805,23 @@
     },
     "/v1/orgs/{orgId}/users/{userId}/mfa-reset": {
       "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stepUpCode": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "description": "A current code from the acting person’s own authenticator app, confirming this action (G-100)."
+                  }
+                }
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {

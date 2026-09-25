@@ -307,7 +307,7 @@ Groups: base, database (`notification_service`), events.
 | Variable | Default | Required | Meaning |
 |---|---|---|---|
 | `INTERNAL_SERVICE_TOKEN` | — | **yes** (secret) | |
-| `ORG_SERVICE_URL`, `VOICEMAIL_SERVICE_URL` | — | **yes** | |
+| `ORG_SERVICE_URL`, `IDENTITY_SERVICE_URL`, `VOICEMAIL_SERVICE_URL` | — | **yes** | identity-service lists an org's admins for the two-step reset notice (G-100) |
 | `SMTP_HOST` | — | **yes** | Your mail relay |
 | `SMTP_PORT` | `587` | no | |
 | `SMTP_SECURE` | `false` | no | `true` for implicit TLS (port 465). With `false`, STARTTLS is used if the server offers it; it is not required. |

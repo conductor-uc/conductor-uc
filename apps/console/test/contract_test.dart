@@ -608,19 +608,16 @@ void main() {
       }, required);
     });
 
-    test(
-      'the two-step reset is a POST on the user with no body, answering a user',
-      () {
-        const reset = '/v1/orgs/{orgId}/users/{userId}/mfa-reset';
-        expect(paths, contains(reset));
-        final post = (paths[reset] as Map)['post'] as Map<String, dynamic>;
-        expect(post.containsKey('requestBody'), isFalse);
-        expect(
-          (_schema(post, response: '200')['properties'] as Map).keys,
-          containsAll(['id', 'mfaEnrolled']),
-        );
-      },
-    );
+    test('the two-step reset is a POST on the user carrying only the step-up code, answering a user', () {
+      const reset = '/v1/orgs/{orgId}/users/{userId}/mfa-reset';
+      expect(paths, contains(reset));
+      final post = (paths[reset] as Map)['post'] as Map<String, dynamic>;
+      expect((_schema(post)['properties'] as Map).keys.toSet(), {'stepUpCode'});
+      expect(
+        (_schema(post, response: '200')['properties'] as Map).keys,
+        containsAll(['id', 'mfaEnrolled']),
+      );
+    });
 
     test('every field the table reads is in the list response', () {
       final list = _schema(

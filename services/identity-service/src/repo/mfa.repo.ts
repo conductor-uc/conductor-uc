@@ -20,6 +20,36 @@ export interface MfaFactor {
   readonly confirmed: boolean;
 }
 
+/** A confirmed factor, with what a step-up check needs beyond the secret (G-100). */
+export interface StepUpFactor extends MfaFactor {
+  /** The time step of the last code accepted as a step-up; null if none ever was. */
+  readonly lastStepUpStep: number | null;
+  readonly stepUpFailures: number;
+  readonly stepUpFailedAt: Date | null;
+}
+
+/** What a failed step-up records in the audit trail. */
+export interface StepUpFailure {
+  readonly actorId: string;
+  readonly actorOrgId: string;
+  /** The org the refused action was aimed at, so that org's trail shows the attempt too. */
+  readonly targetOrgId?: string;
+  /** The sensitive action that was refused, e.g. `user.mfa_reset`. */
+  readonly action: string;
+  /** `invalid_code`, `replayed_code`, or `locked`: never the code itself. */
+  readonly why: string;
+  readonly requestId?: string;
+  readonly ip?: string;
+}
+
+/**
+ * The associated data a TOTP secret is envelope-encrypted under: bound to the
+ * user rather than the factor row, since at enrollment no row exists yet.
+ */
+export function mfaSecretAssociatedData(userId: string): string {
+  return `mfa_factors.secret_enc:user:${userId}`;
+}
+
 /**
  * Data access for TOTP factors, and for the `users.mfa_enrolled` flag that is
  * denormalized from them.
@@ -81,6 +111,97 @@ export function createMfaRepo(db: Database<IdentityServiceDb>) {
         .where('confirmed_at', 'is not', null)
         .executeTakeFirst();
       return row === undefined ? undefined : toFactor(row);
+    },
+
+    /** The user's confirmed factor with its step-up bookkeeping (G-100), if they have one. */
+    findStepUpFactor: async (userId: string): Promise<StepUpFactor | undefined> => {
+      const row = await mfa
+        .selectFrom('mfa_factors')
+        .select([
+          'id',
+          'user_id',
+          'secret_enc',
+          'confirmed_at',
+          'last_step_up_step',
+          'step_up_failures',
+          'step_up_failed_at',
+        ])
+        .where('user_id', '=', userId)
+        .where('confirmed_at', 'is not', null)
+        .executeTakeFirst();
+      if (row === undefined) return undefined;
+      return {
+        ...toFactor(row),
+        lastStepUpStep: row.last_step_up_step === null ? null : Number(row.last_step_up_step),
+        stepUpFailures: Number(row.step_up_failures),
+        stepUpFailedAt: row.step_up_failed_at,
+      };
+    },
+
+    /**
+     * Spends a step-up code's time step. Only a step later than the last one
+     * spent is accepted, in one conditional update, so two requests racing
+     * with the same code cannot both succeed. Clears the failure count.
+     * False means the step (or a later one) was already used: a replay.
+     */
+    async spendStepUpStep(factorId: string, step: number): Promise<boolean> {
+      const result = await mfa
+        .updateTable('mfa_factors')
+        .set({ last_step_up_step: step, step_up_failures: 0, step_up_failed_at: null })
+        .where('id', '=', factorId)
+        .where('confirmed_at', 'is not', null)
+        .where((eb) =>
+          eb.or([eb('last_step_up_step', 'is', null), eb('last_step_up_step', '<', step)]),
+        )
+        .executeTakeFirst();
+      return Number(result.numUpdatedRows) === 1;
+    },
+
+    /**
+     * Counts a wrong step-up code and records it in the audit trail, together
+     * (07 §4: authentication events are audited). A failure more than
+     * `windowMs` before `now` starts the count again at one.
+     */
+    async recordStepUpFailure(
+      factorId: string,
+      now: Date,
+      windowMs: number,
+      failure: StepUpFailure,
+    ): Promise<void> {
+      const windowStart = new Date(now.getTime() - windowMs);
+      await db.kysely.transaction().execute(async (trx) => {
+        await trx
+          .updateTable('mfa_factors')
+          .set((eb) => ({
+            // A failure after a quiet window starts a new count.
+            step_up_failures: eb
+              .case()
+              .when(
+                eb.or([
+                  eb('step_up_failed_at', 'is', null),
+                  eb('step_up_failed_at', '<', windowStart),
+                ]),
+              )
+              .then(1)
+              .else(eb('step_up_failures', '+', 1))
+              .end(),
+            step_up_failed_at: now,
+          }))
+          .where('id', '=', factorId)
+          .execute();
+        await recordAuditEvent(trx, {
+          actorType: 'user',
+          actorId: failure.actorId,
+          actorOrgId: failure.actorOrgId,
+          ...(failure.targetOrgId === undefined ? {} : { targetOrgId: failure.targetOrgId }),
+          action: 'auth.step_up_failed',
+          resource: `user:${failure.actorId}`,
+          dataClass: 'config',
+          reason: `${failure.action}: ${failure.why}`,
+          ...(failure.ip === undefined ? {} : { ip: failure.ip }),
+          ...(failure.requestId === undefined ? {} : { requestId: failure.requestId }),
+        });
+      });
     },
 
     /**

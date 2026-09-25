@@ -11,6 +11,7 @@ const REQUIRED = {
   DB_NAME: 'notification_service',
   NATS_SERVERS: 'nats://nats:4222',
   ORG_SERVICE_URL: 'http://org-service:8080',
+  IDENTITY_SERVICE_URL: 'http://identity-service:8080',
   VOICEMAIL_SERVICE_URL: 'http://voicemail-service:8080',
   INTERNAL_SERVICE_TOKEN: 'token',
   SMTP_HOST: 'mail',

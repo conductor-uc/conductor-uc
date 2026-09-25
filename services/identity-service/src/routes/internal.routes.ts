@@ -99,6 +99,55 @@ export function registerInternalRoutes(
       }
     },
   );
+
+  registerInternalAdminsRoute(app, users, internalServiceToken);
+}
+
+/**
+ * `GET /internal/v1/orgs/:orgId/admins` (G-100): the org's active
+ * administrators, with the address to write to. notification-service asks
+ * when it tells an org's other admins that someone's two-step verification
+ * was reset, so the event itself stays thin. The caller leaves out whoever it
+ * should not write to (the acting admin, the affected person).
+ *
+ * Gated by the same internal service token as the admin-user route; nothing
+ * here is reachable through api-gateway.
+ */
+function registerInternalAdminsRoute(
+  app: Server,
+  users: UserRepo,
+  internalServiceToken: string,
+): void {
+  app.get(
+    '/internal/v1/orgs/:orgId/admins',
+    {
+      config: { public: true },
+      schema: {
+        params: AdminUserParamsSchema,
+        response: {
+          200: Type.Object({
+            rows: Type.Array(
+              Type.Object({
+                userId: Type.String(),
+                email: Type.String(),
+                displayName: Type.String(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const admins = await users.listActiveAdmins(request.params.orgId);
+      return {
+        rows: admins.map((u) => ({ userId: u.id, email: u.email, displayName: u.displayName })),
+      };
+    },
+  );
 }
 
 function bearerToken(header: string | undefined): string | undefined {
