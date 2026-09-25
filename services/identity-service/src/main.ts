@@ -17,6 +17,7 @@ import { createRoleRepo } from './repo/role.repo.js';
 import { createSessionRepo } from './repo/session.repo.js';
 import { createTokenRepo } from './repo/token.repo.js';
 import { createSigningKeyRepo } from './repo/signing-key.repo.js';
+import { createSigningKeyRotator } from './signing-key-rotation.js';
 import { createUserRepo } from './repo/user.repo.js';
 import { registerAuditRoutes } from './routes/audit.routes.js';
 import { registerMeRoutes } from './routes/me.routes.js';
@@ -129,6 +130,22 @@ const tokenRepo = createTokenRepo(db);
 // signs or verifies a token.
 await signingKeyRepo.ensureCurrentKey();
 
+// G-116: rotate the signing key once it is SIGNING_KEY_ROTATION_DAYS old.
+// Safe in every copy of the service; see createSigningKeyRotator.
+const signingKeyRotator =
+  config.SIGNING_KEY_ROTATION_DAYS > 0
+    ? createSigningKeyRotator({
+        signingKeys: signingKeyRepo,
+        rotationDays: config.SIGNING_KEY_ROTATION_DAYS,
+        logger,
+      })
+    : undefined;
+if (signingKeyRotator === undefined) {
+  logger.warn('SIGNING_KEY_ROTATION_DAYS is 0: signing keys are not rotated automatically');
+} else {
+  signingKeyRotator.start();
+}
+
 const authService = createAuthService({
   users: userRepo,
   sessions: sessionRepo,
@@ -193,6 +210,7 @@ async function shutdown(signal: string): Promise<void> {
   await auditConsumerLoop;
   await bus.close();
   await kekRewrap.stop();
+  await signingKeyRotator?.stop();
   await db.destroy();
   logger.info('shutdown complete');
   process.exit(0);

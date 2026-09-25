@@ -50,6 +50,13 @@ export const configSchema = Type.Object({
    * that itself lives only 10 minutes.
    */
   SIGNING_KEY_OVERLAP_DAYS: Env.int({ minimum: 0, default: 7 }),
+  /**
+   * Rotate the signing key automatically once it is this many days old
+   * (07 §2's 90 days; G-116). Every copy of the service checks hourly and
+   * once shortly after startup; exactly one of them rotates. 0 turns
+   * automatic rotation off; `rotate-signing-key` still works.
+   */
+  SIGNING_KEY_ROTATION_DAYS: Env.int({ minimum: 0, default: 90 }),
 
   /** How long an emailed password-reset link works. */
   PASSWORD_RESET_TTL_MINUTES: Env.int({ minimum: 5, default: 60 }),
