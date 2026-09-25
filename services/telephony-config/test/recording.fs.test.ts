@@ -1160,7 +1160,7 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
       const exported = list.findIndex(
         (a) =>
           a.data ===
-          'cc_export_vars=cuc_tenant_id,cuc_queue_id,cuc_did_id,cuc_queue_member_uuid,execute_on_answer_cuc_agent',
+          'cc_export_vars=cuc_tenant_id,cuc_queue_id,cuc_did_id,cuc_queue_member_uuid,execute_on_answer_cuc_agent,cuc_rec_owner',
       );
       // After the caller's own answer (so it never runs on the caller), before the queue.
       expect(armed).toBeGreaterThan(names.indexOf('answer'));

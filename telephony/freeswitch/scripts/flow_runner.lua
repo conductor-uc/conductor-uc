@@ -621,7 +621,7 @@ function handlers.queue(node)
   session:setVariable("execute_on_answer_cuc_agent", "lua agent_recording.lua")
   session:setVariable(
     "cc_export_vars",
-    "cuc_tenant_id,cuc_queue_id,cuc_did_id,cuc_queue_member_uuid,execute_on_answer_cuc_agent"
+    "cuc_tenant_id,cuc_queue_id,cuc_did_id,cuc_queue_member_uuid,execute_on_answer_cuc_agent,cuc_rec_owner"
   )
 
   session:execute("callcenter", decoded.queueName)

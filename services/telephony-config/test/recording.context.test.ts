@@ -59,7 +59,7 @@ describe('recording call context (S5-13)', () => {
       '<action application="set" data="cuc_queue_id=Q1"/>',
       '<action application="set" data="cuc_queue_member_uuid=${uuid}"/>',
       '<action application="set" data="execute_on_answer_cuc_agent=lua agent_recording.lua"/>',
-      '<action application="set" data="cc_export_vars=cuc_tenant_id,cuc_queue_id,cuc_did_id,cuc_queue_member_uuid,execute_on_answer_cuc_agent"/>',
+      '<action application="set" data="cc_export_vars=cuc_tenant_id,cuc_queue_id,cuc_did_id,cuc_queue_member_uuid,execute_on_answer_cuc_agent,cuc_rec_owner"/>',
     ]);
     expect(agentAnswerRecordingActions('Q1', 'D1')[1]).toBe(
       '<action application="set" data="cuc_did_id=D1"/>',

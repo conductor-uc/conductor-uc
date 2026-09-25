@@ -1176,6 +1176,11 @@ export function agentContact(agentName: string, opensipsSipUri: string): string 
  * never runs there (its answer has already happened). `flow_runner.lua`'s `queue` node sets the
  * same variables (keep the two in step).
  *
+ * `cuc_rec_owner` is exported too (when set): the agent leg is originated by `mod_callcenter`,
+ * not bridged from the caller, so the caller's own `export` of it (S5-13's feature codes) does not
+ * reach the agent leg on its own. Whether `bind_meta_app`'s B-leg bindings apply across
+ * `mod_callcenter`'s bridge at all is not known: feature codes on queue calls are unverified.
+ *
  * `cc_export_vars` and the agent leg variables (`cc_agent`) are confirmed present in the 1.10.12
  * `mod_callcenter` binary; their behaviour on a live call is not yet seen.
  */
@@ -1185,6 +1190,7 @@ export const AGENT_ANSWER_EXPORTS = [
   'cuc_did_id',
   'cuc_queue_member_uuid',
   'execute_on_answer_cuc_agent',
+  'cuc_rec_owner',
 ] as const;
 
 export function agentAnswerRecordingActions(queueId: string, didId: string | undefined): string[] {
