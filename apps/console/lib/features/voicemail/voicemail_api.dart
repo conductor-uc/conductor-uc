@@ -37,10 +37,28 @@ class EmailSettings {
   };
 }
 
+/// What the voicemail screens do to one mailbox. The administrator's routes
+/// name the mailbox ([VoicemailApi]); a person's own routes never do
+/// (`MyVoicemailApi` ignores the id, because the service works out whose
+/// mailbox it is from who signed in). The messages table and the two dialogs
+/// are written against this so both share them.
+abstract interface class MailboxOps {
+  Future<List<Json>> messages(String mailboxId);
+
+  /// A short-lived address the recording can be played from.
+  Future<String> playUrl(String mailboxId, String messageId);
+
+  Future<void> deleteMessage(String mailboxId, String messageId);
+
+  Future<Json> saveEmailSettings(String mailboxId, EmailSettings settings);
+
+  Future<void> resetPin(String mailboxId, String pin);
+}
+
 /// The voicemail routes under `/v1/tenants/{tenantId}/voicemail/mailboxes`.
 /// Everything here is private-class data (07 §3.3): a reseller is refused by
 /// the service, and the section is hidden from one in the navigation.
-class VoicemailApi {
+class VoicemailApi implements MailboxOps {
   VoicemailApi(this._api);
 
   final PbxApi _api;
@@ -49,13 +67,14 @@ class VoicemailApi {
 
   Future<List<Json>> mailboxes() => _api.list(_mailboxes);
 
+  @override
   Future<List<Json>> messages(String mailboxId) async {
     final data = await _api.call('GET', _mailboxes, mailboxId, 'messages');
     final rows = (data as Map)['rows'] as List;
     return [for (final r in rows) (r as Map).cast<String, dynamic>()];
   }
 
-  /// A short-lived address the recording can be played from.
+  @override
   Future<String> playUrl(String mailboxId, String messageId) async {
     final data = await _api.call(
       'GET',
@@ -66,9 +85,11 @@ class VoicemailApi {
     return '${(data as Map)['url']}';
   }
 
+  @override
   Future<void> deleteMessage(String mailboxId, String messageId) =>
       _api.call('DELETE', _mailboxes, mailboxId, 'messages/$messageId');
 
+  @override
   Future<Json> saveEmailSettings(String mailboxId, EmailSettings settings) =>
       _api
           .call(
@@ -80,6 +101,7 @@ class VoicemailApi {
           )
           .then((data) => (data as Map).cast<String, dynamic>());
 
+  @override
   Future<void> resetPin(String mailboxId, String pin) =>
       _api.call('POST', _mailboxes, mailboxId, 'reset-pin', body: {'pin': pin});
 }

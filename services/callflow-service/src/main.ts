@@ -1,7 +1,7 @@
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createServer } from '@cuc/http';
+import { createRemotePermissionResolver, createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
 import { configSchema, loadServiceConfig } from './config.js';
@@ -67,6 +67,10 @@ const app = await createServer({
       ? {}
       : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
   },
+  permissions: createRemotePermissionResolver({
+    baseUrl: config.IDENTITY_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
 });
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));

@@ -305,9 +305,9 @@ services:
       # G-60: these services sit behind api-gateway, which signs who is calling.
       TRUST_INTERNAL_HEADERS: 'true'
       INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
-      # Unreachable on purpose (see the note above) — org-service's own
-      # config still requires a syntactically valid URL to boot.
-      IDENTITY_SERVICE_URL: http://127.0.0.1:1
+      # Creates a tenant's first admin, and answers what a signed-in person
+      # may do (per-request permission checks). SIP scenarios never call it.
+      IDENTITY_SERVICE_URL: http://identity-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # G-105: the certificates org-service keeps have their private keys
       # envelope-encrypted with this. Dev-only key (packages/crypto/src/config.ts);
@@ -351,6 +351,8 @@ services:
       TRUST_INTERNAL_HEADERS: 'true'
       INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       ORG_SERVICE_URL: http://org-service:8080
+      # Asked what a signed-in person may do (per-request permission checks).
+      IDENTITY_SERVICE_URL: http://identity-service:8080
       TRUNK_SERVICE_URL: http://trunk-service:8080
       # G-103: phones fetch their settings from the gateway's own address. On a
       # laptop that is the published gateway port; set this to the address the
@@ -404,6 +406,8 @@ services:
       ORG_SERVICE_URL: http://org-service:8080
       TELEPHONY_CONFIG_URL: http://telephony-config:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # Asked what a signed-in person may do (per-request permission checks).
+      IDENTITY_SERVICE_URL: http://identity-service:8080
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
       CRYPTO_KEK_CURRENT: '1'
@@ -590,6 +594,8 @@ services:
       TRUST_INTERNAL_HEADERS: 'true'
       INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # Asked what a signed-in person may do (per-request permission checks).
+      IDENTITY_SERVICE_URL: http://identity-service:8080
 
   voicemail-service:
     build:
@@ -617,6 +623,9 @@ services:
       TRUST_INTERNAL_HEADERS: 'true'
       INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # Asked what a signed-in person may do, and which extension is theirs (self-service).
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+      PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
       CRYPTO_KEK_CURRENT: '1'
@@ -688,6 +697,9 @@ services:
       INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
       ORG_SERVICE_URL: ${ORG_SERVICE_URL:-http://org-service:8080}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # Asked what a signed-in person may do, and which extension is theirs (self-service).
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+      PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
       # `mod_json_cdr`'s own shared token (`telephony/freeswitch/conf/vars.xml`'s
       # `cdr_service_token`) — must match `FS_CDR_INGEST_TOKEN` above on the
       # `freeswitch` service, same "one shared value in dev" pattern

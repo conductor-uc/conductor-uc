@@ -4,6 +4,23 @@
 /// service.
 library;
 
+/// What the built-in `tenant_user` role holds (`@cuc/authz`).
+const demoSelfService = [
+  'org.view',
+  'monitor.presence',
+  'self.settings',
+  'self.voicemail',
+  'self.history',
+];
+
+/// The id the demo gives the signed-in person, by email: the one an extension
+/// can be linked to. Everyone else is the anonymous `demo-user`.
+String demoUserId(String email) {
+  if (email.startsWith('user') || email.startsWith('linked')) return 'user-4';
+  if (email.startsWith('nophone')) return 'user-nophone';
+  return 'demo-user';
+}
+
 const _tenantAdmin = [
   'org.view',
   'user.manage',
@@ -34,6 +51,7 @@ const _tenantAdmin = [
   'analytics.view',
   'audit.read',
   'apikey.manage',
+  ...demoSelfService,
 ];
 
 const _resellerAdmin = [
@@ -91,8 +109,16 @@ const _masterAdmin = [
 /// - `listener@...` is a tenant who can play recordings but not download or delete
 ///   them, or change what is recorded.
 /// - `noperm@...` is a tenant whose permission lookup fails.
+/// - `user@...` is an ordinary person of a tenant (the `tenant_user` role):
+///   only their own phone. They own extension 101.
+/// - `nophone@...` is the same, but nobody has linked an extension to them.
+/// - `linked@...` is a tenant administrator who is also linked to extension
+///   101, so is offered My phone as well.
 List<String>? demoPermissions(String orgType, String email) {
   if (email.startsWith('noperm')) return null;
+  if (email.startsWith('user') || email.startsWith('nophone')) {
+    return const [...demoSelfService];
+  }
   if (email.startsWith('limited')) {
     return const ['org.view', 'extension.manage', 'monitor.presence'];
   }

@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { databaseOrSkipReason, silentLogger } from '@cuc/testing';
 import { createServer, type Server } from '@cuc/http';
 
+import { createPermissionLookup } from '../src/authz/permission-lookup.js';
 import { registerAccessRoutes } from '../src/routes/access.routes.js';
 import { startHarness, type Harness } from './harness.js';
 
@@ -27,7 +28,7 @@ describe.skipIf(skipReason !== undefined)(
     beforeAll(async () => {
       h = await startHarness();
       app = await createServer({ serviceName: 'identity-service', logger: silentLogger() });
-      registerAccessRoutes(app, h.roles, h.grants, TOKEN);
+      registerAccessRoutes(app, createPermissionLookup(h.users, h.roles, h.grants), TOKEN);
       await app.ready();
     });
 
@@ -108,6 +109,22 @@ describe.skipIf(skipReason !== undefined)(
       expect(
         body.grants.map((g) => `${g.permission}@${g.scope.type}:${g.scope.id}`).sort(),
       ).toEqual(['recording.download@queue:Q2', 'recording.listen@queue:Q1']);
+    });
+
+    it('answers 404 for someone disabled, unknown, or asked about under another org', async () => {
+      const supervisor = await makeUser('org-1', 'gone@example.test');
+      await h.roles.assignRole(supervisor, 'tenant_supervisor', 'org-1');
+      await h.grants.create('org-1', 'user', supervisor, 'recording.listen', {
+        type: 'queue',
+        id: 'Q1',
+      });
+      expect((await get('org-1', supervisor)).statusCode).toBe(200);
+      // Their own org is the only one they can be looked up under.
+      expect((await get('org-2', supervisor)).statusCode).toBe(404);
+      expect((await get('org-1', 'no-such-user')).statusCode).toBe(404);
+
+      await h.users.update({ requestId: 'test' }, 'org-1', supervisor, { status: 'disabled' });
+      expect((await get('org-1', supervisor)).statusCode).toBe(404);
     });
   },
 );

@@ -152,6 +152,12 @@ describe('the default routing table', () => {
     ['/v1/tenants/t1/recordings/r1/play-url', SERVICES.recording],
     ['/v1/tenants/t1/recording-policies/p1', SERVICES.recording],
     ['/v1/tenants/t1/recording-settings', SERVICES.recording],
+    ['/v1/tenants/t1/me/extension', SERVICES.pbx],
+    ['/v1/tenants/t1/me/directory', SERVICES.pbx],
+    ['/v1/tenants/t1/me/call-handling', SERVICES.pbx],
+    ['/v1/tenants/t1/me/voicemail', SERVICES.voicemail],
+    ['/v1/tenants/t1/me/voicemail/messages/m1/play-url', SERVICES.voicemail],
+    ['/v1/tenants/t1/me/calls', SERVICES.cdr],
   ])('%s goes to its service', (path, target) => {
     expect(resolveRoute(table, path)?.target).toBe(target);
   });

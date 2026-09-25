@@ -79,14 +79,21 @@ export const configSchema = Type.Object({
       '/v1/tenants/*/emergency-locations=pbx',
       '/v1/tenants/*/media-assets=pbx',
       '/v1/tenants/*/schedules=pbx',
+      // End-user self-service (parity 1e): a person's own extension and call
+      // handling. The rest of `/me` is claimed by the services that own it.
+      '/v1/tenants/*/me/extension=pbx',
+      '/v1/tenants/*/me/directory=pbx',
+      '/v1/tenants/*/me/call-handling=pbx',
       // callflow-service
       '/v1/tenants/*/flows=callflow',
       // voicemail-service
       '/v1/tenants/*/voicemail=voicemail',
+      '/v1/tenants/*/me/voicemail=voicemail',
       // cdr-service
       '/v1/tenants/*/cdrs=cdr',
       '/v1/tenants/*/cdr-exports=cdr',
       '/v1/tenants/*/billing-records=cdr',
+      '/v1/tenants/*/me/calls=cdr',
       // trunk-service
       '/v1/tenants/*/trunks=trunk',
       '/v1/tenants/*/outbound-routes=trunk',

@@ -20,11 +20,13 @@ import { createUserRepo } from './repo/user.repo.js';
 import { registerAuditRoutes } from './routes/audit.routes.js';
 import { registerMeRoutes } from './routes/me.routes.js';
 import { createOrgAccess } from './authz/org-access.js';
+import { createPermissionLookup } from './authz/permission-lookup.js';
 import { createOrgClient } from './org-client.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerGrantRoutes } from './routes/grants.routes.js';
 import { registerAccessRoutes } from './routes/access.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
+import { registerPermissionsInternalRoutes } from './routes/permissions.routes.js';
 import { registerJwksRoute } from './routes/jwks.routes.js';
 import { registerRoleRoutes } from './routes/roles.routes.js';
 import { registerUserRoutes } from './routes/users.routes.js';
@@ -86,6 +88,11 @@ const auditConsumer = createAuditConsumer(db, bus, logger, auditRepo);
 await auditConsumer.ensure();
 const auditConsumerLoop = auditConsumer.run();
 
+const userRepo = createUserRepo(db);
+const roleRepo = createRoleRepo(db);
+const grantRepo = createGrantRepo(db);
+const permissionLookup = createPermissionLookup(userRepo, roleRepo, grantRepo);
+
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
   serviceVersion: config.SERVICE_VERSION,
@@ -96,6 +103,10 @@ const app = await createServer({
       ? {}
       : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
   },
+  // Per-request permission checks for people (07 §3.1): without them a signed-in
+  // person could manage users, roles and grants, whatever they hold.
+  permissions: async (actor, permission) =>
+    (await permissionLookup.ofUser(actor.id, actor.orgId)).has(permission),
 });
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
@@ -107,7 +118,6 @@ app.addReadinessCheck('outbox', async () => {
 
 const kek = fileKekFromConfig(config);
 
-const userRepo = createUserRepo(db);
 const sessionRepo = createSessionRepo(db);
 const mfaRepo = createMfaRepo(db);
 const signingKeyRepo = createSigningKeyRepo(db, kek);
@@ -146,14 +156,13 @@ registerAuthRoutes(app, authService, {
   orgClient,
 });
 registerJwksRoute(app, signingKeyRepo, config.SIGNING_KEY_OVERLAP_DAYS);
-const roleRepo = createRoleRepo(db);
 registerInternalRoutes(app, userRepo, roleRepo, config.INTERNAL_SERVICE_TOKEN);
-registerRoleRoutes(app, roleRepo, orgAccess, userRepo);
+registerRoleRoutes(app, roleRepo, orgAccess, userRepo, permissionLookup);
 registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo);
-const grantRepo = createGrantRepo(db);
-registerGrantRoutes(app, grantRepo);
+registerGrantRoutes(app, grantRepo, orgAccess, permissionLookup);
+registerPermissionsInternalRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
 registerMeRoutes(app, roleRepo, grantRepo);
-registerAccessRoutes(app, roleRepo, grantRepo, config.INTERNAL_SERVICE_TOKEN);
+registerAccessRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
 registerAuditRoutes(app, auditRepo, orgAccess);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });

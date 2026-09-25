@@ -14,6 +14,7 @@ import {
   type RequestContext,
 } from './context.js';
 import { registerHealthRoutes } from './health.js';
+import { registerPermissionGuard, type PermissionResolver } from './permission-guard.js';
 import { registerProblemHandlers } from './problem.js';
 import { registerRouteContractGuard } from './route-guard.js';
 import type { Server } from './server-type.js';
@@ -41,6 +42,13 @@ export interface CreateServerOptions {
   readonly logger?: Logger;
   readonly openapi?: OpenApiOptions;
   readonly context?: ContextOptions;
+  /**
+   * Turns on per-request authorization for signed-in people: the tenant
+   * boundary (H2) and the route's declared `permission`
+   * ({@link registerPermissionGuard}). Left out, only H1 and H3 are enforced.
+   * A service that serves tenant data or manages people passes one.
+   */
+  readonly permissions?: PermissionResolver;
   /** Behind api-gateway this should be true so client IPs are correct. */
   readonly trustProxy?: boolean;
   /**
@@ -144,6 +152,7 @@ export async function createServer(options: CreateServerOptions): Promise<Server
   });
 
   registerHardRules(app);
+  if (options.permissions !== undefined) registerPermissionGuard(app, options.permissions);
 
   // Awaited, not fire-and-forget: @fastify/swagger collects routes through an
   // `onRoute` hook, so it has to be loaded before any route is registered or

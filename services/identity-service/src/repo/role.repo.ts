@@ -158,6 +158,17 @@ export function createRoleRepo(db: Database<IdentityServiceDb>) {
       return rows.map((row) => row.role_id);
     },
 
+    /** The role ids `userId` holds through assignments scoped to `scopeOrgId`: what a route-level permission check counts. */
+    async roleIdsForIn(userId: string, scopeOrgId: string): Promise<string[]> {
+      const rows = await kysely
+        .selectFrom('role_assignments')
+        .select(['role_id'])
+        .where('user_id', '=', userId)
+        .where('scope_org_id', '=', scopeOrgId)
+        .execute();
+      return rows.map((row) => row.role_id);
+    },
+
     /** The merged catalog (built-ins + this org's custom roles) `@cuc/authz` evaluates against. */
     async catalogFor(orgId: string): Promise<RoleCatalog> {
       const custom = await this.listCustomRoles(orgId);

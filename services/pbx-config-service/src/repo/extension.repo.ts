@@ -102,7 +102,28 @@ export class TenantDomainNotFoundError extends Error {
   }
 }
 
+/** `userId` is already the owner of another extension in this tenant: a person has at most one (parity 1e). */
+export class ExtensionUserTakenError extends Error {
+  override readonly name = 'ExtensionUserTakenError';
+
+  constructor(userId: string) {
+    super(`User '${userId}' is already linked to another extension in this tenant.`);
+  }
+}
+
 export { ExtensionNumberTakenError };
+
+const USER_UNIQUE_INDEX = 'extensions_tenant_user_idx';
+
+/** True when a duplicate-key error is the one-extension-per-person index, not the number one. */
+function isUserLinkClash(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { message?: unknown; sqlMessage?: unknown; cause?: unknown };
+  for (const text of [candidate.message, candidate.sqlMessage]) {
+    if (typeof text === 'string' && text.includes(USER_UNIQUE_INDEX)) return true;
+  }
+  return candidate.cause === undefined ? false : isUserLinkClash(candidate.cause);
+}
 
 function associatedData(tenantId: string, credentialId: string): string {
   return `${tenantId}:sip_credentials.secret_enc:${credentialId}`;
@@ -174,6 +195,20 @@ export function createExtensionRepo(
         .selectFrom('extensions')
         .selectAll()
         .where('id', '=', id)
+        .executeTakeFirst()
+        .then((row) => (row === undefined ? undefined : toExtension(row))),
+
+    /**
+     * The one extension linked to `userId` in this tenant, if any. This is how
+     * self-service finds "my extension": the caller passes the signed actor id,
+     * never a client-supplied one.
+     */
+    findByUserId: (ctx: DbContext, userId: string): Promise<Extension | undefined> =>
+      db
+        .scoped(ctx)
+        .selectFrom('extensions')
+        .selectAll()
+        .where('user_id', '=', userId)
         .executeTakeFirst()
         .then((row) => (row === undefined ? undefined : toExtension(row))),
 
@@ -261,7 +296,10 @@ export function createExtensionRepo(
           });
         });
       } catch (error) {
-        if (isDuplicateKeyError(error)) throw new ExtensionNumberTakenError(number);
+        if (isDuplicateKeyError(error)) {
+          if (userId !== null && isUserLinkClash(error)) throw new ExtensionUserTakenError(userId);
+          throw new ExtensionNumberTakenError(number);
+        }
         throw error;
       }
 
@@ -366,7 +404,12 @@ export function createExtensionRepo(
           });
         });
       } catch (error) {
-        if (isDuplicateKeyError(error)) throw new ExtensionNumberTakenError(number);
+        if (isDuplicateKeyError(error)) {
+          if (merged.user_id !== null && isUserLinkClash(error)) {
+            throw new ExtensionUserTakenError(merged.user_id);
+          }
+          throw new ExtensionNumberTakenError(number);
+        }
         throw error;
       }
 

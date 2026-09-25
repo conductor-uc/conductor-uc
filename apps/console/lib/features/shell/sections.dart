@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/acting.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 
 class Section {
@@ -42,6 +43,42 @@ const _users = Section(
   'Users',
   Icons.people_outline,
   requires: ['user.manage'],
+);
+
+/// The three screens of a person's own phone (end-user self-service). They are
+/// everything a person who holds only self-service permissions sees, in place
+/// of the administrator's navigation.
+const myPhoneSections = [
+  Section(
+    '/my-phone/call-handling',
+    'My call handling',
+    Icons.call_split_outlined,
+    requires: ['self.settings'],
+  ),
+  Section(
+    '/my-phone/voicemail',
+    'My voicemail',
+    Icons.voicemail_outlined,
+    privateData: true,
+    requires: ['self.voicemail'],
+  ),
+  Section(
+    '/my-phone/history',
+    'My call history',
+    Icons.history_outlined,
+    privateData: true,
+    requires: ['self.history'],
+  ),
+];
+
+/// What an administrator who is also linked to an extension is offered: one
+/// entry for the same three screens.
+const myPhoneEntry = Section(
+  '/my-phone',
+  'My phone',
+  Icons.phone_in_talk_outlined,
+  privateData: true,
+  requires: ['self.settings', 'self.voicemail', 'self.history'],
 );
 
 /// Top-level sections by org type (08 §3). Each is a placeholder page until
@@ -220,11 +257,25 @@ const sectionsByOrgType = <OrgType, List<Section>>{
 /// a reseller (rule H1; the server enforces it independently). When
 /// [permissions] is known, sections the user holds none of the permissions for
 /// are left out too; the Dashboard is always there.
+///
+/// A person of a tenant who holds only self-service permissions
+/// ([isSelfOnly]) is shown [myPhoneSections] and nothing else. An
+/// administrator of a tenant who is linked to an extension ([hasPhone]) also
+/// gets [myPhoneEntry]. Neither applies while acting as a tenant: a reseller or
+/// the master has no extension of their own there.
 List<Section> visibleSections(
   Session session,
   ActingTenant? acting, [
   Set<String>? permissions,
+  bool hasPhone = false,
 ]) {
+  final ownTenant = session.orgType == OrgType.tenant && acting == null;
+  if (ownTenant && isSelfOnly(permissions)) {
+    return [
+      for (final s in myPhoneSections)
+        if (s.shownTo(permissions)) s,
+    ];
+  }
   final List<Section> byOrg;
   if (acting == null || session.orgType == OrgType.tenant) {
     byOrg = sectionsByOrgType[session.orgType]!;
@@ -240,5 +291,7 @@ List<Section> visibleSections(
   return [
     for (final s in byOrg)
       if (s.shownTo(permissions)) s,
+    if (ownTenant && hasPhone && myPhoneEntry.shownTo(permissions))
+      myPhoneEntry,
   ];
 }

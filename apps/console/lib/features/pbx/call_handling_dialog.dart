@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../myphone/my_phone_api.dart';
 import 'pbx_api.dart';
 
 /// A leading `+`, a non-zero first digit, 7 to 15 digits in all. The service
@@ -68,10 +69,20 @@ class _Dest {
 /// Do not disturb, forwarding and simultaneous ring for one extension (the
 /// "answering rules" a hosted PBX offers each user). Reads and replaces the
 /// extension's call handling as a whole.
+///
+/// With [mine] it is the signed-in person's own extension, read and saved
+/// through their own routes (`/me/call-handling`), which take no extension id;
+/// the other extensions to forward to come from their directory rather than the
+/// administrator's Extensions list, which a person is not allowed to read.
 class CallHandlingDialog extends ConsumerStatefulWidget {
-  const CallHandlingDialog({super.key, required this.extension});
+  const CallHandlingDialog({
+    super.key,
+    required this.extension,
+    this.mine = false,
+  });
 
   final Json extension;
+  final bool mine;
 
   @override
   ConsumerState<CallHandlingDialog> createState() => _CallHandlingDialogState();
@@ -110,12 +121,15 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
 
   Future<void> _load() async {
     final api = ref.read(pbxApiProvider);
-    if (api == null) {
+    final mine = ref.read(myPhoneApiProvider);
+    if (widget.mine ? mine == null : api == null) {
       setState(() => _error = 'Sign in again to continue.');
       return;
     }
     try {
-      final got = await api.callHandling(_extensionId);
+      final got = widget.mine
+          ? await mine!.callHandling()
+          : await api!.callHandling(_extensionId);
       if (!mounted) return;
       setState(() {
         _dnd = got['dnd'] == true;
@@ -168,13 +182,14 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
       return;
     }
     final api = ref.read(pbxApiProvider);
-    if (api == null) return;
+    final mine = ref.read(myPhoneApiProvider);
+    if (widget.mine ? mine == null : api == null) return;
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      await api.saveCallHandling(_extensionId, {
+      final body = {
         'dnd': _dnd,
         'dndAction': _dndAction,
         'forwardAlways': _always.toJson(),
@@ -186,7 +201,12 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
           for (final r in _ring)
             if (r.toJson() != null) r.toJson(),
         ],
-      });
+      };
+      if (widget.mine) {
+        await mine!.saveCallHandling(body);
+      } else {
+        await api!.saveCallHandling(_extensionId, body);
+      }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
@@ -202,7 +222,12 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
   Widget build(BuildContext context) {
     final number = '${widget.extension['number']}';
     final extensions =
-        ref.watch(rowsProvider('extensions')).asData?.value ?? const <Json>[];
+        (widget.mine
+                ? ref.watch(myDirectoryProvider)
+                : ref.watch(rowsProvider('extensions')))
+            .asData
+            ?.value ??
+        const <Json>[];
     final others = [
       for (final e in extensions)
         if ('${e['id']}' != _extensionId) e,

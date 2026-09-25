@@ -79,7 +79,23 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'analytics.view': 'private',
   'audit.read': 'private',
   'apikey.manage': 'secret',
+  'self.settings': 'config',
+  'self.voicemail': 'private',
+  'self.history': 'private',
 };
+
+/**
+ * `self.settings`, `self.voicemail` and `self.history` are not in 07 §3.3
+ * either: they are the end-user self-service portal's (parity 1e) permissions
+ * for a person's OWN extension, mailbox and call history. They are a different
+ * shape from every other permission here: a service that honours one never
+ * takes the extension from the request. It resolves it from the signed actor
+ * id (the extension whose `user_id` is that actor), so holding a `self.*`
+ * permission can never reach anyone else's data. `self.voicemail` and
+ * `self.history` are `private` (voicemail and call history), so H1 keeps every
+ * reseller out of them; `self.settings` is `config`.
+ */
+export const SELF_PERMISSIONS = ['self.settings', 'self.voicemail', 'self.history'] as const;
 
 export type CatalogPermission = keyof typeof PERMISSION_CATALOG;
 

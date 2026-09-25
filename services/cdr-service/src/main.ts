@@ -1,7 +1,7 @@
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createServer } from '@cuc/http';
+import { createRemotePermissionResolver, createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { storageFromConfig } from '@cuc/storage';
 
@@ -11,6 +11,8 @@ import { createOrgClient } from './org-client.js';
 import { createCdrRepo } from './repo/cdr.repo.js';
 import { createExportRepo } from './repo/export.repo.js';
 import { registerBillingRoutes } from './routes/billing.routes.js';
+import { createPbxClient } from './pbx-client.js';
+import { registerMeRoutes } from './routes/me.routes.js';
 import { registerCdrRoutes } from './routes/cdr.routes.js';
 import { registerIngestRoutes } from './routes/ingest.routes.js';
 import type { CdrServiceDb } from './schema.js';
@@ -81,6 +83,10 @@ const app = await createServer({
       ? {}
       : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
   },
+  permissions: createRemotePermissionResolver({
+    baseUrl: config.IDENTITY_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
 });
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
@@ -93,6 +99,11 @@ app.addReadinessCheck('outbox', async () => {
 registerIngestRoutes(app, cdrRepo, orgClient.resellerForTenant, config.FS_CDR_INGEST_TOKEN);
 registerCdrRoutes(app, cdrRepo, exportRepo, storage);
 registerBillingRoutes(app, cdrRepo);
+const pbxClient = createPbxClient({
+  baseUrl: config.PBX_CONFIG_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+registerMeRoutes(app, cdrRepo, pbxClient.userExtension);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

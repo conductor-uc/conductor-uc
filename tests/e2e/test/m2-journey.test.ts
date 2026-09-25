@@ -616,6 +616,203 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
     expect(noRules.status).toBe(403);
   });
 
+  // ---- end-user self-service (parity 1e), through the gateway ------------
+
+  describe('7. a person of the tenant, and their own phone', () => {
+    const kimPassword = 'a receptionist passphrase';
+    let kim: Browser;
+    let kimId = '';
+
+    beforeAll(() => {
+      kim = new Browser(stack.gateway);
+    });
+
+    function asKim<T = Record<string, unknown>>(method: string, path: string, body?: unknown) {
+      return kim.call<T>(method, `/v1/tenants/${tenantId}${path}`, body);
+    }
+
+    it('the tenant admin invites Kim, who accepts, signs in, and holds nothing yet', async () => {
+      const invited = await tenantAdmin.call('POST', `/v1/orgs/${tenantId}/invitations`, {
+        email: 'kim@dental.test',
+        displayName: 'Kim',
+        // Not part of the contract: an invitation names no role.
+        roleId: 'tenant_admin',
+      });
+      expect(invited.status, invited.text).toBe(201);
+      const [mail] = await mailTo(stack.mail, 'kim@dental.test');
+      const token = mail === undefined ? undefined : tokenIn(mail, '/invite');
+      expect(token).toBeTruthy();
+      const visitor = new Browser(stack.gateway);
+      const accepted = await visitor.call(
+        'POST',
+        '/v1/auth/invitations/accept',
+        { token, password: kimPassword },
+        { auth: false },
+      );
+      expect(accepted.status, accepted.text).toBe(201);
+
+      const login = await kim.call<Tokens>(
+        'POST',
+        '/v1/auth/login',
+        { orgId: tenantId, email: 'kim@dental.test', password: kimPassword },
+        { auth: false },
+      );
+      expect(login.json.accessToken, login.text).toBeTruthy();
+      kim.access = login.json.accessToken;
+
+      const me = await kim.call<{ userId: string; roleIds: string[]; permissions: string[] }>(
+        'GET',
+        `/v1/orgs/${tenantId}/me`,
+      );
+      expect(me.json.roleIds).toEqual([]);
+      expect(me.json.permissions).toEqual([]);
+      kimId = me.json.userId;
+    });
+
+    it('with no role, Kim cannot reach the admin API, and cannot give herself a role', async () => {
+      for (const path of ['/extensions', '/voicemail/mailboxes', '/cdrs', '/trunks', '/dids']) {
+        const r = await asKim('GET', path);
+        expect(r.status, path).toBe(403);
+      }
+      const self = await kim.call('POST', `/v1/orgs/${tenantId}/roles/tenant_admin/assignments`, {
+        userId: kimId,
+      });
+      expect(self.status).toBe(403);
+      expect(self.json).toMatchObject({ code: 'permission_denied' });
+      const users = await kim.call('GET', `/v1/orgs/${tenantId}/users`);
+      expect(users.status).toBe(403);
+    });
+
+    it('the admin gives Kim the tenant_user role; she can then see only her own phone routes', async () => {
+      const assigned = await tenantAdmin.call(
+        'POST',
+        `/v1/orgs/${tenantId}/roles/tenant_user/assignments`,
+        { userId: kimId },
+      );
+      expect(assigned.status, assigned.text).toBe(204);
+      // A master role cannot be handed out inside a tenant.
+      const wrong = await tenantAdmin.call(
+        'POST',
+        `/v1/orgs/${tenantId}/roles/master_admin/assignments`,
+        { userId: kimId },
+      );
+      expect(wrong.status).toBe(403);
+      expect(wrong.json).toMatchObject({ code: 'role_wrong_tier' });
+
+      const me = await kim.call<{ permissions: string[] }>('GET', `/v1/orgs/${tenantId}/me`);
+      expect(me.json.permissions).toEqual([
+        'monitor.presence',
+        'org.view',
+        'self.history',
+        'self.settings',
+        'self.voicemail',
+      ]);
+      // Still nothing administrative, and still no way to raise herself.
+      expect((await asKim('GET', '/extensions')).status).toBe(403);
+      const self = await kim.call('POST', `/v1/orgs/${tenantId}/roles/tenant_admin/assignments`, {
+        userId: kimId,
+      });
+      expect(self.status).toBe(403);
+    });
+
+    it('until an extension is linked, every self route says so plainly', async () => {
+      for (const path of ['/me/extension', '/me/call-handling', '/me/voicemail', '/me/calls']) {
+        const r = await asKim('GET', path);
+        expect(r.status, path).toBe(404);
+        expect(r.json, path).toMatchObject({ code: 'no_linked_extension' });
+      }
+      // The admin is not linked either.
+      const admin = await tenant('GET', '/me/extension');
+      expect(admin.status).toBe(404);
+    });
+
+    it('the admin links Kim to the front desk extension; a reseller cannot', async () => {
+      const denied = await reseller.call(
+        'PATCH',
+        `/v1/tenants/${tenantId}/extensions/${extensionId}`,
+        { userId: kimId },
+      );
+      expect(denied.status).toBe(403);
+      expect(denied.json).toMatchObject({ code: 'reseller_cannot_link_user' });
+
+      const linked = await tenant('PATCH', `/extensions/${extensionId}`, { userId: kimId });
+      expect(linked.status, linked.text).toBe(200);
+    });
+
+    it('Kim sees and changes only her own call handling, voicemail and history', async () => {
+      const ext = await asKim<{ id: string; number: string }>('GET', '/me/extension');
+      expect(ext.status).toBe(200);
+      expect(ext.json).toMatchObject({ id: extensionId, number: '101' });
+
+      const handling = await asKim('PUT', '/me/call-handling', {
+        dnd: true,
+        dndAction: 'voicemail',
+      });
+      expect(handling.status, handling.text).toBe(200);
+      expect(handling.json).toMatchObject({ dnd: true });
+      // The same document, read by the admin route.
+      const asAdmin = await tenant('GET', `/extensions/${extensionId}/call-handling`);
+      expect(asAdmin.json).toMatchObject({ dnd: true });
+
+      const box = await asKim<{ greetingStatus: string; unreadCount: number }>(
+        'GET',
+        '/me/voicemail',
+      );
+      expect(box.status, box.text).toBe(200);
+      expect(box.json).toMatchObject({ greetingStatus: 'none', unreadCount: 0 });
+      const messages = await asKim<{ rows: unknown[] }>('GET', '/me/voicemail/messages');
+      expect(messages.json.rows).toEqual([]);
+      const pin = await asKim('POST', '/me/voicemail/reset-pin', { pin: '13579' });
+      expect(pin.status, pin.text).toBe(204);
+      const email = await asKim('PUT', '/me/voicemail/email-settings', {
+        notifyEmail: 'kim@dental.test',
+        attachAudio: false,
+        afterEmail: 'keep',
+      });
+      expect(email.status, email.text).toBe(200);
+      const calls = await asKim<{ rows: unknown[] }>('GET', '/me/calls');
+      expect(calls.status, calls.text).toBe(200);
+      expect(calls.json.rows).toEqual([]);
+
+      // Nothing here takes an id, and no admin route opens.
+      expect((await asKim('GET', `/extensions/${extensionId}`)).status).toBe(403);
+      expect((await asKim('GET', `/voicemail/mailboxes/${mailboxId}/messages`)).status).toBe(403);
+      expect((await asKim('GET', '/cdrs?number=101')).status).toBe(403);
+    });
+
+    it('the reseller cannot reach a person’s own routes: private data is walled off, and there is no "me"', async () => {
+      const voicemail = await reseller.call('GET', `/v1/tenants/${tenantId}/me/voicemail`);
+      expect(voicemail.status).toBe(403);
+      expect(voicemail.json).toMatchObject({ code: 'reseller_private_data_denied' });
+      const history = await reseller.call('GET', `/v1/tenants/${tenantId}/me/calls`);
+      expect(history.status).toBe(403);
+      const settings = await reseller.call('GET', `/v1/tenants/${tenantId}/me/extension`);
+      // A reseller holds no self-service permission at all.
+      expect(settings.status).toBe(403);
+      expect(settings.json).toMatchObject({ code: 'permission_denied' });
+    });
+
+    it('the writes are in the tenant’s audit trail, with Kim as the actor', async () => {
+      let actions: string[] = [];
+      for (let i = 0; i < 40 && !actions.includes('voicemail.pin.reset'); i += 1) {
+        const trail = await tenantAdmin.call<{ rows: { action: string; actorId: string }[] }>(
+          'GET',
+          `/v1/orgs/${tenantId}/audit-events?limit=200`,
+        );
+        expect(trail.status, trail.text).toBe(200);
+        actions = trail.json.rows.filter((e) => e.actorId === kimId).map((e) => e.action);
+        if (!actions.includes('voicemail.pin.reset')) await new Promise((r) => setTimeout(r, 250));
+      }
+      expect(actions).toEqual(
+        expect.arrayContaining([
+          'extension.call_handling.updated',
+          'voicemail.pin.reset',
+          'voicemail.email_settings.updated',
+        ]),
+      );
+    });
+  });
+
   it('1. logging out ends the cookie session', async () => {
     const r = await master.call('POST', '/v1/auth/logout', {}, { auth: false });
     expect(r.status).toBe(204);

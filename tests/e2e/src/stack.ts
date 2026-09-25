@@ -297,6 +297,7 @@ export async function startStack(): Promise<Stack> {
       ...common,
       ...dbEnv(callflowDb),
       HTTP_PORT: String(ports.callflow),
+      IDENTITY_SERVICE_URL: url(ports.identity),
       TRUST_INTERNAL_HEADERS: 'true',
       INTERNAL_HEADER_SIGNING_SECRET: headerSecret,
     });
@@ -322,6 +323,7 @@ export async function startStack(): Promise<Stack> {
       ...dbEnv(trunkDb),
       ...behindGateway,
       HTTP_PORT: String(ports.trunk),
+      IDENTITY_SERVICE_URL: url(ports.identity),
       ORG_SERVICE_URL: url(ports.org),
       TELEPHONY_CONFIG_URL: 'http://127.0.0.1:1',
     });
@@ -332,6 +334,7 @@ export async function startStack(): Promise<Stack> {
       ...storage,
       ...behindGateway,
       HTTP_PORT: String(ports.pbx),
+      IDENTITY_SERVICE_URL: url(ports.identity),
       ORG_SERVICE_URL: url(ports.org),
       TRUNK_SERVICE_URL: url(ports.trunk),
     });
@@ -342,6 +345,8 @@ export async function startStack(): Promise<Stack> {
       ...storage,
       ...behindGateway,
       HTTP_PORT: String(ports.voicemail),
+      IDENTITY_SERVICE_URL: url(ports.identity),
+      PBX_CONFIG_SERVICE_URL: url(ports.pbx),
     });
     running.push(voicemail);
     const cdr = launch('cdr-service', 'services/cdr-service/dist/src/main.js', {
@@ -350,6 +355,8 @@ export async function startStack(): Promise<Stack> {
       ...storage,
       ...behindGateway,
       HTTP_PORT: String(ports.cdr),
+      IDENTITY_SERVICE_URL: url(ports.identity),
+      PBX_CONFIG_SERVICE_URL: url(ports.pbx),
       ORG_SERVICE_URL: url(ports.org),
       FS_CDR_INGEST_TOKEN: `e2e-${randomBytes(8).toString('hex')}`,
     });

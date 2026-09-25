@@ -2,7 +2,7 @@ import { redactConfig } from '@cuc/config';
 import { fileKekFromConfig } from '@cuc/crypto';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createServer } from '@cuc/http';
+import { createRemotePermissionResolver, createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { storageFromConfig } from '@cuc/storage';
 
@@ -31,6 +31,8 @@ import { registerProvisionRoutes } from './routes/provision.routes.js';
 import { parseSipTransports, registerSipEndpointRoutes } from './routes/sip-endpoint.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerCallHandlingInternalRoutes } from './routes/call-handling-internal.routes.js';
+import { registerMeRoutes } from './routes/me.routes.js';
+import { registerUserExtensionInternalRoutes } from './routes/user-extension-internal.routes.js';
 import { registerCallHandlingRoutes } from './routes/call-handling.routes.js';
 import { registerScheduleInternalRoutes } from './routes/schedule-internal.routes.js';
 import { registerMediaAssetRoutes } from './routes/media-asset.routes.js';
@@ -128,6 +130,10 @@ const app = await createServer({
       ? {}
       : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
   },
+  permissions: createRemotePermissionResolver({
+    baseUrl: config.IDENTITY_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
 });
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
@@ -139,6 +145,7 @@ app.addReadinessCheck('outbox', async () => {
 
 registerExtensionRoutes(app, extensionRepo, bus);
 registerCallHandlingRoutes(app, callHandlingRepo, bus);
+registerMeRoutes(app, extensionRepo, callHandlingRepo, bus);
 const sipEdge = {
   port: config.SIP_PUBLIC_PORT,
   tlsPort: config.SIP_PUBLIC_TLS_PORT,
@@ -185,6 +192,7 @@ registerInternalRoutes(
 );
 registerScheduleInternalRoutes(app, scheduleRepo, config.INTERNAL_SERVICE_TOKEN);
 registerCallHandlingInternalRoutes(app, callHandlingRepo, config.INTERNAL_SERVICE_TOKEN);
+registerUserExtensionInternalRoutes(app, extensionRepo, config.INTERNAL_SERVICE_TOKEN);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

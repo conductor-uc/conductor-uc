@@ -22,6 +22,12 @@ export const configSchema = Type.Object({
 
   /** Base URL for org-service's internal API, e.g. http://org-service:8080. */
   ORG_SERVICE_URL: Env.url(),
+  /**
+   * identity-service, asked what a signed-in person may do
+   * (`@cuc/http`'s permission guard). Required, not optional: without it the
+   * service would let any signed-in person call any route.
+   */
+  IDENTITY_SERVICE_URL: Env.url(),
   /** Base URL for trunk-service's internal API, e.g. http://trunk-service:8080 (S2-03). */
   TRUNK_SERVICE_URL: Env.url(),
   /**

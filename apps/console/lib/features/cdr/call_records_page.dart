@@ -17,13 +17,13 @@ final urlOpenerProvider = Provider<Future<void> Function(String url)>(
       (url) => launchUrl(Uri.parse(url), webOnlyWindowName: '_blank'),
 );
 
-const _directions = {
+const directionLabels = {
   'inbound': 'Inbound',
   'outbound': 'Outbound',
   'internal': 'Internal',
 };
 
-const _dispositions = {
+const dispositionLabels = {
   'answered': 'Answered',
   'no_answer': 'No answer',
   'busy': 'Busy',
@@ -236,7 +236,7 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                 decoration: const InputDecoration(labelText: 'Direction'),
                 items: [
                   const DropdownMenuItem(value: null, child: Text('All')),
-                  for (final e in _directions.entries)
+                  for (final e in directionLabels.entries)
                     DropdownMenuItem(value: e.key, child: Text(e.value)),
                 ],
                 onChanged: (v) => setState(() => _direction = v),
@@ -357,16 +357,18 @@ class _CallTableState extends ConsumerState<_CallTable> {
                         DataCell(Text(formatWhen(r['startAt']))),
                         DataCell(
                           Text(
-                            _directions['${r['direction']}'] ??
+                            directionLabels['${r['direction']}'] ??
                                 '${r['direction']}',
                           ),
                         ),
-                        DataCell(Text(_party(r['fromNumber'], r['fromName']))),
+                        DataCell(
+                          Text(partyLabel(r['fromNumber'], r['fromName'])),
+                        ),
                         DataCell(Text('${r['toNumber']}')),
                         DataCell(Text(formatDuration(r['durationSec']))),
                         DataCell(
                           Text(
-                            _dispositions['${r['disposition']}'] ??
+                            dispositionLabels['${r['disposition']}'] ??
                                 '${r['disposition']}',
                           ),
                         ),
@@ -390,7 +392,7 @@ class _CallTableState extends ConsumerState<_CallTable> {
   }
 }
 
-String _party(Object? number, Object? name) =>
+String partyLabel(Object? number, Object? name) =>
     name is String && name.isNotEmpty ? '$number ($name)' : '$number';
 
 /// Everything the service recorded about one call.
@@ -423,18 +425,19 @@ class CallDetailDialog extends ConsumerWidget {
             final rows = <(String, String)>[
               (
                 'Direction',
-                _directions['${c['direction']}'] ?? '${c['direction']}',
+                directionLabels['${c['direction']}'] ?? '${c['direction']}',
               ),
               (
                 'Result',
-                _dispositions['${c['disposition']}'] ?? '${c['disposition']}',
+                dispositionLabels['${c['disposition']}'] ??
+                    '${c['disposition']}',
               ),
               ('Started', formatWhen(c['startAt'])),
               ('Answered', formatWhen(c['answerAt'])),
               ('Ended', formatWhen(c['endAt'])),
               ('Duration', formatDuration(c['durationSec'])),
               ('Billable time', formatDuration(c['billableSec'])),
-              ('From', _party(c['fromNumber'], c['fromName'])),
+              ('From', partyLabel(c['fromNumber'], c['fromName'])),
               ('To', '${c['toNumber']}'),
               ('Dialed', '${c['dialedNumber']}'),
               ('Phone number', '${c['did'] ?? '—'}'),

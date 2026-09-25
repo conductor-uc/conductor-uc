@@ -25,9 +25,9 @@ Legend: **Built** exists with tests. **Partial** some of it. **Planned** in the 
 | Capability | NetSapiens | Metaswitch | Here | Priority |
 |---|---|---|---|---|
 | Extensions, SIP credentials, password reset | Yes | Yes | Built | |
-| Do not disturb | Yes | Yes | Gap | **P1** |
-| Call forwarding: always, busy, no answer, unreachable | Yes | Yes | Gap | **P1** |
-| Simultaneous ring (own mobile, other numbers) | Yes | Yes | Gap | **P1** |
+| Do not disturb | Yes | Yes | Built (G-109; not tried on a real call) | |
+| Call forwarding: always, busy, no answer, unreachable | Yes | Yes | Built (G-109; busy, no answer and unreachable depend on a FreeSWITCH behaviour G-41 found broken) | Verify on a real node |
+| Simultaneous ring (own mobile, other numbers) | Yes | Yes | Built (G-109; not tried on a real call) | |
 | Sequential ring / find me follow me | Yes ("answering rules") | Yes | Gap | P2 |
 | Time-of-day rules for the above | Yes (time frames) | Yes | Partial (schedules exist, not applied to extensions) | P2 |
 | Selective call accept / reject, anonymous call rejection | Yes | Yes | Gap | P2 |
@@ -40,9 +40,9 @@ Legend: **Built** exists with tests. **Partial** some of it. **Planned** in the 
 | Busy lamp field, presence, shared line appearance | Yes | Yes | Gap (planned with the realtime layer) | P2 |
 | Hot desking / login to any phone | Yes | Yes | Gap | P3 |
 | Voicemail: boxes, greetings, PIN, retrieval | Yes | Yes | Built | |
-| Voicemail to email with attachment | Yes | Yes | Planned (S5-07) | **P1** |
+| Voicemail to email with attachment | Yes | Yes | Built (G-107) | |
 | Voicemail transcription | Yes | Yes | Planned (S5-06) | P2 |
-| Message waiting indicator | Yes | Yes | Partial (event has no consumer, G-42) | P2 |
+| Message waiting indicator | Yes | Yes | Partial (event has no consumer, G-42; groundwork in G-108) | P2 |
 | Call history and click to dial for the user | Yes | Yes | Gap | P2 |
 | Contacts / directory (company, personal) | Yes | Yes | Gap | P3 |
 
@@ -83,7 +83,7 @@ Legend: **Built** exists with tests. **Partial** some of it. **Planned** in the 
 | Capability | NetSapiens | Metaswitch | Here | Priority |
 |---|---|---|---|---|
 | SIP trunks: registration and IP authenticated | Yes | Yes (Perimeta) | Built | |
-| Outbound route plans with failover | Yes | Yes | Built (API; no console screen) | P1 |
+| Outbound route plans with failover | Yes | Yes | Built (G-106) | |
 | Least-cost routing, rate tables | Yes | Yes | Gap | P3 |
 | Number normalization and translation | Yes | Yes | Partial (E.164 handling in dialplan) | P2 |
 | DID inventory and assignment | Yes | Yes | Built | |
@@ -97,7 +97,7 @@ Legend: **Built** exists with tests. **Partial** some of it. **Planned** in the 
 
 | Capability | NetSapiens | Metaswitch | Here | Priority |
 |---|---|---|---|---|
-| CDR with search and export | Yes | Yes | Built (API and export; no console screen) | **P1** |
+| CDR with search and export | Yes | Yes | Built (G-106) | |
 | Billing integration (rating feed) | Yes | Yes | Partial (billing records API) | P2 |
 | Usage and analytics dashboards | Yes | Yes | Planned (S7-05) | P2 |
 | High availability, geo-redundancy | Yes | Yes | Planned (S4) | P2 |
