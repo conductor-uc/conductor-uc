@@ -165,7 +165,7 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
   app.get(
     '/v1/tenants/:tenantId/flows',
     {
-      config: { permission: 'callflow.edit', dataClass: 'config' },
+      config: { permission: 'callflow.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(FlowSummarySchema) }) },
@@ -177,7 +177,7 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
   app.get(
     '/v1/tenants/:tenantId/flows/:id',
     {
-      config: { permission: 'callflow.edit', dataClass: 'config' },
+      config: { permission: 'callflow.read', dataClass: 'config' },
       schema: { params: FlowParamsSchema, response: { 200: FlowSchema } },
     },
     async (request) => {
@@ -190,7 +190,7 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
   app.get(
     '/v1/tenants/:tenantId/flows/:id/versions',
     {
-      config: { permission: 'callflow.edit', dataClass: 'config' },
+      config: { permission: 'callflow.read', dataClass: 'config' },
       schema: {
         params: FlowParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(VersionSummarySchema) }) },
@@ -206,7 +206,7 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
   app.get(
     '/v1/tenants/:tenantId/flows/:id/versions/:versionNumber',
     {
-      config: { permission: 'callflow.edit', dataClass: 'config' },
+      config: { permission: 'callflow.read', dataClass: 'config' },
       schema: { params: VersionParamsSchema, response: { 200: VersionDetailSchema } },
     },
     async (request) => {

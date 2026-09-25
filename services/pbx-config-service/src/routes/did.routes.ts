@@ -96,7 +96,7 @@ export function registerDidRoutes(app: Server, dids: DidRepo): void {
   app.get(
     '/v1/tenants/:tenantId/dids',
     {
-      config: { permission: 'did.manage', dataClass: 'config' },
+      config: { permission: 'did.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(DidSchema) }) },
@@ -108,7 +108,7 @@ export function registerDidRoutes(app: Server, dids: DidRepo): void {
   app.get(
     '/v1/tenants/:tenantId/dids/:id',
     {
-      config: { permission: 'did.manage', dataClass: 'config' },
+      config: { permission: 'did.read', dataClass: 'config' },
       schema: { params: DidParamsSchema, response: { 200: DidSchema } },
     },
     async (request) => {

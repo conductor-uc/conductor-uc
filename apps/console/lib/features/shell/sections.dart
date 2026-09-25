@@ -21,14 +21,16 @@ class Section {
   final bool privateData;
 
   /// The permissions that make this section worth showing: holding any one is
-  /// enough. Empty means everyone. Hiding is a convenience; the services still
-  /// decide what a request may do.
+  /// enough. Empty means everyone. A configuration screen asks for its `.read`
+  /// permission (G-10), which the `.manage` one implies ([holds]); the screen
+  /// itself hides its changes from someone without the `.manage` one. Hiding
+  /// is a convenience; the services still decide what a request may do.
   final List<String> requires;
 
   bool shownTo(Set<String>? permissions) =>
       permissions == null ||
       requires.isEmpty ||
-      requires.any(permissions.contains);
+      requires.any((p) => holds(permissions, p));
 }
 
 const _dashboard = Section('/dashboard', 'Dashboard', Icons.dashboard_outlined);
@@ -42,7 +44,7 @@ const _users = Section(
   '/users',
   'Users',
   Icons.people_outline,
-  requires: ['user.manage'],
+  requires: ['user.read'],
 );
 
 /// The three screens of a person's own phone (end-user self-service). They are
@@ -90,7 +92,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       '/resellers',
       'Resellers',
       Icons.storefront_outlined,
-      requires: ['reseller.manage'],
+      requires: ['reseller.read'],
     ),
     Section(
       '/platform-health',
@@ -102,7 +104,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       '/certificates',
       'Certificates',
       Icons.verified_user_outlined,
-      requires: ['domain.manage'],
+      requires: ['domain.read'],
     ),
     _audit,
     _users,
@@ -113,25 +115,25 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       '/tenants',
       'Tenants',
       Icons.apartment_outlined,
-      requires: ['tenant.manage', 'tenant.create'],
+      requires: ['tenant.read', 'tenant.create'],
     ),
     Section(
       '/trunks',
       'Trunks',
       Icons.cable_outlined,
-      requires: ['trunk.manage'],
+      requires: ['trunk.read'],
     ),
     Section(
       '/domains',
       'Domains',
       Icons.dns_outlined,
-      requires: ['domain.manage'],
+      requires: ['domain.read'],
     ),
     Section(
       '/brand',
       'Brand',
       Icons.palette_outlined,
-      requires: ['brand.manage'],
+      requires: ['brand.read'],
     ),
     _users,
     _audit,
@@ -143,67 +145,67 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       '/extensions',
       'Extensions',
       Icons.dialpad_outlined,
-      requires: ['extension.manage'],
+      requires: ['extension.read'],
     ),
     Section(
       '/phones',
       'Phones',
       Icons.phone_android_outlined,
-      requires: ['extension.manage'],
+      requires: ['extension.read'],
     ),
     Section(
       '/phone-numbers',
       'Phone numbers',
       Icons.phone_outlined,
-      requires: ['did.manage'],
+      requires: ['did.read'],
     ),
     Section(
       '/call-flows',
       'Call flows',
       Icons.account_tree_outlined,
-      requires: ['callflow.edit', 'callflow.publish'],
+      requires: ['callflow.read'],
     ),
     Section(
       '/ring-groups',
       'Ring groups',
       Icons.groups_outlined,
-      requires: ['group.manage'],
+      requires: ['group.read'],
     ),
     Section(
       '/outbound-routes',
       'Outbound routes',
       Icons.call_made_outlined,
-      requires: ['trunk.manage', 'emergency_route.manage'],
+      requires: ['trunk.read', 'emergency_route.read'],
     ),
     Section(
       '/queues',
       'Queues',
       Icons.queue_outlined,
-      requires: ['queue.manage'],
+      requires: ['queue.read'],
     ),
     Section(
       '/conference-rooms',
       'Conference rooms',
       Icons.video_call_outlined,
-      requires: ['conference_room.manage'],
+      requires: ['conference_room.read'],
     ),
     Section(
       '/parking-lots',
       'Parking lots',
       Icons.local_parking_outlined,
-      requires: ['parking_lot.manage'],
+      requires: ['parking_lot.read'],
     ),
     Section(
       '/schedules',
       'Schedules',
       Icons.schedule_outlined,
-      requires: ['schedule.manage'],
+      requires: ['schedule.read'],
     ),
     Section(
       '/media',
       'Media',
       Icons.library_music_outlined,
-      requires: ['media.manage'],
+      requires: ['media.read'],
     ),
     Section(
       '/monitoring',
@@ -220,7 +222,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
         'recording.listen',
         'recording.download',
         'recording.delete',
-        'recording.policy.manage',
+        'recording.policy.read',
       ],
     ),
     Section(
@@ -247,7 +249,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       '/settings',
       'Settings',
       Icons.settings_outlined,
-      requires: ['emergency_location.manage'],
+      requires: ['emergency_location.read'],
     ),
   ],
 };

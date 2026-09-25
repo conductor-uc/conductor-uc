@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/permissions.dart';
 import '../../widgets/commit_field.dart';
 import '../../widgets/page.dart';
 import '../callflow/builder/lookups.dart';
@@ -107,6 +108,8 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
   Widget build(BuildContext context) {
     final agents = ref.watch(optionsProvider('agents')).asData?.value ?? {};
     final tiers = _tiers;
+    // Someone who can read queues but not change them sees who answers only.
+    final canChange = ref.watch(canProvider('queue.manage'));
     final used = {for (final t in tiers ?? <Json>[]) '${t['agentId']}'};
     final free = {
       for (final e in agents.entries)
@@ -149,30 +152,37 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
                                       '${t['agentId']}',
                                 ),
                               ),
-                              SizedBox(
-                                width: 90,
-                                child: CommitField(
-                                  label: 'Level',
-                                  value: '${t['level']}',
-                                  number: true,
-                                  onCommit: (v) => _change(t, 'level', v),
+                              if (!canChange)
+                                Text(
+                                  'Level ${t['level']} · '
+                                  'position ${t['position']}',
+                                )
+                              else ...[
+                                SizedBox(
+                                  width: 90,
+                                  child: CommitField(
+                                    label: 'Level',
+                                    value: '${t['level']}',
+                                    number: true,
+                                    onCommit: (v) => _change(t, 'level', v),
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 8),
-                              SizedBox(
-                                width: 90,
-                                child: CommitField(
-                                  label: 'Position',
-                                  value: '${t['position']}',
-                                  number: true,
-                                  onCommit: (v) => _change(t, 'position', v),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: 90,
+                                  child: CommitField(
+                                    label: 'Position',
+                                    value: '${t['position']}',
+                                    number: true,
+                                    onCommit: (v) => _change(t, 'position', v),
+                                  ),
                                 ),
-                              ),
-                              IconButton(
-                                tooltip: 'Remove from queue',
-                                icon: const Icon(Icons.close),
-                                onPressed: () => _remove(t),
-                              ),
+                                IconButton(
+                                  tooltip: 'Remove from queue',
+                                  icon: const Icon(Icons.close),
+                                  onPressed: () => _remove(t),
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -180,58 +190,60 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
                   ),
                 ),
               ),
-            const Divider(height: 24),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('new-agent-$_newAgent-${free.length}'),
-                    initialValue: _newAgent,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      labelText: 'Add an agent',
-                      helperText: free.isEmpty
-                          ? 'Every agent is already in this queue.'
-                          : null,
+            if (canChange) const Divider(height: 24),
+            if (canChange)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('new-agent-$_newAgent-${free.length}'),
+                      initialValue: _newAgent,
+                      isExpanded: true,
+                      decoration: InputDecoration(
+                        labelText: 'Add an agent',
+                        helperText: free.isEmpty
+                            ? 'Every agent is already in this queue.'
+                            : null,
+                      ),
+                      items: [
+                        for (final e in free.entries)
+                          DropdownMenuItem(value: e.key, child: Text(e.value)),
+                      ],
+                      onChanged: (v) => setState(() => _newAgent = v),
                     ),
-                    items: [
-                      for (final e in free.entries)
-                        DropdownMenuItem(value: e.key, child: Text(e.value)),
-                    ],
-                    onChanged: (v) => setState(() => _newAgent = v),
                   ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 80,
-                  child: CommitField(
-                    label: 'Level',
-                    value: '$_newLevel',
-                    number: true,
-                    onCommit: (v) => _newLevel = int.tryParse(v.trim()) ?? 1,
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 80,
+                    child: CommitField(
+                      label: 'Level',
+                      value: '$_newLevel',
+                      number: true,
+                      onCommit: (v) => _newLevel = int.tryParse(v.trim()) ?? 1,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 80,
-                  child: CommitField(
-                    label: 'Position',
-                    value: '$_newPosition',
-                    number: true,
-                    onCommit: (v) => _newPosition = int.tryParse(v.trim()) ?? 1,
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 80,
+                    child: CommitField(
+                      label: 'Position',
+                      value: '$_newPosition',
+                      number: true,
+                      onCommit: (v) =>
+                          _newPosition = int.tryParse(v.trim()) ?? 1,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: FilledButton(
-                    onPressed: _newAgent == null ? null : _add,
-                    child: const Text('Add'),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: FilledButton(
+                      onPressed: _newAgent == null ? null : _add,
+                      child: const Text('Add'),
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
             if (_error != null) ...[
               const SizedBox(height: 8),
               ErrorText(_error!),

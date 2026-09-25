@@ -111,6 +111,19 @@ describe.skipIf(skipReason !== undefined)(
       ).toEqual(['recording.download@queue:Q2', 'recording.listen@queue:Q1']);
     });
 
+    it('spells out implied reads: each role expanded, and a scoped .manage grant with its read twin (G-10)', async () => {
+      const lead = await makeUser('org-1', 'lead@example.test');
+      const role = await h.roles.createCustomRole('org-1', 'queue lead', ['queue.manage']);
+      await h.roles.assignRole(lead, role.id, 'org-1');
+      await h.grants.create('org-1', 'user', lead, 'trunk.manage', { type: 'org', id: 'org-1' });
+
+      const body = (await get('org-1', lead)).json<AccessBody>();
+      expect(body.roles[0]?.permissions).toEqual(['queue.manage', 'queue.read']);
+      expect(
+        body.grants.map((g) => `${g.permission}@${g.scope.type}:${g.scope.id}`).sort(),
+      ).toEqual(['trunk.manage@org:org-1', 'trunk.read@org:org-1']);
+    });
+
     it('answers 404 for someone disabled, unknown, or asked about under another org', async () => {
       const supervisor = await makeUser('org-1', 'gone@example.test');
       await h.roles.assignRole(supervisor, 'tenant_supervisor', 'org-1');

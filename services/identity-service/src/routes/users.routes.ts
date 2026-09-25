@@ -55,7 +55,7 @@ export function registerUserRoutes(
   app.get(
     '/v1/orgs/:orgId/users',
     {
-      config: { permission: 'user.manage', dataClass: 'config' },
+      config: { permission: 'user.read', dataClass: 'config' },
       schema: {
         params: OrgParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(UserSchema) }) },

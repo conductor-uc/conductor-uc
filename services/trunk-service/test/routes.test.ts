@@ -464,4 +464,19 @@ describe.skipIf(skipReason !== undefined)('trunk-service HTTP routes', () => {
       }
     }
   });
+
+  it('trunk reads declare trunk.read and writes trunk.manage (G-10); reveal stays secret.reveal', () => {
+    const routes = app.registeredRoutes.filter((r) =>
+      r.url.startsWith('/v1/tenants/:tenantId/trunks'),
+    );
+    expect(routes.length).toBeGreaterThanOrEqual(5);
+    for (const route of routes) {
+      const expected = route.url.endsWith('/reveal')
+        ? 'secret.reveal'
+        : route.method === 'GET' || route.method === 'HEAD'
+          ? 'trunk.read'
+          : 'trunk.manage';
+      expect(route.permission, `${route.method} ${route.url}`).toBe(expected);
+    }
+  });
 });

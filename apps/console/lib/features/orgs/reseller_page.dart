@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../trunks/trunks_page.dart';
@@ -64,16 +65,18 @@ class _Detail extends ConsumerWidget {
                 onPressed: () => context.go('/resellers'),
               ),
               actions: [
-                OutlinedButton(
-                  onPressed: () =>
-                      orgAction(context, ref, reseller, true, 'edit'),
-                  child: const Text('Edit'),
-                ),
-                OutlinedButton(
-                  onPressed: () =>
-                      orgAction(context, ref, reseller, true, 'suspend'),
-                  child: Text(suspended ? 'Resume' : 'Suspend'),
-                ),
+                if (ref.watch(canProvider('reseller.manage'))) ...[
+                  OutlinedButton(
+                    onPressed: () =>
+                        orgAction(context, ref, reseller, true, 'edit'),
+                    child: const Text('Edit'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () =>
+                        orgAction(context, ref, reseller, true, 'suspend'),
+                    child: Text(suspended ? 'Resume' : 'Suspend'),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 8),

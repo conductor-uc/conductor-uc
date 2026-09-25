@@ -100,10 +100,17 @@ the same reason.
     check: a generated virtual column that is `1` for a master row and `NULL` otherwise, with
     a unique index on it. MariaDB's unique index permits any number of `NULL`s, so this
     rejects a second master while imposing nothing on reseller and tenant rows.
-- `pnpm --filter @cuc/org-service bootstrap-master --slug <slug> --name <name>`: creates the
-  master org. Never through an API (02 §1) — this is the one place a master row is created.
-  Idempotent: running it again logs "master org already exists" and exits 0, whichever of the
-  two constraints above is what actually caught the repeat.
+- `bootstrap-master --slug <slug> --name <name> [--admin-email <email> --admin-name <name>]`
+  (`dist/src/cli/bootstrap-master.js`; in a container, `docker compose run --rm org-service
+  dist/src/cli/bootstrap-master.js ...`): creates the master org. Never through an API (02 §1) —
+  this is the one place a master row is created. With `--admin-email`/`--admin-name` it also
+  creates the master's first administrator through identity-service (G-115). The password is
+  never an argument: it comes from `BOOTSTRAP_ADMIN_PASSWORD`, else standard input (a prompt that
+  does not echo on a terminal, or the first piped line), at least 12 characters.
+  Idempotent: an existing master is kept (whichever of the two constraints above caught the
+  repeat), and the administrator is created only while the master has no users at all, so a
+  re-run exits 0 without creating anyone. If the org was created but the administrator was not,
+  running it again creates just the administrator.
 
 ## What G-105 adds: TLS certificates (migrations 003 and 004)
 

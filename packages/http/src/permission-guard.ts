@@ -1,4 +1,4 @@
-import { h1RouteLevelWall } from '@cuc/authz';
+import { h1RouteLevelWall, holdsPermission } from '@cuc/authz';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import type { RouteContract } from './contract.js';
@@ -137,6 +137,11 @@ export interface RemotePermissionResolverOptions {
  * shared service token) what a person may do, and caches the answer briefly.
  * An unknown or disabled person holds nothing. If identity-service cannot be
  * reached the request fails (503) rather than being let through.
+ *
+ * identity-service already answers with the implied reads included (G-10: a
+ * `.manage` permission implies its `.read` twin); the check here applies the
+ * same implication again, so the answer does not depend on which side of a
+ * rolling deploy identity-service is on.
  */
 export function createRemotePermissionResolver(
   options: RemotePermissionResolverOptions,
@@ -180,5 +185,5 @@ export function createRemotePermissionResolver(
     return permissions;
   }
 
-  return async (actor, permission) => (await permissionsOf(actor)).has(permission);
+  return async (actor, permission) => holdsPermission(await permissionsOf(actor), permission);
 }

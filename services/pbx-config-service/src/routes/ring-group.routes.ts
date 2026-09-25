@@ -80,7 +80,7 @@ export function registerRingGroupRoutes(app: Server, ringGroups: RingGroupRepo):
   app.get(
     '/v1/tenants/:tenantId/ring-groups',
     {
-      config: { permission: 'group.manage', dataClass: 'config' },
+      config: { permission: 'group.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(RingGroupSchema) }) },
@@ -92,7 +92,7 @@ export function registerRingGroupRoutes(app: Server, ringGroups: RingGroupRepo):
   app.get(
     '/v1/tenants/:tenantId/ring-groups/:id',
     {
-      config: { permission: 'group.manage', dataClass: 'config' },
+      config: { permission: 'group.read', dataClass: 'config' },
       schema: { params: RingGroupParamsSchema, response: { 200: RingGroupSchema } },
     },
     async (request) => {

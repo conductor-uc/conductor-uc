@@ -85,39 +85,43 @@ export interface PolicyRoutesDeps {
 
 /**
  * `/v1/tenants/{t}/recording-policies` and `/recording-settings` (S5-01, S5-05; 06's
- * recording-service public API). Configuration, so `dataClass: 'config'`, and every one needs
- * `recording.policy.manage` (07 §3.3: tenant admin) across the tenant, checked per request with
+ * recording-service public API). Configuration, so `dataClass: 'config'`. The reads need
+ * `recording.policy.read` and the writes `recording.policy.manage` (07 §3.3: tenant admin; the
+ * management permission implies the read, G-10) across the tenant, checked per request with
  * `@cuc/authz`. Each write is audited in the same transaction as the write.
  */
 export function registerPolicyRoutes(app: Server, deps: PolicyRoutesDeps): void {
   const { policies, settings, access, storage, logger } = deps;
 
-  async function authorized(request: {
-    readonly context: RequestContext;
-    readonly params: { readonly tenantId: string };
-    readonly ip: string;
-  }): Promise<Caller> {
+  async function authorized(
+    request: {
+      readonly context: RequestContext;
+      readonly params: { readonly tenantId: string };
+      readonly ip: string;
+    },
+    permission: 'recording.policy.read' | 'recording.policy.manage' = 'recording.policy.manage',
+  ): Promise<Caller> {
     const caller = await resolveCaller(
       request.context,
       request.params.tenantId,
       request.ip,
       access,
     );
-    requireForTenant(caller, 'recording.policy.manage');
+    requireForTenant(caller, permission);
     return caller;
   }
 
   app.get(
     '/v1/tenants/:tenantId/recording-policies',
     {
-      config: { permission: 'recording.policy.manage', dataClass: 'config' },
+      config: { permission: 'recording.policy.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(PolicySchema) }) },
       },
     },
     async (request) => {
-      await authorized(request);
+      await authorized(request, 'recording.policy.read');
       return { rows: (await policies.list(ctxFor(request))).map(toResponse) };
     },
   );
@@ -226,11 +230,11 @@ export function registerPolicyRoutes(app: Server, deps: PolicyRoutesDeps): void 
   app.get(
     '/v1/tenants/:tenantId/recording-settings',
     {
-      config: { permission: 'recording.policy.manage', dataClass: 'config' },
+      config: { permission: 'recording.policy.read', dataClass: 'config' },
       schema: { params: TenantParamsSchema, response: { 200: SettingsSchema } },
     },
     async (request) => {
-      await authorized(request);
+      await authorized(request, 'recording.policy.read');
       return { retentionDays: await settings.retentionDays(ctxFor(request)) };
     },
   );

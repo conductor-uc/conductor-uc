@@ -173,7 +173,7 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
   app.get(
     '/v1/tenants/:tenantId/extensions',
     {
-      config: { permission: 'extension.manage', dataClass: 'config' },
+      config: { permission: 'extension.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(ExtensionSchema) }) },
@@ -185,7 +185,7 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
   app.get(
     '/v1/tenants/:tenantId/extensions/:id',
     {
-      config: { permission: 'extension.manage', dataClass: 'config' },
+      config: { permission: 'extension.read', dataClass: 'config' },
       schema: { params: ExtensionParamsSchema, response: { 200: ExtensionSchema } },
     },
     async (request) => {

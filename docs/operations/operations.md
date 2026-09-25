@@ -33,9 +33,20 @@ docker compose exec mariadb mariadb -uroot -p"$MARIADB_ROOT_PASSWORD"
 
 ## 2. First administrator, resellers and tenants
 
-The first master administrator is created once, by hand ([all-in-one §9](deploy-all-in-one.md#9-bootstrap-the-platform)). After that, everything is done in the console: the master creates resellers and resellers create tenants. Creating a reseller or tenant also creates its first administrator, with the email and initial password entered in the form (no invitation email is sent; pass the password on securely). Further people are invited from **Users**, which does send an email. Reseller domains follow [DNS/TLS §7](dns-tls-and-certificates.md#7-adding-a-resellers-domain-runbook).
+The master organisation and its first administrator are created once, with one command ([all-in-one §9](deploy-all-in-one.md#9-bootstrap-the-platform)); running it again changes nothing. After that, everything is done in the console: the master creates resellers and resellers create tenants. Creating a reseller or tenant also creates its first administrator, with the email and initial password entered in the form (no invitation email is sent; pass the password on securely). Further people are invited from **Users**, which does send an email. Reseller domains follow [DNS/TLS §7](dns-tls-and-certificates.md#7-adding-a-resellers-domain-runbook).
 
-If a master administrator loses their two-step device, another master administrator can reset it in the console (**Users**, **Reset two-step verification**). If there is no other, create a second master administrator with the same internal call as at bootstrap.
+If a master administrator loses their two-step device, another master administrator can reset it in the console (**Users**, **Reset two-step verification**). If there is no other, the bootstrap command will not help (it creates an administrator only while the master has nobody). Create a second master administrator with identity-service's internal call instead, from a throwaway container on the private network:
+
+```sh
+set -a; . ./.env; set +a
+docker run --rm --network voice_backplane curlimages/curl -sS \
+  -X POST "http://identity-service:8080/internal/v1/orgs/<master orgId>/admin-user" \
+  -H "Authorization: Bearer ${INTERNAL_SERVICE_TOKEN}" \
+  -H 'Content-Type: application/json' \
+  -d '{"orgType":"master","email":"second@example.net","displayName":"Second administrator","password":"<at least 12 characters>"}'
+```
+
+A `201` response means the person exists with the `master_admin` role. Sign in as them and reset the first administrator's two-step verification. The password is on the command line here, so clear your shell history afterwards.
 
 ## 3. Upgrades
 
@@ -247,6 +258,5 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Telephony | Only Yealink auto-provisioning, not verified on hardware | G-103 |
 | Voicemail | **Recorded voicemail audio does not reach object storage**: messages are listed but cannot be played, and voicemail-to-email has nothing to attach | S5-16 |
 | Operations | No production manifests; no backup tooling; no metrics beyond the uploader; no tracing | S4-11, release readiness |
-| Operations | `make seed` / `seed.sh` cannot bootstrap a current installation | G-115 |
 | Operations | Audit and CDR tables have no retention: partitions are never extended or pruned | G-12, G-52 |
 | Capacity | No capacity benchmarks | S4-09 |

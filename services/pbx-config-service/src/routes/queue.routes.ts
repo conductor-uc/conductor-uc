@@ -112,7 +112,7 @@ export function registerQueueRoutes(app: Server, queues: QueueRepo, tiers: Queue
   app.get(
     '/v1/tenants/:tenantId/queues',
     {
-      config: { permission: 'queue.manage', dataClass: 'config' },
+      config: { permission: 'queue.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(QueueSchema) }) },
@@ -124,7 +124,7 @@ export function registerQueueRoutes(app: Server, queues: QueueRepo, tiers: Queue
   app.get(
     '/v1/tenants/:tenantId/queues/:id',
     {
-      config: { permission: 'queue.manage', dataClass: 'config' },
+      config: { permission: 'queue.read', dataClass: 'config' },
       schema: { params: QueueParamsSchema, response: { 200: QueueSchema } },
     },
     async (request) => {
@@ -192,7 +192,7 @@ export function registerQueueRoutes(app: Server, queues: QueueRepo, tiers: Queue
   app.get(
     '/v1/tenants/:tenantId/queues/:queueId/tiers',
     {
-      config: { permission: 'queue.manage', dataClass: 'config' },
+      config: { permission: 'queue.read', dataClass: 'config' },
       schema: {
         params: QueueTiersListParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(QueueTierSchema) }) },

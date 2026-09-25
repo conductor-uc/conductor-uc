@@ -78,9 +78,9 @@ The WebSocket hub listed above is not present in `services/api-gateway/src` at t
 - `POST /v1/tenants/{id}:suspend` and `:resume`
 - `POST /v1/resellers/{id}/base-domains` and `:verify`
 - `PUT /v1/resellers/{id}/brand`
-- `GET /v1/resellers/{id}/certificates` and `GET /v1/platform/certificates` (`domain.manage`; status and last error per hostname)
-- `GET/PUT /v1/platform/acme-settings` (`domain.manage`; contact address, production or staging, agreement to the CA's terms)
-- `GET/PUT /v1/platform/network-settings` (`domain.manage`, master only; the platform's public IP address or hostname, audited as `platform.network_settings.updated`) and `GET /v1/resellers/{id}/dns-records` (one A, AAAA or CNAME record per name the platform keeps a certificate for, so a reseller knows what to publish; migration 005, table `platform_network`)
+- `GET /v1/resellers/{id}/certificates` and `GET /v1/platform/certificates` (`domain.read`; status and last error per hostname)
+- `GET/PUT /v1/platform/acme-settings` (`domain.read`/`domain.manage`; contact address, production or staging, agreement to the CA's terms)
+- `GET/PUT /v1/platform/network-settings` (`domain.read`/`domain.manage`, master only; the platform's public IP address or hostname, audited as `platform.network_settings.updated`) and `GET /v1/resellers/{id}/dns-records` (one A, AAAA or CNAME record per name the platform keeps a certificate for, so a reseller knows what to publish; migration 005, table `platform_network`)
 - `GET /v1/public/brand?host=` (unauthenticated; returns reseller brand or `{"neutral": true}`)
 
 **Events:** `org.reseller.created|updated|suspended|resumed|deleted`, `org.tenant.*` (same verbs), `org.domain.added|removed`, `org.brand.updated`, `org.certificate.issued` (a certificate was issued or renewed; carries no key).
@@ -118,14 +118,14 @@ The WebSocket hub listed above is not present in `services/api-gateway/src` at t
 
 | Route | Purpose |
 |---|---|
-| `GET /v1/tenants/{t}/sip-endpoint` (`extension.manage`) | What a phone is told: `server` and `realm` (the tenant's primary domain; 409 if none), `port`/`tlsPort`, `transports`, and `outboundProxy` (the tenant's SIP proxy hostname from org-service, only once its certificate is active, otherwise null). |
-| `/v1/tenants/{t}/devices` (`extension.manage`) | A Yealink phone by MAC (unique across all tenants) and the extension it registers as. |
+| `GET /v1/tenants/{t}/sip-endpoint` (`extension.read`) | What a phone is told: `server` and `realm` (the tenant's primary domain; 409 if none), `port`/`tlsPort`, `transports`, and `outboundProxy` (the tenant's SIP proxy hostname from org-service, only once its certificate is active, otherwise null). |
+| `/v1/tenants/{t}/devices` (`extension.read` to list and view, `extension.manage` to change) | A Yealink phone by MAC (unique across all tenants) and the extension it registers as. |
 | `POST .../devices/{id}/provisioning-credentials` (`secret.reveal`, audited) | Per-device password, shown once; only its SHA-256 is kept. |
 | `GET /v1/public/provision/yealink/{file}` (public; authenticates itself) | `<mac>.cfg` and the model-wide file. HTTP Basic with either the platform-wide credential (`PROVISIONING_USERNAME` + `PROVISIONING_PASSWORD`, set together) or the device's own; every failure is the same 401. The file sets account 1, the transport, and the outbound proxy (or turns it off), and asks the phone to refetch every 1440 minutes. |
 
 Settings: `SIP_PUBLIC_PORT` (5060), `SIP_PUBLIC_TLS_PORT` (5061), `SIP_PUBLIC_TRANSPORTS` (code default `udp,tcp`; compose sets `udp,tcp,tls`; put `tls` first in production), `PROVISIONING_BASE_URL` (unset: provisioning URLs are null). The platform-wide credential does not isolate one tenant's phones from another's (a MAC is not a secret); see G-103. Only Yealink is supported.
 
-**Call handling (G-109):** `GET|PUT /v1/tenants/{t}/extensions/{id}/call-handling` (`extension.manage`, config class): do not disturb, forward always, busy, no answer and unreachable, and up to five simultaneous ring destinations (an extension, a voicemail box or an external E.164 number). Table `extension_call_handling`, event `pbx.call_handling.updated`; telephony-config mirrors it and applies it in the dialplan for calls to that extension (design and safety limits in decisions G-109). Internal routes `GET /internal/v1/tenants/{t}/extensions/{id}/call-handling` and `.../tenants/{t}/call-handling` serve telephony-config.
+**Call handling (G-109):** `GET|PUT /v1/tenants/{t}/extensions/{id}/call-handling` (`extension.read`/`extension.manage`, config class): do not disturb, forward always, busy, no answer and unreachable, and up to five simultaneous ring destinations (an extension, a voicemail box or an external E.164 number). Table `extension_call_handling`, event `pbx.call_handling.updated`; telephony-config mirrors it and applies it in the dialplan for calls to that extension (design and safety limits in decisions G-109). Internal routes `GET /internal/v1/tenants/{t}/extensions/{id}/call-handling` and `.../tenants/{t}/call-handling` serve telephony-config.
 
 **Notes:**
 
@@ -152,7 +152,7 @@ Settings: `SIP_PUBLIC_PORT` (5060), `SIP_PUBLIC_TLS_PORT` (5061), `SIP_PUBLIC_TR
 
 **Public API:** `/v1/tenants/{t}/trunks`, `/outbound-routes`, `/emergency-routes`, and `/v1/tenants/{t}/trunks/{id}:status`, which returns registration state (read from OpenSIPs via telephony-config's internal API).
 
-Resellers configure trunks for their tenants. Tenant admins can view trunks and, with the `trunk.manage` grant, edit them.
+Resellers configure trunks for their tenants. Tenant admins can view trunks and, with the `trunk.manage` grant, edit them. Reads declare `trunk.read`, which `trunk.manage` implies (G-10).
 
 **Events:** `trunk.trunk.created|updated|deleted`, `trunk.route.changed`.
 

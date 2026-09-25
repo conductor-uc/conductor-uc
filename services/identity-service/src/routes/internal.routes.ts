@@ -11,6 +11,12 @@ const AdminUserBodySchema = Type.Object({
   email: Type.String({ minLength: 1 }),
   displayName: Type.String({ minLength: 1 }),
   password: Type.String({ minLength: 12 }),
+  /**
+   * Create the user only while the org has nobody yet; otherwise 409
+   * `org_has_users` and nothing changes. The master bootstrap sets it so that
+   * re-running it is a no-op (G-115).
+   */
+  firstUserOnly: Type.Optional(Type.Boolean()),
 });
 
 const AdminUserParamsSchema = Type.Object({ orgId: Type.String({ minLength: 1 }) });
@@ -43,6 +49,14 @@ export function registerInternalRoutes(
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
         throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+
+      // Not atomic with the insert below: it guards against re-running a
+      // bootstrap, not against two bootstraps racing each other.
+      if (request.body.firstUserOnly === true && (await users.hasAnyInOrg(request.params.orgId))) {
+        throw ProblemError.conflict('This org already has users; no user was created.', {
+          code: 'org_has_users',
+        });
       }
 
       try {

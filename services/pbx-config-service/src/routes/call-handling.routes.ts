@@ -82,7 +82,7 @@ export function registerCallHandlingRoutes(
   app.get(
     '/v1/tenants/:tenantId/extensions/:extensionId/call-handling',
     {
-      config: { permission: 'extension.manage', dataClass: 'config' },
+      config: { permission: 'extension.read', dataClass: 'config' },
       schema: { params: ParamsSchema, response: { 200: CallHandlingSchema } },
     },
     async (request) => {

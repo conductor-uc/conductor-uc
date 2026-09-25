@@ -75,7 +75,10 @@ describe.skipIf(skipReason !== undefined)('queue/agent/tier HTTP routes', () => 
       ) {
         expect(route.permission, `${route.method} ${route.url}`).not.toBeNull();
         expect(route.dataClass, `${route.method} ${route.url}`).not.toBeNull();
-        expect(route.permission).toBe('queue.manage');
+        // Reads declare the read twin, writes the management permission (G-10).
+        expect(route.permission).toBe(
+          route.method === 'GET' || route.method === 'HEAD' ? 'queue.read' : 'queue.manage',
+        );
       }
     }
   });

@@ -74,7 +74,7 @@ export function registerConferenceRoomRoutes(
   app.get(
     '/v1/tenants/:tenantId/conference-rooms',
     {
-      config: { permission: 'conference_room.manage', dataClass: 'config' },
+      config: { permission: 'conference_room.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(ConferenceRoomSchema) }) },
@@ -86,7 +86,7 @@ export function registerConferenceRoomRoutes(
   app.get(
     '/v1/tenants/:tenantId/conference-rooms/:id',
     {
-      config: { permission: 'conference_room.manage', dataClass: 'config' },
+      config: { permission: 'conference_room.read', dataClass: 'config' },
       schema: { params: ConferenceRoomParamsSchema, response: { 200: ConferenceRoomSchema } },
     },
     async (request) => {

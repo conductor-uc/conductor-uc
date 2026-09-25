@@ -11,9 +11,15 @@ export {
 } from './hard-rules.js';
 export {
   allPermissions,
+  CONFIG_READ_PERMISSIONS,
   dataClassOf,
+  expandPermissions,
+  grantingPermissions,
+  holdsPermission,
+  implies,
   isKnownPermission,
   PERMISSION_CATALOG,
+  READ_TWINS,
   SELF_PERMISSIONS,
   UnknownPermissionError,
   type CatalogPermission,

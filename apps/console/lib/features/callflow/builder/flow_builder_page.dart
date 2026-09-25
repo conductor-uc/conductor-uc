@@ -152,8 +152,13 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
     _touch();
   }
 
+  /// Whether the person may change the draft (`callflow.edit`). Someone who
+  /// can only read flows (`callflow.read`) looks: nothing they move is saved.
+  bool get _canEdit => ref.read(canProvider('callflow.edit'));
+
   Future<bool> _saveNow({bool silent = false}) async {
     _debounce?.cancel();
+    if (!_canEdit) return true;
     while (_saving) {
       await Future<void>.delayed(const Duration(milliseconds: 20));
     }
@@ -436,7 +441,9 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
 
   Widget _toolbar(Json flow) {
     final theme = Theme.of(context);
+    final canEdit = ref.watch(canProvider('callflow.edit'));
     final status = switch (_save) {
+      _ when !canEdit => 'Read only: changes are not saved',
       _SaveState.saved => 'Saved',
       _SaveState.dirty => 'Unsaved changes',
       _SaveState.saving => 'Saving…',
@@ -499,8 +506,10 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
           onPressed: _c.canRedo ? _c.redo : null,
         ),
         const SizedBox(width: 8),
-        OutlinedButton(onPressed: _validate, child: const Text('Validate')),
-        const SizedBox(width: 8),
+        if (canEdit) ...[
+          OutlinedButton(onPressed: _validate, child: const Text('Validate')),
+          const SizedBox(width: 8),
+        ],
         if (ref.watch(canProvider('callflow.publish')))
           FilledButton(onPressed: _publish, child: const Text('Publish')),
       ],

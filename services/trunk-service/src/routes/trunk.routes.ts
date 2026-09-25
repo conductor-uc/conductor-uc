@@ -167,14 +167,12 @@ function toProblem(error: unknown): ProblemError {
  * Every route declares `permission` and `dataClass` — `@cuc/http` refuses to
  * register one that does not (CLAUDE.md rule 3).
  *
- * Resellers manage their tenants' trunks and tenant admins can view them
- * (both covered by `trunk.manage`/`config`, already in the built-in role
- * catalog — `@cuc/authz`'s `roles.ts`); editing by a tenant admin additionally
- * requires the `trunk.manage` grant (06), which is the same permission this
- * route declares — no separate route-level distinction exists yet for
- * "view" vs "edit" within `trunk.manage` (same gap H1/H2 already document for
- * other services: no service evaluates the full role/grant `allowed()`
- * formula per request yet, only the route-level H1/H3 hard rules).
+ * Resellers manage their tenants' trunks (`trunk.manage`/`config`, in the
+ * built-in role catalog — `@cuc/authz`'s `roles.ts`); editing by a tenant
+ * admin requires the `trunk.manage` grant (06). The list and view routes
+ * declare `trunk.read` (G-10), which `trunk.manage` implies, so the support
+ * roles can view trunks without being able to change them; the writes
+ * declare `trunk.manage`.
  */
 export function registerTrunkRoutes(
   app: Server,
@@ -185,7 +183,7 @@ export function registerTrunkRoutes(
   app.get(
     '/v1/tenants/:tenantId/trunks',
     {
-      config: { permission: 'trunk.manage', dataClass: 'config' },
+      config: { permission: 'trunk.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(TrunkSchema) }) },
@@ -197,7 +195,7 @@ export function registerTrunkRoutes(
   app.get(
     '/v1/tenants/:tenantId/trunks/:id',
     {
-      config: { permission: 'trunk.manage', dataClass: 'config' },
+      config: { permission: 'trunk.read', dataClass: 'config' },
       schema: { params: TrunkParamsSchema, response: { 200: TrunkSchema } },
     },
     async (request) => {
@@ -265,7 +263,7 @@ export function registerTrunkRoutes(
   app.get(
     '/v1/tenants/:tenantId/trunks/:id/ips',
     {
-      config: { permission: 'trunk.manage', dataClass: 'config' },
+      config: { permission: 'trunk.read', dataClass: 'config' },
       schema: {
         params: TrunkParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(TrunkIpSchema) }) },
@@ -316,7 +314,7 @@ export function registerTrunkRoutes(
       // 06: "returns registration state (read from OpenSIPs via
       // telephony-config's internal API)" — trunk config, not a secret, so
       // the ordinary trunk.manage/config contract applies.
-      config: { permission: 'trunk.manage', dataClass: 'config' },
+      config: { permission: 'trunk.read', dataClass: 'config' },
       schema: { params: TrunkParamsSchema, response: { 200: StatusResponseSchema } },
     },
     async (request) => {

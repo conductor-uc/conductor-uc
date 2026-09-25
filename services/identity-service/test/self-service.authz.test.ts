@@ -170,6 +170,49 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
         permissions: ['cdr.read'],
       });
     });
+
+    it('includes the read twin of every management permission held, by role or org-wide grant (G-10)', async () => {
+      const org = crypto.randomUUID();
+      const role = await h.roles.createCustomRole(org, 'front desk', ['did.manage']);
+      const u = await person(org, role.id);
+      await h.grants.create(org, 'user', u.id, 'callflow.edit', { type: 'org', id: org });
+      expect((await call('GET', url(org, u.id), auth)).json()).toEqual({
+        permissions: ['callflow.edit', 'callflow.read', 'did.manage', 'did.read'],
+      });
+    });
+  });
+
+  describe('read permissions (G-10)', () => {
+    it('a custom role with only user.manage still lists users, with no re-granting', async () => {
+      const org = crypto.randomUUID();
+      const role = await h.roles.createCustomRole(org, 'people', ['user.manage']);
+      const u = await person(org, role.id);
+      expect((await call('GET', `/v1/orgs/${org}/users`, u.as)).statusCode).toBe(200);
+    });
+
+    it('a custom role with only user.read lists users but cannot change one', async () => {
+      const org = crypto.randomUUID();
+      const role = await h.roles.createCustomRole(org, 'viewer', ['user.read', 'role.read']);
+      const u = await person(org, role.id);
+      const other = await person(org, undefined);
+      expect((await call('GET', `/v1/orgs/${org}/users`, u.as)).statusCode).toBe(200);
+      expect((await call('GET', `/v1/orgs/${org}/roles`, u.as)).statusCode).toBe(200);
+      const patch = await call('PATCH', `/v1/orgs/${org}/users/${other.id}`, u.as, {
+        status: 'disabled',
+      });
+      expect(patch.statusCode).toBe(403);
+      expect(patch.json()).toMatchObject({ code: 'permission_denied' });
+    });
+
+    it('a tenant admin may put a read permission it holds only by implication into a custom role', async () => {
+      const org = crypto.randomUUID();
+      const admin = await person(org, 'tenant_admin');
+      const response = await call('POST', `/v1/orgs/${org}/roles`, admin.as, {
+        name: 'Viewer',
+        permissions: ['extension.read', 'trunk.read'],
+      });
+      expect(response.statusCode).toBe(201);
+    });
   });
 
   describe('a tenant_user cannot manage people, roles, grants or invitations', () => {

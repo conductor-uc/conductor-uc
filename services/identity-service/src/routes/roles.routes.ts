@@ -119,7 +119,7 @@ export function registerRoleRoutes(
   app.get(
     '/v1/orgs/:orgId/roles',
     {
-      config: { permission: 'role.manage', dataClass: 'config' },
+      config: { permission: 'role.read', dataClass: 'config' },
       schema: {
         params: OrgParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(RoleSummarySchema) }) },

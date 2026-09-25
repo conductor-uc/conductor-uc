@@ -61,7 +61,7 @@ export function registerAgentRoutes(app: Server, agents: AgentRepo): void {
   app.get(
     '/v1/tenants/:tenantId/agents',
     {
-      config: { permission: 'queue.manage', dataClass: 'config' },
+      config: { permission: 'queue.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(AgentSchema) }) },
@@ -73,7 +73,7 @@ export function registerAgentRoutes(app: Server, agents: AgentRepo): void {
   app.get(
     '/v1/tenants/:tenantId/agents/:id',
     {
-      config: { permission: 'queue.manage', dataClass: 'config' },
+      config: { permission: 'queue.read', dataClass: 'config' },
       schema: { params: AgentParamsSchema, response: { 200: AgentSchema } },
     },
     async (request) => {

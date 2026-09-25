@@ -48,7 +48,8 @@ function toProblem(error: unknown): ProblemError {
  * tenant (`emergency-route.repo.ts`'s own doc comment on why), so there is
  * no list/create-many/id-scoped-update the way `outbound-routes` has, just
  * get/upsert/delete on the tenant's own single route. Its own dedicated
- * `emergency_route.manage` permission, not `outbound-routes`' own
+ * `emergency_route.manage` permission (`emergency_route.read` for the get,
+ * G-10), not `outbound-routes`' own
  * `trunk.manage` — G-1's compliance obligation (07 §-security doc: "the
  * reseller carries the compliance obligation") is a distinct grant from
  * ordinary trunk configuration, even though both are tenant admin/reseller
@@ -58,7 +59,7 @@ export function registerEmergencyRouteRoutes(app: Server, routes: EmergencyRoute
   app.get(
     '/v1/tenants/:tenantId/emergency-route',
     {
-      config: { permission: 'emergency_route.manage', dataClass: 'config' },
+      config: { permission: 'emergency_route.read', dataClass: 'config' },
       schema: { params: TenantParamsSchema, response: { 200: EmergencyRouteSchema } },
     },
     async (request) => {

@@ -134,7 +134,7 @@ void main() {
           'recording.listen',
           'recording.download',
           'recording.delete',
-          'recording.policy.manage',
+          'recording.policy.read',
         ]),
       );
     },

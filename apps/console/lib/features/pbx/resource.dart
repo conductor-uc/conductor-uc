@@ -219,7 +219,7 @@ const extensionsDef = ResourceDef(
       'Person',
       FieldKind.ref,
       ref: 'users',
-      needs: 'user.manage',
+      needs: 'user.read',
       notForReseller: true,
       help:
           'Whose phone this is. They can then manage its call handling, '
