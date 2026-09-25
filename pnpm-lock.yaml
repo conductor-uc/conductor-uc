@@ -934,6 +934,9 @@ importers:
       '@cuc/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@cuc/http':
+        specifier: workspace:*
+        version: link:../../packages/http
       '@cuc/logger':
         specifier: workspace:*
         version: link:../../packages/logger

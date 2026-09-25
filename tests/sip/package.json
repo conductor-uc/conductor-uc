@@ -14,6 +14,7 @@
   "dependencies": {
     "@cuc/crypto": "workspace:*",
     "@cuc/db": "workspace:*",
+    "@cuc/http": "workspace:*",
     "@cuc/logger": "workspace:*",
     "@cuc/org-service": "workspace:*",
     "@cuc/pbx-config-service": "workspace:*"

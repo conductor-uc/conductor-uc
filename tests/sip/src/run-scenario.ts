@@ -1145,6 +1145,7 @@ export async function dockerCurlJson(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   url: string,
   body?: unknown,
+  headers: Readonly<Record<string, string>> = {},
 ): Promise<{ status: number; json: unknown }> {
   const env = sipTestEnv();
   const args = [
@@ -1160,6 +1161,7 @@ export async function dockerCurlJson(
     '-w',
     '\n%{http_code}',
   ];
+  for (const [name, value] of Object.entries(headers)) args.push('-H', `${name}: ${value}`);
   if (body !== undefined) {
     args.push('-H', 'content-type: application/json', '-d', JSON.stringify(body));
   }
