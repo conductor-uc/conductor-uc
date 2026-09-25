@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { GetBucketLifecycleConfigurationCommand, S3Client } from '@aws-sdk/client-s3';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  GetBucketCorsCommand,
+  GetBucketLifecycleConfigurationCommand,
+  S3Client,
+  type CORSRule,
+} from '@aws-sdk/client-s3';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import type { Logger } from '@cuc/logger';
 import { s3OrSkipReason, silentLogger, startTestS3, type TestS3Handle } from '@cuc/testing';
 
+import { BROWSER_CORS_RULE } from '../src/cors.js';
 import { createStorage, type Storage } from '../src/storage.js';
 import { MAX_GET_TTL_SECONDS, MAX_PUT_TTL_SECONDS } from '../src/types.js';
 
@@ -36,16 +43,32 @@ describe.skipIf(skipReason !== undefined)('@cuc/storage', () => {
     await stop?.();
   });
 
-  function makeStorage(mode: 'bucket-per-tenant' | 'prefix-per-tenant'): Storage {
+  /** One prefix per run for tests that need two `Storage` instances on the same buckets. */
+  const fixedPrefix = `cuc-test-${randomUUID().slice(0, 8)}`;
+
+  function makeStorage(
+    mode: 'bucket-per-tenant' | 'prefix-per-tenant',
+    logger: Logger = silentLogger(),
+    prefix: 'fresh' | 'fixed' = 'fresh',
+  ): Storage {
     return createStorage({
       mode,
-      bucketPrefix: `cuc-test-${randomUUID().slice(0, 8)}`,
+      bucketPrefix: prefix === 'fixed' ? fixedPrefix : `cuc-test-${randomUUID().slice(0, 8)}`,
       endpoint: handle.endpoint,
       region: handle.region,
       accessKeyId: handle.accessKeyId,
       secretAccessKey: handle.secretAccessKey,
       forcePathStyle: handle.forcePathStyle,
-      logger: silentLogger(),
+      logger,
+    });
+  }
+
+  function rawClient(): S3Client {
+    return new S3Client({
+      region: handle.region,
+      endpoint: handle.endpoint,
+      forcePathStyle: handle.forcePathStyle,
+      credentials: { accessKeyId: handle.accessKeyId, secretAccessKey: handle.secretAccessKey },
     });
   }
 
@@ -84,6 +107,66 @@ describe.skipIf(skipReason !== undefined)('@cuc/storage', () => {
 
         await tenant.provisionBucket();
         await expect(tenant.provisionBucket()).resolves.toBeUndefined();
+      });
+
+      it('sets the browser CORS rule, or warns when the provider refuses it, and a browser can upload', async () => {
+        const logger = silentLogger();
+        const warn = vi.spyOn(logger, 'warn');
+        const storage = makeStorage(mode, logger);
+        const tenant = storage.forTenant(randomUUID());
+        await tenant.provisionBucket();
+
+        // Either outcome is fine (G-80): real S3 stores the rule; MinIO answers
+        // NotImplemented because it allows any origin already.
+        const { bucket } = tenant.locate('');
+        let stored: CORSRule[] | undefined;
+        try {
+          stored = (await rawClient().send(new GetBucketCorsCommand({ Bucket: bucket }))).CORSRules;
+        } catch (error) {
+          expect(error).toMatchObject({ name: 'NoSuchCORSConfiguration' });
+        }
+        const warned = warn.mock.calls.some((call) =>
+          String(call[1]).includes('browser CORS rule'),
+        );
+        if (stored === undefined) {
+          expect(warned).toBe(true);
+        } else {
+          expect(warned).toBe(false);
+          expect(stored).toEqual([expect.objectContaining(BROWSER_CORS_RULE)]);
+        }
+
+        // What a browser does from the console's origin: preflight, then the upload.
+        const putUrl = await tenant.presignPut('media-assets/x/raw', { contentType: 'audio/wav' });
+        const origin = 'https://console.example.test';
+        const preflight = await fetch(putUrl, {
+          method: 'OPTIONS',
+          headers: {
+            origin,
+            'access-control-request-method': 'PUT',
+            'access-control-request-headers': 'content-type',
+          },
+        });
+        expect(preflight.ok).toBe(true);
+        expect(['*', origin]).toContain(preflight.headers.get('access-control-allow-origin'));
+        const put = await fetch(putUrl, {
+          method: 'PUT',
+          headers: { origin, 'content-type': 'audio/wav' },
+          body: 'RIFF',
+        });
+        expect(put.ok).toBe(true);
+        expect(['*', origin]).toContain(put.headers.get('access-control-allow-origin'));
+      });
+
+      it('presigning in a bucket provisioned elsewhere does not fail on the CORS step', async () => {
+        const logger = silentLogger();
+        const tenantId = randomUUID();
+        await makeStorage(mode, logger, 'fixed').forTenant(tenantId).provisionBucket();
+
+        // A fresh process (new storage, empty cache) touching the existing bucket.
+        const later = makeStorage(mode, logger, 'fixed').forTenant(tenantId);
+        const putUrl = await later.presignPut('greeting.txt', { contentType: 'text/plain' });
+        expect((await upload(putUrl, 'still works')).ok).toBe(true);
+        expect(await download(await later.presignGet('greeting.txt'))).toBe('still works');
       });
 
       it('reports the size and ETag with headObject, and undefined for a missing one', async () => {

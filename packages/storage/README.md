@@ -1,8 +1,8 @@
 # @cuc/storage
 
 Wraps the S3 client (05 §4): bucket-per-tenant and prefix-per-tenant modes, presigned
-GET/PUT with a maximum TTL, bucket provisioning (encryption + a public-access block),
-and lifecycle rule helpers. No database, no HTTP — a service builds an
+GET/PUT with a maximum TTL, bucket provisioning (encryption, a public-access block
+and a browser CORS rule), and lifecycle rule helpers. No database, no HTTP — a service builds an
 `ObjectLocation`'s bucket and key from a tenant id and a key it chooses, and gets a
 presigned URL back.
 
@@ -59,7 +59,7 @@ Omitting `ttlSeconds` uses the max.
 
 `provisionBucket()` creates the bucket if it doesn't exist (idempotent — a second call
 against the same bucket is a no-op) and then attempts to enable default encryption and
-set a public-access block. Those two are **attempted, not required**: verified against
+set a public-access block (and the CORS rule below). Those two are **attempted, not required**: verified against
 a real MinIO server, MinIO does not implement `PutPublicAccessBlock` at all (the
 request lands on the wrong internal handler — confirmed from the server's own error
 log) and rejects `PutBucketEncryption` with `AES256` unless a KMS backend is
@@ -69,6 +69,26 @@ gets created; real AWS S3 honors both. This is why "integration tests pass again
 MinIO" (this task's acceptance line) doesn't mean MinIO enforces encryption or public
 blocking in dev — it means the bucket, presigned URLs, and lifecycle rules all work
 against it, which is what a service actually depends on.
+
+## Browser CORS rule (G-80)
+
+The console uploads media and brand images straight to storage through presigned PUT
+URLs, a cross-origin request from the console's host. Every bucket therefore gets one
+CORS rule, `BROWSER_CORS_RULE` (`src/cors.ts`): `PUT`, `GET` and `HEAD` from any
+origin, the `Content-Type` request header, no exposed headers, a one-hour preflight
+cache. Any origin is safe because the rule grants nothing on its own: each request
+still needs its own signed, short-lived URL for one object, and with a `*` origin a
+browser never sends cookies to the storage host.
+
+The rule is set by `provisionBucket()` and also, **once per process per bucket**, the
+first time `presignPut` or `presignGet` hands out a URL in a bucket. That is how
+buckets created before the rule existed get it without listing every tenant's bucket:
+after a deploy, each service re-applies the rule to each bucket it touches, the first
+time it touches it. `PutBucketCors` replaces the whole configuration, so repeating it
+is harmless. Like encryption, it is attempted, not required: MinIO answers
+`NotImplemented` (it already allows any origin by default, verified against the test
+MinIO), which logs one warning per bucket per process and nothing else. A bucket that
+does not exist yet (`NoSuchBucket`) is not remembered, so the next touch tries again.
 
 ## Lifecycle rules
 
