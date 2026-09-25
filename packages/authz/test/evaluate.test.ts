@@ -237,3 +237,58 @@ describe('self-service permissions (parity 1e)', () => {
     expect(allowed({ actor: reseller, permission: 'self.history', resource: own })).toBe(false);
   });
 });
+
+describe('a management permission implies its read twin (G-10)', () => {
+  it('roleHas: a built-in admin role reads what it manages without listing the read', () => {
+    expect(catalog.get('tenant_admin')?.permissions.has('extension.read')).toBe(false);
+    expect(roleHas(tenantAdmin, 'extension.read', catalog)).toBe(true);
+    expect(roleHas(tenantAdmin, 'callflow.read', catalog)).toBe(true);
+    expect(roleHas(tenantAdmin, 'recording.policy.read', catalog)).toBe(true);
+  });
+
+  it('roleHas: a custom role with only .manage keeps reading, without re-granting', () => {
+    const custom: Role = { id: 'front-desk', permissions: new Set(['did.manage']) };
+    const actor: Actor = { ...tenantUser, roleIds: ['front-desk'] };
+    expect(roleHas(actor, 'did.read', roleCatalog([custom]))).toBe(true);
+  });
+
+  it('roleHas: a read never implies the write', () => {
+    const custom: Role = { id: 'viewer', permissions: new Set(['extension.read']) };
+    const actor: Actor = { ...tenantUser, roleIds: ['viewer'] };
+    const merged = roleCatalog([custom]);
+    expect(roleHas(actor, 'extension.read', merged)).toBe(true);
+    expect(roleHas(actor, 'extension.manage', merged)).toBe(false);
+  });
+
+  it('roleHas: only the twin is implied, not another resource or a private read', () => {
+    const custom: Role = { id: 'ext', permissions: new Set(['extension.manage']) };
+    const actor: Actor = { ...tenantUser, roleIds: ['ext'] };
+    const merged = roleCatalog([custom]);
+    expect(roleHas(actor, 'did.read', merged)).toBe(false);
+    expect(roleHas(actor, 'cdr.read', merged)).toBe(false);
+  });
+
+  it('grantMatches: a scoped .manage grant reads the same scope and nothing wider', () => {
+    const grants: Grant[] = [
+      {
+        principalType: 'user',
+        principalId: 'u2',
+        permission: 'queue.manage',
+        scope: { type: 'queue', id: 'Q1' },
+      },
+    ];
+    const q1: ResourceRef = { org: tenantUser.org, scope: { type: 'queue', id: 'Q1' } };
+    const q2: ResourceRef = { org: tenantUser.org, scope: { type: 'queue', id: 'Q2' } };
+    expect(grantMatches(tenantUser, 'queue.read', q1, grants)).toBe(true);
+    expect(grantMatches(tenantUser, 'queue.read', q2, grants)).toBe(false);
+    expect(grantMatches(tenantUser, 'queue.manage', q1, grants)).toBe(true);
+  });
+
+  it('allowed: the hard rules still apply to the read (H2)', () => {
+    const otherTenant: ResourceRef = { org: { id: 't9', type: 'tenant', resellerId: 'r1' } };
+    expect(allowed({ actor: tenantAdmin, permission: 'extension.read', resource: own })).toBe(true);
+    expect(
+      allowed({ actor: tenantAdmin, permission: 'extension.read', resource: otherTenant }),
+    ).toBe(false);
+  });
+});

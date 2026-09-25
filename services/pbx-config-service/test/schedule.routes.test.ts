@@ -52,13 +52,15 @@ describe.skipIf(skipReason !== undefined)('schedule HTTP routes', () => {
     });
   }
 
-  it('every route declares permission and dataClass (CLAUDE.md rule 3), gated by schedule.manage', () => {
+  it('every route declares permission and dataClass (CLAUDE.md rule 3), gated by schedule.read/.manage (G-10)', () => {
     const routes = app.registeredRoutes.filter((r) =>
       r.url.startsWith('/v1/tenants/:tenantId/schedules'),
     );
     expect(routes.length).toBeGreaterThanOrEqual(5);
     for (const route of routes) {
-      expect(route.permission, `${route.method} ${route.url}`).toBe('schedule.manage');
+      expect(route.permission, `${route.method} ${route.url}`).toBe(
+        route.method === 'GET' || route.method === 'HEAD' ? 'schedule.read' : 'schedule.manage',
+      );
       expect(route.dataClass, `${route.method} ${route.url}`).toBe('config');
     }
   });

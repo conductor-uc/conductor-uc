@@ -77,11 +77,13 @@ describe.skipIf(skipReason !== undefined)('users routes', () => {
     });
   }
 
-  it('every route declares user.manage and the config data class (CLAUDE.md rule 3)', () => {
+  it('every route declares user.read (reads) or user.manage (writes) and the config data class (CLAUDE.md rule 3, G-10)', () => {
     const routes = app.registeredRoutes.filter((r) => r.url.includes('/users'));
     expect(routes.length).toBeGreaterThanOrEqual(2);
     for (const route of routes) {
-      expect(route.permission, `${route.method} ${route.url}`).toBe('user.manage');
+      const expected =
+        route.method === 'GET' || route.method === 'HEAD' ? 'user.read' : 'user.manage';
+      expect(route.permission, `${route.method} ${route.url}`).toBe(expected);
       expect(route.dataClass, `${route.method} ${route.url}`).toBe('config');
     }
   });

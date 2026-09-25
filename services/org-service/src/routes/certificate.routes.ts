@@ -47,7 +47,7 @@ export function registerCertificateRoutes(app: Server, certs: CertificateRepo): 
   app.get(
     '/v1/resellers/:id/certificates',
     {
-      config: { permission: 'domain.manage', dataClass: 'config' },
+      config: { permission: 'domain.read', dataClass: 'config' },
       schema: {
         params: OrgParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(CertificateSchema) }) },
@@ -61,7 +61,7 @@ export function registerCertificateRoutes(app: Server, certs: CertificateRepo): 
   app.get(
     '/v1/platform/certificates',
     {
-      config: { permission: 'domain.manage', dataClass: 'config' },
+      config: { permission: 'domain.read', dataClass: 'config' },
       schema: { response: { 200: Type.Object({ rows: Type.Array(CertificateSchema) }) } },
     },
     async (request) => {

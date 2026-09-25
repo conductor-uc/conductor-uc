@@ -91,8 +91,15 @@ describe('h3ResellerLifecycle', () => {
     expect(h3ResellerLifecycle(masterActor, 'reseller.manage')).toBe(true);
   });
 
+  it('reserves reseller.read to the master too (G-10): the reseller records have no ancestry check of their own', () => {
+    expect(h3ResellerLifecycle(resellerActor, 'reseller.read')).toBe(false);
+    expect(h3ResellerLifecycle(tenantActor, 'reseller.read')).toBe(false);
+    expect(h3ResellerLifecycle(masterActor, 'reseller.read')).toBe(true);
+  });
+
   it('does not restrict an unrelated permission', () => {
     expect(h3ResellerLifecycle(resellerActor, 'tenant.create')).toBe(true);
+    expect(h3ResellerLifecycle(resellerActor, 'tenant.read')).toBe(true);
   });
 });
 

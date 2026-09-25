@@ -167,7 +167,7 @@ export function registerOrgRoutes(
   app.get(
     '/v1/resellers',
     {
-      config: { permission: 'reseller.manage', dataClass: 'config' },
+      config: { permission: 'reseller.read', dataClass: 'config' },
       schema: { response: { 200: Type.Object({ rows: Type.Array(OrgSchema) }) } },
     },
     async () => {
@@ -179,7 +179,7 @@ export function registerOrgRoutes(
   app.get(
     '/v1/resellers/:id',
     {
-      config: { permission: 'reseller.manage', dataClass: 'config' },
+      config: { permission: 'reseller.read', dataClass: 'config' },
       schema: { params: IdParamsSchema, response: { 200: OrgSchema } },
     },
     async (request) => {
@@ -244,7 +244,7 @@ export function registerOrgRoutes(
   app.get(
     '/v1/resellers/:id/tenants',
     {
-      config: { permission: 'tenant.manage', dataClass: 'config' },
+      config: { permission: 'tenant.read', dataClass: 'config' },
       schema: {
         params: IdParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(OrgSchema) }) },
@@ -256,7 +256,7 @@ export function registerOrgRoutes(
   app.get(
     '/v1/tenants/:id',
     {
-      config: { permission: 'tenant.manage', dataClass: 'config' },
+      config: { permission: 'tenant.read', dataClass: 'config' },
       schema: { params: IdParamsSchema, response: { 200: OrgSchema } },
     },
     async (request) => {

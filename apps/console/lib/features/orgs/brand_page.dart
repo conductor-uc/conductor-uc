@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/brand.dart';
 import '../../core/file_pick.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
@@ -193,6 +194,8 @@ class _BrandPageState extends ConsumerState<BrandPage> {
     final saved = ref.watch(brandProviderFor(id));
     final hostnames = ref.watch(consoleHostnamesProvider(id));
     final textTheme = Theme.of(context).textTheme;
+    // Someone who can read the brand but not change it sees it read-only.
+    final canChange = ref.watch(canProvider('brand.manage'));
 
     // Not while it is reloading: the value then is the stale one from before
     // the last save.
@@ -239,6 +242,7 @@ class _BrandPageState extends ConsumerState<BrandPage> {
                         padding: const EdgeInsets.only(bottom: 8),
                         child: TextField(
                           controller: _controllers[f.$1],
+                          readOnly: !canChange,
                           decoration: InputDecoration(
                             labelText: f.$2,
                             helperText: f.$3,
@@ -257,24 +261,27 @@ class _BrandPageState extends ConsumerState<BrandPage> {
                               ? 'None'
                               : _assetKeys[i.$1]!.split('/').last,
                         ),
-                        trailing: Wrap(
-                          spacing: 4,
-                          children: [
-                            OutlinedButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () => _upload(i.$1, i.$2),
-                              child: const Text('Upload'),
-                            ),
-                            if (_assetKeys[i.$1] != null)
-                              IconButton(
-                                tooltip: 'Remove ${i.$3}',
-                                icon: const Icon(Icons.close),
-                                onPressed: () =>
-                                    setState(() => _assetKeys[i.$1] = null),
+                        trailing: !canChange
+                            ? null
+                            : Wrap(
+                                spacing: 4,
+                                children: [
+                                  OutlinedButton(
+                                    onPressed: _busy
+                                        ? null
+                                        : () => _upload(i.$1, i.$2),
+                                    child: const Text('Upload'),
+                                  ),
+                                  if (_assetKeys[i.$1] != null)
+                                    IconButton(
+                                      tooltip: 'Remove ${i.$3}',
+                                      icon: const Icon(Icons.close),
+                                      onPressed: () => setState(
+                                        () => _assetKeys[i.$1] = null,
+                                      ),
+                                    ),
+                                ],
                               ),
-                          ],
-                        ),
                       ),
                     if (_error != null)
                       Align(
@@ -287,13 +294,14 @@ class _BrandPageState extends ConsumerState<BrandPage> {
                         child: Text(_status!),
                       ),
                     const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: FilledButton(
-                        onPressed: _busy ? null : _save,
-                        child: const Text('Save brand'),
+                    if (canChange)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: FilledButton(
+                          onPressed: _busy ? null : _save,
+                          child: const Text('Save brand'),
+                        ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -306,11 +314,12 @@ class _BrandPageState extends ConsumerState<BrandPage> {
               Expanded(
                 child: Text('Console hostnames', style: textTheme.titleMedium),
               ),
-              OutlinedButton.icon(
-                onPressed: _addHostname,
-                icon: const Icon(Icons.add),
-                label: const Text('Add hostname'),
-              ),
+              if (canChange)
+                OutlinedButton.icon(
+                  onPressed: _addHostname,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add hostname'),
+                ),
             ],
           ),
           const Text(

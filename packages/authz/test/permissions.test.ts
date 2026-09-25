@@ -2,9 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   allPermissions,
+  CONFIG_READ_PERMISSIONS,
   dataClassOf,
+  expandPermissions,
+  grantingPermissions,
+  holdsPermission,
+  implies,
   isKnownPermission,
   PERMISSION_CATALOG,
+  READ_TWINS,
   SELF_PERMISSIONS,
   UnknownPermissionError,
 } from '../src/permissions.js';
@@ -115,5 +121,100 @@ describe('allPermissions', () => {
     const all = allPermissions();
     expect(new Set(all).size).toBe(all.length);
     expect([...all].sort()).toEqual(Object.keys(PERMISSION_CATALOG).sort());
+  });
+});
+
+describe('read twins (G-10, S1-15)', () => {
+  const TWINNED = [
+    'reseller',
+    'tenant',
+    'domain',
+    'brand',
+    'user',
+    'role',
+    'grant',
+    'extension',
+    'did',
+    'emergency_location',
+    'emergency_route',
+    'group',
+    'queue',
+    'parking_lot',
+    'conference_room',
+    'schedule',
+    'media',
+    'trunk',
+    'recording.policy',
+  ];
+
+  it('gives every configuration .manage permission a .read twin of the same data class', () => {
+    for (const resource of TWINNED) {
+      const manage = `${resource}.manage`;
+      const read = `${resource}.read`;
+      expect(isKnownPermission(read), read).toBe(true);
+      expect(READ_TWINS[manage], manage).toBe(read);
+      expect(dataClassOf(read), read).toBe(dataClassOf(manage));
+    }
+  });
+
+  it('twins every catalog .manage permission except the secret-class one', () => {
+    for (const permission of allPermissions()) {
+      if (!permission.endsWith('.manage')) continue;
+      expect(Object.hasOwn(READ_TWINS, permission), permission).toBe(
+        dataClassOf(permission) !== 'secret',
+      );
+    }
+  });
+
+  it('callflow.read is the twin of both callflow.edit and callflow.publish', () => {
+    expect(dataClassOf('callflow.read')).toBe('config');
+    expect(READ_TWINS['callflow.edit']).toBe('callflow.read');
+    expect(READ_TWINS['callflow.publish']).toBe('callflow.read');
+    expect([...grantingPermissions('callflow.read')].sort()).toEqual([
+      'callflow.edit',
+      'callflow.publish',
+      'callflow.read',
+    ]);
+  });
+
+  it('has no read twin for a secret-class permission', () => {
+    expect(isKnownPermission('secret.read')).toBe(false);
+    expect(isKnownPermission('apikey.read')).toBe(false);
+  });
+
+  it('CONFIG_READ_PERMISSIONS is exactly the set of twins, all config-class', () => {
+    expect([...CONFIG_READ_PERMISSIONS].sort()).toEqual(
+      [...new Set(Object.values(READ_TWINS))].sort(),
+    );
+    for (const permission of CONFIG_READ_PERMISSIONS) {
+      expect(dataClassOf(permission)).toBe('config');
+    }
+  });
+
+  it('implies: .manage gives .read, never the reverse, and nothing else', () => {
+    expect(implies('extension.manage', 'extension.read')).toBe(true);
+    expect(implies('extension.read', 'extension.read')).toBe(true);
+    expect(implies('extension.read', 'extension.manage')).toBe(false);
+    expect(implies('extension.manage', 'did.read')).toBe(false);
+    expect(implies('tenant.create', 'tenant.read')).toBe(false);
+    expect(implies('cdr.export', 'cdr.read')).toBe(false);
+  });
+
+  it('expandPermissions adds the implied reads and keeps everything held', () => {
+    expect([...expandPermissions(['did.manage', 'cdr.read', 'callflow.publish'])].sort()).toEqual([
+      'callflow.publish',
+      'callflow.read',
+      'cdr.read',
+      'did.manage',
+      'did.read',
+    ]);
+  });
+
+  it('holdsPermission answers for a flat set, with the implication', () => {
+    const held = new Set(['trunk.manage']);
+    expect(holdsPermission(held, 'trunk.read')).toBe(true);
+    expect(holdsPermission(held, 'trunk.manage')).toBe(true);
+    expect(holdsPermission(held, 'extension.read')).toBe(false);
+    expect(holdsPermission(new Set(['trunk.read']), 'trunk.manage')).toBe(false);
   });
 });

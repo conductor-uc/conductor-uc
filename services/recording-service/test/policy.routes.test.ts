@@ -61,7 +61,7 @@ describe.skipIf(skipReason !== undefined)(
         ...(payload === undefined ? {} : { payload: payload as object }),
       });
 
-    it('every route declares recording.policy.manage and the config data class (CLAUDE.md rule 3)', () => {
+    it('every route declares recording.policy.read (reads) or .manage (writes) and the config data class (CLAUDE.md rule 3, G-10)', () => {
       const routes = r.app.registeredRoutes.filter(
         (route) =>
           route.url.startsWith('/v1/tenants/:tenantId/recording-policies') ||
@@ -69,7 +69,11 @@ describe.skipIf(skipReason !== undefined)(
       );
       expect(routes.length).toBeGreaterThanOrEqual(6);
       for (const route of routes) {
-        expect(route).toMatchObject({ permission: 'recording.policy.manage', dataClass: 'config' });
+        const permission =
+          route.method === 'GET' || route.method === 'HEAD'
+            ? 'recording.policy.read'
+            : 'recording.policy.manage';
+        expect(route).toMatchObject({ permission, dataClass: 'config' });
       }
     });
 
@@ -154,6 +158,28 @@ describe.skipIf(skipReason !== undefined)(
       ).toBe(403);
       expect(
         (await send('GET', `/v1/tenants/${tenant}/recording-settings`, headers)).statusCode,
+      ).toBe(403);
+      expect(await h.policies.list({ tenantId: tenant })).toEqual([]);
+    });
+
+    it('recording.policy.read reads the policies and the settings but changes nothing (G-10)', async () => {
+      r.access.set('support', {
+        roles: [{ id: 'viewer', permissions: ['recording.policy.read'] }],
+      });
+      const headers = r.headers('support', tenant);
+      expect((await send('GET', base, headers)).statusCode).toBe(200);
+      expect(
+        (await send('GET', `/v1/tenants/${tenant}/recording-settings`, headers)).statusCode,
+      ).toBe(200);
+      expect(
+        (await send('POST', base, headers, { scopeType: 'tenant', action: 'record' })).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await send('PUT', `/v1/tenants/${tenant}/recording-settings`, headers, {
+            retentionDays: 30,
+          })
+        ).statusCode,
       ).toBe(403);
       expect(await h.policies.list({ tenantId: tenant })).toEqual([]);
     });

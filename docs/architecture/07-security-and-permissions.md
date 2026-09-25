@@ -38,7 +38,7 @@ allowed(actor, permission, resource) =
 - **Hard rules** (checked first; code, not data):
   1. **H1 (reseller private-data wall):** an actor whose org is a reseller is DENIED any permission whose data class is `private` on a tenant resource, whatever roles or grants exist.
   2. **H2:** tenant actors cannot access resources outside their tenant.
-  3. **H3:** only master actors can create or modify resellers.
+  3. **H3:** only master actors can create or modify resellers, or read the reseller records (`reseller.read`, G-10).
   4. **H4:** API keys cannot manage users, roles, grants, or other API keys.
 - Every master access to a `private` data class resource is allowed (SAD §10) but is **audited with `data_class=private`**. The console asks for a free-text reason, which is stored in the audit event. Whether a reason is mandatory is configurable.
 
@@ -58,15 +58,18 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 | Permission | Class | Default holders |
 |---|---|---|
 | `reseller.create` / `reseller.manage` | config | Master admin |
+| `reseller.read` | config | Master admin, master support (H3: master only) |
 | `tenant.create` / `tenant.manage` / `tenant.suspend` | config | Reseller admin, master admin |
-| `brand.manage` | config | Reseller admin |
+| `domain.manage`, `brand.manage` | config | Reseller admin |
 | `user.manage` / `role.manage` / `grant.manage` | config | Org admins |
-| `extension.manage`, `did.manage`, `group.manage`, `queue.manage`, `schedule.manage`, `media.manage` | config | Tenant admin, reseller admin |
+| `extension.manage`, `did.manage`, `group.manage`, `queue.manage`, `parking_lot.manage`, `conference_room.manage`, `schedule.manage`, `media.manage` | config | Tenant admin, reseller admin |
 | `trunk.manage` | config | Reseller admin, tenant admin (opt-in) |
 | `emergency_location.manage`, `emergency_route.manage` | config | Tenant admin, reseller admin — G-1: the reseller carries the compliance obligation, but a tenant admin provisions its own extensions' locations day to day |
 | `callflow.edit` / `callflow.publish` | config | Tenant admin |
 | `secret.reveal` | secret | Tenant admin (audited) |
 | `recording.policy.manage` | config | Tenant admin |
+| `tenant.read`, `domain.read`, `brand.read`, `user.read`, `role.read`, `grant.read`, `extension.read`, `did.read`, `emergency_location.read`, `emergency_route.read`, `group.read`, `queue.read`, `parking_lot.read`, `conference_room.read`, `schedule.read`, `media.read`, `trunk.read` | config | Master support, reseller support; implied by the matching `.manage` (G-10). Tenant supervisor: `queue.read`, `extension.read` |
+| `callflow.read`, `recording.policy.read` | config | Master support; implied by `callflow.edit`/`callflow.publish` and `recording.policy.manage` (G-10) |
 | `recording.listen` / `recording.download` / `recording.delete` | private | Tenant admin; grantable per `extension`/`queue` scope |
 | `cdr.read` / `cdr.export` | private | Tenant admin |
 | `voicemail.access` | private | Mailbox owner; grantable per `mailbox` |
@@ -76,9 +79,11 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 | `audit.read` | config/private | Org admins (private entries are visible only to the tenant and the master) |
 | `apikey.manage` | secret | Org admins |
 
+**Read twins (G-10).** Every configuration management permission has a `.read` twin of the same class. List and view routes declare the twin and writes keep the management permission. Holding a management permission implies its twin wherever permissions are evaluated (`READ_TWINS` in `@cuc/authz`: `roleHas`, `grantMatches`, identity-service's permission lookup and `/me`, the `@cuc/http` permission guard, and the console), so admins and custom roles that name only `.manage` keep reading without being re-granted. Nothing else implies anything, and no permission implies a `private` one. The secret-class permissions (`secret.reveal`, `apikey.manage`) have no twin. The console shows a screen read-only to a person who holds its `.read` permission without its `.manage` permission.
+
 Monitoring is a "who can do this to whom" check. A grant `monitor.barge` scoped to `queue:Q1` lets its holder barge calls where the target channel is an agent of Q1 **or** the call is in Q1. `call-control` evaluates this against the live call record in Redis.
 
-Built-in roles: `master_admin`, `master_support` (read everything, no writes), `reseller_admin`, `reseller_support` (read config), `tenant_admin`, `tenant_supervisor`, `tenant_user` (own extension, voicemail, and recordings where granted). Custom roles are per org.
+Built-in roles: `master_admin`, `master_support` (read everything, no writes: every `.read`, plus `cdr.read`, `analytics.view`, `audit.read`, `monitor.presence` and `billing.read`, its private reads audited), `reseller_admin`, `reseller_support` (read config: the `.read` twin of everything `reseller_admin` manages, plus `audit.read`; H1 still blocks private data), `tenant_admin`, `tenant_supervisor` (monitoring, `analytics.view`, and `queue.read`/`extension.read` for the queues and agents it supervises), `tenant_user` (own extension, voicemail, and recordings where granted). Custom roles are per org.
 
 ## 4. Audit
 

@@ -38,7 +38,7 @@ export function registerNetworkRoutes(
   app.get(
     '/v1/platform/network-settings',
     {
-      config: { permission: 'domain.manage', dataClass: 'config' },
+      config: { permission: 'domain.read', dataClass: 'config' },
       schema: { response: { 200: NetworkSchema } },
     },
     async (request) => {
@@ -92,7 +92,7 @@ export function registerNetworkRoutes(
   app.get(
     '/v1/resellers/:id/dns-records',
     {
-      config: { permission: 'domain.manage', dataClass: 'config' },
+      config: { permission: 'domain.read', dataClass: 'config' },
       schema: {
         params: Type.Object({ id: Type.String({ minLength: 1 }) }),
         response: { 200: DnsRecordsSchema },

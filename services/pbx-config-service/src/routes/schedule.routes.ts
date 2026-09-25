@@ -80,7 +80,7 @@ export function registerScheduleRoutes(app: Server, schedules: ScheduleRepo): vo
   app.get(
     '/v1/tenants/:tenantId/schedules',
     {
-      config: { permission: 'schedule.manage', dataClass: 'config' },
+      config: { permission: 'schedule.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(ScheduleSchema) }) },
@@ -92,7 +92,7 @@ export function registerScheduleRoutes(app: Server, schedules: ScheduleRepo): vo
   app.get(
     '/v1/tenants/:tenantId/schedules/:id',
     {
-      config: { permission: 'schedule.manage', dataClass: 'config' },
+      config: { permission: 'schedule.read', dataClass: 'config' },
       schema: { params: ScheduleParamsSchema, response: { 200: ScheduleSchema } },
     },
     async (request) => {

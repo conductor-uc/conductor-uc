@@ -88,13 +88,13 @@ describe.skipIf(skipReason !== undefined)('call handling HTTP routes', () => {
   const url = (tenantId: string, extensionId: string) =>
     `/v1/tenants/${tenantId}/extensions/${extensionId}/call-handling`;
 
-  it('declares extension.manage and a data class on both routes (CLAUDE.md rule 3)', () => {
+  it('declares extension.read (GET) or extension.manage (PUT) and a data class on both routes (CLAUDE.md rule 3, G-10)', () => {
     const routes = app.registeredRoutes.filter(
       (r) => r.url.startsWith('/v1/') && r.url.endsWith('/call-handling') && r.method !== 'HEAD',
     );
     expect(routes.map((r) => r.method).sort()).toEqual(['GET', 'PUT']);
     for (const route of routes) {
-      expect(route.permission).toBe('extension.manage');
+      expect(route.permission).toBe(route.method === 'GET' ? 'extension.read' : 'extension.manage');
       expect(route.dataClass).toBe('config');
     }
   });

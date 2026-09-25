@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/session.dart';
+import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import '../orgs/orgs_api.dart';
 import '../pbx/pbx_api.dart';
@@ -174,6 +175,8 @@ class _TrunkIpsDialogState extends ConsumerState<TrunkIpsDialog> {
   @override
   Widget build(BuildContext context) {
     final ips = _ips;
+    // Someone who can read trunks but not change them sees the list only.
+    final canChange = ref.watch(canProvider('trunk.manage'));
     return AlertDialog(
       title: Text('${widget.trunk['name']}'),
       content: SizedBox(
@@ -197,28 +200,31 @@ class _TrunkIpsDialogState extends ConsumerState<TrunkIpsDialog> {
                 dense: true,
                 contentPadding: EdgeInsets.zero,
                 title: Text('${ip['cidr']}'),
-                trailing: IconButton(
-                  tooltip: 'Remove ${ip['cidr']}',
-                  icon: const Icon(Icons.close),
-                  onPressed: () => _remove('${ip['id']}'),
-                ),
+                trailing: canChange
+                    ? IconButton(
+                        tooltip: 'Remove ${ip['cidr']}',
+                        icon: const Icon(Icons.close),
+                        onPressed: () => _remove('${ip['id']}'),
+                      )
+                    : null,
               ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _cidr,
-                    decoration: const InputDecoration(
-                      labelText: 'Address or range',
-                      helperText: 'For example 203.0.113.0/24',
+            if (canChange)
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _cidr,
+                      decoration: const InputDecoration(
+                        labelText: 'Address or range',
+                        helperText: 'For example 203.0.113.0/24',
+                      ),
+                      onSubmitted: (_) => _add(),
                     ),
-                    onSubmitted: (_) => _add(),
                   ),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(onPressed: _add, child: const Text('Add')),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  FilledButton(onPressed: _add, child: const Text('Add')),
+                ],
+              ),
             if (_error != null) ErrorText(_error!),
           ],
         ),

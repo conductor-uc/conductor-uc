@@ -58,7 +58,7 @@ export function registerAcmeSettingsRoutes(
   app.get(
     '/v1/platform/acme-settings',
     {
-      config: { permission: 'domain.manage', dataClass: 'config' },
+      config: { permission: 'domain.read', dataClass: 'config' },
       schema: { response: { 200: SettingsSchema } },
     },
     async (request) => {

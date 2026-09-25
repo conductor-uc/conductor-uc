@@ -80,7 +80,7 @@ export function registerMediaAssetRoutes(app: Server, assets: MediaAssetRepo): v
   app.get(
     '/v1/tenants/:tenantId/media-assets',
     {
-      config: { permission: 'media.manage', dataClass: 'config' },
+      config: { permission: 'media.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(MediaAssetSchema) }) },
@@ -92,7 +92,7 @@ export function registerMediaAssetRoutes(app: Server, assets: MediaAssetRepo): v
   app.get(
     '/v1/tenants/:tenantId/media-assets/:id',
     {
-      config: { permission: 'media.manage', dataClass: 'config' },
+      config: { permission: 'media.read', dataClass: 'config' },
       schema: { params: AssetParamsSchema, response: { 200: MediaAssetSchema } },
     },
     async (request) => {

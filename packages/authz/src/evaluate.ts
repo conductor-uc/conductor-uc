@@ -1,11 +1,20 @@
 import { orgAncestry } from './ancestry.js';
 import { hardRulesPass } from './hard-rules.js';
+import { grantingPermissions, implies } from './permissions.js';
 import { BUILT_IN_ROLES } from './roles.js';
 import type { Actor, Grant, Permission, ResourceRef, RoleCatalog } from './types.js';
 
-/** True when any role the actor holds bundles `permission` (07 §3.1). */
+/**
+ * True when any role the actor holds bundles `permission` (07 §3.1), or a
+ * permission that implies it: a role with `extension.manage` has
+ * `extension.read` (G-10, `READ_TWINS`).
+ */
 export function roleHas(actor: Actor, permission: Permission, roles: RoleCatalog): boolean {
-  return actor.roleIds.some((roleId) => roles.get(roleId)?.permissions.has(permission) === true);
+  const granting = grantingPermissions(permission);
+  return actor.roleIds.some((roleId) => {
+    const held = roles.get(roleId)?.permissions;
+    return held !== undefined && granting.some((p) => held.has(p));
+  });
 }
 
 /**
@@ -15,6 +24,9 @@ export function roleHas(actor: Actor, permission: Permission, roles: RoleCatalog
  * does the principal filtering itself (a grant matches if it names the actor
  * directly, or names a role the actor holds), so a caller can safely pass a
  * broader list without pre-filtering it correctly first.
+ *
+ * A grant of a management permission also matches its read twin on the same
+ * scope (G-10): `queue.manage` on `queue:Q1` reads Q1.
  */
 export function grantMatches(
   actor: Actor,
@@ -25,7 +37,7 @@ export function grantMatches(
   const resourceScope = resource.scope ?? { type: 'org' as const, id: resource.org.id };
 
   return grants.some((grant) => {
-    if (grant.permission !== permission) return false;
+    if (!implies(grant.permission, permission)) return false;
 
     const principalMatches =
       (grant.principalType === 'user' && grant.principalId === actor.id) ||

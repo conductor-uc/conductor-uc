@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config.dart';
+import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource.dart';
@@ -102,11 +103,12 @@ class _MediaPageState extends ConsumerState<MediaPage> {
     return ResourceView(
       def: mediaAssetsDef,
       headerActions: [
-        FilledButton.icon(
-          onPressed: _upload,
-          icon: const Icon(Icons.upload_file),
-          label: const Text('Upload recording'),
-        ),
+        if (ref.watch(canProvider('media.manage')))
+          FilledButton.icon(
+            onPressed: _upload,
+            icon: const Icon(Icons.upload_file),
+            label: const Text('Upload recording'),
+          ),
       ],
     );
   }
