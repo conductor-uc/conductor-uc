@@ -1,0 +1,40 @@
+<mjml>
+  <mj-head>
+    <mj-title>{{ title }}</mj-title>
+    <mj-attributes>
+      <mj-all font-family="Helvetica, Arial, sans-serif" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#fafafa" width="560px">
+    {{> header}}
+    <mj-section background-color="#ffffff" padding="24px">
+      <mj-column>
+        <mj-text font-size="20px" font-weight="600" color="#212121"
+          >Two-step verification was reset</mj-text
+        >
+        <mj-text font-size="15px" line-height="1.5" color="#424242">
+          Hello {{ name }}, an administrator reset the two-step verification of {{ aboutName }} ({{
+            aboutEmail
+          }}), who is in your organization. Their authenticator app was removed and they were signed
+          out everywhere. The next time they sign in they will be asked to set up a new one.
+        </mj-text>
+        <mj-text font-size="15px" line-height="1.5" color="#424242">
+          You are receiving this because you are an administrator. If nobody expected this, check
+          the activity log and make sure every administrator's account is secure.
+        </mj-text>
+        <mj-button
+          href="{{{link}}}"
+          background-color="{{primary}}"
+          color="{{onPrimary}}"
+          border-radius="4px"
+          font-size="15px"
+          >Sign in</mj-button
+        >
+        <mj-text font-size="13px" line-height="1.5" color="#616161">
+          If the button does not work, copy this address into your browser:<br />{{{link}}}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+    {{> footer}}
+  </mj-body>
+</mjml>

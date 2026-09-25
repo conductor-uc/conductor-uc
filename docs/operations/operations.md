@@ -35,7 +35,7 @@ docker compose exec mariadb mariadb -uroot -p"$MARIADB_ROOT_PASSWORD"
 
 The master organisation and its first administrator are created once, with one command ([all-in-one §9](deploy-all-in-one.md#9-bootstrap-the-platform)); running it again changes nothing. After that, everything is done in the console: the master creates resellers and resellers create tenants. Creating a reseller or tenant also creates its first administrator, with the email and initial password entered in the form (no invitation email is sent; pass the password on securely). Further people are invited from **Users**, which does send an email. Reseller domains follow [DNS/TLS §7](dns-tls-and-certificates.md#7-adding-a-resellers-domain-runbook).
 
-If a master administrator loses their two-step device, another master administrator can reset it in the console (**Users**, **Reset two-step verification**). If there is no other, the bootstrap command will not help (it creates an administrator only while the master has nobody). Create a second master administrator with identity-service's internal call instead, from a throwaway container on the private network:
+If a master administrator loses their two-step device, another master administrator can reset it in the console (**Users**, **Reset two-step verification**). The resetting administrator confirms with a current code from **their own** authenticator app (step-up, G-100), so an administrator without two-step verification of their own cannot reset anyone's, and five wrong codes lock the confirmation for 15 minutes. The person is emailed, and so are the organisation's other administrators. If there is no other, the bootstrap command will not help (it creates an administrator only while the master has nobody). Create a second master administrator with identity-service's internal call instead, from a throwaway container on the private network:
 
 ```sh
 set -a; . ./.env; set +a
@@ -46,7 +46,7 @@ docker run --rm --network voice_backplane curlimages/curl -sS \
   -d '{"orgType":"master","email":"second@example.net","displayName":"Second administrator","password":"<at least 12 characters>"}'
 ```
 
-A `201` response means the person exists with the `master_admin` role. Sign in as them and reset the first administrator's two-step verification. The password is on the command line here, so clear your shell history afterwards.
+A `201` response means the person exists with the `master_admin` role. Sign in as them: as a master user they set up their own authenticator app at that first sign-in, which is what lets them confirm the reset. Then reset the first administrator's two-step verification, entering the new administrator's own current code when asked. The password is on the command line here, so clear your shell history afterwards.
 
 ## 3. Upgrades
 

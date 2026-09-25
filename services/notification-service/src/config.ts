@@ -17,6 +17,9 @@ export const configSchema = Type.Object({
   ORG_SERVICE_URL: Env.url(),
   INTERNAL_SERVICE_TOKEN: Env.secret(),
 
+  /** identity-service: an org's administrators, for the two-step reset notice to them (G-100). */
+  IDENTITY_SERVICE_URL: Env.url(),
+
   /** voicemail-service: mailbox email settings, message details and audio for voicemail-to-email (S5-07). */
   VOICEMAIL_SERVICE_URL: Env.url(),
   /**
