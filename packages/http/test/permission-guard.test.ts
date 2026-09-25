@@ -195,7 +195,7 @@ describe('createRemotePermissionResolver', () => {
       Promise.resolve(Response.json({ permissions: ['self.settings'] })),
     );
     let clock = 0;
-    const resolve = resolver(fetchImpl as never, () => clock);
+    const resolve = resolver(fetchImpl, () => clock);
 
     expect(await resolve(actor, 'self.settings')).toBe(true);
     expect(await resolve(actor, 'extension.manage')).toBe(false);
@@ -211,14 +211,14 @@ describe('createRemotePermissionResolver', () => {
   });
 
   it('treats an unknown person as holding nothing', async () => {
-    const resolve = resolver((() => Promise.resolve(new Response(null, { status: 404 }))) as never);
+    const resolve = resolver((() => Promise.resolve(new Response(null, { status: 404 }))));
     expect(await resolve(actor, 'self.settings')).toBe(false);
   });
 
   it('fails closed when identity-service is unreachable or errors', async () => {
-    const down = resolver((() => Promise.reject(new Error('refused'))) as never);
+    const down = resolver((() => Promise.reject(new Error('refused'))));
     await expect(down(actor, 'self.settings')).rejects.toMatchObject({ status: 503 });
-    const broken = resolver((() => Promise.resolve(new Response(null, { status: 500 }))) as never);
+    const broken = resolver((() => Promise.resolve(new Response(null, { status: 500 }))));
     await expect(broken(actor, 'self.settings')).rejects.toMatchObject({ status: 503 });
   });
 });
