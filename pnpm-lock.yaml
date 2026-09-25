@@ -995,6 +995,9 @@ importers:
       '@cuc/http':
         specifier: workspace:*
         version: link:../../packages/http
+      '@cuc/identity-service':
+        specifier: workspace:*
+        version: link:../../services/identity-service
       '@cuc/logger':
         specifier: workspace:*
         version: link:../../packages/logger

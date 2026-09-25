@@ -18,6 +18,8 @@
  * Safe to re-run: every create is caught for "already exists" and resolved
  * to the existing row instead of failing the whole script.
  */
+import { randomBytes } from 'node:crypto';
+
 import { createDatabase, type Database } from '@cuc/db';
 import { fileKekFromConfig } from '@cuc/crypto';
 import { createLogger } from '@cuc/logger';
@@ -29,6 +31,9 @@ import {
   type Org,
 } from '@cuc/org-service/dist/src/repo/org.repo.js';
 import type { OrgServiceDb } from '@cuc/org-service/dist/src/schema.js';
+import { createRoleRepo } from '@cuc/identity-service/dist/src/repo/role.repo.js';
+import { createUserRepo } from '@cuc/identity-service/dist/src/repo/user.repo.js';
+import type { IdentityServiceDb } from '@cuc/identity-service/dist/src/schema.js';
 import { createOrgClient } from '@cuc/pbx-config-service/dist/src/org-client.js';
 import { createEmergencyLocationRepo } from '@cuc/pbx-config-service/dist/src/repo/emergency-location.repo.js';
 import {
@@ -492,6 +497,56 @@ export async function resetExtensionPassword(
   }
 }
 
+/** The one administrator every tenant in this suite gets when a test needs to act as a person. */
+export const SIP_TEST_ADMIN_EMAIL = 'sip-test-admin@sip-test.invalid';
+
+/**
+ * Makes sure `tenantId` has a real, active person holding `tenant_admin`, and
+ * prints their id. Since every user-facing service asks identity-service what
+ * the signed-in person may do (07 §3.1), a test that calls those services as
+ * an administrator has to sign as someone who exists: a made-up actor id holds
+ * nothing and is refused. Created through identity-service's own repos, like
+ * the rest of this file; nobody ever signs in with the password.
+ */
+export async function ensureTenantAdmin(
+  tenantId: string,
+  resellerId: string,
+): Promise<{ readonly userId: string }> {
+  const identityDb = createDatabase<IdentityServiceDb>({
+    host: env('IDENTITY_DB_HOST'),
+    port: Number(env('IDENTITY_DB_PORT')),
+    user: env('IDENTITY_DB_USER'),
+    password: env('IDENTITY_DB_PASSWORD'),
+    database: env('IDENTITY_DB_NAME'),
+    poolSize: 2,
+    logger,
+  });
+  try {
+    const users = createUserRepo(identityDb);
+    const roles = createRoleRepo(identityDb);
+    const existing = await users.findByOrgAndEmail(tenantId, SIP_TEST_ADMIN_EMAIL);
+    const userId =
+      existing?.id ??
+      (
+        await users.create(
+          { requestId: 'sip-test-seed' },
+          {
+            orgId: tenantId,
+            orgType: 'tenant',
+            resellerId,
+            email: SIP_TEST_ADMIN_EMAIL,
+            displayName: 'SIP test administrator',
+            password: randomBytes(24).toString('base64url'),
+          },
+        )
+      ).id;
+    await roles.assignRole(userId, 'tenant_admin', tenantId);
+    return { userId };
+  } finally {
+    await identityDb.destroy();
+  }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   if (process.argv[2] === 'set-limits') {
     const tenantId = process.argv[3];
@@ -509,6 +564,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     const reset = await resetExtensionPassword(tenantId, number);
     process.stdout.write(`\n${JSON.stringify(reset)}\n`);
+  } else if (process.argv[2] === 'tenant-admin') {
+    const tenantId = process.argv[3];
+    const resellerId = process.argv[4];
+    if (tenantId === undefined || resellerId === undefined) {
+      throw new Error('usage: seed.js tenant-admin <tenantId> <resellerId>');
+    }
+    const admin = await ensureTenantAdmin(tenantId, resellerId);
+    process.stdout.write(`\n${JSON.stringify(admin)}\n`);
   } else {
     const result = await seed();
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

@@ -19,6 +19,8 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
+import { signInternalHeaders } from '@cuc/http';
+
 const execFileAsync = promisify(execFile);
 
 const SRC_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -95,7 +97,7 @@ export function sipTestEnv(): SipTestEnv {
     freeswitchContainer,
     freeswitchContainers: envOr(
       'SIP_TEST_FREESWITCH_CONTAINERS',
-      `${freeswitchContainer},conductor-uc-freeswitch-2-1`,
+      `${freeswitchContainer},${envOr('SIP_TEST_FREESWITCH_2_CONTAINER', 'conductor-uc-freeswitch-2-1')}`,
     )
       .split(',')
       .map((name) => name.trim())
@@ -346,6 +348,72 @@ export async function resetExtensionPassword(
   };
 }
 
+const tenantAdmins = new Map<string, string>();
+
+/**
+ * Signed request-context headers for a real `tenant_admin` of `tenantId`
+ * (`seed.ts`'s `ensureTenantAdmin`), as api-gateway would send them. Every
+ * user-facing service checks what the signed-in person holds (07 §3.1), so an
+ * administrator's call has to name a person identity-service knows. The
+ * person is created once per tenant and reused.
+ */
+export async function tenantAdminHeaders(
+  tenantId: string,
+  resellerId: string,
+): Promise<Record<string, string>> {
+  let userId = tenantAdmins.get(tenantId);
+  if (userId === undefined) {
+    const env = sipTestEnv();
+    const dbHost = envOr('SIP_TEST_DB_HOST', 'mariadb');
+    const dbPort = envOr('SIP_TEST_DB_PORT', '3306');
+    const { stdout } = await execFileAsync(
+      'docker',
+      [
+        'run',
+        '--rm',
+        '--network',
+        env.network,
+        '-v',
+        `${REPO_ROOT}:/repo`,
+        '-w',
+        '/repo/tests/sip',
+        '-e',
+        `IDENTITY_DB_HOST=${dbHost}`,
+        '-e',
+        `IDENTITY_DB_PORT=${dbPort}`,
+        '-e',
+        'IDENTITY_DB_USER=identity_service',
+        '-e',
+        `IDENTITY_DB_PASSWORD=${envOr('IDENTITY_SERVICE_DB_PASSWORD', 'dev-identity-password')}`,
+        '-e',
+        'IDENTITY_DB_NAME=identity_service',
+        'node:22',
+        'node',
+        'dist/src/seed.js',
+        'tenant-admin',
+        tenantId,
+        resellerId,
+      ],
+      { maxBuffer: 16 * 1024 * 1024 },
+    );
+    const start = stdout.lastIndexOf('\n{');
+    userId = (JSON.parse(start === -1 ? stdout : stdout.slice(start + 1)) as { userId: string })
+      .userId;
+    tenantAdmins.set(tenantId, userId);
+  }
+  return signInternalHeaders(
+    process.env['INTERNAL_HEADER_SIGNING_SECRET'] ?? 'dev-internal-header-signing-secret',
+    {
+      actorId: userId,
+      actorType: 'user',
+      orgId: tenantId,
+      orgType: 'tenant',
+      resellerId,
+      tenantId,
+    },
+  );
+}
+
 /** `docker exec`s the real MI command — see `project_s1_14_checkpoint.md`:
  * `usrloc`/`subscriber` are DB-persisted, so a stale registration from a
  * prior run (same AOR) can make a fresh REGISTER fail with "Invalid CSeq
@@ -386,13 +454,16 @@ async function opensipsMi(command: string, ...args: readonly string[]): Promise<
   ]);
 }
 
-const OPENSIPS_MARIADB_CONTAINER = 'conductor-uc-mariadb-1';
+/** The compose stack's MariaDB container, named like the others so a stack under another project name works too. */
+function mariadbContainer(): string {
+  return envOr('SIP_TEST_MARIADB_CONTAINER', 'conductor-uc-mariadb-1');
+}
 
 /** `docker exec`s the real `mariadb` client against the `opensips` schema, as the `opensips` DB user — same rationale as `opensipsMi`: a real CLI already inside an already-running container, not a new throwaway one. */
 async function opensipsSql(sql: string): Promise<void> {
   await execFileAsync('docker', [
     'exec',
-    OPENSIPS_MARIADB_CONTAINER,
+    mariadbContainer(),
     'mariadb',
     '-u',
     'opensips',
