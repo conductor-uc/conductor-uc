@@ -19,7 +19,7 @@ What an all-in-one server cannot do:
 | Requirement | Detail |
 |---|---|
 | Operating system | Any current Linux that runs Docker Engine 24+ and the Compose v2 plugin. Examples use Ubuntu 24.04 LTS. |
-| **Public IPv4 on the server's own network interface** | FreeSWITCH advertises the address of its default-route interface for audio ([network §4](network-and-firewall.md#4-media-rtp-and-why-freeswitch-needs-a-public-address)). Bare metal and most VPS providers give you this. **AWS, Google Cloud, Azure and anything behind 1:1 NAT do not.** There you must apply the `vars.xml` edit in network §4 (not verified), or use a provider that puts the address on the interface. Check with `ip -4 route get 1.1.1.1`: the `src` address must be the public one. |
+| **A public IPv4 for audio** | FreeSWITCH advertises the address of its default-route interface for audio ([network §4](network-and-firewall.md#4-media-rtp-and-why-freeswitch-needs-a-public-address)). Bare metal and most VPS providers put the public address on the interface, and nothing needs setting. **On AWS, Google Cloud, Azure and anything behind 1:1 NAT** the interface has a private address: set `FS_EXTERNAL_RTP_IP` to the public one on the `freeswitch` service, and allow UDP 16384–32768 in the provider's firewall (not verified on a real cloud; test a call). Check with `ip -4 route get 1.1.1.1`: if the `src` address is private, you need the setting. |
 | Free ports | Nothing else may use TCP 80, 443, 5060, 5061, 5080, 8021, 8888, 18080, 18081 or UDP 5060, 5080, 16384–32768 |
 | Clock | NTP or chrony running (`timedatectl` shows `System clock synchronized: yes`) |
 | DNS | The records in [DNS, TLS and certificates §2](dns-tls-and-certificates.md#2-dns-records), all pointing at the server's public IP |
@@ -784,7 +784,7 @@ Work through this list on a new installation, and after every upgrade.
 | 2 | Platform health | In the console as master, **Platform health** (or `GET /v1/platform/health`) | All eight services ready |
 | 3 | Internal readiness | `docker run --rm --network voice_backplane curlimages/curl -s http://telephony-config:8080/readyz` | `"status":"pass"`, including `opensips_db` and `redis` |
 | 4 | OpenSIPs up | `docker compose logs opensips | tail` and `ss -lunp | grep 5060` | Listening; no DB errors |
-| 5 | FreeSWITCH up, SDP address right | `docker compose exec freeswitch fs_cli -p "$FS_EVENT_SOCKET_PASSWORD" -x 'sofia status profile internal'` | `RUNNING`; `SIP-IP` and `EXT-RTP-IP` are the public address |
+| 5 | FreeSWITCH up, SDP address right | `docker compose exec freeswitch fs_cli -p "$FS_EVENT_SOCKET_PASSWORD" -x 'sofia status profile internal'` | `RUNNING`; `SIP-IP` and `Ext-RTP-IP` are the public address |
 | 6 | call-control sees the node | `docker compose logs call-control | grep -i connect` | Connected to `fs1` |
 | 7 | Firewall | nmap from outside (§4) | Only 80, 443, 5060, 5061 open |
 | 8 | Registration | Softphone registers to the tenant domain | Registered |

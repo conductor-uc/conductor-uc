@@ -38,10 +38,19 @@
   <X-PRE-PROCESS cmd="set" data="internal_sip_port=5060"/>
   <X-PRE-PROCESS cmd="env-set" data="internal_sip_port=$FS_SIP_PORT"/>
 
-  <!-- 03 §1: media never leaves the docker/cluster network directly — OpenSIPs
-       is the only thing FS ever talks to, and it owns NAT/external exposure
-       (RTPengine media anchoring is deferred, O-7). No STUN lookup needed. -->
+  <!-- The address FreeSWITCH writes into SDP for audio. There is no media relay
+       (RTPengine is deferred, O-7), so phones and carriers send RTP straight to
+       it: it must be reachable from the internet. By default it is the address
+       of the interface with the default route, which is right when the public
+       IPv4 is on the server's own interface. Behind 1:1 NAT (AWS, Google Cloud,
+       Azure) that is a private address, so set FS_EXTERNAL_RTP_IP to the public
+       one (G-114). No STUN lookup: a fixed address is predictable.
+
+       Signalling stays on the private address on purpose: only OpenSIPs talks
+       SIP to FreeSWITCH, and it must see one consistent source address for the
+       `opensips` ACL (FS_OPENSIPS_CIDR) and its dispatcher entry. -->
   <X-PRE-PROCESS cmd="set" data="external_rtp_ip=$${local_ip_v4}"/>
+  <X-PRE-PROCESS cmd="env-set" data="external_rtp_ip=$FS_EXTERNAL_RTP_IP"/>
   <X-PRE-PROCESS cmd="set" data="external_sip_ip=$${local_ip_v4}"/>
 
   <X-PRE-PROCESS cmd="set" data="rtp_start_port=16384"/>

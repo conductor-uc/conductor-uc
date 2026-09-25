@@ -528,7 +528,7 @@ export async function withSingleFsNode<T>(fn: () => Promise<T>): Promise<T> {
  * `cluster` list) already allows loopback, so this was never a network/ACL
  * problem, just fs_cli never being told the right password.
  */
-async function fsCliOn(container: string, command: string): Promise<string> {
+export async function fsCliOn(container: string, command: string): Promise<string> {
   const env = sipTestEnv();
   const { stdout } = await execFileAsync('docker', [
     'exec',

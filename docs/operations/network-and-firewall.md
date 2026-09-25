@@ -97,30 +97,17 @@ Phones fetch `GET https://<gateway>/v1/public/provision/yealink/<mac>.cfg` with 
 
 ## 4. Media (RTP), and why FreeSWITCH needs a public address
 
-There is no media relay (no RTPengine or rtpproxy; decision O-7, deferred). OpenSIPs forwards SDP untouched. FreeSWITCH writes this address into every SDP it sends:
+There is no media relay (no RTPengine or rtpproxy; decision O-7, deferred). OpenSIPs forwards SDP untouched. So the address FreeSWITCH writes into its SDP for audio is where phones and carriers send RTP, and it has to be reachable from the internet.
 
-```xml
-<!-- telephony/freeswitch/conf/vars.xml -->
-<X-PRE-PROCESS cmd="set" data="external_rtp_ip=$${local_ip_v4}"/>
-<X-PRE-PROCESS cmd="set" data="external_sip_ip=$${local_ip_v4}"/>
-```
+By default that address is `local_ip_v4`: the IPv4 address of the interface that carries FreeSWITCH's default route. **`FS_EXTERNAL_RTP_IP` overrides it** for audio only. Signalling stays on the interface address, because only OpenSIPs talks SIP to FreeSWITCH (G-114).
 
-`local_ip_v4` is the IPv4 address of the interface that carries FreeSWITCH's default route. **No environment variable overrides it.** So:
+| Where FreeSWITCH runs | What to set | Result |
+|---|---|---|
+| **Host networking on a server whose public IPv4 is configured on its network interface** (most bare-metal servers and VPS providers) | Nothing | SDP carries the public address. What both deployment guides use by default. |
+| **Host networking behind 1:1 NAT**, where the public address is not on any interface (AWS EC2 and Lightsail, Google Cloud, Azure, most office routers) | `FS_EXTERNAL_RTP_IP=<public IPv4>`, and forward UDP 16384–32768 from the public address to the server (cloud providers do this for you once the security group allows it) | SDP carries the public address; FreeSWITCH binds to and signals on its private address. OpenSIPs must then reach the node on its **private** address: use that in `OPENSIPS_FS_DESTINATION` and set `FS_OPENSIPS_CIDR` to OpenSIPs' private address ([distributed §4.4](deploy-distributed.md#44-media-n)). |
+| In a Docker bridge network (the development stack) | Nothing | SDP carries a private container address. Works only when phones and carriers are on the same Docker network (the SIP test suite). Not usable in production. |
 
-| Where FreeSWITCH runs | Result |
-|---|---|
-| **Host networking on a server whose public IPv4 is configured on its network interface** (most bare-metal servers and VPS providers) | **Works.** SDP carries the public address. This is what both deployment guides use. |
-| In a Docker bridge network (the development stack) | SDP carries a private container address. Works only when phones and carriers are on the same Docker network (the SIP test suite). Not usable in production. |
-| **Behind 1:1 NAT**, where the public address is not on any interface (AWS EC2 and Lightsail, Google Cloud, Azure, most home and office routers) | **Does not work as shipped.** SDP carries the private address and audio fails in both directions. |
-
-If you must run behind 1:1 NAT, edit two lines in `telephony/freeswitch/conf/vars.xml` before building the image, one image per server (or template them yourself):
-
-```xml
-<X-PRE-PROCESS cmd="set" data="external_rtp_ip=203.0.113.21"/>
-<X-PRE-PROCESS cmd="set" data="external_sip_ip=203.0.113.21"/>
-```
-
-Then forward the whole RTP range (UDP 16384–32768) from the public address to the server. This change is **not verified**, and it is a local modification you must carry across upgrades (tracked as G-114 in [decisions](../decisions.md)).
+`tests/sip/test/media_address.test.ts` checks on a real node that the advertised audio address follows `FS_EXTERNAL_RTP_IP` and that signalling does not move. That audio then really flows through a cloud provider's NAT has **not been verified** (no such network was available): confirm it with a test call on your first cloud deployment.
 
 Consequences you have to plan for:
 
