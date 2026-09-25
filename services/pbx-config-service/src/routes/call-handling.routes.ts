@@ -28,7 +28,7 @@ export const DestinationSchema = Type.Union([
 
 const NullableDestination = Type.Union([DestinationSchema, Type.Null()]);
 
-const CallHandlingBodySchema = Type.Object({
+export const CallHandlingBodySchema = Type.Object({
   dnd: Type.Optional(Type.Boolean()),
   dndAction: Type.Optional(Type.Union(DND_ACTIONS.map((a) => Type.Literal(a)))),
   forwardAlways: Type.Optional(NullableDestination),

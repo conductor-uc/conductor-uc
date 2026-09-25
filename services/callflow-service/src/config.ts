@@ -23,6 +23,12 @@ export const configSchema = Type.Object({
    * (07 §1's precedent) — must match flow_runner/telephony-config's copy.
    */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
+  /**
+   * identity-service, asked what a signed-in person may do
+   * (`@cuc/http`'s permission guard). Required, not optional: without it the
+   * service would let any signed-in person call any route.
+   */
+  IDENTITY_SERVICE_URL: Env.url(),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

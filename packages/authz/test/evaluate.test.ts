@@ -197,3 +197,43 @@ describe('allowed', () => {
     ).toBe(false);
   });
 });
+
+describe('self-service permissions (parity 1e)', () => {
+  const reseller: Actor = {
+    id: 'u9',
+    type: 'user',
+    org: { id: 'r1', type: 'reseller', resellerId: null },
+    roleIds: ['tenant_user'],
+  };
+  const otherTenantUser: Actor = {
+    id: 'u3',
+    type: 'user',
+    org: { id: 't2', type: 'tenant', resellerId: 'r1' },
+    roleIds: ['tenant_user'],
+  };
+
+  it('a tenant_user holds all three in its own tenant', () => {
+    for (const permission of ['self.settings', 'self.voicemail', 'self.history']) {
+      expect(allowed({ actor: tenantUser, permission, resource: own }), permission).toBe(true);
+    }
+  });
+
+  it('a tenant_user holds none of the org-wide equivalents', () => {
+    for (const permission of ['extension.manage', 'voicemail.access', 'cdr.read']) {
+      expect(allowed({ actor: tenantUser, permission, resource: own }), permission).toBe(false);
+    }
+  });
+
+  it('a tenant_user of another tenant is denied all three here (H2)', () => {
+    for (const permission of ['self.settings', 'self.voicemail', 'self.history']) {
+      expect(allowed({ actor: otherTenantUser, permission, resource: own }), permission).toBe(
+        false,
+      );
+    }
+  });
+
+  it('a reseller is denied the private ones even if it somehow held the role (H1), and settings by ancestry only when it holds them', () => {
+    expect(allowed({ actor: reseller, permission: 'self.voicemail', resource: own })).toBe(false);
+    expect(allowed({ actor: reseller, permission: 'self.history', resource: own })).toBe(false);
+  });
+});

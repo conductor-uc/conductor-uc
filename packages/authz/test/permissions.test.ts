@@ -5,6 +5,7 @@ import {
   dataClassOf,
   isKnownPermission,
   PERMISSION_CATALOG,
+  SELF_PERMISSIONS,
   UnknownPermissionError,
 } from '../src/permissions.js';
 import { isDataClass } from '../src/types.js';
@@ -91,6 +92,14 @@ describe('PERMISSION_CATALOG', () => {
   it('includes billing.read — S2-18/C-1/D-013, a usage-class reseller billing view distinct from private-class cdr.read', () => {
     expect(isKnownPermission('billing.read')).toBe(true);
     expect(dataClassOf('billing.read')).toBe('usage');
+  });
+
+  it('includes the self-service permissions (parity 1e): voicemail and history are private, settings are config', () => {
+    expect([...SELF_PERMISSIONS]).toEqual(['self.settings', 'self.voicemail', 'self.history']);
+    for (const permission of SELF_PERMISSIONS) expect(isKnownPermission(permission)).toBe(true);
+    expect(dataClassOf('self.settings')).toBe('config');
+    expect(dataClassOf('self.voicemail')).toBe('private');
+    expect(dataClassOf('self.history')).toBe('private');
   });
 });
 

@@ -10,6 +10,7 @@ import {
   type OrgLineage,
 } from '../src/org-client.js';
 import { registerAuthRoutes } from '../src/routes/auth.routes.js';
+import { createPermissionLookup } from '../src/authz/permission-lookup.js';
 import { registerRoleRoutes } from '../src/routes/roles.routes.js';
 import { registerUserRoutes } from '../src/routes/users.routes.js';
 import { startHarness, type Harness } from './harness.js';
@@ -68,7 +69,13 @@ describe.skipIf(skipReason !== undefined)('managing the users of orgs beneath yo
       orgClient: { ...orgClient, signInScope: () => Promise.resolve(undefined) },
     });
     registerUserRoutes(app, h.users, h.roles, access, h.mfa);
-    registerRoleRoutes(app, h.roles, access, h.users);
+    registerRoleRoutes(
+      app,
+      h.roles,
+      access,
+      h.users,
+      createPermissionLookup(h.users, h.roles, h.grants),
+    );
     await app.ready();
   });
 

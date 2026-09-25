@@ -5,6 +5,7 @@ import type { Storage } from '@cuc/storage';
 import { CDR_DIRECTIONS } from '../domain/cdr.js';
 import { InvalidExportRangeError } from '../domain/export.js';
 import type { CdrRepo } from '../repo/cdr.repo.js';
+import { LimitQuerySchema, parseLimit } from './limit.js';
 import type { ExportRepo } from '../repo/export.repo.js';
 
 const TenantParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
@@ -19,7 +20,7 @@ const CdrListQuerySchema = Type.Object({
   did: Type.Optional(Type.String()),
   number: Type.Optional(Type.String({ minLength: 1 })),
   cursor: Type.Optional(Type.String()),
-  limit: Type.Optional(Type.Number({ minimum: 1, maximum: 200 })),
+  limit: Type.Optional(LimitQuerySchema),
 });
 
 const CdrSchema = Type.Object({
@@ -153,7 +154,7 @@ export function registerCdrRoutes(
         ...(query.did === undefined ? {} : { did: query.did }),
         ...(query.number === undefined ? {} : { number: query.number }),
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
-        ...(query.limit === undefined ? {} : { limit: query.limit }),
+        ...(query.limit === undefined ? {} : { limit: parseLimit(query.limit) }),
       });
       return { rows: page.rows.map(toCdrResponse), nextCursor: page.nextCursor };
     },

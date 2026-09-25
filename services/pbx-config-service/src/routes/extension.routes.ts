@@ -1,13 +1,14 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { DbContext } from '@cuc/db';
 import type { Bus } from '@cuc/events';
-import { ProblemError, Type, type Server, type Static } from '@cuc/http';
+import { ProblemError, Type, type RequestContext, type Server, type Static } from '@cuc/http';
 
 import { InvalidExtensionNumberError } from '../domain/numbering.js';
 import {
   EmergencyLocationNotFoundError,
   ExtensionNotFoundError,
   ExtensionNumberTakenError,
+  ExtensionUserTakenError,
   TenantDomainNotFoundError,
   type ExtensionRepo,
 } from '../repo/extension.repo.js';
@@ -104,6 +105,9 @@ function toProblem(error: unknown): ProblemError {
   if (error instanceof ExtensionNumberTakenError) {
     return ProblemError.conflict(error.message, { code: 'extension_number_taken' });
   }
+  if (error instanceof ExtensionUserTakenError) {
+    return ProblemError.conflict(error.message, { code: 'extension_user_taken' });
+  }
   if (error instanceof TenantDomainNotFoundError) {
     return ProblemError.conflict(error.message, { code: 'tenant_domain_not_found' });
   }
@@ -115,11 +119,57 @@ function toProblem(error: unknown): ProblemError {
 }
 
 /**
+ * Linking a person to an extension gives them that extension's voicemail and
+ * call history in their own portal (parity 1e), both `private` data a
+ * reseller can never read (rule H1). So a reseller may not link a person, or
+ * it could make one it controls the owner of a tenant's mailbox. It can still
+ * unlink (`null`), which only removes access. The tenant's admins and the
+ * master link people.
+ */
+function assertMayLink(
+  context: { readonly orgType?: string | undefined },
+  userId: string | null | undefined,
+): void {
+  if (context.orgType === 'reseller' && userId !== undefined && userId !== null) {
+    throw ProblemError.forbidden(
+      'Only the tenant’s own administrators can link a person to an extension.',
+      { code: 'reseller_cannot_link_user' },
+    );
+  }
+}
+
+/**
  * Registers `/v1/tenants/{tenantId}/extensions` (06's pbx-config-service
  * section). Every route declares `permission` and `dataClass` — `@cuc/http`
  * refuses to register one that does not (CLAUDE.md rule 3).
  */
 export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, bus: Bus): void {
+  /** Who an extension belongs to is an access decision, so every change to it is audited. */
+  async function auditLink(
+    request: {
+      readonly context: RequestContext;
+      readonly params: { readonly tenantId: string };
+      readonly ip?: string | undefined;
+    },
+    extensionId: string,
+    userId: string | null,
+  ): Promise<void> {
+    const { actorId, actorType, orgId } = request.context;
+    if (actorId === undefined || actorType === undefined || orgId === undefined) return;
+    await publishAuditEvent(bus, {
+      actorType,
+      actorId,
+      actorOrgId: orgId,
+      targetOrgId: request.params.tenantId,
+      action: userId === null ? 'extension.user.unlinked' : 'extension.user.linked',
+      resource: extensionId,
+      dataClass: 'config',
+      ...(userId === null ? {} : { reason: `linked to user ${userId}` }),
+      ...(request.ip === undefined ? {} : { ip: request.ip }),
+      requestId: request.context.requestId,
+    });
+  }
+
   app.get(
     '/v1/tenants/:tenantId/extensions',
     {
@@ -156,12 +206,15 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
       },
     },
     async (request, reply) => {
+      assertMayLink(request.context, request.body.userId);
+      let created;
       try {
-        const created = await extensions.create(ctxFor(request), request.body);
-        return reply.status(201).send(toResponse(created));
+        created = await extensions.create(ctxFor(request), request.body);
       } catch (error) {
         throw toProblem(error);
       }
+      if (created.userId !== null) await auditLink(request, created.id, created.userId);
+      return reply.status(201).send(toResponse(created));
     },
   );
 
@@ -176,13 +229,15 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
       },
     },
     async (request) => {
+      assertMayLink(request.context, request.body.userId);
+      let updated;
       try {
-        return toResponse(
-          await extensions.update(ctxFor(request), request.params.id, request.body),
-        );
+        updated = await extensions.update(ctxFor(request), request.params.id, request.body);
       } catch (error) {
         throw toProblem(error);
       }
+      if (request.body.userId !== undefined) await auditLink(request, updated.id, updated.userId);
+      return toResponse(updated);
     },
   );
 

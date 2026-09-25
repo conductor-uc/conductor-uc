@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/permissions.dart';
+import '../../core/session.dart';
 import '../../widgets/page.dart';
 import 'pbx_api.dart';
 import 'resource.dart';
@@ -37,10 +39,16 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
   bool get _editing => widget.row != null;
 
   /// The fields that apply to this create or edit.
-  List<Field> get _fields => [
-    for (final f in widget.def.fields)
-      if (f.inScope(editing: _editing)) f,
-  ];
+  List<Field> get _fields {
+    final reseller = ref.read(sessionProvider)?.orgType == OrgType.reseller;
+    return [
+      for (final f in widget.def.fields)
+        if (f.inScope(editing: _editing) &&
+            !(f.notForReseller && reseller) &&
+            ref.read(canProvider(f.needs)))
+          f,
+    ];
+  }
 
   @override
   void initState() {

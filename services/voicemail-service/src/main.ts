@@ -2,7 +2,7 @@ import { redactConfig } from '@cuc/config';
 import { fileKekFromConfig } from '@cuc/crypto';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createServer } from '@cuc/http';
+import { createRemotePermissionResolver, createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { storageFromConfig } from '@cuc/storage';
 
@@ -10,6 +10,8 @@ import { configSchema, loadServiceConfig } from './config.js';
 import { createMailboxRepo } from './repo/mailbox.repo.js';
 import { createMessageRepo } from './repo/message.repo.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
+import { createPbxClient } from './pbx-client.js';
+import { registerMeRoutes } from './routes/me.routes.js';
 import { registerMailboxRoutes } from './routes/mailbox.routes.js';
 import type { VoicemailServiceDb } from './schema.js';
 
@@ -72,6 +74,10 @@ const app = await createServer({
       ? {}
       : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
   },
+  permissions: createRemotePermissionResolver({
+    baseUrl: config.IDENTITY_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
 });
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
@@ -82,6 +88,11 @@ app.addReadinessCheck('outbox', async () => {
 });
 
 registerMailboxRoutes(app, mailboxRepo, messageRepo, storage);
+const pbxClient = createPbxClient({
+  baseUrl: config.PBX_CONFIG_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+registerMeRoutes(app, mailboxRepo, messageRepo, storage, pbxClient.userExtension, bus);
 registerInternalRoutes(app, mailboxRepo, messageRepo, config.INTERNAL_SERVICE_TOKEN, storage);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });

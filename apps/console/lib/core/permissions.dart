@@ -46,3 +46,25 @@ final canProvider = Provider.family<bool, String?>((ref, permission) {
   final held = ref.watch(knownPermissionsProvider);
   return held == null || held.contains(permission);
 });
+
+/// What the built-in `tenant_user` role holds (`@cuc/authz`): the permissions
+/// that concern nothing but the person's own phone, and the two every signed-in
+/// person has.
+const selfScopedPermissions = {
+  'org.view',
+  'monitor.presence',
+  'self.settings',
+  'self.voicemail',
+  'self.history',
+};
+
+/// Whether [held] is a person with a phone and nothing else: some `self.*`
+/// permission and nothing beyond [selfScopedPermissions]. That person is shown
+/// the "My phone" experience instead of the administrator's navigation. Null
+/// (not known yet, or the lookup failed) is not self-only: the console then
+/// shows what the org type gets, as it always did. Hiding is a convenience; the
+/// services refuse an administrator's route to such a person regardless.
+bool isSelfOnly(Set<String>? held) =>
+    held != null &&
+    held.any((p) => p.startsWith('self.')) &&
+    held.every(selfScopedPermissions.contains);

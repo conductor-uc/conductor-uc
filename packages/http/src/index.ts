@@ -29,6 +29,15 @@ export {
   type ReadinessResult,
 } from './health.js';
 export {
+  createRemotePermissionResolver,
+  registerPermissionGuard,
+  selfActor,
+  type PermissionActor,
+  type PermissionResolver,
+  type RemotePermissionResolverOptions,
+  type SelfActor,
+} from './permission-guard.js';
+export {
   PROBLEM_CONTENT_TYPE,
   PROBLEM_TYPES,
   ProblemError,

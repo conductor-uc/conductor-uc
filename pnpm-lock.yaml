@@ -440,6 +440,9 @@ importers:
       '@cuc/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
+      '@cuc/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
       '@cuc/config':
         specifier: workspace:*
         version: link:../../packages/config
@@ -833,6 +836,9 @@ importers:
       '@cuc/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
+      '@cuc/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
       '@cuc/config':
         specifier: workspace:*
         version: link:../../packages/config

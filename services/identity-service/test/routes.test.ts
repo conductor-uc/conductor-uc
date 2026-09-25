@@ -7,6 +7,7 @@ import { registerGrantRoutes } from '../src/routes/grants.routes.js';
 import { registerInternalRoutes } from '../src/routes/internal.routes.js';
 import { registerJwksRoute } from '../src/routes/jwks.routes.js';
 import { createOrgAccess } from '../src/authz/org-access.js';
+import { createPermissionLookup } from '../src/authz/permission-lookup.js';
 import { registerRoleRoutes } from '../src/routes/roles.routes.js';
 import { startHarness, TEST_TTL, type Harness } from './harness.js';
 
@@ -14,17 +15,6 @@ const skipReason = await databaseOrSkipReason();
 
 const INTERNAL_TOKEN = 'test-internal-service-token';
 const HEADER_SECRET = 'test-internal-header-secret';
-
-/** A signed-in tenant admin of [orgId]. */
-function actorIn(orgId: string) {
-  return signInternalHeaders(HEADER_SECRET, {
-    actorId: 'actor-1',
-    actorType: 'user',
-    orgId,
-    orgType: 'tenant',
-    tenantId: orgId,
-  });
-}
 
 describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => {
   let h: Harness;
@@ -40,13 +30,10 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     registerAuthRoutes(app, h.auth);
     registerJwksRoute(app, createSigningKeyRepoFrom(h), TEST_TTL.signingKeyOverlapDays);
     registerInternalRoutes(app, h.users, h.roles, INTERNAL_TOKEN);
-    registerRoleRoutes(
-      app,
-      h.roles,
-      createOrgAccess({ lineage: () => Promise.resolve(undefined) }),
-      h.users,
-    );
-    registerGrantRoutes(app, h.grants);
+    const access = createOrgAccess({ lineage: () => Promise.resolve(undefined) });
+    const lookup = createPermissionLookup(h.users, h.roles, h.grants);
+    registerRoleRoutes(app, h.roles, access, h.users, lookup);
+    registerGrantRoutes(app, h.grants, access, lookup);
     await app.ready();
   });
 
@@ -263,7 +250,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const response = await app.inject({
         method: 'GET',
         url: `/v1/orgs/${orgId}/roles`,
-        headers: actorIn(orgId),
+        headers: await adminIn(orgId),
       });
 
       expect(response.statusCode).toBe(200);
@@ -278,7 +265,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const created = await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/roles`,
-        headers: actorIn(orgId),
+        headers: await adminIn(orgId),
         payload: { name: 'billing-viewer', permissions: ['cdr.read'] },
       });
       expect(created.statusCode).toBe(201);
@@ -291,7 +278,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const listed = await app.inject({
         method: 'GET',
         url: `/v1/orgs/${orgId}/roles`,
-        headers: actorIn(orgId),
+        headers: await adminIn(orgId),
       });
       const { rows } = listed.json<{ rows: { name: string; builtIn: boolean }[] }>();
       expect(rows.some((role) => role.name === 'billing-viewer' && !role.builtIn)).toBe(true);
@@ -302,14 +289,14 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/roles`,
-        headers: actorIn(orgId),
+        headers: await adminIn(orgId),
         payload: { name: 'dup', permissions: ['cdr.read'] },
       });
 
       const response = await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/roles`,
-        headers: actorIn(orgId),
+        headers: await adminIn(orgId),
         payload: { name: 'dup', permissions: ['analytics.view'] },
       });
 
@@ -322,7 +309,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const response = await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/roles`,
-        headers: actorIn(orgId),
+        headers: await adminIn(orgId),
         payload: { name: '', permissions: [] },
       });
 
@@ -339,7 +326,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const assigned = await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/roles/tenant_admin/assignments`,
-        headers: actorIn(orgId),
+        headers: await adminIn(orgId),
         payload: { userId },
       });
       expect(assigned.statusCode).toBe(204);
@@ -348,7 +335,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const revoked = await app.inject({
         method: 'DELETE',
         url: `/v1/orgs/${orgId}/roles/tenant_admin/assignments`,
-        headers: actorIn(orgId),
+        headers: await adminIn(orgId),
         payload: { userId },
       });
       expect(revoked.statusCode).toBe(204);
@@ -363,6 +350,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       const created = await app.inject({
         method: 'POST',
         url: `/v1/orgs/${orgId}/grants`,
+        headers: await adminIn(orgId),
         payload: {
           principalType: 'user',
           principalId: 'u1',
@@ -373,25 +361,38 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       expect(created.statusCode).toBe(201);
       const grantId = created.json<{ id: string }>().id;
 
-      const listed = await app.inject({ method: 'GET', url: `/v1/orgs/${orgId}/grants` });
+      const listed = await app.inject({
+        method: 'GET',
+        url: `/v1/orgs/${orgId}/grants`,
+        headers: await adminIn(orgId),
+      });
       expect(listed.json<{ rows: unknown[] }>().rows).toHaveLength(1);
 
       const deleted = await app.inject({
         method: 'DELETE',
         url: `/v1/orgs/${orgId}/grants/${grantId}`,
+        headers: await adminIn(orgId),
       });
       expect(deleted.statusCode).toBe(204);
       expect(
-        (await app.inject({ method: 'GET', url: `/v1/orgs/${orgId}/grants` })).json<{
+        (
+          await app.inject({
+            method: 'GET',
+            url: `/v1/orgs/${orgId}/grants`,
+            headers: await adminIn(orgId),
+          })
+        ).json<{
           rows: unknown[];
         }>().rows,
       ).toEqual([]);
     });
 
     it('returns a problem+json 404 for a grant that does not exist', async () => {
+      const orgId = crypto.randomUUID();
       const response = await app.inject({
         method: 'DELETE',
-        url: `/v1/orgs/${crypto.randomUUID()}/grants/${crypto.randomUUID()}`,
+        url: `/v1/orgs/${orgId}/grants/${crypto.randomUUID()}`,
+        headers: await adminIn(orgId),
       });
 
       expect(response.statusCode).toBe(404);
@@ -399,9 +400,11 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     });
 
     it('rejects an unknown scope type before it reaches the repo', async () => {
+      const orgId = crypto.randomUUID();
       const response = await app.inject({
         method: 'POST',
-        url: `/v1/orgs/${crypto.randomUUID()}/grants`,
+        url: `/v1/orgs/${orgId}/grants`,
+        headers: await adminIn(orgId),
         payload: {
           principalType: 'user',
           principalId: 'u1',
@@ -413,6 +416,33 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
       expect(response.statusCode).toBe(400);
     });
   });
+
+  /** A real, active tenant admin of [orgId], signed in as the gateway would forward them. */
+  async function adminIn(orgId: string) {
+    const email = 'operator@example.com';
+    const existing = await h.users.findByOrgAndEmail(orgId, email);
+    const user =
+      existing ??
+      (await h.users.create(
+        { requestId: 'test' },
+        {
+          orgId,
+          orgType: 'tenant',
+          resellerId: null,
+          email,
+          displayName: 'Operator',
+          password: 'correct horse battery staple',
+        },
+      ));
+    await h.roles.assignRole(user.id, 'tenant_admin', orgId);
+    return signInternalHeaders(HEADER_SECRET, {
+      actorId: user.id,
+      actorType: 'user',
+      orgId,
+      orgType: 'tenant',
+      tenantId: orgId,
+    });
+  }
 
   async function createUserViaInternal(
     target: Server,
