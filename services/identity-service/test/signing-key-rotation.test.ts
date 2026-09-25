@@ -10,9 +10,12 @@ import {
   type TestDatabaseHandle,
 } from '@cuc/testing';
 
-import { parseRotateSigningKeyArgs } from '../src/cli/rotate-signing-key-args.js';
+import {
+  parseRotateSigningKeyArgs,
+  runRotateSigningKey,
+} from '../src/cli/rotate-signing-key-command.js';
 import { createKekRewrapJob, ENCRYPTED_COLUMNS } from '../src/kek-rewrap.js';
-import type { RotationResult, SigningKey } from '../src/repo/signing-key.repo.js';
+import type { RotationStep } from '../src/repo/signing-key.repo.js';
 import { createSigningKeyRepo } from '../src/repo/signing-key.repo.js';
 import type { IdentityServiceDb } from '../src/schema.js';
 import { createSigningKeyRotator } from '../src/signing-key-rotation.js';
@@ -21,14 +24,31 @@ import { migrations } from './fixtures/migrations.js';
 const skipReason = await databaseOrSkipReason();
 
 describe('rotate-signing-key arguments', () => {
-  it('defaults to a plain rotation', () => {
-    expect(parseRotateSigningKeyArgs([])).toEqual({ revokePrevious: false, help: false });
+  it('defaults to a publish-ahead rotation', () => {
+    expect(parseRotateSigningKeyArgs([])).toEqual({
+      now: false,
+      revokePrevious: false,
+      help: false,
+    });
   });
 
-  it('accepts --revoke-previous', () => {
+  it('accepts --now', () => {
+    expect(parseRotateSigningKeyArgs(['--now'])).toEqual({
+      now: true,
+      revokePrevious: false,
+      help: false,
+    });
+  });
+
+  it('--revoke-previous implies --now', () => {
     expect(parseRotateSigningKeyArgs(['--revoke-previous'])).toEqual({
+      now: true,
       revokePrevious: true,
       help: false,
+    });
+    expect(parseRotateSigningKeyArgs(['--revoke-previous', '--now'])).toMatchObject({
+      now: true,
+      revokePrevious: true,
     });
   });
 
@@ -47,79 +67,94 @@ describe('rotate-signing-key arguments', () => {
 });
 
 describe('signing key rotator', () => {
-  const rotation = (): RotationResult => ({
-    previousKeyId: 'old',
-    previousCreatedAt: new Date('2026-01-01T00:00:00Z'),
-    current: { id: 'new' } as SigningKey,
-    revoked: 0,
-  });
+  const NONE: RotationStep = { action: 'none' };
 
-  it('asks the repository to rotate past the configured age, at the injected time', async () => {
-    const rotateIfOlderThan = vi.fn().mockResolvedValue(null);
+  it('asks the repository to stage past the configured age and promote after publish-ahead', async () => {
+    const advance = vi.fn().mockResolvedValue(NONE);
     const now = new Date('2026-09-25T00:00:00Z');
     const rotator = createSigningKeyRotator({
-      signingKeys: { rotateIfOlderThan },
+      signingKeys: { advance },
       rotationDays: 90,
+      publishAheadMinutes: 15,
       logger: silentLogger(),
       now: () => now,
     });
 
-    expect(await rotator.runOnce()).toBeNull();
-    expect(rotateIfOlderThan).toHaveBeenCalledWith(90, now);
+    expect(await rotator.runOnce()).toBe(NONE);
+    expect(advance).toHaveBeenCalledWith({ stage: 90, publishAheadMinutes: 15, now });
   });
 
-  it('returns what a rotation did', async () => {
-    const result = rotation();
+  it('with SIGNING_KEY_ROTATION_DAYS at 0, never stages but still promotes', async () => {
+    const advance = vi.fn().mockResolvedValue(NONE);
     const rotator = createSigningKeyRotator({
-      signingKeys: { rotateIfOlderThan: vi.fn().mockResolvedValue(result) },
-      rotationDays: 90,
+      signingKeys: { advance },
+      rotationDays: 0,
+      publishAheadMinutes: 15,
       logger: silentLogger(),
     });
 
-    expect(await rotator.runOnce()).toBe(result);
+    await rotator.runOnce();
+    expect(advance).toHaveBeenCalledWith(expect.objectContaining({ stage: 'never' }));
+  });
+
+  it('returns what the step did', async () => {
+    const step: RotationStep = {
+      action: 'promoted',
+      previousKeyId: 'old',
+      previousCreatedAt: new Date('2026-01-01T00:00:00Z'),
+      currentKeyId: 'new',
+    };
+    const rotator = createSigningKeyRotator({
+      signingKeys: { advance: vi.fn().mockResolvedValue(step) },
+      rotationDays: 90,
+      publishAheadMinutes: 15,
+      logger: silentLogger(),
+    });
+
+    expect(await rotator.runOnce()).toBe(step);
   });
 
   it('shares one check between overlapping calls', async () => {
-    let release!: (value: RotationResult | null) => void;
-    const rotateIfOlderThan = vi.fn(
-      () => new Promise<RotationResult | null>((resolve) => (release = resolve)),
-    );
+    let release!: (value: RotationStep) => void;
+    const advance = vi.fn(() => new Promise<RotationStep>((resolve) => (release = resolve)));
     const rotator = createSigningKeyRotator({
-      signingKeys: { rotateIfOlderThan },
+      signingKeys: { advance },
       rotationDays: 90,
+      publishAheadMinutes: 15,
       logger: silentLogger(),
     });
 
     const first = rotator.runOnce();
     const second = rotator.runOnce();
-    release(null);
+    release(NONE);
 
-    expect(await first).toBeNull();
-    expect(await second).toBeNull();
-    expect(rotateIfOlderThan).toHaveBeenCalledTimes(1);
+    expect(await first).toBe(NONE);
+    expect(await second).toBe(NONE);
+    expect(advance).toHaveBeenCalledTimes(1);
   });
 
   it('runs the first check shortly after start, then on the interval, and stops', async () => {
     vi.useFakeTimers();
     try {
-      const rotateIfOlderThan = vi.fn().mockResolvedValue(null);
+      const advance = vi.fn().mockResolvedValue(NONE);
       const rotator = createSigningKeyRotator({
-        signingKeys: { rotateIfOlderThan },
+        signingKeys: { advance },
         rotationDays: 90,
+        publishAheadMinutes: 15,
         logger: silentLogger(),
       });
 
       rotator.start(60_000, 1_000);
       await vi.advanceTimersByTimeAsync(999);
-      expect(rotateIfOlderThan).toHaveBeenCalledTimes(0);
+      expect(advance).toHaveBeenCalledTimes(0);
       await vi.advanceTimersByTimeAsync(1);
-      expect(rotateIfOlderThan).toHaveBeenCalledTimes(1);
+      expect(advance).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(60_000);
-      expect(rotateIfOlderThan).toHaveBeenCalledTimes(2);
+      expect(advance).toHaveBeenCalledTimes(2);
 
       await rotator.stop();
       await vi.advanceTimersByTimeAsync(120_000);
-      expect(rotateIfOlderThan).toHaveBeenCalledTimes(2);
+      expect(advance).toHaveBeenCalledTimes(2);
     } finally {
       vi.useRealTimers();
     }
@@ -128,23 +163,117 @@ describe('signing key rotator', () => {
   it('survives a failed check', async () => {
     vi.useFakeTimers();
     try {
-      const rotateIfOlderThan = vi
+      const advance = vi
         .fn()
         .mockRejectedValueOnce(new Error('database down'))
-        .mockResolvedValue(null);
+        .mockResolvedValue(NONE);
       const rotator = createSigningKeyRotator({
-        signingKeys: { rotateIfOlderThan },
+        signingKeys: { advance },
         rotationDays: 90,
+        publishAheadMinutes: 15,
         logger: silentLogger(),
       });
 
       rotator.start(1_000, 0);
       await vi.advanceTimersByTimeAsync(1_000);
-      expect(rotateIfOlderThan).toHaveBeenCalledTimes(2);
+      expect(advance).toHaveBeenCalledTimes(2);
       await rotator.stop();
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe.skipIf(skipReason !== undefined)('rotate-signing-key command', () => {
+  const kek = new FileKekProvider({ keys: { '1': randomBytes(32) }, currentVersion: '1' });
+  const settings = { publishAheadMinutes: 15, overlapDays: 7 };
+  const MINUTE = 60 * 1000;
+
+  let handle: TestDatabaseHandle;
+  let db: Database<IdentityServiceDb>;
+
+  beforeAll(async () => {
+    handle = await startTestDatabase();
+    db = createDatabase<IdentityServiceDb>({
+      host: handle.host,
+      port: handle.port,
+      user: handle.user,
+      password: handle.password,
+      database: handle.database,
+      logger: silentLogger(),
+    });
+    await migrateToLatest({ db: db.kysely, migrations, logger: silentLogger() });
+    await createSigningKeyRepo(db, kek).ensureCurrentKey();
+  });
+
+  afterAll(async () => {
+    await db?.destroy();
+    await handle?.stop();
+  });
+
+  const ids = async () =>
+    (await createSigningKeyRepo(db, kek).forVerification(7)).map((key) => key.id).sort();
+
+  it('by default stages a published next key, says when it signs, and a later run promotes it', async () => {
+    const repo = createSigningKeyRepo(db, kek);
+    const before = await repo.current();
+    const start = new Date();
+    const args = parseRotateSigningKeyArgs([]);
+
+    const staged = await runRotateSigningKey(repo, args, settings, start);
+    expect(staged.message).toMatch(/published; it starts signing after/);
+    const nextId = staged.fields['nextKeyId'] as string;
+    expect(staged.fields['promotesAfter']).toBe(
+      new Date(start.getTime() + 15 * MINUTE).toISOString(),
+    );
+    expect((await repo.current()).id).toBe(before.id);
+    expect(await ids()).toContain(nextId);
+
+    const early = await runRotateSigningKey(
+      repo,
+      args,
+      settings,
+      new Date(start.getTime() + MINUTE),
+    );
+    expect(early.message).toMatch(/not due yet/);
+    expect((await repo.current()).id).toBe(before.id);
+
+    const due = await runRotateSigningKey(
+      repo,
+      args,
+      settings,
+      new Date(start.getTime() + 16 * MINUTE),
+    );
+    expect(due.message).toMatch(/promoted/);
+    expect((await repo.current()).id).toBe(nextId);
+    expect(await ids()).toEqual(expect.arrayContaining([before.id, nextId]));
+  });
+
+  it('--now switches at once and keeps the previous key published', async () => {
+    const repo = createSigningKeyRepo(db, kek);
+    const before = await repo.current();
+
+    const outcome = await runRotateSigningKey(repo, parseRotateSigningKeyArgs(['--now']), settings);
+
+    expect(outcome.message).toMatch(/rotated now/);
+    expect((await repo.current()).id).toBe(outcome.fields['keyId']);
+    expect(await ids()).toContain(before.id);
+  });
+
+  it('--revoke-previous switches at once, even with a key published ahead, and leaves only the new key', async () => {
+    const repo = createSigningKeyRepo(db, kek);
+    await runRotateSigningKey(repo, parseRotateSigningKeyArgs([]), settings);
+    expect((await ids()).length).toBeGreaterThan(2);
+
+    const outcome = await runRotateSigningKey(
+      repo,
+      parseRotateSigningKeyArgs(['--revoke-previous']),
+      settings,
+    );
+
+    expect(outcome.message).toMatch(/revoked/);
+    expect((await repo.current()).id).toBe(outcome.fields['keyId']);
+    expect(await ids()).toEqual([outcome.fields['keyId']]);
   });
 });
 

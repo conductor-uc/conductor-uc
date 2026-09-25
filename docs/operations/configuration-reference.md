@@ -153,7 +153,7 @@ Groups: base only. No database, no NATS, no storage.
 | `ROUTE_TABLE` | built-in table | no | Path-to-service map. **Leave unset**: the default matches the services. |
 | `PUBLIC_ROUTE_PREFIXES` | `/v1/auth,/v1/public` | no | Paths reachable without a token. Leave unset. |
 | `ACCESS_TOKEN_ALGORITHM` | `EdDSA` | no | Leave unset |
-| `JWKS_CACHE_MAX_AGE_MS` / `JWKS_COOLDOWN_MS` | `600000` / `30000` | no | Signing-key cache |
+| `JWKS_CACHE_MAX_AGE_MS` / `JWKS_COOLDOWN_MS` | `600000` / `30000` | no | Signing-key cache. Keep the cache age shorter than identity-service's `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` (15 minutes), so a new signing key is fetched before it signs. |
 | `PROXY_TIMEOUT_MS` | `15000` | no | Upstream timeout |
 
 Certificate lookup order for each TLS connection: `TLS_CERT_DIR`, then org-service, then the default file. The gateway never presents SIP certificates.
@@ -170,13 +170,14 @@ Groups: base, database (`identity_service`), events, signed headers, crypto.
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | no | Sliding session lifetime |
 | `MFA_TICKET_TTL_SECONDS` | `300` | no | Time to enter a two-step code |
 | `SIGNING_KEY_OVERLAP_DAYS` | `7` | no | How long a retired signing key stays published, so tokens it signed keep verifying. Keep it longer than `ACCESS_TOKEN_TTL_SECONDS`. |
-| `SIGNING_KEY_ROTATION_DAYS` | `90` | no | Rotate the signing key automatically once it is this old. Every copy checks hourly and 30 s after startup; exactly one rotates. `0` turns automatic rotation off. |
+| `SIGNING_KEY_ROTATION_DAYS` | `90` | no | Start rotating the signing key once it has signed for this many days: a new key is published, then promoted after `SIGNING_KEY_PUBLISH_AHEAD_MINUTES`. Every copy checks every 5 minutes and 30 s after startup; exactly one acts. `0` turns automatic rotation off (a key published by `rotate-signing-key` is still promoted on time). |
+| `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` | `15` | no | How long a new signing key is published in the key set before it signs anything. **Must be longer than api-gateway's `JWKS_CACHE_MAX_AGE_MS`** (10 minutes by default), so every gateway has refetched the key set, and holds the new key, before the first token it signed arrives. Raise both together. |
 | `PASSWORD_RESET_TTL_MINUTES` | `60` | no | |
 | `INVITATION_TTL_DAYS` | `7` | no | |
 | `COOKIE_SECURE` | `true` | no | `Secure` flag on the refresh cookie. **Keep `true`** in production (HTTPS only). |
 | `DEV_EXPOSE_TOKENS` | `false` | no | Logs reset and invitation tokens. **Never in production.** |
 
-Signing keys (Ed25519) are generated at first start and stored in its database, encrypted with `CRYPTO_KEKS`. They rotate automatically (`SIGNING_KEY_ROTATION_DAYS`), and an operator can rotate at any time with the `rotate-signing-key` command, adding `--revoke-previous` if a key may have leaked ([operations §6](operations.md#6-rotating-secrets)). Every copy signs with the new key from its next token; nothing needs a restart.
+Signing keys (Ed25519) are generated at first start and stored in its database, encrypted with `CRYPTO_KEKS`. Rotation is published ahead, in two steps: the next key is first added to the key set (`/.well-known/jwks.json`) without signing anything, and only after `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` does it become the key that signs; the previous key stays published for `SIGNING_KEY_OVERLAP_DAYS`. So the gateway never sees a token signed with a key it has not fetched. This happens automatically (`SIGNING_KEY_ROTATION_DAYS`), and an operator can start it at any time with the `rotate-signing-key` command, or switch at once with `--now` or, if a key may have leaked, `--revoke-previous` ([operations §6](operations.md#6-rotating-secrets)). Every copy signs with the new key from its next token after the switch; nothing needs a restart.
 
 ### 4.3 org-service
 

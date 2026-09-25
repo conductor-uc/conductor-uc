@@ -130,21 +130,21 @@ const tokenRepo = createTokenRepo(db);
 // signs or verifies a token.
 await signingKeyRepo.ensureCurrentKey();
 
-// G-116: rotate the signing key once it is SIGNING_KEY_ROTATION_DAYS old.
-// Safe in every copy of the service; see createSigningKeyRotator.
-const signingKeyRotator =
-  config.SIGNING_KEY_ROTATION_DAYS > 0
-    ? createSigningKeyRotator({
-        signingKeys: signingKeyRepo,
-        rotationDays: config.SIGNING_KEY_ROTATION_DAYS,
-        logger,
-      })
-    : undefined;
-if (signingKeyRotator === undefined) {
+// G-116: publish-ahead rotation. Stages a next key once the current one is
+// SIGNING_KEY_ROTATION_DAYS old and promotes it after
+// SIGNING_KEY_PUBLISH_AHEAD_MINUTES. Runs even with rotation days at 0, so a key
+// staged by `rotate-signing-key` is still promoted. Safe in every copy of the
+// service; see createSigningKeyRotator.
+const signingKeyRotator = createSigningKeyRotator({
+  signingKeys: signingKeyRepo,
+  rotationDays: config.SIGNING_KEY_ROTATION_DAYS,
+  publishAheadMinutes: config.SIGNING_KEY_PUBLISH_AHEAD_MINUTES,
+  logger,
+});
+if (config.SIGNING_KEY_ROTATION_DAYS === 0) {
   logger.warn('SIGNING_KEY_ROTATION_DAYS is 0: signing keys are not rotated automatically');
-} else {
-  signingKeyRotator.start();
 }
+signingKeyRotator.start();
 
 const authService = createAuthService({
   users: userRepo,
@@ -210,7 +210,7 @@ async function shutdown(signal: string): Promise<void> {
   await auditConsumerLoop;
   await bus.close();
   await kekRewrap.stop();
-  await signingKeyRotator?.stop();
+  await signingKeyRotator.stop();
   await db.destroy();
   logger.info('shutdown complete');
   process.exit(0);
