@@ -90,6 +90,12 @@ interface Connection {
   readonly socket: WebSocket;
   readonly meta: ConnectionMeta;
   readonly subscriptions: Map<string, Subscription>;
+  /**
+   * Subscribes still being authorized or audited, by topic name. A later
+   * subscribe or unsubscribe for the same topic replaces or removes the entry,
+   * and the earlier attempt then gives up instead of creating the subscription.
+   */
+  readonly inFlight: Map<string, symbol>;
   actor: RealtimeActor | undefined;
   authTimer: NodeJS.Timeout | undefined;
   expiryTimer: NodeJS.Timeout | undefined;
@@ -237,6 +243,7 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
     clearTimeout(connection.authTimer);
     clearTimeout(connection.expiryTimer);
     for (const name of [...connection.subscriptions.keys()]) removeSubscription(connection, name);
+    connection.inFlight.clear();
     decrement(perIp, connection.meta.ip);
     if (connection.actor !== undefined) decrement(perUser, userKey(connection.actor));
   }
@@ -368,14 +375,21 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
     }
     // Subscribing again to the same topic replaces it: a way to get a fresh snapshot.
     removeSubscription(connection, name);
-    if (connection.subscriptions.size >= limits.maxSubscriptions) {
+    // Subscribes still in flight count too, so a burst of them cannot pass the limit together.
+    const inFlightOthers = connection.inFlight.size - (connection.inFlight.has(name) ? 1 : 0);
+    if (connection.subscriptions.size + inFlightOthers >= limits.maxSubscriptions) {
       sendError(connection, 'too_many_subscriptions', { topic: name, id });
       return;
     }
+    const attempt = Symbol(name);
+    connection.inFlight.set(name, attempt);
+    /** False once this attempt was superseded, cancelled by an unsubscribe, or its connection closed. */
+    const current = () => connections.has(connection) && connection.inFlight.get(name) === attempt;
 
     const verdict = await options.authorizer.authorize(actor, topic);
-    if (!connections.has(connection)) return;
+    if (!current()) return;
     if (!verdict.allowed) {
+      connection.inFlight.delete(name);
       logger.info(
         { topic: name, code: verdict.code, actorOrgId: actor.orgId },
         'realtime subscription refused',
@@ -384,6 +398,7 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
       return;
     }
     if (feed?.live !== true) {
+      connection.inFlight.delete(name);
       sendError(connection, 'unavailable', { topic: name, id });
       return;
     }
@@ -402,13 +417,13 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
           { err: error, topic: name },
           'could not audit a private subscription; refused',
         );
+        if (connection.inFlight.get(name) === attempt) connection.inFlight.delete(name);
         sendError(connection, 'unavailable', { topic: name, id });
         return;
       }
     }
-    if (!connections.has(connection)) return;
-    // Another subscribe for the same topic may have raced this one.
-    removeSubscription(connection, name);
+    if (!current()) return;
+    connection.inFlight.delete(name);
     if (connection.subscriptions.size >= limits.maxSubscriptions) {
       sendError(connection, 'too_many_subscriptions', { topic: name, id });
       return;
@@ -524,8 +539,10 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
       });
       return;
     }
+    // An unsubscribe also cancels a subscribe for the topic that is still being authorized.
+    const cancelled = connection.inFlight.delete(message.topic);
     const removed = removeSubscription(connection, message.topic);
-    if (removed === undefined) {
+    if (removed === undefined && !cancelled) {
       sendError(connection, 'not_subscribed', { topic: message.topic, id: message.id });
       return;
     }
@@ -575,6 +592,7 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
         socket,
         meta,
         subscriptions: new Map(),
+        inFlight: new Map(),
         actor: undefined,
         authTimer: undefined,
         expiryTimer: undefined,

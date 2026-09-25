@@ -138,8 +138,13 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
 
   /** What each person holds, by `${orgId}:${userId}`. A test changes it to revoke. */
   const held = new Map<string, Set<string>>();
-  const permissions: PermissionResolver = (actor, permission) =>
-    Promise.resolve(held.get(`${actor.orgId}:${actor.id}`)?.has(permission) ?? false);
+  /** A person whose permission lookups wait on a gate, by `${orgId}:${userId}`; a test holds it open. */
+  const gates = new Map<string, Promise<void>>();
+  const permissions: PermissionResolver = async (actor, permission) => {
+    const key = `${actor.orgId}:${actor.id}`;
+    await gates.get(key);
+    return held.get(key)?.has(permission) ?? false;
+  };
 
   /** The live calls the fake call-control answers with, by tenant. */
   const liveCalls = new Map<string, object[]>();
@@ -501,6 +506,64 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
       expect(await client.subscribe(topic(TENANT_A, 'queues'))).toMatchObject({
         type: 'subscribed',
       });
+      client.close();
+    });
+
+    it('cancels a subscribe still being authorized when the client unsubscribes', async () => {
+      const who = person(TENANT_A, 'tenant', ['monitor.presence', 'queue.read']);
+      const client = await connectAs(who);
+      let release = () => {};
+      gates.set(
+        `${who.org}:${who.sub}`,
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+      );
+      const presence = topic(TENANT_A, 'presence');
+      client.send({ type: 'subscribe', topic: presence, id: 's1' });
+      client.send({ type: 'unsubscribe', topic: presence, id: 'u1' });
+      expect(await client.next((m) => m['id'] === 'u1')).toEqual({
+        type: 'unsubscribed',
+        topic: presence,
+        id: 'u1',
+      });
+      release();
+      gates.delete(`${who.org}:${who.sub}`);
+      // A later subscribe is answered, and the cancelled one never was.
+      expect(await client.subscribe(topic(TENANT_A, 'queues'))).toMatchObject({
+        type: 'subscribed',
+      });
+      expect(client.messages.filter((m) => m['topic'] === presence)).toEqual([
+        { type: 'unsubscribed', topic: presence, id: 'u1' },
+      ]);
+      client.close();
+    });
+
+    it('counts subscribes still being authorized against the limit', async () => {
+      const who = person(TENANT_A, 'tenant', ['monitor.presence', 'queue.read', 'monitor.calls']);
+      const client = await connectAs(who);
+      let release = () => {};
+      gates.set(
+        `${who.org}:${who.sub}`,
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+      );
+      for (const kind of ['presence', 'queues', 'calls']) {
+        client.send({ type: 'subscribe', topic: topic(TENANT_A, kind) });
+      }
+      client.send({ type: 'subscribe', topic: topic(TENANT_B, 'presence'), id: 'fourth' });
+      expect(await client.next((m) => m['id'] === 'fourth')).toMatchObject({
+        type: 'error',
+        code: 'too_many_subscriptions',
+      });
+      release();
+      gates.delete(`${who.org}:${who.sub}`);
+      for (const kind of ['presence', 'queues', 'calls']) {
+        expect(
+          await client.next((m) => m.type === 'subscribed' && m['topic'] === topic(TENANT_A, kind)),
+        ).toBeDefined();
+      }
       client.close();
     });
 
