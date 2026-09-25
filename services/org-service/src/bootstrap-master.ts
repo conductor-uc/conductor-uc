@@ -79,15 +79,23 @@ export async function bootstrapMaster(
 ): Promise<BootstrapResult> {
   let orgId: string;
   let masterCreated: boolean;
-  try {
-    orgId = (await deps.repo.createMaster({ slug: input.slug, name: input.name })).id;
-    masterCreated = true;
-  } catch (error) {
-    if (!(error instanceof MasterAlreadyExistsError)) throw error;
-    const existing = await deps.repo.findMaster();
-    if (existing === undefined) throw error;
-    orgId = existing.id;
+  // Look first, so an ordinary re-run never attempts the insert (a failed
+  // insert is logged as a query error). The catch covers a concurrent run.
+  const found = await deps.repo.findMaster();
+  if (found !== undefined) {
+    orgId = found.id;
     masterCreated = false;
+  } else {
+    try {
+      orgId = (await deps.repo.createMaster({ slug: input.slug, name: input.name })).id;
+      masterCreated = true;
+    } catch (error) {
+      if (!(error instanceof MasterAlreadyExistsError)) throw error;
+      const existing = await deps.repo.findMaster();
+      if (existing === undefined) throw error;
+      orgId = existing.id;
+      masterCreated = false;
+    }
   }
 
   if (input.admin === undefined)

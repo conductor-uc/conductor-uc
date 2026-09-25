@@ -100,9 +100,10 @@ describe('bootstrapMaster', () => {
 
   it('re-run: keeps the existing master and creates its administrator if it has none', async () => {
     const createAdminUser = creator(() => Promise.resolve({ id: 'u-2', email: ADMIN.email }));
+    const repo = fakeRepo(true);
 
     const result = await bootstrapMaster(
-      { repo: fakeRepo(true), createAdminUser },
+      { repo, createAdminUser },
       { slug: 'master', name: 'Master', admin: ADMIN },
     );
 
@@ -110,6 +111,30 @@ describe('bootstrapMaster', () => {
       orgId: 'master-1',
       masterCreated: false,
       admin: { status: 'created', userId: 'u-2' },
+    });
+    // Found first, so no insert is attempted (and none is logged as failed).
+    expect(repo.createMaster).not.toHaveBeenCalled();
+  });
+
+  it('a concurrent run that created the master first is treated as "already exists"', async () => {
+    const findMaster = vi
+      .fn<() => Promise<Org | undefined>>()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValue(MASTER);
+    const repo = {
+      createMaster: () => Promise.reject(new MasterAlreadyExistsError()),
+      findMaster,
+    };
+
+    const result = await bootstrapMaster(
+      { repo, createAdminUser: creator(() => Promise.reject(new OrgHasUsersError('x'))) },
+      { slug: 'master', name: 'Master', admin: ADMIN },
+    );
+
+    expect(result).toEqual({
+      orgId: 'master-1',
+      masterCreated: false,
+      admin: { status: 'already_present' },
     });
   });
 
