@@ -169,9 +169,13 @@ export function registerBrandRoutes(
     },
     async (request, reply) => {
       const key = `brand/${request.params.id}/${request.body.kind}-${randomUUID()}`;
-      const uploadUrl = await storage
-        .forPlatform()
-        .presignPut(key, { contentType: request.body.contentType });
+      const platform = storage.forPlatform();
+      // A presigned PUT into a bucket that does not exist fails only at upload time
+      // (`NoSuchBucket`), so a fresh installation's first logo upload needs the platform
+      // bucket created here (G-37). `@cuc/storage` does the work once per process; later
+      // calls return straight away.
+      await platform.provisionBucket();
+      const uploadUrl = await platform.presignPut(key, { contentType: request.body.contentType });
       return reply.status(201).send({ uploadUrl, key });
     },
   );

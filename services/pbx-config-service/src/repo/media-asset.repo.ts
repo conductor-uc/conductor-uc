@@ -155,9 +155,8 @@ export function createMediaAssetRepo(db: Database<PbxConfigServiceDb>, storage: 
       // provisioned this tenant" ourselves. Live-verified this is not
       // optional: a presigned PUT against a bucket that was never
       // provisioned 404s as `NoSuchBucket` on the real upload, not at
-      // presign time (a pre-existing gap found this way in org-service's
-      // own S1-04 brand-asset route, which skips this call — flagged,
-      // docs/decisions.md).
+      // presign time (the same gap org-service's brand-asset route had
+      // until G-37 was fixed).
       await tenantStorage.provisionBucket();
       const uploadUrl = await tenantStorage.presignPut(objectKey, { contentType });
 
