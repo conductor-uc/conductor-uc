@@ -579,6 +579,43 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
     expect(walled.json).toMatchObject({ code: 'reseller_private_data_denied' });
   });
 
+  it('6. recordings: the tenant admin manages rules and retention and reads an empty list; the reseller is walled out', async () => {
+    // recording-service asks identity-service what this admin may do, per request.
+    const recordings = await tenant<{ rows: unknown[] }>('GET', '/recordings');
+    expect(recordings.status, recordings.text).toBe(200);
+    expect(recordings.json.rows).toEqual([]);
+
+    const rule = await tenant<{ id: string }>('POST', '/recording-policies', {
+      scopeType: 'tenant',
+      action: 'record',
+      announce: true,
+    });
+    expect(rule.status, rule.text).toBe(201);
+    const rules = await tenant<{ rows: { id: string }[] }>('GET', '/recording-policies');
+    expect(rules.json.rows.map((r) => r.id)).toEqual([rule.json.id]);
+    const duplicate = await tenant('POST', '/recording-policies', {
+      scopeType: 'tenant',
+      action: 'no_record',
+    });
+    expect(duplicate.status).toBe(409);
+
+    const settings = await tenant<{ retentionDays: number }>('PUT', '/recording-settings', {
+      retentionDays: 30,
+    });
+    expect(settings.status, settings.text).toBe(200);
+    expect((await tenant<{ retentionDays: number }>('GET', '/recording-settings')).json).toEqual({
+      retentionDays: 30,
+    });
+
+    // H1 through the gateway: a reseller never reads a tenant's recordings, and holds no
+    // permission over its recording rules either.
+    const walled = await reseller.call('GET', `/v1/tenants/${tenantId}/recordings`);
+    expect(walled.status).toBe(403);
+    expect(walled.json).toMatchObject({ code: 'reseller_private_data_denied' });
+    const noRules = await reseller.call('GET', `/v1/tenants/${tenantId}/recording-policies`);
+    expect(noRules.status).toBe(403);
+  });
+
   it('1. logging out ends the cookie session', async () => {
     const r = await master.call('POST', '/v1/auth/logout', {}, { auth: false });
     expect(r.status).toBe(204);
