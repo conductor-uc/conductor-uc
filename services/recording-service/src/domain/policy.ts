@@ -1,0 +1,194 @@
+/**
+ * Recording policies and how one is chosen for a call (S5-01). Pure: no DB, no HTTP.
+ *
+ * ## Precedence
+ *
+ * A policy names a scope (the tenant, one extension, one queue, or one DID), a
+ * direction (`inbound`, `outbound`, `internal`, or `any`), and an action
+ * (`record` or `no_record`), optionally with a consent announcement. Given one
+ * call, the policies that *match* it are those whose scope names something on the
+ * call and whose direction is `any` or the call's own. Of those, exactly one
+ * group decides:
+ *
+ * 1. **The narrowest scope wins.** `extension` beats `queue`, which beats `did`,
+ *    which beats `tenant`. A person's own setting overrides the queue they answer,
+ *    which overrides the number that was dialled, which overrides the tenant default.
+ * 2. **Within a scope, a policy naming the call's direction beats `any`.**
+ * 3. **Whatever still ties is resolved towards privacy:** if any tied policy says
+ *    `no_record`, the call is not recorded. Ties happen only when a call carries
+ *    two different scopes of the same kind (two extensions on an internal call).
+ *    Of tied `record` policies, the call is announced if any of them announces.
+ * 4. **No matching policy means no recording**, and no announcement.
+ *
+ * A `no_record` policy never announces: nothing is being recorded to consent to.
+ */
+
+export const POLICY_SCOPE_TYPES = ['tenant', 'extension', 'queue', 'did'] as const;
+export type PolicyScopeType = (typeof POLICY_SCOPE_TYPES)[number];
+
+export const POLICY_DIRECTIONS = ['any', 'inbound', 'outbound', 'internal'] as const;
+export type PolicyDirection = (typeof POLICY_DIRECTIONS)[number];
+
+export const CALL_DIRECTIONS = ['inbound', 'outbound', 'internal'] as const;
+export type CallDirection = (typeof CALL_DIRECTIONS)[number];
+
+export const POLICY_ACTIONS = ['record', 'no_record'] as const;
+export type PolicyAction = (typeof POLICY_ACTIONS)[number];
+
+/** Narrower scopes have a higher rank and win. */
+const SCOPE_RANK: Readonly<Record<PolicyScopeType, number>> = {
+  tenant: 0,
+  did: 1,
+  queue: 2,
+  extension: 3,
+};
+
+export interface Policy {
+  readonly id: string;
+  readonly scopeType: PolicyScopeType;
+  /** For scope `tenant`, the tenant's own id. */
+  readonly scopeId: string;
+  readonly direction: PolicyDirection;
+  readonly action: PolicyAction;
+  readonly announce: boolean;
+  readonly consentAssetId: string | null;
+}
+
+/** What telephony-config knows about one call at setup time. */
+export interface CallContext {
+  readonly direction: CallDirection;
+  /** Every extension on the call (the caller and the callee of an internal call). */
+  readonly extensionIds: readonly string[];
+  readonly queueId?: string | null | undefined;
+  readonly didId?: string | null | undefined;
+}
+
+export interface Decision {
+  readonly record: boolean;
+  readonly announce: boolean;
+  /** The media asset to play as the announcement; null plays the neutral default. */
+  readonly consentAssetId: string | null;
+  readonly policyId: string | null;
+  readonly reason: 'policy' | 'default';
+}
+
+export const NO_RECORDING: Decision = {
+  record: false,
+  announce: false,
+  consentAssetId: null,
+  policyId: null,
+  reason: 'default',
+};
+
+export class InvalidPolicyError extends Error {
+  override readonly name = 'InvalidPolicyError';
+}
+
+export function policyMatches(policy: Policy, call: CallContext): boolean {
+  if (policy.direction !== 'any' && policy.direction !== call.direction) return false;
+  switch (policy.scopeType) {
+    case 'tenant':
+      return true;
+    case 'extension':
+      return call.extensionIds.includes(policy.scopeId);
+    case 'queue':
+      return call.queueId !== undefined && call.queueId !== null && call.queueId === policy.scopeId;
+    case 'did':
+      return call.didId !== undefined && call.didId !== null && call.didId === policy.scopeId;
+  }
+}
+
+/** Chooses the decision for `call` among `policies` (all of one tenant). */
+export function evaluatePolicies(policies: readonly Policy[], call: CallContext): Decision {
+  const matching = policies.filter((policy) => policyMatches(policy, call));
+  if (matching.length === 0) return NO_RECORDING;
+
+  const specificity = (policy: Policy): number =>
+    SCOPE_RANK[policy.scopeType] * 2 + (policy.direction === 'any' ? 0 : 1);
+  const top = Math.max(...matching.map(specificity));
+  // Sorted by id so a tie resolves the same way on every node and every call.
+  const tied = matching.filter((policy) => specificity(policy) === top).sort(byId);
+
+  const refusal = tied.find((policy) => policy.action === 'no_record');
+  if (refusal !== undefined) {
+    return {
+      record: false,
+      announce: false,
+      consentAssetId: null,
+      policyId: refusal.id,
+      reason: 'policy',
+    };
+  }
+
+  const announcing = tied.filter((policy) => policy.announce);
+  return {
+    record: true,
+    announce: announcing.length > 0,
+    consentAssetId:
+      announcing.find((policy) => policy.consentAssetId !== null)?.consentAssetId ?? null,
+    policyId: tied[0]!.id,
+    reason: 'policy',
+  };
+}
+
+function byId(a: Policy, b: Policy): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+export interface PolicyInput {
+  readonly scopeType: PolicyScopeType;
+  readonly scopeId?: string | undefined;
+  readonly direction: PolicyDirection;
+  readonly action: PolicyAction;
+  readonly announce: boolean;
+  readonly consentAssetId?: string | null | undefined;
+}
+
+/** A policy ready to store: `scopeId` resolved and the combination checked. */
+export interface ValidPolicy {
+  readonly scopeType: PolicyScopeType;
+  readonly scopeId: string;
+  readonly direction: PolicyDirection;
+  readonly action: PolicyAction;
+  readonly announce: boolean;
+  readonly consentAssetId: string | null;
+}
+
+/** Checks a proposed policy. `tenantId` is the scope id of a tenant-wide one. */
+export function validatePolicy(input: PolicyInput, tenantId: string): ValidPolicy {
+  let scopeId: string;
+  if (input.scopeType === 'tenant') {
+    if (input.scopeId !== undefined && input.scopeId !== tenantId) {
+      throw new InvalidPolicyError("A tenant-wide policy cannot name another tenant's scope.");
+    }
+    scopeId = tenantId;
+  } else {
+    const named = input.scopeId?.trim() ?? '';
+    if (named === '' || named.length > 36) {
+      throw new InvalidPolicyError(
+        `A ${input.scopeType} policy needs the ${input.scopeType}'s id.`,
+      );
+    }
+    scopeId = named;
+  }
+
+  if (input.action === 'no_record' && input.announce) {
+    throw new InvalidPolicyError('A policy that does not record has nothing to announce.');
+  }
+  const consentAssetId = input.consentAssetId ?? null;
+  if (consentAssetId !== null && !input.announce) {
+    throw new InvalidPolicyError('A consent announcement asset needs announce to be on.');
+  }
+  if (consentAssetId !== null && (consentAssetId.trim() === '' || consentAssetId.length > 36)) {
+    throw new InvalidPolicyError('The consent announcement asset id is not valid.');
+  }
+
+  return {
+    scopeType: input.scopeType,
+    scopeId,
+    direction: input.direction,
+    action: input.action,
+    announce: input.announce,
+    consentAssetId,
+  };
+}

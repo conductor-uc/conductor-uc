@@ -1,0 +1,38 @@
+{
+  "name": "@cuc/recording-service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/main.js",
+  "scripts": {
+    "build": "tsc --build tsconfig.build.json",
+    "clean": "rm -rf dist *.tsbuildinfo",
+    "dev": "node --watch dist/src/main.js",
+    "lint": "eslint .",
+    "migrate": "cuc-db latest --dir dist/migrations",
+    "start": "node dist/src/main.js",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start:uploader": "node dist/src/uploader/main.js"
+  },
+  "dependencies": {
+    "@cuc/api-contracts": "workspace:*",
+    "@cuc/audit": "workspace:*",
+    "@cuc/authz": "workspace:*",
+    "@cuc/config": "workspace:*",
+    "@cuc/crypto": "workspace:*",
+    "@cuc/db": "workspace:*",
+    "@cuc/events": "workspace:*",
+    "@cuc/http": "workspace:*",
+    "@cuc/logger": "workspace:*",
+    "@cuc/storage": "workspace:*",
+    "kysely": "^0.29.5"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-s3": "^3.1131.0",
+    "@cuc/testing": "workspace:*",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

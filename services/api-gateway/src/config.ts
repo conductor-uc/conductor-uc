@@ -34,11 +34,12 @@ export const configSchema = Type.Object({
   VOICEMAIL_SERVICE_URL: Env.url(),
   CDR_SERVICE_URL: Env.url(),
   TRUNK_SERVICE_URL: Env.url(),
+  RECORDING_SERVICE_URL: Env.url(),
 
   /**
    * The routing table (06, api-gateway): which downstream service owns which
    * public path. Each entry is `pattern=service`, `service` one of `identity`,
-   * `org`, `pbx`, `callflow`, `voicemail`, `cdr` or `trunk`. A pattern is a
+   * `org`, `pbx`, `callflow`, `voicemail`, `cdr`, `trunk` or `recording`. A pattern is a
    * path prefix whose segments are literals or `*` (any one segment), so
    * `/v1/tenants/*` + `/flows` can go to callflow-service while `/v1/tenants`
    * alone still belongs to org-service (G-60). Configurable rather than
@@ -97,6 +98,10 @@ export const configSchema = Type.Object({
       '/v1/tenants/*/trunks=trunk',
       '/v1/tenants/*/outbound-routes=trunk',
       '/v1/tenants/*/emergency-route=trunk',
+      // recording-service (S5-01, S5-04, S5-05)
+      '/v1/tenants/*/recordings=recording',
+      '/v1/tenants/*/recording-policies=recording',
+      '/v1/tenants/*/recording-settings=recording',
     ],
   }),
 

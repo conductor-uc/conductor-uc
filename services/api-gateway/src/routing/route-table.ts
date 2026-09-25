@@ -16,6 +16,7 @@ export const KNOWN_SERVICES = [
   'voicemail',
   'cdr',
   'trunk',
+  'recording',
 ] as const;
 export type ServiceKey = (typeof KNOWN_SERVICES)[number];
 

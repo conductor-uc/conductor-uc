@@ -1492,6 +1492,247 @@ class DemoPbx {
     return _problem(405, 'Not supported.');
   }
 
+  /// 30 recordings, one every two hours back from 2026-09-24, so the list
+  /// spans two pages. Every sixth is on the Support queue; a few are still
+  /// uploading, failed, or past their retention.
+  late final List<Map<String, dynamic>> _recordings = [
+    for (var i = 0; i < 30; i++) _recording(i),
+  ];
+
+  static Map<String, dynamic> _recording(int i) {
+    final start = DateTime.utc(
+      2026,
+      9,
+      24,
+      18,
+    ).subtract(Duration(hours: 2 * i));
+    final direction = ['inbound', 'outbound', 'internal'][i % 3];
+    final status = i == 1
+        ? 'pending'
+        : i == 2
+        ? 'failed'
+        : i >= 27
+        ? 'expired'
+        : 'ready';
+    final ready = status == 'ready';
+    return {
+      'id': 'rec-${i + 1}',
+      'callUuid': 'call-${i + 1}',
+      'direction': direction,
+      'extensionId': 'ext-${1 + i % 3}',
+      'peerExtensionId': direction == 'internal'
+          ? 'ext-${1 + (i + 1) % 3}'
+          : null,
+      'queueId': direction == 'inbound' && i % 2 == 0 ? 'q-1' : null,
+      'didId': direction == 'inbound' ? 'did-1' : null,
+      'announced': direction == 'inbound',
+      'status': status,
+      'startedAt': start.toIso8601String(),
+      'durationMs': ready || status == 'expired'
+          ? 20000 + (i * 7919) % 400000
+          : null,
+      'sizeBytes': ready ? 160000 + (i * 104729) % 4000000 : null,
+      'retentionDate': ready
+          ? start.add(const Duration(days: 90)).toIso8601String()
+          : null,
+    };
+  }
+
+  static final _recordingRoute = RegExp(
+    r'^/v1/tenants/[^/]+/recordings(?:/([^/]+))?(?:/([^/]+))?$',
+  );
+  static final _policyRoute = RegExp(
+    r'^/v1/tenants/[^/]+/recording-policies(?:/([^/]+))?$',
+  );
+
+  late final List<Map<String, dynamic>> _policies = [
+    {
+      'id': 'pol-1',
+      'scopeType': 'tenant',
+      'scopeId': 'demo-tenant',
+      'direction': 'any',
+      'action': 'record',
+      'announce': true,
+      'consentAssetId': 'media-1',
+    },
+    {
+      'id': 'pol-2',
+      'scopeType': 'extension',
+      'scopeId': 'ext-3',
+      'direction': 'any',
+      'action': 'no_record',
+      'announce': false,
+      'consentAssetId': null,
+    },
+  ];
+  var _retentionDays = 90;
+
+  /// The recording API (`recording-service`): search, presigned play and
+  /// download addresses, delete, the recording rules, and how long recordings
+  /// are kept. Checks what the service checks.
+  ResponseBody? _recordingApi(RequestOptions options) {
+    final method = options.method.toUpperCase();
+    final path = options.path;
+
+    if (RegExp(r'^/v1/tenants/[^/]+/recording-settings$').hasMatch(path)) {
+      if (method == 'GET') return _json({'retentionDays': _retentionDays});
+      if (method == 'PUT') {
+        final days = _body(options)['retentionDays'];
+        if (days is! int || days < 0 || days > 3650) {
+          return _problem(400, 'Retention must be from 0 to 3650 days.');
+        }
+        _retentionDays = days;
+        return _json({'retentionDays': _retentionDays});
+      }
+      return _problem(405, 'Not supported.');
+    }
+
+    final policy = _policyRoute.firstMatch(path);
+    if (policy != null) {
+      final id = policy.group(1);
+      if (id == null) {
+        if (method == 'GET') return _json({'rows': _policies});
+        if (method == 'POST') {
+          final made = _policyFrom(_body(options), 'pol-${_next++}');
+          if (made is ResponseBody) return made;
+          _policies.add(made as Map<String, dynamic>);
+          return _json(made, 201);
+        }
+        return _problem(405, 'Not supported.');
+      }
+      final at = _policies.indexWhere((p) => p['id'] == id);
+      if (at < 0) return _problem(404, "No policy with id '$id'.");
+      if (method == 'PUT') {
+        final made = _policyFrom(_body(options), id, except: id);
+        if (made is ResponseBody) return made;
+        _policies[at] = made as Map<String, dynamic>;
+        return _json(made);
+      }
+      if (method == 'DELETE') {
+        _policies.removeAt(at);
+        return ResponseBody.fromString('', 204);
+      }
+      return _problem(405, 'Not supported.');
+    }
+
+    final match = _recordingRoute.firstMatch(path);
+    if (match == null) return null;
+    final id = match.group(1);
+    if (id == null) {
+      if (method != 'GET') return _problem(405, 'Not supported.');
+      final q = options.queryParameters;
+      final from = q['from'] == null ? null : DateTime.parse('${q['from']}');
+      final to = q['to'] == null ? null : DateTime.parse('${q['to']}');
+      final limit = int.tryParse('${q['limit'] ?? 50}') ?? 50;
+      final after = q['cursor'] == null ? -1 : int.parse('${q['cursor']}');
+      final matching = [
+        for (final (i, r) in _recordings.indexed)
+          if (i > after &&
+              (from == null ||
+                  !DateTime.parse('${r['startedAt']}').isBefore(from)) &&
+              (to == null ||
+                  DateTime.parse('${r['startedAt']}').isBefore(to)) &&
+              (q['direction'] == null || r['direction'] == q['direction']) &&
+              (q['queueId'] == null || r['queueId'] == q['queueId']) &&
+              (q['extensionId'] == null ||
+                  r['extensionId'] == q['extensionId'] ||
+                  r['peerExtensionId'] == q['extensionId']))
+            (i, r),
+      ];
+      final page = matching.take(limit).toList();
+      return _json({
+        'rows': [for (final (_, r) in page) r],
+        'nextCursor': matching.length > page.length ? '${page.last.$1}' : null,
+      });
+    }
+    final at = _recordings.indexWhere((r) => r['id'] == id);
+    if (at < 0) return _problem(404, 'No recording with that id.');
+    final recording = _recordings[at];
+    final part = match.group(2);
+    if (part == null && method == 'GET') return _json(recording);
+    if (part == null && method == 'DELETE') {
+      _recordings.removeAt(at);
+      return ResponseBody.fromString('', 204);
+    }
+    if ((part == 'play-url' || part == 'download-url') && method == 'GET') {
+      if (recording['status'] != 'ready') {
+        return _problem(
+          409,
+          'That recording is ${recording['status']}, so it has no audio to serve.',
+        );
+      }
+      return _json({
+        'url': part == 'play-url'
+            ? 'https://storage.demo.invalid/recordings/$id.wav?X-Amz-Expires=300'
+            : 'https://storage.demo.invalid/recordings/$id.wav?download=1',
+        'expiresAt': DateTime.utc(2026, 9, 24, 19, 25).toIso8601String(),
+      });
+    }
+    return _problem(405, 'Not supported.');
+  }
+
+  /// A policy from a request body, or the problem to answer with (the same
+  /// checks the service makes).
+  Object _policyFrom(Map<String, dynamic> body, String id, {String? except}) {
+    final scope = '${body['scopeType']}';
+    if (!const ['tenant', 'extension', 'queue', 'did'].contains(scope)) {
+      return _problem(
+        400,
+        'scopeType is not one of tenant, extension, queue, did.',
+      );
+    }
+    final direction = '${body['direction'] ?? 'any'}';
+    if (!const ['any', 'inbound', 'outbound', 'internal'].contains(direction)) {
+      return _problem(400, 'direction is not valid.');
+    }
+    final action = '${body['action']}';
+    if (!const ['record', 'no_record'].contains(action)) {
+      return _problem(400, 'action must be record or no_record.');
+    }
+    final scopeId = scope == 'tenant'
+        ? 'demo-tenant'
+        : '${body['scopeId'] ?? ''}';
+    if (scopeId.isEmpty) {
+      return _problem(400, "A $scope policy needs the $scope's id.");
+    }
+    final announce = body['announce'] == true;
+    if (action == 'no_record' && announce) {
+      return _problem(
+        400,
+        'A policy that does not record has nothing to announce.',
+      );
+    }
+    final consent = body['consentAssetId'] as String?;
+    if (consent != null && !announce) {
+      return _problem(
+        400,
+        'A consent announcement asset needs announce to be on.',
+      );
+    }
+    final taken = _policies.any(
+      (p) =>
+          p['id'] != except &&
+          p['scopeType'] == scope &&
+          p['scopeId'] == scopeId &&
+          p['direction'] == direction,
+    );
+    if (taken) {
+      return _problem(
+        409,
+        'A policy for that scope and direction already exists; change it instead.',
+      );
+    }
+    return {
+      'id': id,
+      'scopeType': scope,
+      'scopeId': scopeId,
+      'direction': direction,
+      'action': action,
+      'announce': announce,
+      'consentAssetId': consent,
+    };
+  }
+
   Map<String, dynamic>? _extensionOf(String? userId) {
     for (final e in _rows['extensions']!) {
       if (userId != null && e['userId'] == userId) return e;
@@ -1660,6 +1901,8 @@ class DemoPbx {
     if (callHandling != null) return callHandling;
     final voicemail = _voicemail(options);
     if (voicemail != null) return voicemail;
+    final recordings = _recordingApi(options);
+    if (recordings != null) return recordings;
     final media = _media(options);
     if (media != null) return media;
     final routing = _routing(options);

@@ -15,6 +15,7 @@ const SERVICES = {
   voicemail: 'http://voicemail:8080',
   cdr: 'http://cdr:8080',
   trunk: 'http://trunk:8080',
+  recording: 'http://recording:8080',
 };
 
 describe('buildRouteTable', () => {
@@ -117,6 +118,7 @@ describe('the default routing table', () => {
     VOICEMAIL_SERVICE_URL: SERVICES.voicemail,
     CDR_SERVICE_URL: SERVICES.cdr,
     TRUNK_SERVICE_URL: SERVICES.trunk,
+    RECORDING_SERVICE_URL: SERVICES.recording,
     REDIS_URL: 'redis://localhost:6379',
   });
   const table = buildRouteTable(config.ROUTE_TABLE, SERVICES);
@@ -146,6 +148,10 @@ describe('the default routing table', () => {
     ['/v1/tenants/t1/voicemail/mailboxes/m1/messages', SERVICES.voicemail],
     ['/v1/tenants/t1/cdrs', SERVICES.cdr],
     ['/v1/tenants/t1/trunks/tr1/ips', SERVICES.trunk],
+    ['/v1/tenants/t1/recordings', SERVICES.recording],
+    ['/v1/tenants/t1/recordings/r1/play-url', SERVICES.recording],
+    ['/v1/tenants/t1/recording-policies/p1', SERVICES.recording],
+    ['/v1/tenants/t1/recording-settings', SERVICES.recording],
     ['/v1/tenants/t1/me/extension', SERVICES.pbx],
     ['/v1/tenants/t1/me/directory', SERVICES.pbx],
     ['/v1/tenants/t1/me/call-handling', SERVICES.pbx],
@@ -170,6 +176,7 @@ const OWNERS: Readonly<Record<string, keyof typeof SERVICES>> = {
   'voicemail-service': 'voicemail',
   'cdr-service': 'cdr',
   'trunk-service': 'trunk',
+  'recording-service': 'recording',
 };
 
 const SERVICES_DIR = fileURLToPath(new URL('../../', import.meta.url));
@@ -206,6 +213,7 @@ describe('every service route resolves through the default table', () => {
       VOICEMAIL_SERVICE_URL: SERVICES.voicemail,
       CDR_SERVICE_URL: SERVICES.cdr,
       TRUNK_SERVICE_URL: SERVICES.trunk,
+      RECORDING_SERVICE_URL: SERVICES.recording,
       REDIS_URL: 'redis://localhost:6379',
     }).ROUTE_TABLE,
     SERVICES,

@@ -236,6 +236,85 @@ export function buildDialplanDocument(
 }
 
 /**
+ * Call recording (S5-02): what the dialplan needs to start one.
+ *
+ * `fs.routes.ts` asks recording-service (`recording-client.ts`) and hands the answer here; these
+ * helpers only turn it into actions, so they stay pure string builders like the rest of this file.
+ * They are verified only by the unit tests on the strings, not against a real FreeSWITCH node.
+ */
+export interface RecordingDialplan {
+  readonly recordingId: string;
+  /** Node-local spool directory the uploader watches, e.g. `/var/spool/cuc/rec`. */
+  readonly spoolDir: string;
+  readonly announce: boolean;
+  /** A credentialed `http_cache://` URL for the tenant's own consent recording, or null for the neutral tone. */
+  readonly consentUrl: string | null;
+}
+
+/**
+ * A short neutral tone, played when a policy asks for an announcement but no announcement recording
+ * was chosen. It carries no words and no name, so nothing can be branded. It is a courtesy signal, not
+ * a spoken notice: a tenant that needs a spoken one uploads a media asset and names it in the policy.
+ */
+export const CONSENT_TONE = 'tone_stream://%(300,150,880);loops=2';
+
+/** The spool file's path. The name is the opaque recording id and nothing else (no tenant, no number). */
+export function recordingSpoolPath(spoolDir: string, recordingId: string): string {
+  return `${spoolDir.replace(/\/+$/, '')}/${recordingId}.wav`;
+}
+
+/**
+ * The actions that start a recording, in order: mark the channel, play the announcement first if the
+ * policy says so, then arm `record_session` to start, into the spool, when the call is answered.
+ *
+ * - `pre_answer` lets the caller hear the announcement before the call is answered, without answering
+ *   (and so without starting billing on an inbound call that nobody picks up).
+ * - `record_session` is not run directly: on a call that is not answered yet, FreeSWITCH pre-answers
+ *   the channel to attach the recorder (seen live: `Pre-Answer` right before `record_session`), which
+ *   sends 183 early media to the caller before anyone picks up, so the caller hears silence instead of
+ *   ringback. `execute_on_answer` runs it at answer instead, so ringing and the announcement are not in
+ *   the file either. `RECORD_STEREO` puts each party on its own channel.
+ * - `recording_follow_transfer` keeps recording across an attended transfer.
+ */
+export function recordingActions(recording: RecordingDialplan): string[] {
+  const actions = [
+    `<action application="set" data="${escapeXml(`cuc_recording_id=${recording.recordingId}`)}"/>`,
+  ];
+  if (recording.announce) {
+    actions.push(
+      '<action application="pre_answer"/>',
+      `<action application="playback" data="${escapeXml(recording.consentUrl ?? CONSENT_TONE)}"/>`,
+    );
+  }
+  actions.push(
+    '<action application="set" data="RECORD_STEREO=true"/>',
+    '<action application="set" data="recording_follow_transfer=true"/>',
+    `<action application="set" data="${escapeXml(`execute_on_answer=record_session ${recordingSpoolPath(recording.spoolDir, recording.recordingId)}`)}"/>`,
+  );
+  return actions;
+}
+
+/** What the CDR sees when recording-service could not be asked: the call runs, unrecorded, and is flagged. */
+export const RECORDING_UNAVAILABLE_ACTION =
+  '<action application="set" data="cuc_recording_status=unavailable"/>';
+
+/**
+ * Puts `actions` at the start of a dialplan document's first `<condition>`. Every builder that
+ * places a call emits exactly one, so the actions run before its bridge or hand-off. Returns the
+ * document unchanged when there is no condition to put them in.
+ */
+export function injectDialplanActions(document: string, actions: readonly string[]): string {
+  const condition = /<condition [^>]*>\n/.exec(document);
+  if (condition === null) return document;
+  const at = condition.index + condition[0].length;
+  return (
+    document.slice(0, at) +
+    actions.map((action) => `          ${action}\n`).join('') +
+    document.slice(at)
+  );
+}
+
+/**
  * Parity 1a: per-extension call handling.
  *
  * `fs.routes.ts` resolves what an extension's stored settings mean for one

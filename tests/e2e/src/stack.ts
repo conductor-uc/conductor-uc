@@ -138,7 +138,7 @@ function dbEnv(handle: TestDatabaseHandle): Record<string, string> {
  *
  * Everything a browser calls goes through the gateway, which routes each path
  * to the service that owns it (G-60): identity, org, pbx-config, trunk,
- * callflow, voicemail and cdr all run here, with telephony-config left out
+ * callflow, voicemail, cdr and recording all run here, with telephony-config left out
  * (nothing in this journey needs a media node).
  */
 export async function startStack(): Promise<Stack> {
@@ -174,6 +174,7 @@ export async function startStack(): Promise<Stack> {
     const trunkDb = await startTestDatabase();
     const voicemailDb = await startTestDatabase();
     const cdrDb = await startTestDatabase();
+    const recordingDb = await startTestDatabase();
     const nats: TestNatsHandle = await startTestNats();
     const s3: TestS3Handle = await startTestS3();
     cleanups.push(
@@ -185,6 +186,7 @@ export async function startStack(): Promise<Stack> {
       () => trunkDb.stop(),
       () => voicemailDb.stop(),
       () => cdrDb.stop(),
+      () => recordingDb.stop(),
       () => nats.stop(),
       () => s3.stop(),
     );
@@ -201,6 +203,7 @@ export async function startStack(): Promise<Stack> {
       trunk: await freePort(),
       voicemail: await freePort(),
       cdr: await freePort(),
+      recording: await freePort(),
       gateway: await freePort(),
     };
     const url = (port: number) => `http://127.0.0.1:${String(port)}`;
@@ -358,6 +361,15 @@ export async function startStack(): Promise<Stack> {
       FS_CDR_INGEST_TOKEN: `e2e-${randomBytes(8).toString('hex')}`,
     });
     running.push(cdr);
+    const recording = launch('recording-service', 'services/recording-service/dist/src/main.js', {
+      ...common,
+      ...dbEnv(recordingDb),
+      ...storage,
+      ...behindGateway,
+      HTTP_PORT: String(ports.recording),
+      IDENTITY_SERVICE_URL: url(ports.identity),
+    });
+    running.push(recording);
 
     const gateway = launch('api-gateway', 'services/api-gateway/dist/src/main.js', {
       ...common,
@@ -369,6 +381,7 @@ export async function startStack(): Promise<Stack> {
       VOICEMAIL_SERVICE_URL: url(ports.voicemail),
       CDR_SERVICE_URL: url(ports.cdr),
       TRUNK_SERVICE_URL: url(ports.trunk),
+      RECORDING_SERVICE_URL: url(ports.recording),
       REDIS_URL,
       INTERNAL_HEADER_SIGNING_SECRET: headerSecret,
     });
@@ -382,6 +395,7 @@ export async function startStack(): Promise<Stack> {
       untilHealthy(pbx, url(ports.pbx)),
       untilHealthy(voicemail, url(ports.voicemail)),
       untilHealthy(cdr, url(ports.cdr)),
+      untilHealthy(recording, url(ports.recording)),
       untilHealthy(gateway, url(ports.gateway)),
     ]);
 

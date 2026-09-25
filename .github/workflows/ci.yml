@@ -199,12 +199,12 @@ jobs:
       - name: Console OpenAPI snapshot is current
         # apps/console/api/openapi.json is dumped from the services' own route
         # schemas, and the console's contract test compares its screens against
-        # it. Building every service `dump-openapi.mjs` imports (the seven in its
+        # it. Building every service `dump-openapi.mjs` imports (the eight in its
         # SOURCES list) first makes this independent of which packages
         # `--affected` happened to build above. Leave one out and the step only
         # fails on a pull request that does not touch that service.
         run: |
-          pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service --filter=@cuc/trunk-service --filter=@cuc/voicemail-service --filter=@cuc/cdr-service --filter=@cuc/api-gateway
+          pnpm exec turbo run build --filter=@cuc/pbx-config-service --filter=@cuc/callflow-service --filter=@cuc/identity-service --filter=@cuc/org-service --filter=@cuc/trunk-service --filter=@cuc/voicemail-service --filter=@cuc/cdr-service --filter=@cuc/recording-service --filter=@cuc/api-gateway
           node apps/console/tool/dump-openapi.mjs
           git diff --exit-code -- apps/console/api/openapi.json
 

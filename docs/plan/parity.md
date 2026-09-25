@@ -57,7 +57,7 @@ Legend: **Built** exists with tests. **Partial** some of it. **Planned** in the 
 | Supervisor listen, whisper, barge | Yes | Yes | Planned (S5-09) | P2 |
 | Audio conferencing, PIN | Yes | Yes | Built | |
 | Web / video conferencing | Yes | Yes | Planned (S6-01) | P3 |
-| Call recording, on demand and by policy | Yes | Yes | Planned (S5-01..05) | **P1** |
+| Call recording, on demand and by policy | Yes | Yes | Partial (G-111): by policy (tenant, extension, queue, DID, direction), consent announcement, search, play, download, delete, retention; not on demand, not for calls through an IVR flow | P2 (on demand, IVR calls) |
 | Attendant / receptionist console | Yes | Yes | Gap | P3 |
 | Executive-assistant / boss-secretary | Yes | Yes | Gap | P3 |
 | Music on hold and prompts | Yes | Yes | Built (media) | |

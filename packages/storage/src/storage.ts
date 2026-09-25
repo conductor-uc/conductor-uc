@@ -1,13 +1,18 @@
 import {
   CreateBucketCommand,
+  DeleteBucketLifecycleCommand,
+  DeleteObjectCommand,
+  GetBucketLifecycleConfigurationCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   PutBucketEncryptionCommand,
   PutBucketLifecycleConfigurationCommand,
   PutObjectCommand,
   PutPublicAccessBlockCommand,
   S3Client,
   S3ServiceException,
+  type LifecycleRule as S3LifecycleRule,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Logger } from '@cuc/logger';
@@ -53,6 +58,15 @@ export interface ScopedStorage {
   /** The write half of {@link getObject} — writes bytes directly rather than handing a client a presigned PUT URL. */
   putObject(key: string, body: Buffer, options?: PutObjectOptions): Promise<void>;
   /**
+   * The object's size and ETag without reading it, or `undefined` when it does not exist.
+   * For a single-part upload without KMS the ETag is the object's MD5 in hex, quotes removed
+   * (recording-service uses that to verify an upload); a multipart or KMS-encrypted object
+   * has an opaque one.
+   */
+  headObject(key: string): Promise<{ sizeBytes: number; etag: string | null } | undefined>;
+  /** Deletes one object. Deleting one that is already gone is not an error (S3 semantics). */
+  deleteObject(key: string): Promise<void>;
+  /**
    * Creates this scope's bucket if it does not exist yet, with server-side
    * encryption and a public-access block (05 §4). Idempotent: a bucket that
    * already exists is left alone, not recreated.
@@ -66,6 +80,8 @@ export interface ScopedStorage {
    */
   provisionBucket(): Promise<void>;
   setLifecycleRule(rule: LifecycleRule): Promise<void>;
+  /** Removes the rule with this id if there is one; the bucket's other rules stay. */
+  removeLifecycleRule(id: string): Promise<void>;
 }
 
 export interface Storage {
@@ -136,15 +152,36 @@ export function createStorage(options: CreateStorageOptions): Storage {
     provisioned.add(bucket);
   }
 
-  async function setLifecycleRule(bucket: string, rule: LifecycleRule): Promise<void> {
+  /**
+   * Adds or replaces one rule, keeping the bucket's other rules: S3's API replaces the whole
+   * configuration, so this reads it first. `prefix` is already the real key prefix.
+   */
+  async function setLifecycleRule(
+    bucket: string,
+    rule: LifecycleRule,
+    realPrefix: string,
+  ): Promise<void> {
+    let existing: S3LifecycleRule[] = [];
+    try {
+      const current = await client.send(
+        new GetBucketLifecycleConfigurationCommand({ Bucket: bucket }),
+      );
+      existing = current.Rules ?? [];
+    } catch (error) {
+      if (!(error instanceof S3ServiceException) || error.name !== 'NoSuchLifecycleConfiguration') {
+        throw error;
+      }
+    }
+
     await client.send(
       new PutBucketLifecycleConfigurationCommand({
         Bucket: bucket,
         LifecycleConfiguration: {
           Rules: [
+            ...existing.filter((other) => other.ID !== rule.id),
             {
               ID: rule.id,
-              Filter: { Prefix: rule.prefix },
+              Filter: { Prefix: realPrefix },
               Status: 'Enabled',
               Expiration: { Days: rule.expirationDays },
             },
@@ -154,14 +191,48 @@ export function createStorage(options: CreateStorageOptions): Storage {
     );
   }
 
+  /** Removes one rule by id, keeping the others; a bucket left with none has its configuration deleted. */
+  async function removeLifecycleRule(bucket: string, id: string): Promise<void> {
+    let existing: S3LifecycleRule[];
+    try {
+      existing =
+        (await client.send(new GetBucketLifecycleConfigurationCommand({ Bucket: bucket }))).Rules ??
+        [];
+    } catch (error) {
+      if (error instanceof S3ServiceException && error.name === 'NoSuchLifecycleConfiguration')
+        return;
+      throw error;
+    }
+    const remaining = existing.filter((rule) => rule.ID !== id);
+    if (remaining.length === existing.length) return;
+    if (remaining.length === 0) {
+      await client.send(new DeleteBucketLifecycleCommand({ Bucket: bucket }));
+      return;
+    }
+    await client.send(
+      new PutBucketLifecycleConfigurationCommand({
+        Bucket: bucket,
+        LifecycleConfiguration: { Rules: remaining },
+      }),
+    );
+  }
+
   function scopeFor(locate: (key: string) => ObjectLocation): ScopedStorage {
     return {
       locate,
       async presignGet(key, presignOptions) {
         const { bucket, key: realKey } = locate(key);
-        return getSignedUrl(client, new GetObjectCommand({ Bucket: bucket, Key: realKey }), {
-          expiresIn: clampTtl(presignOptions?.ttlSeconds, MAX_GET_TTL_SECONDS),
-        });
+        return getSignedUrl(
+          client,
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: realKey,
+            ...(presignOptions?.responseContentDisposition === undefined
+              ? {}
+              : { ResponseContentDisposition: presignOptions.responseContentDisposition }),
+          }),
+          { expiresIn: clampTtl(presignOptions?.ttlSeconds, MAX_GET_TTL_SECONDS) },
+        );
       },
       async presignPut(key, presignOptions) {
         const { bucket, key: realKey } = locate(key);
@@ -198,11 +269,39 @@ export function createStorage(options: CreateStorageOptions): Storage {
           }),
         );
       },
+      async headObject(key) {
+        const { bucket, key: realKey } = locate(key);
+        try {
+          const result = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: realKey }));
+          return {
+            sizeBytes: result.ContentLength ?? 0,
+            etag: result.ETag === undefined ? null : result.ETag.replaceAll('"', ''),
+          };
+        } catch (error) {
+          if (
+            error instanceof S3ServiceException &&
+            (error.name === 'NotFound' || error.name === 'NoSuchKey')
+          ) {
+            return undefined;
+          }
+          throw error;
+        }
+      },
+      async deleteObject(key) {
+        const { bucket, key: realKey } = locate(key);
+        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: realKey }));
+      },
       async provisionBucket() {
         await ensureBucket(locate('').bucket);
       },
+      async removeLifecycleRule(id) {
+        await removeLifecycleRule(locate('').bucket, id);
+      },
       async setLifecycleRule(rule) {
-        await setLifecycleRule(locate('').bucket, rule);
+        // The rule's prefix names keys as callers know them; in prefix-per-tenant mode the real
+        // keys carry the tenant's own prefix in front, and the rule must cover exactly those.
+        const { bucket, key: realPrefix } = locate(rule.prefix);
+        await setLifecycleRule(bucket, rule, realPrefix);
       },
     };
   }

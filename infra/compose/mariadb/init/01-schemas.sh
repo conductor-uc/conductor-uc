@@ -45,6 +45,8 @@ create_service_db voicemail_service voicemail_service "${VOICEMAIL_SERVICE_DB_PA
 create_service_db cdr_service cdr_service "${CDR_SERVICE_DB_PASSWORD}"
 # S3-03: outbox/consumed_events plus its own sent_emails log.
 create_service_db notification_service notification_service "${NOTIFICATION_SERVICE_DB_PASSWORD}"
+# S5-01: recording policies, recording metadata, retention settings.
+create_service_db recording_service recording_service "${RECORDING_SERVICE_DB_PASSWORD}"
 
 # `opensips` is the one schema not owned by a Node service (05 §1.1's rule
 # still applies — one schema, one user, granted only on its own schema):

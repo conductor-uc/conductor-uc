@@ -1,0 +1,214 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  InvalidPolicyError,
+  NO_RECORDING,
+  evaluatePolicies,
+  policyMatches,
+  validatePolicy,
+  type CallContext,
+  type Policy,
+} from '../src/domain/policy.js';
+
+let counter = 0;
+function policy(overrides: Partial<Policy> = {}): Policy {
+  counter += 1;
+  return {
+    id: `p-${String(counter).padStart(3, '0')}`,
+    scopeType: 'tenant',
+    scopeId: 'T1',
+    direction: 'any',
+    action: 'record',
+    announce: false,
+    consentAssetId: null,
+    ...overrides,
+  };
+}
+
+const call = (overrides: Partial<CallContext> = {}): CallContext => ({
+  direction: 'inbound',
+  extensionIds: ['E1'],
+  queueId: null,
+  didId: null,
+  ...overrides,
+});
+
+describe('policyMatches', () => {
+  it('matches a tenant policy for every call, and any direction', () => {
+    expect(policyMatches(policy(), call())).toBe(true);
+    expect(policyMatches(policy(), call({ direction: 'internal' }))).toBe(true);
+  });
+
+  it('matches a direction-specific policy only for that direction', () => {
+    const outboundOnly = policy({ direction: 'outbound' });
+    expect(policyMatches(outboundOnly, call({ direction: 'outbound' }))).toBe(true);
+    expect(policyMatches(outboundOnly, call({ direction: 'inbound' }))).toBe(false);
+  });
+
+  it('matches an extension policy against any extension on the call', () => {
+    const forE2 = policy({ scopeType: 'extension', scopeId: 'E2' });
+    expect(policyMatches(forE2, call({ extensionIds: ['E1', 'E2'] }))).toBe(true);
+    expect(policyMatches(forE2, call({ extensionIds: ['E1'] }))).toBe(false);
+  });
+
+  it('matches queue and DID policies only when the call carries that queue or DID', () => {
+    const queue = policy({ scopeType: 'queue', scopeId: 'Q1' });
+    const did = policy({ scopeType: 'did', scopeId: 'D1' });
+    expect(policyMatches(queue, call({ queueId: 'Q1' }))).toBe(true);
+    expect(policyMatches(queue, call({ queueId: 'Q2' }))).toBe(false);
+    expect(policyMatches(queue, call())).toBe(false);
+    expect(policyMatches(did, call({ didId: 'D1' }))).toBe(true);
+    expect(policyMatches(did, call({ didId: null }))).toBe(false);
+  });
+});
+
+describe('evaluatePolicies precedence', () => {
+  it('records nothing and announces nothing when no policy matches', () => {
+    expect(evaluatePolicies([], call())).toEqual(NO_RECORDING);
+    expect(
+      evaluatePolicies([policy({ scopeType: 'queue', scopeId: 'Q9' })], call({ queueId: 'Q1' })),
+    ).toEqual(NO_RECORDING);
+  });
+
+  it('applies the tenant default when nothing narrower matches', () => {
+    const tenant = policy({ announce: true, consentAssetId: 'A1' });
+    expect(evaluatePolicies([tenant], call())).toEqual({
+      record: true,
+      announce: true,
+      consentAssetId: 'A1',
+      policyId: tenant.id,
+      reason: 'policy',
+    });
+  });
+
+  it('ranks extension over queue over DID over tenant', () => {
+    const tenant = policy({ action: 'record' });
+    const did = policy({ scopeType: 'did', scopeId: 'D1', action: 'no_record' });
+    const queue = policy({ scopeType: 'queue', scopeId: 'Q1', action: 'record' });
+    const extension = policy({ scopeType: 'extension', scopeId: 'E1', action: 'no_record' });
+    const context = call({ queueId: 'Q1', didId: 'D1' });
+
+    expect(evaluatePolicies([tenant], context).record).toBe(true);
+    expect(evaluatePolicies([tenant, did], context).record).toBe(false); // DID beats tenant
+    expect(evaluatePolicies([tenant, did, queue], context).record).toBe(true); // queue beats DID
+    const decided = evaluatePolicies([tenant, did, queue, extension], context);
+    expect(decided.record).toBe(false); // extension beats queue
+    expect(decided.policyId).toBe(extension.id);
+  });
+
+  it('lets a direction-specific policy beat "any" within the same scope', () => {
+    const anyDirection = policy({ scopeType: 'queue', scopeId: 'Q1', action: 'record' });
+    const inboundOnly = policy({
+      scopeType: 'queue',
+      scopeId: 'Q1',
+      direction: 'inbound',
+      action: 'no_record',
+    });
+    expect(evaluatePolicies([anyDirection, inboundOnly], call({ queueId: 'Q1' })).record).toBe(
+      false,
+    );
+    expect(
+      evaluatePolicies([anyDirection, inboundOnly], call({ queueId: 'Q1', direction: 'outbound' }))
+        .record,
+    ).toBe(true);
+  });
+
+  it('ranks scope above direction: a wider scope naming the direction does not beat a narrower "any"', () => {
+    const tenantInbound = policy({ direction: 'inbound', action: 'record' });
+    const extensionAny = policy({ scopeType: 'extension', scopeId: 'E1', action: 'no_record' });
+    expect(evaluatePolicies([tenantInbound, extensionAny], call()).record).toBe(false);
+  });
+
+  it('resolves a tie between two extensions on the call towards not recording', () => {
+    const records = policy({ scopeType: 'extension', scopeId: 'E1', action: 'record' });
+    const refuses = policy({ scopeType: 'extension', scopeId: 'E2', action: 'no_record' });
+    const decided = evaluatePolicies([records, refuses], call({ extensionIds: ['E1', 'E2'] }));
+    expect(decided).toMatchObject({ record: false, announce: false, policyId: refuses.id });
+  });
+
+  it('announces when any tied record policy announces, using the first asset by id', () => {
+    const quiet = policy({ scopeType: 'extension', scopeId: 'E1' });
+    const loud = policy({
+      scopeType: 'extension',
+      scopeId: 'E2',
+      announce: true,
+      consentAssetId: 'A2',
+    });
+    expect(evaluatePolicies([quiet, loud], call({ extensionIds: ['E1', 'E2'] }))).toMatchObject({
+      record: true,
+      announce: true,
+      consentAssetId: 'A2',
+    });
+  });
+
+  it('gives the same answer whatever order the policies are listed in', () => {
+    const a = policy({
+      scopeType: 'extension',
+      scopeId: 'E1',
+      announce: true,
+      consentAssetId: 'A1',
+    });
+    const b = policy({
+      scopeType: 'extension',
+      scopeId: 'E2',
+      announce: true,
+      consentAssetId: 'A2',
+    });
+    const context = call({ extensionIds: ['E1', 'E2'] });
+    expect(evaluatePolicies([a, b], context)).toEqual(evaluatePolicies([b, a], context));
+  });
+
+  it('a narrower no_record overrides a wider announcing record', () => {
+    const tenant = policy({ announce: true, consentAssetId: 'A1' });
+    const extension = policy({ scopeType: 'extension', scopeId: 'E1', action: 'no_record' });
+    expect(evaluatePolicies([tenant, extension], call())).toMatchObject({
+      record: false,
+      announce: false,
+      consentAssetId: null,
+    });
+  });
+});
+
+describe('validatePolicy', () => {
+  const base = { direction: 'any', action: 'record', announce: false } as const;
+
+  it('fills a tenant-wide policy with the tenant id as its scope', () => {
+    expect(validatePolicy({ ...base, scopeType: 'tenant' }, 'T1')).toMatchObject({
+      scopeType: 'tenant',
+      scopeId: 'T1',
+    });
+  });
+
+  it("rejects a tenant policy that names another tenant's scope", () => {
+    expect(() => validatePolicy({ ...base, scopeType: 'tenant', scopeId: 'T2' }, 'T1')).toThrow(
+      InvalidPolicyError,
+    );
+  });
+
+  it('requires an id for extension, queue and DID scopes', () => {
+    for (const scopeType of ['extension', 'queue', 'did'] as const) {
+      expect(() => validatePolicy({ ...base, scopeType }, 'T1')).toThrow(InvalidPolicyError);
+      expect(() => validatePolicy({ ...base, scopeType, scopeId: '  ' }, 'T1')).toThrow(
+        InvalidPolicyError,
+      );
+    }
+  });
+
+  it('rejects announcing on a policy that does not record, and an asset without announce', () => {
+    expect(() =>
+      validatePolicy({ ...base, scopeType: 'tenant', action: 'no_record', announce: true }, 'T1'),
+    ).toThrow(/nothing to announce/);
+    expect(() =>
+      validatePolicy({ ...base, scopeType: 'tenant', consentAssetId: 'A1' }, 'T1'),
+    ).toThrow(/needs announce/);
+  });
+
+  it('accepts an announcing policy with an asset', () => {
+    expect(
+      validatePolicy(
+        { ...base, scopeType: 'queue', scopeId: 'Q1', announce: true, consentAssetId: 'A1' },
+        'T1',
+      ),
+    ).toMatchObject({ announce: true, consentAssetId: 'A1' });
+  });
+});

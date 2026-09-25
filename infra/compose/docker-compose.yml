@@ -28,6 +28,7 @@ services:
       VOICEMAIL_SERVICE_DB_PASSWORD: ${VOICEMAIL_SERVICE_DB_PASSWORD:-dev-voicemail-service-password}
       CDR_SERVICE_DB_PASSWORD: ${CDR_SERVICE_DB_PASSWORD:-dev-cdr-service-password}
       NOTIFICATION_SERVICE_DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD:-dev-notification-service-password}
+      RECORDING_SERVICE_DB_PASSWORD: ${RECORDING_SERVICE_DB_PASSWORD:-dev-recording-service-password}
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     ports:
       - '${MARIADB_PORT:-3306}:3306'
@@ -140,10 +141,12 @@ services:
     # FS is reached over the compose network (its ACL only allows
     # opensips_cidr/cluster_cidr, S1-10), same as production. The dispatcher
     # module (below) is what actually sends it traffic.
+    volumes:
+      # 06's recording pipeline spool (S5-03), shared with this node's uploader
+      # sidecar below. A named volume, but tmpfs-backed (see `volumes:` at the
+      # bottom): nothing durable lives on a FreeSWITCH node (CLAUDE.md rule 5).
+      - recording-spool:/var/spool/cuc/rec
     tmpfs:
-      # 06's recording pipeline spool. Never a named volume — nothing
-      # durable lives on a FreeSWITCH node (CLAUDE.md rule 5).
-      - /var/spool/cuc/rec
       # S2-10's flow-IR cache. tmpfs for the same reason, and losing it costs
       # nothing: the runner fetches the IR on every call anyway, and only
       # falls back to this cache when callflow-service is unreachable.
@@ -178,10 +181,48 @@ services:
       FS_NODE_ID: ${FS_NODE_ID_2:-freeswitch-2}
       FS_REDIS_HOST: ${FS_REDIS_HOST:-redis}
       FS_REDIS_PORT: ${FS_REDIS_PORT:-6379}
+    volumes:
+      - recording-spool-2:/var/spool/cuc/rec
     tmpfs:
-      - /var/spool/cuc/rec
       - /var/cache/cuc/flow
       - /var/cache/cuc/http
+
+  recording-uploader:
+    # S5-03. This node's uploader sidecar: watches the spool `freeswitch` records
+    # into, uploads each finished file through recording-service, then deletes it.
+    # No storage or database credentials, only recording-service's address and token.
+    build:
+      context: ../..
+      dockerfile: services/recording-service/Dockerfile
+    restart: unless-stopped
+    command: ['dist/src/uploader/main.js']
+    depends_on:
+      recording-service:
+        condition: service_started
+    volumes:
+      - recording-spool:/var/spool/cuc/rec
+    environment:
+      RECORDING_SERVICE_URL: http://recording-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      SPOOL_DIR: /var/spool/cuc/rec
+      SERVICE_NAME: recording-uploader
+
+  recording-uploader-2:
+    build:
+      context: ../..
+      dockerfile: services/recording-service/Dockerfile
+    restart: unless-stopped
+    command: ['dist/src/uploader/main.js']
+    depends_on:
+      recording-service:
+        condition: service_started
+    volumes:
+      - recording-spool-2:/var/spool/cuc/rec
+    environment:
+      RECORDING_SERVICE_URL: http://recording-service:8080
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      SPOOL_DIR: /var/spool/cuc/rec
+      SERVICE_NAME: recording-uploader-2
 
   opensips:
     # S1-11. telephony/opensips's own Dockerfile builds this from the
@@ -423,6 +464,10 @@ services:
       STORAGE_FORCE_PATH_STYLE: 'true'
       ORG_SERVICE_URL: http://org-service:8080
       VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
+      # S5-02: asked at call setup whether to record; unreachable means the call
+      # goes ahead unrecorded (fail open), so it is not a startup dependency.
+      RECORDING_SERVICE_URL: http://recording-service:8080
+      RECORDING_SPOOL_DIR: /var/spool/cuc/rec
       CALLFLOW_SERVICE_URL: http://callflow-service:8080
       # S2-13: `handleQueueDial`'s own synchronous affinity-acquire call.
       CALL_CONTROL_URL: http://call-control:8080
@@ -590,6 +635,41 @@ services:
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
 
+  recording-service:
+    # S5-01, S5-04, S5-05: policies, recording metadata, playback URLs, retention.
+    build:
+      context: ../..
+      dockerfile: services/recording-service/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      SERVICE_NAME: recording-service
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_USER: recording_service
+      DB_PASSWORD: ${RECORDING_SERVICE_DB_PASSWORD:-dev-recording-service-password}
+      DB_NAME: recording_service
+      NATS_SERVERS: nats://nats:4222
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      # G-60: these services sit behind api-gateway, which signs who is calling.
+      TRUST_INTERNAL_HEADERS: 'true'
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # Which roles and grants a signed-in user holds (scoped `recording.listen` etc.).
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+      STORAGE_BUCKET_PREFIX: cuc-dev
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
+      STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
+      STORAGE_FORCE_PATH_STYLE: 'true'
+
   cdr-service:
     build:
       context: ../..
@@ -692,6 +772,8 @@ services:
         condition: service_started
       trunk-service:
         condition: service_started
+      recording-service:
+        condition: service_started
     ports:
       - '${GATEWAY_PORT:-8080}:8080'
     environment:
@@ -707,6 +789,7 @@ services:
       VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
       CDR_SERVICE_URL: http://cdr-service:8080
       TRUNK_SERVICE_URL: http://trunk-service:8080
+      RECORDING_SERVICE_URL: http://recording-service:8080
       # 07 §5: the edge speaks HTTPS when it is given a certificate, and refuses to
       # serve phone provisioning (which carries a SIP password) over plain HTTP.
       # A laptop runs plain HTTP, so dev turns both off; production sets
@@ -751,6 +834,24 @@ services:
       CONSOLE_URL_OVERRIDE: ${CONSOLE_URL_OVERRIDE:-}
 
 volumes:
+  # The node spool recordings are written to before upload (S5-03). tmpfs-backed, so it is
+  # never durable (CLAUDE.md rule 5, D-011), yet shared between a FreeSWITCH node and its
+  # uploader sidecar, which a plain `tmpfs:` mount cannot do across two containers. The size
+  # bounds the spool. 0777 and not 1777: FreeSWITCH writes as root, and with the sticky bit
+  # the non-root uploader could upload those files but never delete them (seen live). Only
+  # the node and its own uploader mount the volume.
+  recording-spool:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=512m,mode=0777
+  recording-spool-2:
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=512m,mode=0777
   opensips-tls:
   mariadb-data:
   redis-data:

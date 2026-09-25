@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { GetBucketLifecycleConfigurationCommand, S3Client } from '@aws-sdk/client-s3';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { s3OrSkipReason, silentLogger, startTestS3, type TestS3Handle } from '@cuc/testing';
 
@@ -83,6 +84,77 @@ describe.skipIf(skipReason !== undefined)('@cuc/storage', () => {
 
         await tenant.provisionBucket();
         await expect(tenant.provisionBucket()).resolves.toBeUndefined();
+      });
+
+      it('reports the size and ETag with headObject, and undefined for a missing one', async () => {
+        const storage = makeStorage(mode);
+        const tenant = storage.forTenant(randomUUID());
+        await tenant.provisionBucket();
+        await tenant.putObject('a/b.bin', Buffer.from('12345'));
+
+        const head = await tenant.headObject('a/b.bin');
+        expect(head?.sizeBytes).toBe(5);
+        // MD5 of '12345' (single-part upload, no KMS).
+        expect(head?.etag).toBe('827ccb0eea8a706c4c34a16891f84e7b');
+        expect(await tenant.headObject('a/missing.bin')).toBeUndefined();
+      });
+
+      it('a presigned GET can force a download with responseContentDisposition', async () => {
+        const storage = makeStorage(mode);
+        const tenant = storage.forTenant(randomUUID());
+        await tenant.provisionBucket();
+        await tenant.putObject('x.wav', Buffer.from('abc'));
+
+        const response = await fetch(
+          await tenant.presignGet('x.wav', {
+            responseContentDisposition: 'attachment; filename="x.wav"',
+          }),
+        );
+        expect(response.headers.get('content-disposition')).toBe('attachment; filename="x.wav"');
+      });
+
+      it('deletes an object, and deleting a missing one is not an error', async () => {
+        const storage = makeStorage(mode);
+        const tenant = storage.forTenant(randomUUID());
+        await tenant.provisionBucket();
+        await tenant.putObject('gone.bin', Buffer.from('x'));
+
+        await tenant.deleteObject('gone.bin');
+        expect(await tenant.headObject('gone.bin')).toBeUndefined();
+        await expect(tenant.deleteObject('gone.bin')).resolves.toBeUndefined();
+      });
+
+      it('adds a second lifecycle rule without dropping the first, and replaces one by id', async () => {
+        const storage = makeStorage(mode);
+        const tenant = storage.forTenant(randomUUID());
+        await tenant.provisionBucket();
+
+        await tenant.setLifecycleRule({ id: 'r1', prefix: 'recordings/', expirationDays: 30 });
+        await tenant.setLifecycleRule({ id: 'r2', prefix: 'exports/', expirationDays: 7 });
+        await tenant.setLifecycleRule({ id: 'r1', prefix: 'recordings/', expirationDays: 60 });
+
+        const client = new S3Client({
+          region: handle.region,
+          endpoint: handle.endpoint,
+          forcePathStyle: handle.forcePathStyle,
+          credentials: { accessKeyId: handle.accessKeyId, secretAccessKey: handle.secretAccessKey },
+        });
+        const { bucket, key } = tenant.locate('recordings/');
+        const rules =
+          (await client.send(new GetBucketLifecycleConfigurationCommand({ Bucket: bucket })))
+            .Rules ?? [];
+        expect(rules.map((rule) => rule.ID).sort()).toEqual(['r1', 'r2']);
+        const r1 = rules.find((rule) => rule.ID === 'r1');
+        expect(r1?.Expiration?.Days).toBe(60);
+        // The rule covers the real key prefix (tenant-prefixed in prefix-per-tenant mode).
+        expect(r1?.Filter?.Prefix ?? r1?.Prefix).toBe(key);
+
+        await tenant.removeLifecycleRule('r1');
+        await tenant.removeLifecycleRule('r1'); // already gone: fine
+        await tenant.removeLifecycleRule('r2');
+        await expect(
+          client.send(new GetBucketLifecycleConfigurationCommand({ Bucket: bucket })),
+        ).rejects.toMatchObject({ name: 'NoSuchLifecycleConfiguration' });
       });
 
       it('sets a lifecycle rule without throwing', async () => {

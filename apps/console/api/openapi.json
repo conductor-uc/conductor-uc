@@ -17769,6 +17769,1249 @@
         ]
       }
     },
+    "/v1/tenants/{tenantId}/recordings": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "from",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "to",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "inbound"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "outbound"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "internal"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "direction",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "extensionId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "queueId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "didId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "query",
+            "name": "callUuid",
+            "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "pending"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "ready"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "failed"
+                  ]
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "expired"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "status",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "query",
+            "name": "cursor",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]{1,4}$"
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows",
+                    "nextCursor"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "callUuid",
+                          "direction",
+                          "extensionId",
+                          "peerExtensionId",
+                          "queueId",
+                          "didId",
+                          "announced",
+                          "status",
+                          "startedAt",
+                          "durationMs",
+                          "sizeBytes",
+                          "retentionDate"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "callUuid": {
+                            "type": "string"
+                          },
+                          "direction": {
+                            "type": "string"
+                          },
+                          "extensionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "peerExtensionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "queueId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "didId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "announced": {
+                            "type": "boolean"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "startedAt": {
+                            "type": "string"
+                          },
+                          "durationMs": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "sizeBytes": {
+                            "type": [
+                              "number",
+                              "null"
+                            ]
+                          },
+                          "retentionDate": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    "nextCursor": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listRecordings",
+        "tags": [
+          "Recordings"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/recordings/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "callUuid",
+                    "direction",
+                    "extensionId",
+                    "peerExtensionId",
+                    "queueId",
+                    "didId",
+                    "announced",
+                    "status",
+                    "startedAt",
+                    "durationMs",
+                    "sizeBytes",
+                    "retentionDate"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "callUuid": {
+                      "type": "string"
+                    },
+                    "direction": {
+                      "type": "string"
+                    },
+                    "extensionId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "peerExtensionId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "queueId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "didId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "announced": {
+                      "type": "boolean"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "startedAt": {
+                      "type": "string"
+                    },
+                    "durationMs": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "sizeBytes": {
+                      "type": [
+                        "number",
+                        "null"
+                      ]
+                    },
+                    "retentionDate": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRecording",
+        "tags": [
+          "Recordings"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteRecording",
+        "tags": [
+          "Recordings"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/recordings/{id}/play-url": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "url",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRecordingPlayUrl",
+        "tags": [
+          "Recordings"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/recordings/{id}/download-url": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "url",
+                    "expiresAt"
+                  ],
+                  "properties": {
+                    "url": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRecordingDownloadUrl",
+        "tags": [
+          "Recordings"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/recording-policies": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "scopeType",
+                          "scopeId",
+                          "direction",
+                          "action",
+                          "announce",
+                          "consentAssetId"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "scopeType": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "tenant"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "extension"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "queue"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "did"
+                                ]
+                              }
+                            ]
+                          },
+                          "scopeId": {
+                            "type": "string"
+                          },
+                          "direction": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "any"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "inbound"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "outbound"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "internal"
+                                ]
+                              }
+                            ]
+                          },
+                          "action": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "record"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "no_record"
+                                ]
+                              }
+                            ]
+                          },
+                          "announce": {
+                            "type": "boolean"
+                          },
+                          "consentAssetId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listRecordingPolicies",
+        "tags": [
+          "RecordingPolicies"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "scopeType",
+                  "action"
+                ],
+                "properties": {
+                  "scopeType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "tenant"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "extension"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "queue"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "did"
+                        ]
+                      }
+                    ]
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "maxLength": 36
+                  },
+                  "direction": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "any"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "inbound"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "outbound"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "internal"
+                        ]
+                      }
+                    ]
+                  },
+                  "action": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "record"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "no_record"
+                        ]
+                      }
+                    ]
+                  },
+                  "announce": {
+                    "type": "boolean"
+                  },
+                  "consentAssetId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 36
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "scopeType",
+                    "scopeId",
+                    "direction",
+                    "action",
+                    "announce",
+                    "consentAssetId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "scopeType": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "extension"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "queue"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "did"
+                          ]
+                        }
+                      ]
+                    },
+                    "scopeId": {
+                      "type": "string"
+                    },
+                    "direction": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "any"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "inbound"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outbound"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "internal"
+                          ]
+                        }
+                      ]
+                    },
+                    "action": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "record"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "no_record"
+                          ]
+                        }
+                      ]
+                    },
+                    "announce": {
+                      "type": "boolean"
+                    },
+                    "consentAssetId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "createRecordingPolicy",
+        "tags": [
+          "RecordingPolicies"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/recording-policies/{id}": {
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "scopeType",
+                  "action"
+                ],
+                "properties": {
+                  "scopeType": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "tenant"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "extension"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "queue"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "did"
+                        ]
+                      }
+                    ]
+                  },
+                  "scopeId": {
+                    "type": "string",
+                    "maxLength": 36
+                  },
+                  "direction": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "any"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "inbound"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "outbound"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "internal"
+                        ]
+                      }
+                    ]
+                  },
+                  "action": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "record"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "no_record"
+                        ]
+                      }
+                    ]
+                  },
+                  "announce": {
+                    "type": "boolean"
+                  },
+                  "consentAssetId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "maxLength": 36
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "scopeType",
+                    "scopeId",
+                    "direction",
+                    "action",
+                    "announce",
+                    "consentAssetId"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "scopeType": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tenant"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "extension"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "queue"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "did"
+                          ]
+                        }
+                      ]
+                    },
+                    "scopeId": {
+                      "type": "string"
+                    },
+                    "direction": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "any"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "inbound"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "outbound"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "internal"
+                          ]
+                        }
+                      ]
+                    },
+                    "action": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "record"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "no_record"
+                          ]
+                        }
+                      ]
+                    },
+                    "announce": {
+                      "type": "boolean"
+                    },
+                    "consentAssetId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveRecordingPolicy",
+        "tags": [
+          "RecordingPolicies"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteRecordingPolicy",
+        "tags": [
+          "RecordingPolicies"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/recording-settings": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "retentionDays"
+                  ],
+                  "properties": {
+                    "retentionDays": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getRecordingSettings",
+        "tags": [
+          "RecordingSettings"
+        ]
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "retentionDays"
+                ],
+                "properties": {
+                  "retentionDays": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 3650
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "retentionDays"
+                  ],
+                  "properties": {
+                    "retentionDays": {
+                      "type": "number"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveRecordingSettings",
+        "tags": [
+          "RecordingSettings"
+        ]
+      }
+    },
     "/v1/tenants/{tenantId}/me/calls": {
       "get": {
         "parameters": [

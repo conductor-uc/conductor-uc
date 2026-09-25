@@ -53,6 +53,7 @@ describe('api-gateway: GET /v1/platform/health', () => {
         VOICEMAIL_SERVICE_URL: healthy.url,
         CDR_SERVICE_URL: healthy.url,
         TRUNK_SERVICE_URL: healthy.url,
+        RECORDING_SERVICE_URL: healthy.url,
       }),
       redis,
       jwksUrl: jwks.jwksUrl,
@@ -94,6 +95,7 @@ describe('api-gateway: GET /v1/platform/health', () => {
       'voicemail-service',
       'cdr-service',
       'trunk-service',
+      'recording-service',
     ]);
     expect(byName['org-service']).toMatchObject({ status: 'up', failing: [] });
     expect(byName['pbx-config-service']).toMatchObject({

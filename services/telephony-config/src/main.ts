@@ -19,6 +19,7 @@ import type { OpenSipsDb } from './opensips-schema.js';
 import { createOrgClient } from './org-client.js';
 import { createPbxConfigClient } from './pbx-config-client.js';
 import { createProjection } from './projection.js';
+import { createRecordingClient } from './recording-client.js';
 import { createOpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
 import { createReadModelRepo } from './repo/read-model.repo.js';
 import { createCertificateSync, startCertificateSync } from './certificate-sync.js';
@@ -122,6 +123,14 @@ const callControlClient = createCallControlClient({
   baseUrl: config.CALL_CONTROL_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
+// S5-02: `/fs/dialplan`'s recording decision. Fails open: see `recording-client.ts`.
+const recordingClient = createRecordingClient({
+  baseUrl: config.RECORDING_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  logger,
+  timeoutMs: config.RECORDING_POLICY_TIMEOUT_MS,
+  ttlMs: config.RECORDING_POLICY_CACHE_TTL_MS,
+});
 // S2-08: the round-robin ring-group counter (`ring-group-counter.ts`) —
 // same `lazyConnect: false`/`maxRetriesPerRequest` shape api-gateway's own
 // rate-limiter client uses, so this fails fast at startup rather than
@@ -213,6 +222,7 @@ registerFsRoutes(
   affinityRegistry,
   callControlClient,
   config.SELF_URL,
+  { client: recordingClient, spoolDir: config.RECORDING_SPOOL_DIR },
 );
 registerInternalRoutes(
   app,

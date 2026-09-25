@@ -16,6 +16,7 @@ import { isOutboundCallAllowed, parseFraudLimits } from '../domain/fraud-limits.
 import { telephonyEvents } from '../events.js';
 import type { OrgClient } from '../org-client.js';
 import type { PbxConfigClient } from '../pbx-config-client.js';
+import type { RecordingClient } from '../recording-client.js';
 import type { ExtensionRow, OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
 import type { CallflowClient } from '../callflow-client.js';
 import { nextRoundRobinStart } from '../ring-group-counter.js';
@@ -39,8 +40,11 @@ import {
   buildVoicemailDialplanDocument,
   callcenterName,
   FORWARD_HOPS_HEADER,
+  injectDialplanActions,
   MAX_FORWARD_HOPS,
   NOT_FOUND_DOCUMENT,
+  RECORDING_UNAVAILABLE_ACTION,
+  recordingActions,
   type CallcenterAgentEntry,
   type CallcenterQueueEntry,
   type CallHandlingPlan,
@@ -227,6 +231,13 @@ function parseMemberExtensionIds(value: string): string[] {
   return JSON.parse(value) as string[];
 }
 
+/** What `registerFsRoutes` needs to record calls (S5-02). */
+export interface RecordingWiring {
+  readonly client: RecordingClient;
+  /** Where FreeSWITCH writes recordings on its node, which the node uploader watches. */
+  readonly spoolDir: string;
+}
+
 export function registerFsRoutes(
   app: Server,
   db: Database<TelephonyConfigDb>,
@@ -262,6 +273,11 @@ export function registerFsRoutes(
   callControlClient: CallControlClient,
   /** S2-13: this service's own externally-reachable base URL (`config.ts`'s own doc comment) — used only to build a queue's credentialed `moh-sound` URL. */
   selfUrl: string,
+  /**
+   * S5-02: recording-service's client and this node fleet's spool directory. `null` (the default)
+   * turns recording off entirely, which is what tests that never exercise it get.
+   */
+  recording: RecordingWiring | null = null,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -1144,6 +1160,89 @@ export function registerFsRoutes(
     );
   }
 
+  /**
+   * What `/fs/dialplan` learned about the call while resolving it, for the recording decision
+   * (S5-02). Only the branches that end in a real call fill it in and set `eligible`: emergency,
+   * voicemail, conference, parking, agent status and flow (IVR) calls are never recorded here.
+   */
+  interface RecordingTarget {
+    eligible: boolean;
+    tenantId?: string;
+    direction?: 'inbound' | 'outbound' | 'internal';
+    /** The calling extension's number (internal and outbound calls), resolved to an id on demand. */
+    callerNumber?: string;
+    /** Extension ids already known to be on the call. */
+    extensionIds: string[];
+    queueId?: string;
+    didId?: string;
+  }
+
+  /**
+   * Adds the recording actions to a call's dialplan document, when a policy asks for one. Never
+   * blocks or fails the call: if recording-service cannot be asked, the call is placed unrecorded
+   * and flagged (`recording-client.ts` has the full fail-open policy).
+   */
+  async function withRecording(
+    document: string,
+    target: RecordingTarget,
+    body: Record<string, string>,
+    nodeId: string | undefined,
+  ): Promise<string> {
+    if (
+      recording === null ||
+      !target.eligible ||
+      target.tenantId === undefined ||
+      target.direction === undefined ||
+      document === NOT_FOUND_DOCUMENT
+    ) {
+      return document;
+    }
+
+    const extensionIds = [...target.extensionIds];
+    if (target.callerNumber !== undefined) {
+      const caller = await readModel.findExtensionByNumber(target.tenantId, target.callerNumber);
+      if (caller !== undefined && !extensionIds.includes(caller.id))
+        extensionIds.unshift(caller.id);
+    }
+
+    let directive;
+    try {
+      directive = await recording.client.decide({
+        tenantId: target.tenantId,
+        direction: target.direction,
+        extensionIds,
+        ...(target.queueId === undefined ? {} : { queueId: target.queueId }),
+        ...(target.didId === undefined ? {} : { didId: target.didId }),
+        callUuid: body['Unique-ID'] ?? body['Channel-Call-UUID'] ?? 'unknown',
+        ...(nodeId === undefined || nodeId === '' ? {} : { nodeId }),
+      });
+    } catch (error) {
+      // `decide` reports its own failures as `unavailable`; this is a bug guard, not the plan.
+      logger.error(
+        { err: error },
+        'dialplan: recording decision threw; placing the call unrecorded',
+      );
+      directive = { kind: 'unavailable' as const, reason: 'internal error' };
+    }
+
+    if (directive.kind === 'none') return document;
+    if (directive.kind === 'unavailable') {
+      return injectDialplanActions(document, [RECORDING_UNAVAILABLE_ACTION]);
+    }
+    return injectDialplanActions(
+      document,
+      recordingActions({
+        recordingId: directive.recordingId,
+        spoolDir: recording.spoolDir,
+        announce: directive.announce,
+        consentUrl:
+          directive.announce && directive.consentAssetId !== null
+            ? mohUrlFor(target.tenantId, directive.consentAssetId)
+            : null,
+      }),
+    );
+  }
+
   app.post('/fs/dialplan', { config: { public: true } }, async (request, reply) => {
     if (!authorized(request.headers)) {
       reply.code(401);
@@ -1157,6 +1256,17 @@ export function registerFsRoutes(
     // queue's affinity lease onto the node that is actually asking.
     const nodeId = (request.query as Record<string, string | undefined>).nodeId;
     reply.type('text/xml');
+    const target: RecordingTarget = { eligible: false, extensionIds: [] };
+    const document = await resolveDialplan(body, nodeId, target);
+    return withRecording(document, target, body, nodeId);
+  });
+
+  /** The dialplan document for one `/fs/dialplan` hunt. Fills in `rec` for calls that may be recorded. */
+  async function resolveDialplan(
+    body: Record<string, string>,
+    nodeId: string | undefined,
+    rec: RecordingTarget,
+  ): Promise<string> {
     if (body.section !== 'dialplan') return NOT_FOUND_DOCUMENT;
 
     // Trusted signals only (03 §3.2: "Tenant data is never inferred from
@@ -1261,6 +1371,12 @@ export function registerFsRoutes(
         // `do_routing()` on the exact same signal (a `lookup("location")`
         // miss on this same R-URI) once this response bridges the call
         // back to it.
+        Object.assign(rec, {
+          eligible: true,
+          tenantId,
+          direction: 'outbound',
+          callerNumber: body['variable_sip_from_user'],
+        });
         return handleOutboundDial(body, tenantId, destinationNumber, callerContext);
       }
 
@@ -1279,6 +1395,14 @@ export function registerFsRoutes(
       // S2-05's fraud limits and S2-06's emergency location).
       // Parity 1a: an extension with call handling saved takes its own
       // builder; one without is exactly what it was before.
+      // S5-02: an extension-to-extension call may be recorded.
+      Object.assign(rec, {
+        eligible: true,
+        tenantId,
+        direction: 'internal',
+        callerNumber: body['variable_sip_from_user'],
+        extensionIds: [extension.id],
+      });
       const callHandling = await readModel.findCallHandling(extension.id);
       if (callHandling !== undefined) {
         return handleExtensionWithCallHandling(
@@ -1403,6 +1527,13 @@ export function registerFsRoutes(
           return NOT_FOUND_DOCUMENT;
         }
 
+        Object.assign(rec, {
+          eligible: true,
+          tenantId: trunk.tenantId,
+          direction: 'inbound',
+          didId: did.id,
+          extensionIds: [extension.id],
+        });
         const callHandling = await readModel.findCallHandling(extension.id);
         if (callHandling !== undefined) {
           return handleExtensionWithCallHandling(
@@ -1478,6 +1609,13 @@ export function registerFsRoutes(
       }
 
       if (did.destinationType === 'queue') {
+        Object.assign(rec, {
+          eligible: true,
+          tenantId: trunk.tenantId,
+          direction: 'inbound',
+          didId: did.id,
+          queueId: did.destinationId,
+        });
         return handleQueueDial(
           trunk.tenantId,
           did.destinationId,
@@ -1510,6 +1648,12 @@ export function registerFsRoutes(
         return NOT_FOUND_DOCUMENT;
       }
       const { ringGroup, orderedMembers } = resolved;
+      Object.assign(rec, {
+        eligible: true,
+        tenantId: trunk.tenantId,
+        direction: 'inbound',
+        didId: did.id,
+      });
 
       let noAnswerBridgeNumber: string | null = null;
       if (
@@ -1536,7 +1680,7 @@ export function registerFsRoutes(
     // Neither ext→ext (S1-13) nor from-trunk (S2-03) — honestly out of scope,
     // not silently guessed at.
     return NOT_FOUND_DOCUMENT;
-  });
+  }
 
   /**
    * `GET /fs/media/:tenantId/:assetId/:rate` (S2-07) — what a

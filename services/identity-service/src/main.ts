@@ -24,6 +24,7 @@ import { createPermissionLookup } from './authz/permission-lookup.js';
 import { createOrgClient } from './org-client.js';
 import { registerAuthRoutes } from './routes/auth.routes.js';
 import { registerGrantRoutes } from './routes/grants.routes.js';
+import { registerAccessRoutes } from './routes/access.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerPermissionsInternalRoutes } from './routes/permissions.routes.js';
 import { registerJwksRoute } from './routes/jwks.routes.js';
@@ -161,6 +162,7 @@ registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo);
 registerGrantRoutes(app, grantRepo, orgAccess, permissionLookup);
 registerPermissionsInternalRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
 registerMeRoutes(app, roleRepo, grantRepo);
+registerAccessRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
 registerAuditRoutes(app, auditRepo, orgAccess);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
