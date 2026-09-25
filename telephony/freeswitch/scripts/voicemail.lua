@@ -13,19 +13,22 @@ telephony-config). `telephony_config_url`/`telephony_config_token` are the
 same FreeSWITCH global variables `xml_curl.conf.xml` already uses for the
 directory/dialplan/configuration bindings (`vars.xml`).
 
-The `mod_curl` API call shape below is now confirmed live (S2-20, G-41 —
-see the auth/Content-Type paragraph further down). The recording *format*
-`leaveMessage` produces is still this task's own best-effort reasoning,
-not confirmed — and the upload step (`api:executeString("curl " ..
-uploadUrl .. " -X PUT -H ...")`) still uses the same wrong curl-CLI-flag
-syntax (`-X`/`-H`/`-T`) this comment's own neighboring fixes already found
-`mod_curl` doesn't support at all; whether `mod_curl`'s `put` even has a
-way to stream a local file as the body (the only thing this upload
-actually needs) is unconfirmed and looks unlikely given everything else
-found here. `tests/sip/test/voicemail.test.ts`'s own "leave a message"
-test only asserts a message *row* exists, not that its audio successfully
-uploaded — see G-41's own docs/decisions.md entry for why that's a
-knowingly narrower assertion, not an oversight.
+The `mod_curl` API call shape below is confirmed live (S2-20, G-41 — see
+the auth/Content-Type paragraph further down).
+
+S5-16: this script never uploads audio. `mod_curl` cannot PUT a local file
+(the old upload step used curl-CLI flags it does not have, and reported
+`"sizeBytes":0`, so messages were listed with nothing in storage).
+`leaveMessage` now only creates the message row (which names the spool
+file, `vm-<messageId>.wav`), records the caller into the node spool, and
+hangs up. The file stays there: the node uploader sidecar (the same one
+that delivers call recordings) waits for it to settle, uploads it to
+voicemail-service, which checks size and MD5 against storage before the
+message is listed, and only then deletes it. Nothing durable stays on the
+node (CLAUDE.md rule 5). A caller who hangs up before speaking leaves a
+header-only file, which the uploader reports as `empty_file`; no file at
+all leaves the row `pending`, which voicemail-service's pending sweep
+marks failed. Pending messages are never listed either way.
 
 The `voicemail/vm-*.wav` prompt paths below are pre-emptively fixed, not
 merely unverified: this image ships no FreeSWITCH sound package at all
@@ -133,31 +136,24 @@ end
 local function leaveMessage()
   local created = httpCall("POST", "/fs/voicemail/" .. tenantId .. "/mailbox/" .. mailboxId .. "/messages", "{}")
   local messageId = jsonField(created, "messageId")
-  local uploadUrl = jsonField(created, "uploadUrl")
-  if messageId == nil or uploadUrl == nil then
+  local fileName = jsonField(created, "fileName")
+  if messageId == nil or fileName == nil then
     freeswitch.consoleLog("ERR", "voicemail.lua: could not create a message row, aborting leave-message\n")
     return
   end
 
-  local spoolPath = "/var/spool/cuc/rec/vm-" .. messageId .. ".wav"
+  -- `recordings_dir` is the spool the uploader watches (vars.xml); the file
+  -- name (`vm-<messageId>.wav`) is voicemail-service's, so the uploader can
+  -- tell a message from a call recording and knows which one it is.
+  local spoolDir = session:getVariable("recordings_dir") or "/var/spool/cuc/rec"
+  local spoolPath = spoolDir .. "/" .. fileName
   session:answer()
   session:execute("playback", "silence_stream://1000")
   session:setVariable("RECORD_APPEND", "false")
   session:recordFile(spoolPath, 180, 500, 3)
 
-  -- `-T <file>` uploads the local spool file as the PUT body — the
-  -- presigned URL only accepts a real byte stream, not a shell-escaped
-  -- inline body the way the JSON calls above use.
-  api:executeString("curl " .. uploadUrl .. " -X PUT -H \"Content-Type: audio/wav\" -T " .. spoolPath)
-
-  local durationMs = tonumber(session:getVariable("record_ms")) or 0
-  httpCall(
-    "POST",
-    "/fs/voicemail/" .. tenantId .. "/mailbox/" .. mailboxId .. "/messages/" .. messageId .. "/complete",
-    '{"durationMs":' .. durationMs .. ',"sizeBytes":0}'
-  )
-
-  os.remove(spoolPath)
+  -- No upload, no completion call, no delete: the node uploader owns the
+  -- file from here (see the header comment).
   session:hangup()
 end
 
