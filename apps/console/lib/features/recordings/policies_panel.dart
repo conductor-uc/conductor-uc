@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource.dart';
@@ -92,6 +93,7 @@ class PoliciesPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final policies = ref.watch(recordingPoliciesProvider);
+    final canChange = ref.watch(canProvider('recording.policy.manage'));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -108,12 +110,14 @@ class PoliciesPanel extends ConsumerWidget {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-            const SizedBox(width: 12),
-            FilledButton.icon(
-              onPressed: () => _edit(context, ref),
-              icon: const Icon(Icons.add),
-              label: const Text('Add rule'),
-            ),
+            if (canChange) ...[
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: () => _edit(context, ref),
+                icon: const Icon(Icons.add),
+                label: const Text('Add rule'),
+              ),
+            ],
           ],
         ),
         const SizedBox(height: 12),
@@ -163,16 +167,18 @@ class PoliciesPanel extends ConsumerWidget {
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                IconButton(
-                                  tooltip: 'Edit rule',
-                                  icon: const Icon(Icons.edit_outlined),
-                                  onPressed: () => _edit(context, ref, p),
-                                ),
-                                IconButton(
-                                  tooltip: 'Delete rule',
-                                  icon: const Icon(Icons.delete_outline),
-                                  onPressed: () => _delete(context, ref, p),
-                                ),
+                                if (canChange) ...[
+                                  IconButton(
+                                    tooltip: 'Edit rule',
+                                    icon: const Icon(Icons.edit_outlined),
+                                    onPressed: () => _edit(context, ref, p),
+                                  ),
+                                  IconButton(
+                                    tooltip: 'Delete rule',
+                                    icon: const Icon(Icons.delete_outline),
+                                    onPressed: () => _delete(context, ref, p),
+                                  ),
+                                ],
                               ],
                             ),
                           ),
@@ -251,6 +257,7 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
   @override
   Widget build(BuildContext context) {
     final current = ref.watch(recordingRetentionProvider);
+    final canChange = ref.watch(canProvider('recording.policy.manage'));
     if (!_loaded && current.hasValue) {
       _loaded = true;
       _days.text = '${current.requireValue}';
@@ -276,6 +283,7 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
                     key: const ValueKey('retention-days'),
                     controller: _days,
                     enabled: !_busy,
+                    readOnly: !canChange,
                     keyboardType: TextInputType.number,
                     decoration: const InputDecoration(
                       labelText: 'Keep recordings for (days)',
@@ -284,10 +292,11 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
                     onSubmitted: (_) => _save(),
                   ),
                 ),
-                FilledButton(
-                  onPressed: _busy ? null : _save,
-                  child: const Text('Save'),
-                ),
+                if (canChange)
+                  FilledButton(
+                    onPressed: _busy ? null : _save,
+                    child: const Text('Save'),
+                  ),
               ],
             ),
             if (_error != null) ...[

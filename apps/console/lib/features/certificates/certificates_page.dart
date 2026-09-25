@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import 'certificates_api.dart';
@@ -132,6 +133,7 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
   Widget build(BuildContext context) {
     final ready = widget.settings['ready'] == true;
     final scheme = Theme.of(context).colorScheme;
+    final canChange = ref.watch(canProvider('domain.manage'));
     final termsUrl = '${widget.settings['termsUrl']}';
     return Card(
       child: Padding(
@@ -168,6 +170,7 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
             const SizedBox(height: 16),
             TextField(
               controller: _email,
+              readOnly: !canChange,
               keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
                 labelText: 'Contact email',
@@ -186,11 +189,13 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
                 ),
               ],
               selected: {_directory},
-              onSelectionChanged: (v) => setState(() {
-                _directory = v.first;
-                // The agreement belongs to one environment, so a change asks again.
-                _agree = false;
-              }),
+              onSelectionChanged: !canChange
+                  ? null
+                  : (v) => setState(() {
+                      _directory = v.first;
+                      // The agreement belongs to one environment, so a change asks again.
+                      _agree = false;
+                    }),
             ),
             if (_directory == 'staging')
               const Padding(
@@ -205,7 +210,9 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
               contentPadding: EdgeInsets.zero,
               controlAffinity: ListTileControlAffinity.leading,
               value: _agree,
-              onChanged: (v) => setState(() => _agree = v ?? false),
+              onChanged: canChange
+                  ? (v) => setState(() => _agree = v ?? false)
+                  : null,
               title: const Text(
                 'I agree to the Let’s Encrypt Subscriber Agreement',
               ),
@@ -228,10 +235,11 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
                 child: Text(_error!, style: TextStyle(color: scheme.error)),
               ),
             const SizedBox(height: 8),
-            FilledButton(
-              onPressed: _saving ? null : _save,
-              child: const Text('Save'),
-            ),
+            if (canChange)
+              FilledButton(
+                onPressed: _saving ? null : _save,
+                child: const Text('Save'),
+              ),
           ],
         ),
       ),
@@ -290,6 +298,7 @@ class _PublicAddressCardState extends ConsumerState<PublicAddressCard> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final canChange = ref.watch(canProvider('domain.manage'));
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -309,6 +318,7 @@ class _PublicAddressCardState extends ConsumerState<PublicAddressCard> {
             const SizedBox(height: 12),
             TextField(
               controller: _address,
+              readOnly: !canChange,
               decoration: const InputDecoration(
                 labelText: 'Public address',
                 helperText: 'An IP address, or a hostname to point names at with a CNAME.',
@@ -321,11 +331,12 @@ class _PublicAddressCardState extends ConsumerState<PublicAddressCard> {
                 child: Text(_error!, style: TextStyle(color: scheme.error)),
               ),
             const SizedBox(height: 12),
-            FilledButton(
-              key: const ValueKey('save-public-address'),
-              onPressed: _saving ? null : _save,
-              child: const Text('Save address'),
-            ),
+            if (canChange)
+              FilledButton(
+                key: const ValueKey('save-public-address'),
+                onPressed: _saving ? null : _save,
+                child: const Text('Save address'),
+              ),
           ],
         ),
       ),
