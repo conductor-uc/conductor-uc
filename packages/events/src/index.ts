@@ -14,7 +14,13 @@ export {
   type EventConsumer,
   type EventHandler,
 } from './consumer.js';
-export { enqueueEvent, envelopeFromRow, type OutboxRow, type PublishRequest } from './outbox.js';
+export {
+  enqueueEvent,
+  envelopeFromRow,
+  newEventId,
+  type OutboxRow,
+  type PublishRequest,
+} from './outbox.js';
 export {
   createRelay,
   DEFAULT_OUTBOX_RETENTION_DAYS,

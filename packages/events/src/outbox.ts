@@ -1,9 +1,42 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import type { EventDefinitions, EventEnvelope, EventRegistry, PayloadOf } from '@cuc/api-contracts';
 import type { Kysely, Transaction } from 'kysely';
 
 import type { EventTables } from './schema.js';
+
+let lastMs = 0;
+let sequence = 0;
+
+/**
+ * A new event id: a UUIDv7 (RFC 9562), time-ordered and, within this process,
+ * strictly increasing. The relay publishes by `created_at` (millisecond
+ * precision) and then by `id`, so two events a service enqueues in the same
+ * millisecond reach the bus in the order it enqueued them. (A random id would
+ * publish them in either order; a live view, such as the realtime hub's,
+ * could then see a call change before it saw it start.) The 12-bit
+ * `rand_a` field is a counter within the millisecond (RFC 9562 §6.2, method
+ * 1); past 4096 in one millisecond the timestamp is borrowed from the next.
+ */
+export function newEventId(): string {
+  const now = Date.now();
+  if (now > lastMs) {
+    lastMs = now;
+    sequence = 0;
+  } else if (sequence < 0xfff) {
+    sequence += 1;
+  } else {
+    lastMs += 1;
+    sequence = 0;
+  }
+  const bytes = randomBytes(16);
+  bytes.writeUIntBE(lastMs, 0, 6);
+  bytes[6] = 0x70 | (sequence >> 8);
+  bytes[7] = sequence & 0xff;
+  bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 /** What a service supplies to publish an event. */
 export interface PublishRequest<TType extends string = string, TData = unknown> {
@@ -67,7 +100,7 @@ export async function enqueueEvent<
   const contract = registry.contract(request.type);
   registry.assertPayload(request.type, request.data);
 
-  const id = request.id ?? randomUUID();
+  const id = request.id ?? newEventId();
   const now = new Date();
 
   await eventTablesOf(db)
