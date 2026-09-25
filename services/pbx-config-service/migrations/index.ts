@@ -11,6 +11,7 @@ import * as addConferenceRooms from './008_add_conference_rooms.js';
 import * as addSchedules from './009_add_schedules.js';
 import * as addDevices from './010_add_devices.js';
 import * as addExtensionCallHandling from './011_add_extension_call_handling.js';
+import * as uniqueExtensionUser from './012_unique_extension_user.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -33,4 +34,5 @@ export const migrations: Record<string, Migration> = {
   '009_add_schedules': addSchedules,
   '010_add_devices': addDevices,
   '011_add_extension_call_handling': addExtensionCallHandling,
+  '012_unique_extension_user': uniqueExtensionUser,
 };
