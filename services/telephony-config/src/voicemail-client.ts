@@ -32,9 +32,14 @@ export interface CreateVoicemailMessageInput {
   readonly callerIdNumber?: string | null;
 }
 
-export interface CompleteVoicemailMessageInput {
-  readonly durationMs: number;
-  readonly sizeBytes: number;
+/**
+ * A new `pending` message (S5-16): `voicemail.lua` records to `fileName` in the node's spool,
+ * and the node uploader, not FreeSWITCH, delivers it to voicemail-service.
+ */
+export interface CreatedVoicemailMessage {
+  readonly messageId: string;
+  readonly fileName: string;
+  readonly objectKey: string;
 }
 
 export class VoicemailClientError extends Error {
@@ -65,14 +70,7 @@ export interface VoicemailClient {
     tenantId: string,
     mailboxId: string,
     input: CreateVoicemailMessageInput,
-  ): Promise<{ messageId: string; uploadUrl: string; objectKey: string }>;
-  completeMessage(
-    tenantId: string,
-    mailboxId: string,
-    messageId: string,
-    input: CompleteVoicemailMessageInput,
-  ): Promise<VoicemailMessage>;
-  failMessage(tenantId: string, mailboxId: string, messageId: string): Promise<void>;
+  ): Promise<CreatedVoicemailMessage>;
   listMessages(tenantId: string, mailboxId: string): Promise<VoicemailMessage[]>;
   markMessageRead(
     tenantId: string,
@@ -152,25 +150,7 @@ export function createVoicemailClient(options: VoicemailClientOptions): Voicemai
     },
     async createMessage(tenantId, mailboxId, input) {
       const response = await call('POST', `${mailboxUrl(tenantId, mailboxId)}/messages`, input);
-      return (await response!.json()) as {
-        messageId: string;
-        uploadUrl: string;
-        objectKey: string;
-      };
-    },
-    async completeMessage(tenantId, mailboxId, messageId, input) {
-      const response = await call(
-        'POST',
-        `${mailboxUrl(tenantId, mailboxId)}/messages/${encodeURIComponent(messageId)}/complete`,
-        input,
-      );
-      return (await response!.json()) as VoicemailMessage;
-    },
-    async failMessage(tenantId, mailboxId, messageId) {
-      await call(
-        'POST',
-        `${mailboxUrl(tenantId, mailboxId)}/messages/${encodeURIComponent(messageId)}/fail`,
-      );
+      return (await response!.json()) as CreatedVoicemailMessage;
     },
     async listMessages(tenantId, mailboxId) {
       const response = await call('GET', `${mailboxUrl(tenantId, mailboxId)}/messages`);

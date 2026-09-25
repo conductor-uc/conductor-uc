@@ -3,6 +3,7 @@ import { ProblemError, Type, type Server, type Static } from '@cuc/http';
 
 import type { Storage } from '@cuc/storage';
 
+import { spoolFileName } from '../domain/message.js';
 import { MailboxNotFoundError, type MailboxRepo } from '../repo/mailbox.repo.js';
 import { MessageNotFoundError, type MessageRepo } from '../repo/message.repo.js';
 
@@ -39,12 +40,9 @@ const CreateMessageBodySchema = Type.Object({
 });
 const CreateMessageResponseSchema = Type.Object({
   messageId: Type.String(),
-  uploadUrl: Type.String(),
+  /** The file to record to in the node's spool (`vm-<messageId>.wav`), which the node uploader delivers (S5-16). */
+  fileName: Type.String(),
   objectKey: Type.String(),
-});
-const CompleteMessageBodySchema = Type.Object({
-  durationMs: Type.Number({ minimum: 0 }),
-  sizeBytes: Type.Number({ minimum: 0 }),
 });
 const MessageResponseSchema = Type.Object({
   id: Type.String(),
@@ -71,6 +69,10 @@ function bearerToken(header: string | undefined): string | undefined {
  * (CLAUDE.md rule 4), so it calls these on the app's behalf via its own
  * `/fs/voicemail/...` routes, the same shape `/fs/media/...` already uses
  * for pbx-config-service's media assets (S2-07).
+ *
+ * Creating a message only makes its `pending` row and names its spool file:
+ * the audio itself reaches storage through the node uploader and
+ * `upload.routes.ts` (S5-16), never through FreeSWITCH or these routes.
  *
  * Same gating as every other internal route in this codebase: a shared
  * `INTERNAL_SERVICE_TOKEN` bearer check inside the handler, not the
@@ -209,51 +211,12 @@ export function registerInternalRoutes(
       const mailbox = await mailboxes.findById({ tenantId }, id);
       if (mailbox === undefined) throw ProblemError.notFound('No mailbox with that id.');
 
-      const { message, uploadUrl } = await messages.create({ tenantId }, id, request.body);
-      return reply
-        .status(201)
-        .send({ messageId: message.id, uploadUrl, objectKey: message.objectKey });
-    },
-  );
-
-  app.post(
-    '/internal/v1/tenants/:tenantId/voicemail/mailboxes/:id/messages/:messageId/complete',
-    {
-      config: { public: true },
-      schema: {
-        params: MessageParamsSchema,
-        body: CompleteMessageBodySchema,
-        response: { 200: MessageResponseSchema },
-      },
-    },
-    async (request) => {
-      requireToken(request);
-      try {
-        const message = await messages.complete(
-          { tenantId: request.params.tenantId },
-          request.params.messageId,
-          request.body,
-        );
-        return toMessageResponse(message);
-      } catch (error) {
-        if (error instanceof MessageNotFoundError) throw ProblemError.notFound(error.message);
-        throw error;
-      }
-    },
-  );
-
-  app.post(
-    '/internal/v1/tenants/:tenantId/voicemail/mailboxes/:id/messages/:messageId/fail',
-    { config: { public: true }, schema: { params: MessageParamsSchema } },
-    async (request, reply) => {
-      requireToken(request);
-      try {
-        await messages.fail({ tenantId: request.params.tenantId }, request.params.messageId);
-      } catch (error) {
-        if (error instanceof MessageNotFoundError) throw ProblemError.notFound(error.message);
-        throw error;
-      }
-      return reply.status(204).send();
+      const { message } = await messages.create({ tenantId }, id, request.body);
+      return reply.status(201).send({
+        messageId: message.id,
+        fileName: spoolFileName(message.id),
+        objectKey: message.objectKey,
+      });
     },
   );
 

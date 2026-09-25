@@ -12,6 +12,8 @@ import { createMailboxRepo } from './repo/mailbox.repo.js';
 import { createMessageRepo } from './repo/message.repo.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { createPbxClient } from './pbx-client.js';
+import { createPendingSweep } from './pending-sweep.js';
+import { registerUploadRoutes } from './routes/upload.routes.js';
 import { registerMeRoutes } from './routes/me.routes.js';
 import { registerMailboxRoutes } from './routes/mailbox.routes.js';
 import type { VoicemailServiceDb } from './schema.js';
@@ -65,7 +67,7 @@ const relayLoop = relay.run();
 const kek = fileKekFromConfig(config);
 const storage = storageFromConfig(config, logger);
 const mailboxRepo = createMailboxRepo(db, storage, kek);
-const messageRepo = createMessageRepo(db, storage);
+const messageRepo = createMessageRepo(db);
 
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
@@ -99,6 +101,20 @@ const pbxClient = createPbxClient({
 });
 registerMeRoutes(app, mailboxRepo, messageRepo, storage, pbxClient.userExtension, bus);
 registerInternalRoutes(app, mailboxRepo, messageRepo, config.INTERNAL_SERVICE_TOKEN, storage);
+registerUploadRoutes(app, {
+  messages: messageRepo,
+  storage,
+  logger,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+
+const pendingSweep = createPendingSweep({
+  messages: messageRepo,
+  logger,
+  now: () => new Date(),
+  pendingMaxAgeHours: config.PENDING_MESSAGE_MAX_AGE_HOURS,
+});
+pendingSweep.start(config.PENDING_SWEEP_INTERVAL_MS);
 
 // G-116: values still under an older KEK version are moved to the current one
 // in the background, and `/readyz` says how many remain, so an old version
@@ -112,6 +128,7 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
+  pendingSweep.stop();
   relay.stop();
   await Promise.race([
     app.close(),

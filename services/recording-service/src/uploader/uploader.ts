@@ -6,17 +6,48 @@ import { Readable } from 'node:stream';
 
 import type { Logger } from '@cuc/logger';
 
-import { AlreadyUploadedError, TransientUploadError, type RecordingApi } from './client.js';
+import { AlreadyUploadedError, TransientUploadError, type UploadApi } from './client.js';
 import { inspectWav } from './wav.js';
 
-/** `<recording id>.wav`, the only names the uploader touches: FreeSWITCH writes exactly this. */
-const SPOOL_FILE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.wav$/;
+/** What a spool file holds, which decides the service it is delivered to. */
+export type SpoolFileKind = 'recording' | 'voicemail';
+
+const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+/**
+ * The only names the uploader touches: FreeSWITCH writes exactly these. `<recording id>.wav`
+ * is a call recording (recording-service's id); `vm-<message id>.wav` is a voicemail message
+ * `voicemail.lua` recorded (voicemail-service's id, S5-16). Both ids are lowercase UUIDs.
+ */
+const SPOOL_FILES: readonly { readonly kind: SpoolFileKind; readonly pattern: RegExp }[] = [
+  { kind: 'recording', pattern: new RegExp(`^(${UUID})\\.wav$`) },
+  { kind: 'voicemail', pattern: new RegExp(`^vm-(${UUID})\\.wav$`) },
+];
+
+/** The kind and service-side id a spool file name carries, or undefined for any other file. */
+export function parseSpoolFileName(name: string): { kind: SpoolFileKind; id: string } | undefined {
+  for (const { kind, pattern } of SPOOL_FILES) {
+    const id = pattern.exec(name)?.[1];
+    if (id !== undefined) return { kind, id };
+  }
+  return undefined;
+}
+
+const isSpoolFile = (name: string): boolean => parseSpoolFileName(name) !== undefined;
+
+/** How a file is named in log lines and alerts: an opaque id, whose key says which kind. */
+function fileRef(name: string): Record<string, string> {
+  const file = parseSpoolFileName(name);
+  if (file === undefined) return { file: name };
+  return file.kind === 'recording' ? { recordingId: file.id } : { voicemailMessageId: file.id };
+}
+
 /** A file with no room for a WAV header holds no audio. */
 const MIN_AUDIO_FILE_BYTES = 45;
 
 export interface UploaderOptions {
   readonly spoolDir: string;
-  readonly api: RecordingApi;
+  /** Where each kind of spool file is delivered: recording-service and voicemail-service. */
+  readonly apis: Readonly<Record<SpoolFileKind, UploadApi>>;
   readonly logger: Logger;
   /** Injected so tests drive time; production passes `Date.now`. */
   readonly now?: () => number;
@@ -69,9 +100,14 @@ export interface ScanResult {
 
 /**
  * The node's recording uploader (S5-03; 03 §6): watches the spool directory, and for each
- * finished file asks recording-service for a presigned PUT, uploads it, has the service verify
+ * finished file asks the owning service for a presigned PUT, uploads it, has the service verify
  * what arrived (size and MD5), and only then deletes the local file. It holds no storage or
  * database credentials, and the spool is transient: nothing here is a durable copy (D-011).
+ *
+ * Two kinds of file share the spool, told apart by name (`parseSpoolFileName`): call
+ * recordings go to recording-service, voicemail messages to voicemail-service (S5-16). Both
+ * services speak the same contract, so everything below is the same for both; the metrics and
+ * alerts count them together (one spool, one disk, one alert).
  *
  * A file leaves the spool only after the service has confirmed the stored object matches. Any
  * failure leaves it in place for the next attempt, spaced by exponential backoff with jitter.
@@ -79,7 +115,7 @@ export interface ScanResult {
  * `stuckFiles` metric).
  */
 export function createUploader(options: UploaderOptions) {
-  const { spoolDir, api, logger } = options;
+  const { spoolDir, apis, logger } = options;
   const now = options.now ?? Date.now;
   const random = options.random ?? Math.random;
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -164,7 +200,7 @@ export function createUploader(options: UploaderOptions) {
         logger.error(
           {
             alert: 'recording_spool_delete_failed',
-            recordingId: name.slice(0, -4),
+            ...fileRef(name),
             code: (error as NodeJS.ErrnoException).code,
             err: state.lastError,
           },
@@ -182,19 +218,21 @@ export function createUploader(options: UploaderOptions) {
     size: number,
     mtimeMs: number,
   ): Promise<'uploaded' | 'dropped'> {
-    const recordingId = name.slice(0, -'.wav'.length);
+    const { kind, id } = parseSpoolFileName(name)!;
+    const api = apis[kind];
     const header = await readHeader(path);
     const wav = inspectWav(header, size);
 
     if (size < MIN_AUDIO_FILE_BYTES) {
-      // No audio was ever written (the call never got media). Tell the service and drop it.
-      await api.fail(recordingId, 'empty_file');
-      logger.info({ recordingId }, 'uploader: dropping an empty spool file');
+      // No audio was ever written (the call never got media, or the voicemail caller hung up
+      // before speaking). Tell the service and drop it.
+      await api.fail(id, 'empty_file');
+      logger.info(fileRef(name), 'uploader: dropping an empty spool file');
       return 'dropped';
     }
 
     const { md5, sha256 } = await fingerprint(path);
-    const target = await api.requestUploadUrl(recordingId);
+    const target = await api.requestUploadUrl(id);
 
     let response: Response;
     try {
@@ -219,7 +257,7 @@ export function createUploader(options: UploaderOptions) {
     }
 
     // The service compares its object's size and ETag with what we sent before it says yes.
-    await api.complete(recordingId, { sizeBytes: size, md5, sha256, durationMs: wav.durationMs });
+    await api.complete(id, { sizeBytes: size, md5, sha256, durationMs: wav.durationMs });
 
     // The file must be exactly what was uploaded: one that changed since was still being written.
     const after = await stat(path);
@@ -240,7 +278,7 @@ export function createUploader(options: UploaderOptions) {
       // Only the delete is left; the service is not asked again.
       if (await removeLocal(name, state)) {
         states.delete(name);
-        logger.info({ recordingId: name.slice(0, -4) }, 'uploader: spool file deleted on retry');
+        logger.info(fileRef(name), 'uploader: spool file deleted on retry');
       }
       return;
     }
@@ -249,21 +287,15 @@ export function createUploader(options: UploaderOptions) {
       if (outcome === 'uploaded') {
         uploadedTotal += 1;
         result.uploaded += 1;
-        logger.info(
-          { recordingId: name.slice(0, -4), bytes: size },
-          'uploader: recording uploaded',
-        );
+        logger.info({ ...fileRef(name), bytes: size }, 'uploader: file uploaded');
       }
       if (await removeLocal(name, state)) states.delete(name);
     } catch (error) {
       if (error instanceof AlreadyUploadedError) {
-        // The service already holds this recording; the spool copy is a duplicate.
+        // The service already holds this file's audio; the spool copy is a duplicate.
         if (await removeLocal(name, state)) {
           states.delete(name);
-          logger.warn(
-            { recordingId: name.slice(0, -4) },
-            'uploader: dropped a duplicate spool file',
-          );
+          logger.warn(fileRef(name), 'uploader: dropped a duplicate spool file');
         }
         return;
       }
@@ -271,13 +303,13 @@ export function createUploader(options: UploaderOptions) {
       state.lastError = error instanceof Error ? error.message : String(error);
       failedAttemptsTotal += 1;
       result.failed += 1;
-      // A recording the service has never heard of may be registered a moment later; a
+      // A file the service has never heard of may be registered a moment later; a
       // corrupt upload should be redone. Both simply wait out the backoff.
       const wait = backoffMs(state.attempts);
       state.nextAttemptAt = now() + wait;
       logger.warn(
         {
-          recordingId: name.slice(0, -4),
+          ...fileRef(name),
           attempts: state.attempts,
           retryInMs: wait,
           err: state.lastError,
@@ -296,7 +328,7 @@ export function createUploader(options: UploaderOptions) {
     try {
       let names: string[];
       try {
-        names = (await readdir(spoolDir)).filter((name) => SPOOL_FILE.test(name));
+        names = (await readdir(spoolDir)).filter(isSpoolFile);
       } catch (error) {
         logger.error(
           { err: error instanceof Error ? error.message : String(error) },
@@ -348,9 +380,7 @@ export function createUploader(options: UploaderOptions) {
 
       // What remains after this pass is what the alert is about: files that uploaded are gone.
       const after = now();
-      const remaining = (await readdir(spoolDir).catch(() => [] as string[])).filter((name) =>
-        SPOOL_FILE.test(name),
-      );
+      const remaining = (await readdir(spoolDir).catch(() => [] as string[])).filter(isSpoolFile);
       let remainingBytes = 0;
       let remainingOldestMs = 0;
       let stuckFiles = 0;
@@ -370,7 +400,7 @@ export function createUploader(options: UploaderOptions) {
           logger.error(
             {
               alert: 'recording_upload_stuck',
-              recordingId: name.slice(0, -4),
+              ...fileRef(name),
               ageSeconds: Math.round(age / 1000),
               attempts: state.attempts,
               lastError: state.lastError,
@@ -422,22 +452,22 @@ export type Uploader = ReturnType<typeof createUploader>;
 /** Prometheus text exposition of the uploader's metrics. `cuc_recording_spool_stuck_files > 0` is the alert. */
 export function renderMetrics(metrics: UploaderMetrics): string {
   const lines = [
-    '# HELP cuc_recording_spool_files Recordings waiting in the node spool.',
+    '# HELP cuc_recording_spool_files Files (call recordings and voicemail messages) waiting in the node spool.',
     '# TYPE cuc_recording_spool_files gauge',
     `cuc_recording_spool_files ${String(metrics.spoolFiles)}`,
     '# HELP cuc_recording_spool_bytes Bytes waiting in the node spool.',
     '# TYPE cuc_recording_spool_bytes gauge',
     `cuc_recording_spool_bytes ${String(metrics.spoolBytes)}`,
-    '# HELP cuc_recording_spool_stuck_files Recordings on the node longer than the stuck threshold. Alert when above zero.',
+    '# HELP cuc_recording_spool_stuck_files Spool files on the node longer than the stuck threshold. Alert when above zero.',
     '# TYPE cuc_recording_spool_stuck_files gauge',
     `cuc_recording_spool_stuck_files ${String(metrics.stuckFiles)}`,
-    '# HELP cuc_recording_spool_undeletable_files Recordings already stored that could not be deleted from the node spool. Alert when above zero.',
+    '# HELP cuc_recording_spool_undeletable_files Spool files already stored that could not be deleted from the node spool. Alert when above zero.',
     '# TYPE cuc_recording_spool_undeletable_files gauge',
     `cuc_recording_spool_undeletable_files ${String(metrics.undeletableFiles)}`,
     '# HELP cuc_recording_spool_oldest_file_age_seconds Age of the oldest spool file.',
     '# TYPE cuc_recording_spool_oldest_file_age_seconds gauge',
     `cuc_recording_spool_oldest_file_age_seconds ${String(metrics.oldestFileAgeSeconds)}`,
-    '# HELP cuc_recording_uploaded_total Recordings uploaded since this process started.',
+    '# HELP cuc_recording_uploaded_total Spool files uploaded since this process started.',
     '# TYPE cuc_recording_uploaded_total counter',
     `cuc_recording_uploaded_total ${String(metrics.uploadedTotal)}`,
     '# HELP cuc_recording_upload_failures_total Failed upload attempts since this process started.',

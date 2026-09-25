@@ -6,8 +6,8 @@
   unprompted one instead, the same "wait for the far end's own BYE"
   reasoning `uac_call_wrong_pin.xml`/`login_feature_code.xml` already
   establish for a different FS-initiated hangup. `voicemail.lua`'s own
-  `leaveMessage` calls `session:hangup()` itself once recording, upload,
-  and the `/complete` call all finish — confirmed live this reliably
+  `leaveMessage` calls `session:hangup()` itself once recording finishes
+  (the node uploader delivers the file afterwards, S5-16) — confirmed live this reliably
   happens well before any fixed multi-second hold a caller-side scenario
   might script (SIPp sends no real RTP audio, so FreeSWITCH's own
   silence-based auto-stop on `recordFile` ends the recording almost

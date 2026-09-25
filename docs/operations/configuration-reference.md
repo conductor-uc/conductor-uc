@@ -119,7 +119,7 @@ There is no KMS integration: the Vault provider in `packages/crypto` throws "not
 |---|---|---|---|
 | `STORAGE_MODE` | `bucket-per-tenant` | no | Or `prefix-per-tenant` (one shared bucket; for providers that cap bucket counts). **Choose once**: changing it later does not move existing objects. |
 | `STORAGE_BUCKET_PREFIX` | — | **yes** | At most 28 characters. Buckets are `{prefix}-t-{tenant id}`, `{prefix}-shared`, `{prefix}-platform`. Bucket names appear in presigned URLs, so do not put a product or company name in it (brand rule). Example: `v1prod`. |
-| `STORAGE_ENDPOINT` | — (AWS S3) | no | Your S3-compatible endpoint, for example `https://s3.voice.example.net` or `https://s3.eu-central-1.wasabisys.com`. **Presigned URLs are signed for this exact host**, so it must be reachable by the services, by every FreeSWITCH server and uploader, **and by browsers over HTTPS**. There is no separate "public endpoint" setting. |
+| `STORAGE_ENDPOINT` | — (AWS S3) | no | Your S3-compatible endpoint, for example `https://s3.voice.example.net` or `https://s3.eu-central-1.wasabisys.com`. **Presigned URLs are signed for this exact host**, so it must be reachable by the services, by every uploader (FreeSWITCH itself never uses it), **and by browsers over HTTPS**. There is no separate "public endpoint" setting. |
 | `STORAGE_REGION` | `us-east-1` | no | |
 | `STORAGE_ACCESS_KEY_ID` | — | **yes** (secret) | |
 | `STORAGE_SECRET_ACCESS_KEY` | — | **yes** (secret) | |
@@ -225,7 +225,15 @@ Groups: base, database (`callflow_service`), events, signed headers. Own variabl
 
 ### 4.7 voicemail-service
 
-Groups: base, database (`voicemail_service`), events, signed headers, crypto, storage. Own variables: `INTERNAL_SERVICE_TOKEN` (**required**, secret), `PBX_CONFIG_SERVICE_URL` and `IDENTITY_SERVICE_URL` (**required**).
+Groups: base, database (`voicemail_service`), events, signed headers, crypto, storage.
+
+| Variable | Default | Required | Meaning |
+|---|---|---|---|
+| `INTERNAL_SERVICE_TOKEN` | — | **yes** (secret) | Also what every recording uploader presents when it delivers a voicemail message |
+| `PBX_CONFIG_SERVICE_URL` | — | **yes** | |
+| `IDENTITY_SERVICE_URL` | — | **yes** | |
+| `PENDING_MESSAGE_MAX_AGE_HOURS` | `72` | no | A message whose audio never reached storage (the caller hung up before anything was recorded, or the node died with the file) is marked failed after this. Pending messages are never listed either way. |
+| `PENDING_SWEEP_INTERVAL_MS` | `3600000` | no | First sweep runs one interval after startup |
 
 ### 4.8 recording-service
 
@@ -343,9 +351,9 @@ Set as environment variables on the FreeSWITCH container. `vars.xml` reads them 
 | `FS_SDP_IDENTITY` | `SIP-Media-Server` | SDP `o=`/`s=` name. Neutral, no spaces. |
 | `FS_LOG_LEVEL` | `info` | |
 
-Fixed in the configuration files, with no variable: SIP binds to the detected interface address only; signalling (`ext-sip-ip`) is always that same address; codecs are Opus, G.722, PCMU, PCMA; at most 1,000 sessions and 30 new sessions per second; recordings go to `/var/spool/cuc/rec`; the event socket port is 8021.
+Fixed in the configuration files, with no variable: SIP binds to the detected interface address only; signalling (`ext-sip-ip`) is always that same address; codecs are Opus, G.722, PCMU, PCMA; at most 1,000 sessions and 30 new sessions per second; recordings and voicemail messages go to `/var/spool/cuc/rec`; the event socket port is 8021.
 
-Directories: `/var/spool/cuc/rec` (recording spool, shared with the uploader), `/var/cache/cuc/flow` and `/var/cache/cuc/http` (caches). Mount all three on tmpfs or disposable storage; nothing in them is durable.
+Directories: `/var/spool/cuc/rec` (recording and voicemail spool, shared with the uploader), `/var/cache/cuc/flow` and `/var/cache/cuc/http` (caches). Mount all three on tmpfs or disposable storage; nothing in them is durable.
 
 ## 6. OpenSIPs
 
@@ -369,16 +377,17 @@ The entrypoint substitutes only these variables into `opensips.cfg.template`. An
 
 ## 7. recording-uploader
 
-One per FreeSWITCH node, on the same server, sharing the spool directory. It does not use the shared variable groups.
+One per FreeSWITCH node, on the same server, sharing the spool directory. It uploads call recordings and voicemail messages alike. It does not use the shared variable groups.
 
 | Variable | Default | Required | Meaning |
 |---|---|---|---|
-| `RECORDING_SERVICE_URL` | — | **yes** | |
-| `INTERNAL_SERVICE_TOKEN` | — | **yes** (secret) | |
+| `RECORDING_SERVICE_URL` | — | **yes** | Where call recordings (`<uuid>.wav`) go |
+| `VOICEMAIL_SERVICE_URL` | — | **yes** | Where voicemail messages (`vm-<uuid>.wav`) go (S5-16). Required because every node records voicemail: an uploader without it does not start. |
+| `INTERNAL_SERVICE_TOKEN` | — | **yes** (secret) | The same token recording-service and voicemail-service expect |
 | `SERVICE_NAME` | `recording-uploader` | no | Name it after its node, for example `recording-uploader-fs1` |
 | `SPOOL_DIR` | `/var/spool/cuc/rec` | no | |
 | `SCAN_INTERVAL_MS` | `5000` | no | |
-| `SETTLE_SECONDS` | `30` | no | A file must be unchanged this long before upload |
+| `SETTLE_SECONDS` | `30` | no | A file must be unchanged this long before upload. A voicemail message is listed only after its upload, so this is also how long after the caller hangs up it appears. |
 | `ABANDONED_AFTER_SECONDS` | `600` | no | Upload even if the WAV header never closed (FreeSWITCH died mid-call) |
 | `STUCK_AFTER_SECONDS` | `3600` | no | Raise the stuck alert after this |
 | `BACKOFF_BASE_MS` / `BACKOFF_MAX_MS` | `2000` / `300000` | no | Retry backoff |

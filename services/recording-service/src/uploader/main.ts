@@ -3,7 +3,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { redactConfig } from '@cuc/config';
 import { createLogger } from '@cuc/logger';
 
-import { createRecordingApi } from './client.js';
+import { createRecordingApi, createVoicemailApi } from './client.js';
 import { loadUploaderConfig, uploaderConfigSchema } from './config.js';
 import { createUploader, renderMetrics } from './uploader.js';
 
@@ -17,10 +17,16 @@ logger.info(redactConfig(uploaderConfigSchema, config), 'starting');
 
 const uploader = createUploader({
   spoolDir: config.SPOOL_DIR,
-  api: createRecordingApi({
-    baseUrl: config.RECORDING_SERVICE_URL,
-    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
-  }),
+  apis: {
+    recording: createRecordingApi({
+      baseUrl: config.RECORDING_SERVICE_URL,
+      internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+    }),
+    voicemail: createVoicemailApi({
+      baseUrl: config.VOICEMAIL_SERVICE_URL,
+      internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+    }),
+  },
   logger,
   settleMs: config.SETTLE_SECONDS * 1000,
   abandonedMs: config.ABANDONED_AFTER_SECONDS * 1000,

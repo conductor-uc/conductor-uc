@@ -7,7 +7,7 @@ import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 import { PbxClientError, type UserExtensionLookup } from '../src/pbx-client.js';
 import { registerMailboxRoutes } from '../src/routes/mailbox.routes.js';
 import { registerMeRoutes } from '../src/routes/me.routes.js';
-import { resetSchema, startHarness, type Harness } from './harness.js';
+import { resetSchema, startHarness, storeAudio, type Harness } from './harness.js';
 
 const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
 const SECRET = 'test-internal-header-secret';
@@ -92,10 +92,10 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in voicemail-se
     const extensionId = crypto.randomUUID();
     links.set(`${tenantId}:${userId}`, extensionId);
     const mailbox = await h.mailboxes.create({ tenantId }, { extensionId, pin: '1234' });
-    const { message, uploadUrl } = await h.messages.create({ tenantId }, mailbox.id, {
+    const { message } = await h.messages.create({ tenantId }, mailbox.id, {
       callerIdNumber: caller,
     });
-    await fetch(uploadUrl, { method: 'PUT', body: 'wav bytes' });
+    await storeAudio(h, tenantId, message.objectKey, 'wav bytes');
     await h.messages.complete({ tenantId }, message.id, { durationMs: 1000, sizeBytes: 9 });
     return { mailbox, message };
   }

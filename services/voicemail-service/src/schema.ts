@@ -40,6 +40,10 @@ export interface VoicemailServiceDb extends EventTables {
     caller_id_number: string | null;
     duration_ms: number | null;
     size_bytes: number | null;
+    /** Hex SHA-256 of the uploaded WAV, as the node uploader read it (S5-16, 05 §4). */
+    sha256: string | null;
+    /** Why the message never became ready: `empty_file` (uploader), `never_uploaded` (sweep). */
+    failure_reason: string | null;
     is_read: boolean;
     created_at: Date;
     updated_at: Date;

@@ -217,8 +217,10 @@ services:
 
   recording-uploader:
     # S5-03. This node's uploader sidecar: watches the spool `freeswitch` records
-    # into, uploads each finished file through recording-service, then deletes it.
-    # No storage or database credentials, only recording-service's address and token.
+    # into, uploads each finished file through recording-service (call recordings)
+    # or voicemail-service (`vm-<id>.wav` voicemail messages, S5-16), then deletes
+    # it. No storage or database credentials, only the two services' addresses and
+    # the internal token.
     build:
       context: ../..
       dockerfile: services/recording-service/Dockerfile
@@ -227,10 +229,13 @@ services:
     depends_on:
       recording-service:
         condition: service_started
+      voicemail-service:
+        condition: service_started
     volumes:
       - recording-spool:/var/spool/cuc/rec
     environment:
       RECORDING_SERVICE_URL: http://recording-service:8080
+      VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       SPOOL_DIR: /var/spool/cuc/rec
       SERVICE_NAME: recording-uploader
@@ -245,10 +250,13 @@ services:
     depends_on:
       recording-service:
         condition: service_started
+      voicemail-service:
+        condition: service_started
     volumes:
       - recording-spool-2:/var/spool/cuc/rec
     environment:
       RECORDING_SERVICE_URL: http://recording-service:8080
+      VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       SPOOL_DIR: /var/spool/cuc/rec
       SERVICE_NAME: recording-uploader-2

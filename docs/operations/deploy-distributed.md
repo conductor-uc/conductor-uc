@@ -259,6 +259,7 @@ services:
     environment:
       SERVICE_NAME: recording-uploader-${NODE_ID}
       RECORDING_SERVICE_URL: http://${APP_IP}:8107
+      VOICEMAIL_SERVICE_URL: http://${APP_IP}:8106   # voicemail messages (S5-16)
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
       SPOOL_DIR: /var/spool/cuc/rec
 ```
@@ -270,7 +271,7 @@ How the addresses fit together on a media server:
 - OpenSIPs sends to `203.0.113.21:5060` from `203.0.113.10`. That is why `FS_OPENSIPS_CIDR` is the edge's public address and the firewall allows 5060 from it.
 - FreeSWITCH sends its outbound legs to `OPENSIPS_SIP_URI` (`203.0.113.10:5060`) from `203.0.113.21:5060`. That is exactly its entry in `OPENSIPS_FS_DESTINATION`, which is how OpenSIPs recognises it.
 - call-control connects to `10.10.0.21:8021` from app-1's private address, which is what `FS_CLUSTER_CIDR` allows.
-- The node and its uploader reach object storage over the internet (voicemail uploads, recordings).
+- The uploader reaches object storage over the internet (call recordings and voicemail messages). FreeSWITCH itself never does: it records into the spool and the uploader delivers.
 
 ### 4.5 Media servers behind 1:1 NAT (AWS, Google Cloud, Azure)
 
@@ -313,6 +314,7 @@ Use your cloud provider's security groups or host firewalls. The rules below are
 | Port | Protocol | From | Why |
 |---|---|---|---|
 | 8101–8107, 8110 | TCP | 10.10.0.10 (gateway) and 10.10.0.50 (monitoring) | API services; call-control only for monitoring |
+| 8106 | TCP | 10.10.0.21, 10.10.0.22 | voicemail-service, from the uploaders (voicemail messages) |
 | 8107 | TCP | 10.10.0.21, 10.10.0.22 | recording-service, from the uploaders |
 | 8108 | TCP | 10.10.0.10, 10.10.0.21, 10.10.0.22, 10.10.0.50 | cdr-service: gateway, and CDRs from FreeSWITCH |
 | 8109 | TCP | 10.10.0.21, 10.10.0.22, 10.10.0.50 | telephony-config: FreeSWITCH configuration |
@@ -389,10 +391,10 @@ To remove one: take it out of `OPENSIPS_FS_DESTINATION` and restart OpenSIPs, wa
 | Server lost | Effect | Recovery |
 |---|---|---|
 | edge-1 | **All calls and the console stop.** Phones cannot register or call. | Restore or rebuild it. Nothing on it is durable: its state is in MariaDB. |
-| One media server | Its calls drop, and its recordings not yet uploaded are lost (O-13, accepted). OpenSIPs stops sending new calls to it once its OPTIONS probe (every 10 seconds) goes unanswered, so within tens of seconds; calls routed to it before then fail. call-control marks it down. **Its call records are not written** (synthetic CDRs are S4-04, not built). | Other nodes carry new calls. Restart it; it rejoins without configuration changes. |
+| One media server | Its calls drop, and its recordings and voicemail messages not yet uploaded are lost (O-13, accepted; such a message is never listed). OpenSIPs stops sending new calls to it once its OPTIONS probe (every 10 seconds) goes unanswered, so within tens of seconds; calls routed to it before then fail. call-control marks it down. **Its call records are not written** (synthetic CDRs are S4-04, not built). | Other nodes carry new calls. Restart it; it rejoins without configuration changes. |
 | app-1 | New calls fail, because FreeSWITCH asks telephony-config for every call. Established calls stay up, but anything in them that needs telephony-config (a transfer, an IVR step, voicemail) fails. The console and API stop. | Restart. Services reconnect and catch up on events from NATS. |
 | data-1 | Everything stops: services cannot reach MariaDB, and OpenSIPs cannot authenticate. | Restore MariaDB from backup ([operations §4](operations.md#4-backups-and-restore)). Redis needs no restore. |
-| object storage | Recording and voicemail playback, prompt uploads and exports fail. Recordings wait on the media servers' spool and upload later. Voicemail messages lose their audio (FreeSWITCH is meant to upload them directly; that upload is broken anyway until S5-16). Calls otherwise work: FreeSWITCH caches prompts. | Provider's concern. |
+| object storage | Recording and voicemail playback, prompt uploads and exports fail. Recordings and voicemail messages wait in the media servers' spool and upload when storage is back; a new voicemail message is listed only then. Calls otherwise work: FreeSWITCH caches prompts. | Provider's concern. |
 | SMTP relay | Emails fail. Nothing else is affected. | — |
 
 ## 9. Checklist before going live

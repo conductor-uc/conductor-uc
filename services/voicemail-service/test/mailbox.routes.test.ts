@@ -3,7 +3,7 @@ import { databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 
 import { registerMailboxRoutes } from '../src/routes/mailbox.routes.js';
-import { resetSchema, startHarness, type Harness } from './harness.js';
+import { resetSchema, startHarness, storeAudio, type Harness } from './harness.js';
 
 const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
 const TEST_INTERNAL_SECRET = 'test-internal-header-secret';
@@ -186,10 +186,10 @@ describe.skipIf(skipReason !== undefined)('mailbox HTTP routes', () => {
       { tenantId },
       { extensionId: crypto.randomUUID(), pin: '1234' },
     );
-    const { message, uploadUrl } = await h.messages.create({ tenantId }, mailbox.id, {
+    const { message } = await h.messages.create({ tenantId }, mailbox.id, {
       callerIdNumber: '+15005550001',
     });
-    await fetch(uploadUrl, { method: 'PUT', body: 'wav bytes' });
+    await storeAudio(h, tenantId, message.objectKey, 'wav bytes');
     await h.messages.complete({ tenantId }, message.id, { durationMs: 1000, sizeBytes: 9 });
 
     const list = await app.inject({

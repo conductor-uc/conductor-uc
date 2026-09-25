@@ -9,7 +9,7 @@ Every port the platform listens on and every connection it makes: who opens it, 
 | **api-gateway** | **Yes**: TCP 443 and 80 | Browsers, phones fetching their provisioning files, and Let's Encrypt validation all come from the internet. Port 80 must be on **the same public IP as OpenSIPs** ([§3.3](#33-port-80-must-share-the-sip-edges-address)). |
 | **OpenSIPs** | **Yes**: UDP and TCP 5060, TCP 5061 | Phones register and call; carriers send and receive calls. Its management port 8888 must stay private. |
 | **FreeSWITCH** | **Yes, for media**: UDP 16384–32768 | Audio flows straight between phones or carriers and FreeSWITCH, and FreeSWITCH advertises its own interface address in SDP ([§4](#4-media-rtp-and-why-freeswitch-needs-a-public-address)). Its SIP port and event socket must stay private. |
-| **Object storage** | **Reachable over HTTPS by browsers** (and by FreeSWITCH servers) | Browsers download recordings, voicemail and exports, and upload prompts and logos, through presigned URLs on `STORAGE_ENDPOINT`. A hosted S3 provider satisfies this; a self-hosted MinIO needs a public HTTPS name. |
+| **Object storage** | **Reachable over HTTPS by browsers** (and by every recording uploader) | Browsers download recordings, voicemail and exports, and upload prompts and logos, through presigned URLs on `STORAGE_ENDPOINT`. A hosted S3 provider satisfies this; a self-hosted MinIO needs a public HTTPS name. |
 | recording-uploader | No | Outbound only, plus a private metrics port |
 | All twelve application services | **No, never** | Private by design; shared internal secrets protect them ([§6.1](#61-keep-backend-service-ports-private)) |
 | MariaDB, Redis, NATS | **No, never** | No TLS support in the clients; Redis and (by default) NATS have no password |
@@ -47,7 +47,7 @@ WebSocket SIP (WS/WSS), SIP over IPv6 and HEP capture are not configured.
 | NATS client | 4222 | TCP (no TLS) | container default | Every application service | None in the development stack; username and password supported (`NATS_USER`, `NATS_PASSWORD`) | Those hosts |
 | NATS monitoring | 8222 | TCP, HTTP | container default | Your monitoring system | None | Monitoring only, or do not publish it |
 | MinIO console | 9001 | TCP, HTTP | container default | Administrators | MinIO root credentials | Do not publish it, or administrators' addresses only |
-| MinIO API (self-hosted object storage) | 9000 | TCP, HTTP (HTTPS if you give MinIO a certificate) | container default | Services, uploaders, FreeSWITCH; browsers **via HTTPS** | S3 signatures | See [§1](#1-public-or-private-at-a-glance): browsers need it over HTTPS |
+| MinIO API (self-hosted object storage) | 9000 | TCP, HTTP (HTTPS if you give MinIO a certificate) | container default | Services, uploaders; browsers **via HTTPS** | S3 signatures | See [§1](#1-public-or-private-at-a-glance): browsers need it over HTTPS |
 
 Mailpit (1025, 8025) exists only in the development stack. Do not deploy it.
 
@@ -62,7 +62,7 @@ Every application service listens on 8080. This is the complete list of callers,
 | pbx-config-service | api-gateway, telephony-config, media-worker, voicemail-service, cdr-service | HTTP |
 | trunk-service | api-gateway, pbx-config-service, telephony-config | HTTP |
 | callflow-service | api-gateway, telephony-config | HTTP |
-| voicemail-service | api-gateway, telephony-config, notification-service | HTTP |
+| voicemail-service | api-gateway, telephony-config, notification-service, **every recording-uploader** (voicemail messages, S5-16) | HTTP |
 | recording-service | api-gateway, telephony-config, **every recording-uploader** | HTTP |
 | cdr-service | api-gateway, **every FreeSWITCH node** (`/ingest/json-cdr`) | HTTP |
 | telephony-config | **every FreeSWITCH node** (`/fs/*`), trunk-service | HTTP |
@@ -79,7 +79,7 @@ Every application service listens on 8080. This is the complete list of callers,
 3. FreeSWITCH asks telephony-config `POST /fs/dialplan` (HTTP to 8080) what to do. The answer may bridge to another phone, ring a group, run an IVR flow or voicemail, join a queue or conference, or dial out.
 4. To reach a phone or a carrier, FreeSWITCH sends the new leg **back through OpenSIPs** (to `OPENSIPS_SIP_URI`), and OpenSIPs delivers it.
 5. **Audio never passes through OpenSIPs.** The SDP each side sees carries FreeSWITCH's own address and an RTP port from its range. Phones and carriers send RTP straight to that address, and FreeSWITCH sends RTP straight back.
-6. When the call ends, FreeSWITCH posts the call record to cdr-service (`/ingest/json-cdr`). If it was recorded, the uploader moves the file to object storage.
+6. When the call ends, FreeSWITCH posts the call record to cdr-service (`/ingest/json-cdr`). If it was recorded, or the caller left a voicemail message, the uploader moves the file to object storage.
 
 ### 3.2 An administrator or end user in the browser
 
@@ -126,7 +126,7 @@ What each component must be allowed to open. Private-to-private connections are 
 | org-service | Let's Encrypt: `acme-v02.api.letsencrypt.org` (production) or `acme-staging-v02.api.letsencrypt.org` (staging), or `ACME_DIRECTORY_URL` | TCP 443 | Issue and renew certificates | Yes, for automatic certificates |
 | org-service | Public DNS, through the server's normal resolver | UDP and TCP 53 | Check the `_domain-verification` TXT record when a reseller verifies a domain | Yes, for reseller domains |
 | notification-service | Your SMTP relay (`SMTP_HOST`) | `SMTP_PORT` (587 by default, or 465 with `SMTP_SECURE=true`, or 25) | Every email | Yes |
-| Services using storage, recording-uploader, FreeSWITCH | Object storage (`STORAGE_ENDPOINT`, or AWS S3 when unset) | TCP 443 (or your MinIO port) | Audio, images, exports | Yes |
+| Services using storage, recording-uploader | Object storage (`STORAGE_ENDPOINT`, or AWS S3 when unset) | TCP 443 (or your MinIO port) | Audio, images, exports. FreeSWITCH itself never connects: it records into the spool and the uploader delivers call recordings and voicemail messages (S5-16). | Yes |
 | OpenSIPs | Carriers' SIP servers | Their SIP port (usually 5060 UDP or TCP) | Registration (for registration-based trunks) and outbound calls | Yes, if you use trunks |
 | FreeSWITCH | Carriers' and phones' media addresses | Their RTP ports (any UDP) | Audio | Yes |
 | OpenSIPs | Phones | Whatever address each phone registered | Incoming calls to the phone | Yes |

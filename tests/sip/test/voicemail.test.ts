@@ -1,17 +1,23 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
+  dockerCurlText,
   tenantAdminCurlJson,
   runForeground,
   seedFixtures,
   sipInfraOrSkipReason,
+  sipTestEnv,
   startDelayedCaller,
   stopContainer,
   withSingleFsNode,
   type SeedResult,
 } from '../src/run-scenario.js';
 
+const execFileAsync = promisify(execFile);
 const skipReason = await sipInfraOrSkipReason();
 
 const VOICEMAIL_SERVICE_URL = 'http://voicemail-service:8080';
@@ -23,6 +29,7 @@ const TRUNK_SERVICE_URL = 'http://trunk-service:8080';
 const CARRIER_TARGET_DOMAIN = 'opensips';
 const CALLER_CONTAINER = 'sip-test-vm-caller';
 const MAILBOX_PIN = '5678';
+const SPOOL_DIR = '/var/spool/cuc/rec';
 
 interface ExtensionRow {
   readonly id: string;
@@ -36,6 +43,8 @@ interface CreatedMailbox {
 
 interface MessageRow {
   readonly id: string;
+  readonly status: string;
+  readonly durationMs: number | null;
 }
 
 /**
@@ -45,7 +54,13 @@ interface MessageRow {
  * affinity lease of its own (S2-16 never gave it one, unlike
  * queue/parking/conference), but pinning to one node keeps every call in
  * this file on the same node as everything else this test creates,
- * avoiding an unrelated round-robin surprise.
+ * avoiding an unrelated round-robin surprise. It is also what makes
+ * `sipTestEnv().freeswitchContainer` the node whose spool the leave-message
+ * case inspects.
+ *
+ * S5-16: leaving a message is proved end to end, not just a message row:
+ * the recording is delivered by the node uploader, verified in storage,
+ * playable through its play URL, and gone from the node's spool.
  *
  * The "leave a message" case dials a DID bound directly to the mailbox
  * (`destinationType: 'voicemail'`) rather than exercising
@@ -121,6 +136,36 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
     return (response.json as { rows: MessageRow[] }).rows;
   }
 
+  /**
+   * S5-16: a message is listed only once the node uploader has delivered its
+   * audio and voicemail-service has verified it in storage. The uploader waits
+   * for the file to settle (30 s in compose) first, so this polls.
+   */
+  async function waitForReadyMessage(tenantId: string, mailboxId: string): Promise<MessageRow> {
+    const deadline = Date.now() + 90_000;
+    let last: MessageRow[] = [];
+    while (Date.now() < deadline) {
+      last = await listMessages(tenantId, mailboxId);
+      const ready = last.find((message) => message.status === 'ready');
+      if (ready !== undefined) return ready;
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+    throw new Error(
+      `no ready message after 90 s; listed: ${JSON.stringify(last)}; spool: ${JSON.stringify(await spoolListing())}`,
+    );
+  }
+
+  async function spoolListing(): Promise<string[]> {
+    const { stdout } = await execFileAsync('docker', [
+      'exec',
+      sipTestEnv().freeswitchContainer,
+      'ls',
+      '-A',
+      SPOOL_DIR,
+    ]);
+    return stdout.split('\n').filter((name) => name !== '');
+  }
+
   async function createIpTrunk(tenantId: string, ip: string): Promise<{ id: string }> {
     const created = await tenantAdminCurlJson(
       seed.resellerId,
@@ -180,7 +225,7 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
     );
   }
 
-  it('a DID bound directly to a mailbox records a message', async () => {
+  it('a DID bound directly to a mailbox records a message, and its audio reaches storage', async () => {
     await withSingleFsNode(async () => {
       const tenantId = seed.tenantVoicemail.id;
 
@@ -207,7 +252,7 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
         // detail on why this scenario waits for FS's own BYE rather than
         // scripting a fixed hold: `voicemail.lua`'s own leave-message flow
         // (create the message row, answer, "play" the silent intro,
-        // record, upload, mark complete) hangs up on its own once it
+        // record into the spool) hangs up on its own once it
         // finishes, reliably faster than any fixed hold a scenario could
         // script (SIPp sends no real RTP audio, so FS's own silence-based
         // auto-stop ends the recording almost immediately) — the caller's
@@ -217,21 +262,31 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
         const result = await caller.result();
         expect(result.successfulCalls, result.stdout).toBe(1);
 
-        // Real time for `voicemail.lua`'s own post-hangup steps (the PUT
-        // upload to the presigned URL, then the `/complete` call) to land
-        // — none of that is guaranteed to have finished by the moment the
-        // channel itself tears down.
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // S5-16: the recording stays in the node spool as `vm-<id>.wav`
+        // until the uploader sidecar delivers it; only then, with its size
+        // and MD5 checked against storage, is the message listed.
+        const message = await waitForReadyMessage(tenantId, mailbox.id);
 
-        const messages = await listMessages(tenantId, mailbox.id);
-        expect(messages.length).toBeGreaterThanOrEqual(1);
+        // The audio is really in storage: its play URL serves a WAV.
+        const playUrl = await tenantAdminCurlJson(
+          seed.resellerId,
+          'GET',
+          `${VOICEMAIL_SERVICE_URL}/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages/${message.id}/play-url`,
+        );
+        expect(playUrl.status, JSON.stringify(playUrl.json)).toBe(200);
+        const audio = await dockerCurlText((playUrl.json as { url: string }).url);
+        expect(audio.status).toBe(200);
+        expect(audio.text.startsWith('RIFF')).toBe(true);
+
+        // Nothing durable on the node (CLAUDE.md rule 5): the uploader deleted its copy.
+        expect(await spoolListing()).not.toContain(`vm-${message.id}.wav`);
       } finally {
         if (didId !== undefined) await deleteDid(tenantId, didId);
         if (trunk !== undefined) await deleteTrunk(tenantId, trunk.id);
         await deleteMailbox(tenantId, mailbox.id);
       }
     });
-  }, 45_000);
+  }, 180_000);
 
   it('the mailbox owner retrieves messages via *97 with the correct PIN', async () => {
     await withSingleFsNode(async () => {

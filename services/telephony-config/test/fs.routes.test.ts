@@ -1676,7 +1676,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(invalid.json()).toMatchObject({ valid: false });
     });
 
-    it('the full leave-message round trip: create, upload, complete, list, play the real bytes, mark read, delete', async () => {
+    it('the full leave-message round trip: create, (uploader delivers), list, play the real bytes, mark read, delete', async () => {
       const tenantId = crypto.randomUUID();
       const mailboxId = seedMailbox(tenantId, crypto.randomUUID());
       await h.storage.forTenant(tenantId).provisionBucket();
@@ -1688,24 +1688,14 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         payload: { callerIdNumber: '+15005550001' },
       });
       expect(created.statusCode).toBe(201);
-      const { messageId, uploadUrl }: { messageId: string; uploadUrl: string } = created.json();
+      const { messageId, fileName, objectKey }: Record<string, string> = created.json();
+      // The Lua app records to this spool file; nothing here uploads it (S5-16).
+      expect(fileName).toBe(`vm-${messageId}.wav`);
 
+      // What the node uploader does through voicemail-service's own routes.
       const wav = Buffer.from('real spool bytes');
-      const uploaded = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'content-type': 'audio/wav' },
-        body: wav,
-      });
-      expect(uploaded.ok).toBe(true);
-
-      const completed = await app.inject({
-        method: 'POST',
-        url: `/fs/voicemail/${tenantId}/mailbox/${mailboxId}/messages/${messageId}/complete`,
-        headers: { authorization: BASIC_AUTH },
-        payload: { durationMs: 4000, sizeBytes: wav.length },
-      });
-      expect(completed.statusCode).toBe(200);
-      expect(completed.json()).toMatchObject({ status: 'ready' });
+      await h.storage.forTenant(tenantId).putObject(objectKey!, wav);
+      h.voicemail.messages[messageId!] = { ...h.voicemail.messages[messageId!]!, status: 'ready' };
 
       const list = await app.inject({
         method: 'GET',

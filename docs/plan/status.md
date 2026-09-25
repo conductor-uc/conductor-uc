@@ -1,6 +1,6 @@
 # Implementation status
 
-Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `251ef45`, 2026-09-24; Stage 5 rows updated for call recording (G-111) on 2026-09-25; S1-15 (read permissions, G-10) added on 2026-09-25.
+Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `251ef45`, 2026-09-24; Stage 5 rows updated for call recording (G-111) on 2026-09-25; S1-15 (read permissions, G-10) added on 2026-09-25; S5-16 (voicemail audio) added on 2026-09-25.
 
 **Done** = the task's scope exists and has tests; known caveats are named. **Partial** = some of the scope exists. **Not started** = no code.
 
@@ -13,12 +13,12 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S2 Core telephony (20) | 17 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (11) | 0 | 4 | 7 |
-| S5 Recording, voicemail features, monitoring (10) | 6 | 1 | 3 |
+| S5 Recording, voicemail features, monitoring (11) | 7 | 1 | 3 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | Release readiness (7) | 1 | 1 | 5 |
-| **Total (103)** | **59** | **13** | **31** |
+| **Total (104)** | **60** | **13** | **31** |
 
 Milestones: M1 (S1) reached except API-key auth and organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below. M3, M4 not started.
 
@@ -131,6 +131,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S5-08 | Not started | api-gateway has no WebSocket hub |
 | S5-09 | Not started | call-control has no listen/whisper/barge |
 | S5-10 | Partial | Voicemail (`features/voicemail`), Call records (`features/cdr`) and Recordings (`features/recordings`: list, filters, play, download, delete, rules, retention) screens exist; `/monitoring` and `/reports` are still placeholders |
+| S5-16 | Done | Voicemail audio reaches storage: `voicemail.lua` records to `vm-<id>.wav` in the spool and leaves it; the node uploader (`recording-service/src/uploader`, `createVoicemailApi`) delivers it to voicemail-service's `routes/upload.routes.ts` (`upload-url`, `complete` verifying size and MD5 against storage, `fail`); pending sweep (`pending-sweep.ts`). Tests: `voicemail-service/test/upload.routes.test.ts` (real MinIO), uploader voicemail cases. The live check in `tests/sip/test/voicemail.test.ts` (audio playable, spool emptied) is written; not yet run (G-2) |
 
 ## Stage 6
 

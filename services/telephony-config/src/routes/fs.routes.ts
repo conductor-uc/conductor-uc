@@ -155,10 +155,6 @@ const VoicemailCreateMessageBodySchema = Type.Object({
   callerIdName: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   callerIdNumber: Type.Optional(Type.Union([Type.String(), Type.Null()])),
 });
-const VoicemailCompleteMessageBodySchema = Type.Object({
-  durationMs: Type.Number({ minimum: 0 }),
-  sizeBytes: Type.Number({ minimum: 0 }),
-});
 const VoicemailPinBodySchema = Type.Object({ pin: Type.String({ minLength: 1 }) });
 
 /** `/fs/conference-rooms/...` (S2-15) — the Lua conference app's own params/body shapes. */
@@ -1952,6 +1948,10 @@ export function registerFsRoutes(
    * Each handler is a thin proxy over `voicemailClient` into
    * voicemail-service's own internal API — this service never touches
    * voicemail-service's database (05 §1.1).
+   *
+   * There is no message upload or `complete` route here (S5-16): the Lua
+   * app only creates the message row and records to the spool file it
+   * names; the node uploader delivers the audio straight to voicemail-service.
    */
   app.get(
     '/fs/voicemail/:tenantId/mailbox/by-extension/:extensionId',
@@ -2026,36 +2026,6 @@ export function registerFsRoutes(
       const { tenantId, mailboxId } = request.params;
       const result = await voicemailClient.createMessage(tenantId, mailboxId, request.body);
       return reply.status(201).send(result);
-    },
-  );
-
-  app.post(
-    '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/complete',
-    {
-      config: { public: true },
-      schema: { params: VoicemailMessageParamsSchema, body: VoicemailCompleteMessageBodySchema },
-    },
-    async (request, reply) => {
-      if (!authorized(request.headers)) {
-        reply.code(401);
-        return '';
-      }
-      const { tenantId, mailboxId, messageId } = request.params;
-      return voicemailClient.completeMessage(tenantId, mailboxId, messageId, request.body);
-    },
-  );
-
-  app.post(
-    '/fs/voicemail/:tenantId/mailbox/:mailboxId/messages/:messageId/fail',
-    { config: { public: true }, schema: { params: VoicemailMessageParamsSchema } },
-    async (request, reply) => {
-      if (!authorized(request.headers)) {
-        reply.code(401);
-        return '';
-      }
-      const { tenantId, mailboxId, messageId } = request.params;
-      await voicemailClient.failMessage(tenantId, mailboxId, messageId);
-      return reply.status(204).send();
     },
   );
 

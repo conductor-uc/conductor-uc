@@ -125,9 +125,10 @@
   <X-PRE-PROCESS cmd="set" data="outbound_codec_prefs=OPUS,G722,PCMU,PCMA"/>
 
   <!-- 06's recording pipeline: FS spools here (tmpfs — see the Dockerfile and
-       compose's volume mount), and a node-local uploader sidecar (a later
-       stage) pushes to S3 and deletes the local copy. Nothing durable lives
-       on the node (CLAUDE.md rule 5). -->
+       compose's volume mount), call recordings and voicemail messages
+       (voicemail.lua, S5-16) alike, and the node-local uploader sidecar
+       (S5-03) pushes each to S3 and deletes the local copy. Nothing durable
+       lives on the node (CLAUDE.md rule 5). -->
   <X-PRE-PROCESS cmd="set" data="recordings_dir=/var/spool/cuc/rec"/>
 
   <!-- S2-05: `mod_redis` (autoload_configs/redis.conf.xml) — the shared

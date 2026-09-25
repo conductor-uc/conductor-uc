@@ -483,8 +483,8 @@ end
 
 --[[
 Hands off to the S2-16 voicemail app rather than reimplementing recording
-here — it already owns the spool-then-upload-then-complete sequence and the
-greeting handling.
+here — it already owns creating the message, recording it to the spool (the
+node uploader delivers it, S5-16) and the greeting handling.
 --]]
 function handlers.voicemail(node)
   session:execute("lua", "voicemail.lua leave " .. tenantId .. " " .. node.config.mailboxId)
