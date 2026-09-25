@@ -283,7 +283,6 @@ export async function startStack(): Promise<Stack> {
         ...dbEnv(notificationDb),
         HTTP_PORT: String(ports.notification),
         ORG_SERVICE_URL: url(ports.org),
-        // Issues the reset or invitation link when the email is sent (G-55).
         IDENTITY_SERVICE_URL: url(ports.identity),
         VOICEMAIL_SERVICE_URL: url(ports.voicemail),
         SMTP_HOST,

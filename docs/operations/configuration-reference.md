@@ -125,7 +125,7 @@ There is no KMS integration: the Vault provider in `packages/crypto` throws "not
 | `STORAGE_SECRET_ACCESS_KEY` | — | **yes** (secret) | |
 | `STORAGE_FORCE_PATH_STYLE` | `false` | no | `true` for MinIO and most self-hosted stores |
 
-Permissions the key needs: create buckets, put and get objects, delete objects, head objects, put bucket encryption and public-access block (attempted, not required), and get, put and delete bucket lifecycle configuration (used for recording retention).
+Permissions the key needs: create buckets, put and get objects, delete objects, head objects, put bucket encryption and public-access block (attempted, not required), put bucket CORS (`s3:PutBucketCORS`; the platform sets the rule browsers need to upload, see dns-tls-and-certificates §6), and get, put and delete bucket lifecycle configuration (used for recording retention). Without the CORS permission the services log a warning and browser uploads to a hosted store fail.
 
 ## 4. Per-service settings
 
@@ -309,8 +309,7 @@ Groups: base, database (`notification_service`), events.
 | Variable | Default | Required | Meaning |
 |---|---|---|---|
 | `INTERNAL_SERVICE_TOKEN` | — | **yes** (secret) | |
-| `ORG_SERVICE_URL`, `VOICEMAIL_SERVICE_URL` | — | **yes** | |
-| `IDENTITY_SERVICE_URL` | — | **yes** | Issues the one-time token of each password-reset and invitation link when the email is sent |
+| `ORG_SERVICE_URL`, `IDENTITY_SERVICE_URL`, `VOICEMAIL_SERVICE_URL` | — | **yes** | identity-service lists an org's admins for the two-step reset notice (G-100) |
 | `SMTP_HOST` | — | **yes** | Your mail relay |
 | `SMTP_PORT` | `587` | no | |
 | `SMTP_SECURE` | `false` | no | `true` for implicit TLS (port 465). With `false`, STARTTLS is used if the server offers it; it is not required. |

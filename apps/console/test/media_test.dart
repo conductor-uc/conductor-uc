@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:console/features/media/file_source.dart';
 import 'package:console/features/media/media_page.dart';
+import 'package:console/features/voicemail/voicemail_api.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,7 @@ Future<List<Sent>> openMedia(
   WidgetTester tester, {
   PickedFile? picks,
   Future<void> Function(String, Uint8List, String)? upload,
+  List<String>? opened,
 }) async {
   final sent = <Sent>[];
   await openSection(
@@ -22,6 +24,7 @@ Future<List<Sent>> openMedia(
     'Media',
     overrides: [
       filePickerProvider.overrideWithValue(() async => picks),
+      openRecordingProvider.overrideWithValue((url) async => opened?.add(url)),
       uploadToStorageProvider.overrideWithValue((url, bytes, type) async {
         if (upload != null) await upload(url, bytes, type);
         sent.add((url: url, bytes: bytes.length, contentType: type));
@@ -223,5 +226,42 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
     expect(find.text('Hold music'), findsNothing);
+  });
+
+  testWidgets('a ready recording plays from a short-lived address', (
+    tester,
+  ) async {
+    final opened = <String>[];
+    await openMedia(tester, opened: opened);
+    expect(find.byTooltip('Play'), findsNWidgets(2));
+
+    await tester.tap(find.byTooltip('Play').first);
+    await tester.pumpAndSettle();
+
+    // The converted copy, from storage, not the upload or the API.
+    expect(opened, hasLength(1));
+    expect(opened.single, startsWith('https://storage.demo.invalid/media/'));
+    expect(opened.single, contains('16k.wav'));
+  });
+
+  testWidgets('a recording that is not ready has nothing to play', (
+    tester,
+  ) async {
+    await openMedia(
+      tester,
+      picks: audio('welcome.wav'),
+      upload: (_, _, _) async => throw DioException(
+        requestOptions: RequestOptions(),
+        response: Response(requestOptions: RequestOptions(), statusCode: 403),
+      ),
+    );
+    await openUpload(tester);
+    await submitUpload(tester);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    await tester.pump(mediaPollDelay);
+    expect(find.text('Waiting for upload'), findsOneWidget);
+    // Only the two ready ones can be played.
+    expect(find.byTooltip('Play'), findsNWidgets(2));
   });
 }

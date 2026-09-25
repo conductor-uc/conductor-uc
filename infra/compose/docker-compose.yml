@@ -871,7 +871,7 @@ services:
       HTTP_HOST: 0.0.0.0
       HTTP_PORT: 8080
       ORG_SERVICE_URL: ${ORG_SERVICE_URL:-http://org-service:8080}
-      # G-55: issues the reset or invitation link when the email is sent.
+      # G-100: the org's admins, told when someone's two-step verification is reset.
       IDENTITY_SERVICE_URL: http://identity-service:8080
       # S5-07: voicemail-to-email reads mailbox settings and the recording from here.
       VOICEMAIL_SERVICE_URL: ${VOICEMAIL_SERVICE_URL:-http://voicemail-service:8080}

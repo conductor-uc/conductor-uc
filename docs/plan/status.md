@@ -220,7 +220,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | Orgs | Act as a tenant or descendant | console shell (`acting.dart`) |
 | Orgs | Base domains, tenant domain, console hostnames | org-service `base-domains`, `tenants/:id/domain`, `console-hostnames`; console Domains |
 | Brand | Reseller brand editor, images, public and session brand | org-service `/v1/resellers/:id/brand`, `/v1/public/brand`, `/v1/session/brand`; console Brand |
-| Users and roles | Login, MFA, refresh, reset, invitations, MFA reset | identity-service `/v1/auth/*`, `.../users/:userId/mfa-reset`; console auth screens |
+| Users and roles | Login, MFA, refresh, reset, invitations, MFA reset (confirmed with the admin's own code; other admins emailed) | identity-service `/v1/auth/*`, `.../users/:userId/mfa-reset`; console auth screens |
 | Users and roles | Users list, rename, disable; roles and grants | identity-service `/users`, `/roles`, `/grants`; console Users |
 | Extensions and devices | Extensions, SIP credentials, reveal, reset password | pbx-config-service `/extensions`; console Extensions |
 | Extensions and devices | Connect a phone; Yealink phones by MAC | `/sip-endpoint`, `/devices`, `/v1/public/provision/yealink/:file`; console Phones |

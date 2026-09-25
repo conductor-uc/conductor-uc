@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Database, DbContext } from '@cuc/db';
 import { requireTenant } from '@cuc/db';
 import { enqueueEvent } from '@cuc/events';
-import type { Storage } from '@cuc/storage';
+import { MAX_GET_TTL_SECONDS, type Storage } from '@cuc/storage';
 
 import {
   validateContentType,
@@ -44,6 +44,15 @@ export interface TranscodeResult {
   readonly sizeBytes: number;
   readonly variant8kKey: string;
   readonly variant16kKey: string;
+}
+
+/** Which converted copy of a ready asset to play: 16 kHz (the better one) or 8 kHz. */
+export type MediaAssetVariant = '8k' | '16k';
+
+/** A short-lived address to fetch an asset's audio from, and when it stops working. */
+export interface MediaAssetDownload {
+  readonly url: string;
+  readonly expiresAt: Date;
 }
 
 export class MediaAssetNotFoundError extends Error {
@@ -146,9 +155,8 @@ export function createMediaAssetRepo(db: Database<PbxConfigServiceDb>, storage: 
       // provisioned this tenant" ourselves. Live-verified this is not
       // optional: a presigned PUT against a bucket that was never
       // provisioned 404s as `NoSuchBucket` on the real upload, not at
-      // presign time (a pre-existing gap found this way in org-service's
-      // own S1-04 brand-asset route, which skips this call — flagged,
-      // docs/decisions.md).
+      // presign time (the same gap org-service's brand-asset route had
+      // until G-37 was fixed).
       await tenantStorage.provisionBucket();
       const uploadUrl = await tenantStorage.presignPut(objectKey, { contentType });
 
@@ -193,6 +201,37 @@ export function createMediaAssetRepo(db: Database<PbxConfigServiceDb>, storage: 
         },
         uploadUrl,
       };
+    },
+
+    /**
+     * A presigned GET for one of a ready asset's converted WAVs, so the console can play
+     * a prompt or hold music back (G-80). Only a `ready` asset has them: the raw upload is
+     * never served, since it is unchecked tenant input. The URL lives for 05 §4's maximum
+     * download lifetime (5 minutes).
+     */
+    async downloadUrl(
+      ctx: DbContext,
+      id: string,
+      variant: MediaAssetVariant,
+    ): Promise<MediaAssetDownload> {
+      const { tenantId } = requireTenant(ctx);
+      const asset = await db
+        .scoped(ctx)
+        .selectFrom('media_assets')
+        .select(['status', 'variant_8k_key as variant8kKey', 'variant_16k_key as variant16kKey'])
+        .where('id', '=', id)
+        .executeTakeFirst();
+      if (asset === undefined) throw new MediaAssetNotFoundError(`No media asset with id '${id}'.`);
+      const key = variant === '8k' ? asset.variant8kKey : asset.variant16kKey;
+      if (asset.status !== 'ready' || key === null) {
+        throw new InvalidMediaAssetStatusError(
+          `That recording is ${asset.status}, so there is nothing to play yet.`,
+        );
+      }
+      const url = await storage
+        .forTenant(tenantId)
+        .presignGet(key, { ttlSeconds: MAX_GET_TTL_SECONDS });
+      return { url, expiresAt: new Date(Date.now() + MAX_GET_TTL_SECONDS * 1000) };
     },
 
     /**

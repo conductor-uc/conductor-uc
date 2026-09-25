@@ -40,7 +40,8 @@ export const identityEvents = defineEvents({
     description:
       "An admin reset a user's two-step verification: their authenticator was removed and " +
       'every session revoked, so they enroll a new one at the next sign-in. notification-service ' +
-      'emails the user. Carries no secret.',
+      "emails the user, and the org's other admins (fetched from identity-service's internal " +
+      'admins route; the envelope actor, who did the reset, is left out). Carries no secret.',
     data: Type.Object({
       userId: Type.String({ minLength: 1 }),
       orgId: Type.String({ minLength: 1 }),

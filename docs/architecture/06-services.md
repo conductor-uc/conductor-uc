@@ -113,7 +113,7 @@ The WebSocket hub listed above is not present in `services/api-gateway/src` at t
 
 **Owns:** extensions, SIP credentials, devices, DIDs, ring and hunt groups, queues and agents, parking lots, conference rooms, schedules, media assets, emergency locations.
 
-**Public API:** `/v1/tenants/{t}/extensions`, `/devices`, `/sip-endpoint`, `/dids`, `/ring-groups`, `/queues`, `/parking-lots`, `/conference-rooms`, `/schedules`, `/media-assets` (upload via presigned URL, then `:finalize`, which transcodes to 8 kHz/16 kHz WAV).
+**Public API:** `/v1/tenants/{t}/extensions`, `/devices`, `/sip-endpoint`, `/dids`, `/ring-groups`, `/queues`, `/parking-lots`, `/conference-rooms`, `/schedules`, `/media-assets` (upload via presigned URL, then `:finalize`, which transcodes to 8 kHz/16 kHz WAV; `/{id}/download-url` plays a ready one back, G-80).
 
 **Events:** `pbx.{entity}.created|updated|deleted` for each entity above.
 

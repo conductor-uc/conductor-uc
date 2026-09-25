@@ -5,7 +5,8 @@ import mjml2html from 'mjml';
 
 import { readableOn, safeColor, type MailBrand } from './domain/brand.js';
 
-export type TemplateName = 'password-reset' | 'invitation' | 'mfa-reset' | 'voicemail';
+export type TemplateName =
+  'password-reset' | 'invitation' | 'mfa-reset' | 'mfa-reset-admin' | 'voicemail';
 
 export interface RenderInput {
   readonly template: TemplateName;
@@ -14,10 +15,12 @@ export interface RenderInput {
   readonly email: string;
   /** Their name, for a greeting. */
   readonly name?: string;
-  /** The link: a one-time one, or for `mfa-reset` the plain sign-in page. */
+  /** The link: a one-time one, or for the `mfa-reset` notices the plain sign-in page. */
   readonly link: string;
   /** How long a one-time link works, in words: "1 hour", "7 days". */
   readonly validFor?: string;
+  /** Required for `mfa-reset-admin`: the person whose two-step verification was reset. */
+  readonly about?: { readonly name: string; readonly email: string };
   /** Required for the `voicemail` template. */
   readonly voicemail?: VoicemailSummary;
 }
@@ -44,6 +47,7 @@ const SUBJECTS: Record<TemplateName, string> = {
   'password-reset': 'Reset your password',
   invitation: 'You have been invited',
   'mfa-reset': 'Your two-step verification was reset',
+  'mfa-reset-admin': 'Two-step verification was reset for someone in your organization',
   voicemail: 'New voicemail',
 };
 
@@ -89,6 +93,9 @@ export async function renderEmail(input: RenderInput): Promise<RenderedEmail> {
     input.brand.supportUrl === null ? null : `Help: ${input.brand.supportUrl}`,
   ].filter((part): part is string => part !== null);
 
+  if (input.template === 'mfa-reset-admin' && input.about === undefined) {
+    throw new Error('The mfa-reset-admin template needs the person it is about.');
+  }
   const voicemail = voicemailContext(input);
   const subject = voicemail === undefined ? SUBJECTS[input.template] : voicemail.subject;
 
@@ -104,6 +111,8 @@ export async function renderEmail(input: RenderInput): Promise<RenderedEmail> {
     name: input.name ?? input.email,
     link: input.link,
     validFor: input.validFor ?? '',
+    aboutName: input.about?.name ?? '',
+    aboutEmail: input.about?.email ?? '',
   };
 
   const mjmlSource = (await load(`${input.template}.mjml`))(context);

@@ -148,10 +148,17 @@ class UsersApi {
   }
 
   /// Removes a person's authenticator (a lost phone). They are signed out
-  /// everywhere, emailed, and asked to set up a new one at the next sign-in.
-  Future<Json> resetMfa(Json user) async {
+  /// everywhere, emailed, and asked to set up a new one at the next sign-in;
+  /// the organization's other admins are emailed too.
+  ///
+  /// [stepUpCode] is a current code from the signed-in admin's own
+  /// authenticator app, which the service asks for to confirm (step-up):
+  /// without a right one it answers 401 `step_up_required` or
+  /// `step_up_invalid`.
+  Future<Json> resetMfa(Json user, {required String stepUpCode}) async {
     final response = await _dio.post<Object?>(
       '/v1/orgs/$orgId/users/${user['id']}/mfa-reset',
+      data: {'stepUpCode': stepUpCode},
       options: _options,
     );
     return _row((response.data as Map).cast<Object?, Object?>());

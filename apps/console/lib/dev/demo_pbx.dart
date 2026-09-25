@@ -801,12 +801,33 @@ class DemoPbx {
           return _problem(
             409,
             'You cannot reset your own two-step verification.',
+            code: 'cannot_reset_self',
           );
         }
         if (people[index]['mfaEnrolled'] != true) {
           return _problem(
             409,
             'That user has not set up two-step verification.',
+            code: 'mfa_not_enrolled',
+          );
+        }
+        // G-100 step-up: the signed-in admin confirms with their own current
+        // code. The demo accepts 123456, as its sign-in does.
+        final sent = options.data == null ? const {} : _body(options);
+        final code = '${sent['stepUpCode'] ?? ''}'.trim();
+        if (code.isEmpty) {
+          return _problem(
+            401,
+            'Enter the current code from your authenticator app to confirm.',
+            code: 'step_up_required',
+          );
+        }
+        if (code != '123456') {
+          return _problem(
+            401,
+            'That code is not right, or it was already used. Wait for the next '
+            'code and try again.',
+            code: 'step_up_invalid',
           );
         }
         people[index] = {...people[index], 'mfaEnrolled': false};
@@ -993,11 +1014,12 @@ class DemoPbx {
 
   /// Null when [options] is not a tenant route.
   static final _mediaRoute = RegExp(
-    r'^/v1/tenants/[^/]+/media-assets(?:/([^/]+)/finalize)?$',
+    r'^/v1/tenants/[^/]+/media-assets(?:/([^/]+)/(finalize|download-url))?$',
   );
 
   /// Uploading a recording: an address to send the bytes to, then a finalize
-  /// that starts a short "processing" before the recording is ready (or fails).
+  /// that starts a short "processing" before the recording is ready (or fails),
+  /// and an address to play a ready one from.
   ResponseBody? _media(RequestOptions options) {
     final match = _mediaRoute.firstMatch(options.path);
     if (match == null) return null;
@@ -1019,7 +1041,24 @@ class DemoPbx {
         'uploadUrl': 'https://storage.demo.invalid/upload/${asset['id']}',
       }, 201);
     }
-    if (method == 'POST' && id != null) {
+    if (method == 'GET' && match.group(2) == 'download-url') {
+      final asset = rows.where((r) => r['id'] == id);
+      if (asset.isEmpty) return _problem(404, 'No media asset with that id.');
+      final status = asset.first['status'];
+      if (status != 'ready') {
+        return _problem(
+          409,
+          'That recording is $status, so there is nothing to play yet.',
+          code: 'invalid_media_asset_status',
+        );
+      }
+      return _json({
+        'url':
+            'https://storage.demo.invalid/media/$id/16k.wav?X-Amz-Expires=300',
+        'expiresAt': DateTime.utc(2026, 9, 24, 19, 25).toIso8601String(),
+      });
+    }
+    if (method == 'POST' && id != null && match.group(2) == 'finalize') {
       final asset = rows.where((r) => r['id'] == id);
       if (asset.isEmpty) return _problem(404, 'Not found.');
       asset.first['status'] = 'processing';

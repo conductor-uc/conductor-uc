@@ -20,7 +20,7 @@ import { migrations } from '../migrations/index.js';
 import { createIdentityConsumer } from '../src/consumers/identity.consumer.js';
 import type { MailBrandResponse } from '../src/domain/brand.js';
 import { notificationEvents } from '../src/events.js';
-import { createIdentityClient } from '../src/identity-client.js';
+import { createIdentityClient, type OrgAdmin } from '../src/identity-client.js';
 import { createMailer } from '../src/mailer.js';
 import { createOrgClient } from '../src/org-client.js';
 import type { NotificationServiceDb } from '../src/schema.js';
@@ -75,6 +75,9 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
   /** What the fake org-service answers per org id; absent means 404. */
   const brands = new Map<string, MailBrandResponse>();
   let orgDown = false;
+  /** What the fake identity-service answers for an org's admins; absent means none. */
+  const admins = new Map<string, OrgAdmin[]>();
+  let identityDown = false;
   let consumer: EventConsumer;
 
   /**
@@ -109,6 +112,7 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
       bus,
       captureLogger(),
       createOrgClient({ baseUrl: orgUrl, internalServiceToken: INTERNAL_TOKEN }),
+      // The same fake server plays identity-service's internal admins route.
       createIdentityClient({ baseUrl: orgUrl, internalServiceToken: INTERNAL_TOKEN }),
       createMailer({ host: SMTP_HOST, port: smtpPort, secure: false, fromAddress: NOREPLY }),
       {
@@ -138,43 +142,20 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
 
     // One fake for both org-service (the brand) and identity-service (the link).
     org = createServer((request, response) => {
-      const link =
-        /^\/internal\/v1\/orgs\/([^/]+)\/(password-resets|invitations)\/([^/]+)\/link$/.exec(
-          request.url ?? '',
-        );
-      if (link !== null) {
-        linkCalls.push({ path: request.url ?? '', authorization: request.headers.authorization });
+      const adminsOf = /^\/internal\/v1\/orgs\/([^/]+)\/admins$/.exec(request.url ?? '');
+      if (adminsOf !== null) {
         if (identityDown) {
           response.writeHead(503).end();
           return;
         }
-        if (
-          request.method !== 'POST' ||
-          request.headers.authorization !== `Bearer ${INTERNAL_TOKEN}`
-        ) {
+        if (request.headers.authorization !== `Bearer ${INTERNAL_TOKEN}`) {
           response.writeHead(401).end();
           return;
         }
-        const id = decodeURIComponent(link[3]!);
-        const refusal = refusals.get(id);
-        if (refusal !== undefined) {
-          response
-            .writeHead(refusal.status, { 'content-type': 'application/problem+json' })
-            .end(JSON.stringify(refusal.code === undefined ? {} : { code: refusal.code }));
-          return;
-        }
-        const base = tokens.get(id);
-        if (base === undefined) {
-          response.writeHead(404).end();
-          return;
-        }
-        const count = linkCalls.filter((call) => call.path === request.url).length;
-        response.writeHead(200, { 'content-type': 'application/json' }).end(
-          JSON.stringify({
-            token: count === 1 ? base : `${base}-${String(count)}`,
-            expiresAt: linkExpiry.get(id) ?? new Date(Date.now() + 60 * 60_000).toISOString(),
-          }),
-        );
+        const rows = admins.get(decodeURIComponent(adminsOf[1]!)) ?? [];
+        response
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ rows }));
         return;
       }
       const match = /^\/internal\/v1\/orgs\/([^/]+)\/mail-brand$/.exec(request.url ?? '');
@@ -211,12 +192,8 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
   beforeEach(async () => {
     brands.clear();
     orgDown = false;
+    admins.clear();
     identityDown = false;
-    tokens.clear();
-    linkExpiry.clear();
-    refusals.clear();
-    linkCalls.length = 0;
-    logLines.length = 0;
     await clearMailbox();
   });
 
@@ -365,15 +342,27 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
     expect(mail!.html).toContain('3 days');
   });
 
-  async function publishMfaReset(orgId: string, email: string): Promise<void> {
+  async function publishMfaReset(
+    orgId: string,
+    email: string,
+    opts: { userId?: string; actorId?: string } = {},
+  ): Promise<string> {
+    const id = crypto.randomUUID();
     await bus.publish({
-      id: crypto.randomUUID(),
+      id,
       type: 'identity.user.mfa_reset',
       schemaVersion: notificationEvents.contract('identity.user.mfa_reset').schemaVersion,
       occurredAt: new Date(Date.now() - 3 * 24 * 60 * 60_000).toISOString(),
       orgContext: {},
-      data: { userId: crypto.randomUUID(), orgId, email, displayName: 'Rae Okafor' },
+      actor: { type: 'user', id: opts.actorId ?? crypto.randomUUID(), orgId },
+      data: {
+        userId: opts.userId ?? crypto.randomUUID(),
+        orgId,
+        email,
+        displayName: 'Rae Okafor',
+      },
     });
+    return id;
   }
 
   it("tells a reseller's user their two-step verification was reset, in the reseller's brand", async () => {
@@ -418,6 +407,104 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
     await publishMfaReset('tenant-a', to);
     await drain();
     expect(await emailsTo(to)).toHaveLength(1);
+  });
+
+  describe("the org's other admins hear about a two-step reset too (G-100)", () => {
+    function admin(label: string): OrgAdmin {
+      return {
+        userId: crypto.randomUUID(),
+        email: `${label}-${crypto.randomUUID()}@example.test`,
+        displayName: `Admin ${label}`,
+      };
+    }
+
+    it('each other admin gets a notice in the brand: not the admin who did it, not the person', async () => {
+      brands.set('tenant-a', ACME);
+      const person = admin('rae');
+      const actor = admin('boss');
+      const ann = admin('ann');
+      const bea = admin('bea');
+      // The person is an admin too, so the list names them: they get only their own notice.
+      admins.set('tenant-a', [ann, actor, bea, person]);
+      const id = await publishMfaReset('tenant-a', person.email, {
+        userId: person.userId,
+        actorId: actor.userId,
+      });
+      await drain();
+
+      for (const other of [ann, bea]) {
+        const [mail] = await emailsTo(other.email);
+        expect(mail).toBeDefined();
+        expect(mail!.subject).toBe(
+          'Two-step verification was reset for someone in your organization',
+        );
+        expect(mail!.from).toEqual({ name: 'Acme Voice', address: NOREPLY });
+        expect(mail!.html).toContain(`Hello ${other.displayName}`);
+        expect(mail!.html).toContain('Rae Okafor');
+        expect(mail!.html).toContain(person.email);
+        expect(mail!.html).toContain('https://portal.acme.example/login');
+        expect(mail!.html).not.toContain('token=');
+        expect(mail!.text).toContain('Rae Okafor');
+      }
+      expect(await emailsTo(actor.email, 500)).toHaveLength(0);
+      const personal = await emailsTo(person.email);
+      expect(personal.map((m) => m.subject)).toEqual(['Your two-step verification was reset']);
+
+      const rows = await db.kysely
+        .selectFrom('sent_emails')
+        .select(['template', 'to_address'])
+        .where('event_id', '=', id)
+        .execute();
+      expect(rows.map((r) => `${r.template} ${r.to_address}`).sort()).toEqual(
+        [
+          `mfa-reset ${person.email}`,
+          `mfa-reset-admin ${ann.email}`,
+          `mfa-reset-admin ${bea.email}`,
+        ].sort(),
+      );
+    });
+
+    it('the master’s admins get a neutral notice', async () => {
+      brands.set('master', NEUTRAL);
+      const ann = admin('ann');
+      admins.set('master', [ann]);
+      await publishMfaReset('master', `m-${crypto.randomUUID()}@example.test`);
+      await drain();
+
+      const [mail] = await emailsTo(ann.email);
+      expect(mail).toBeDefined();
+      expect(mail!.from).toEqual({ name: '', address: NOREPLY });
+      expect(mail!.html).not.toMatch(/<img/i);
+      expect(mail!.html.toLowerCase()).not.toContain('conductor');
+      expect(mail!.text.toLowerCase()).not.toContain('conductor');
+    });
+
+    it('sends nothing, to anyone, while identity-service is down, and retries later', async () => {
+      brands.set('tenant-a', ACME);
+      identityDown = true;
+      const ann = admin('ann');
+      admins.set('tenant-a', [ann]);
+      const to = `r-${crypto.randomUUID()}@example.test`;
+      const id = await publishMfaReset('tenant-a', to);
+      const pass = await drain();
+
+      expect(pass.failed).toBeGreaterThan(0);
+      expect(await emailsTo(to, 500)).toHaveLength(0);
+      expect(await emailsTo(ann.email, 500)).toHaveLength(0);
+      const consumed = await db.kysely
+        .selectFrom('consumed_events')
+        .selectAll()
+        .where('id', '=', id)
+        .execute();
+      expect(consumed).toHaveLength(0);
+
+      identityDown = false;
+      for (let i = 0; i < 5 && (await emailsTo(ann.email, 200)).length === 0; i += 1) {
+        await consumer.runOnce();
+      }
+      expect(await emailsTo(to)).toHaveLength(1);
+      expect(await emailsTo(ann.email)).toHaveLength(1);
+    });
   });
 
   it('still sends, neutral, when org-service does not know the org', async () => {

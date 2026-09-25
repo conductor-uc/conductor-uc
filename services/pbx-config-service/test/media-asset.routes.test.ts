@@ -150,4 +150,105 @@ describe.skipIf(skipReason !== undefined)('media asset HTTP routes', () => {
     });
     expect(secondFinalize.statusCode).toBe(409);
   });
+
+  describe('download-url (G-80)', () => {
+    /** A tenant with one asset the worker has finished converting, both WAVs in storage. */
+    async function readyAsset(): Promise<{ tenantId: string; id: string }> {
+      const tenantId = crypto.randomUUID();
+      const { asset } = await h.mediaAssets.create({ tenantId }, VALID_BODY);
+      await h.mediaAssets.finalize({ tenantId }, asset.id);
+      const tenantStorage = h.storage.forTenant(tenantId);
+      await tenantStorage.putObject(`media-assets/${asset.id}/8k.wav`, Buffer.from('eight'), {
+        contentType: 'audio/wav',
+      });
+      await tenantStorage.putObject(`media-assets/${asset.id}/16k.wav`, Buffer.from('sixteen'), {
+        contentType: 'audio/wav',
+      });
+      await h.mediaAssets.complete({ tenantId }, asset.id, {
+        durationMs: 1000,
+        sha256: 'a'.repeat(64),
+        sizeBytes: 7,
+        variant8kKey: `media-assets/${asset.id}/8k.wav`,
+        variant16kKey: `media-assets/${asset.id}/16k.wav`,
+      });
+      return { tenantId, id: asset.id };
+    }
+
+    it('returns a short-lived URL for the 16 kHz WAV by default', async () => {
+      const { tenantId, id } = await readyAsset();
+      const before = Date.now();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/tenants/${tenantId}/media-assets/${id}/download-url`,
+        headers: actorHeaders(tenantId),
+      });
+
+      expect(response.statusCode, response.body).toBe(200);
+      const body: { url: string; expiresAt: string } = response.json();
+      expect(Number(new URL(body.url).searchParams.get('X-Amz-Expires'))).toBeLessThanOrEqual(300);
+      const expiresAt = Date.parse(body.expiresAt);
+      expect(expiresAt).toBeGreaterThan(before);
+      expect(expiresAt).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000);
+
+      const audio = await fetch(body.url);
+      expect(audio.ok).toBe(true);
+      expect(audio.headers.get('content-type')).toBe('audio/wav');
+      expect(await audio.text()).toBe('sixteen');
+    });
+
+    it('serves the 8 kHz WAV when asked', async () => {
+      const { tenantId, id } = await readyAsset();
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/tenants/${tenantId}/media-assets/${id}/download-url?variant=8k`,
+        headers: actorHeaders(tenantId),
+      });
+      expect(response.statusCode).toBe(200);
+      const { url }: { url: string } = response.json();
+      expect(await (await fetch(url)).text()).toBe('eight');
+    });
+
+    it('400s an unknown variant', async () => {
+      const { tenantId, id } = await readyAsset();
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/tenants/${tenantId}/media-assets/${id}/download-url?variant=raw`,
+        headers: actorHeaders(tenantId),
+      });
+      expect(response.statusCode).toBe(400);
+    });
+
+    it('409s an asset that is not ready yet, and never serves the raw upload', async () => {
+      const tenantId = crypto.randomUUID();
+      const created = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenantId}/media-assets`,
+        headers: actorHeaders(tenantId),
+        payload: VALID_BODY,
+      });
+      const { asset }: { asset: { id: string } } = created.json();
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/tenants/${tenantId}/media-assets/${asset.id}/download-url`,
+        headers: actorHeaders(tenantId),
+      });
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({ code: 'invalid_media_asset_status' });
+    });
+
+    it("404s an unknown asset and another tenant's asset", async () => {
+      const { id } = await readyAsset();
+      const other = crypto.randomUUID();
+      for (const assetId of [id, crypto.randomUUID()]) {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/v1/tenants/${other}/media-assets/${assetId}/download-url`,
+          headers: actorHeaders(other),
+        });
+        expect(response.statusCode).toBe(404);
+      }
+    });
+  });
 });

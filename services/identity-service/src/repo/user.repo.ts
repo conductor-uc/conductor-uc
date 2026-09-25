@@ -30,6 +30,9 @@ export interface UserWithHash extends User {
   readonly passwordHash: string;
 }
 
+/** The built-in role that makes someone an administrator of their org, at each tier (07 §3.3). */
+const ADMIN_ROLE_IDS = ['master_admin', 'reseller_admin', 'tenant_admin'];
+
 export class EmailTakenError extends Error {
   override readonly name = 'EmailTakenError';
 
@@ -208,6 +211,27 @@ export function createUserRepo(db: Database<IdentityServiceDb>) {
         .orderBy('email', 'asc')
         .execute();
       return rows.map((row) => ({ ...toUser(row), lastLoginAt: row.last_login_at }));
+    },
+
+    /**
+     * The org's administrators: active users holding the org's built-in admin
+     * role (`master_admin`, `reseller_admin` or `tenant_admin`) in its own
+     * scope. Who is told when something sensitive happens to one of the
+     * org's people (G-100).
+     */
+    listActiveAdmins: async (orgId: string): Promise<User[]> => {
+      const rows = await users
+        .selectFrom('users')
+        .innerJoin('role_assignments', 'role_assignments.user_id', 'users.id')
+        .selectAll('users')
+        .where('users.org_id', '=', orgId)
+        .where('users.status', '=', 'active')
+        .where('role_assignments.scope_org_id', '=', orgId)
+        .where('role_assignments.role_id', 'in', ADMIN_ROLE_IDS)
+        .distinct()
+        .orderBy('users.email', 'asc')
+        .execute();
+      return rows.map(toUser);
     },
 
     /**

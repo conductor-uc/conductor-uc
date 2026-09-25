@@ -7,6 +7,7 @@ import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
 import { createAuthService } from './auth/auth-service.js';
+import { createStepUp } from './auth/step-up.js';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createKekRewrapJob } from './kek-rewrap.js';
 import { createAuditConsumer } from './consumers/audit.consumer.js';
@@ -182,7 +183,9 @@ registerJwksRoute(app, signingKeyRepo, config.SIGNING_KEY_OVERLAP_DAYS);
 registerInternalRoutes(app, userRepo, roleRepo, config.INTERNAL_SERVICE_TOKEN);
 registerLinkRoutes(app, authService, config.INTERNAL_SERVICE_TOKEN);
 registerRoleRoutes(app, roleRepo, orgAccess, userRepo, permissionLookup);
-registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo);
+// G-100: sensitive actions are confirmed with the acting person's own code.
+const stepUp = createStepUp({ mfa: mfaRepo, kek });
+registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo, stepUp);
 registerGrantRoutes(app, grantRepo, orgAccess, permissionLookup);
 registerPermissionsInternalRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
 registerMeRoutes(app, roleRepo, grantRepo);

@@ -35,7 +35,7 @@ docker compose exec mariadb mariadb -uroot -p"$MARIADB_ROOT_PASSWORD"
 
 The master organisation and its first administrator are created once, with one command ([all-in-one §9](deploy-all-in-one.md#9-bootstrap-the-platform)); running it again changes nothing. After that, everything is done in the console: the master creates resellers and resellers create tenants. Creating a reseller or tenant also creates its first administrator, with the email and initial password entered in the form (no invitation email is sent; pass the password on securely). Further people are invited from **Users**, which does send an email. Reseller domains follow [DNS/TLS §7](dns-tls-and-certificates.md#7-adding-a-resellers-domain-runbook).
 
-If a master administrator loses their two-step device, another master administrator can reset it in the console (**Users**, **Reset two-step verification**). If there is no other, the bootstrap command will not help (it creates an administrator only while the master has nobody). Create a second master administrator with identity-service's internal call instead, from a throwaway container on the private network:
+If a master administrator loses their two-step device, another master administrator can reset it in the console (**Users**, **Reset two-step verification**). The resetting administrator confirms with a current code from **their own** authenticator app (step-up, G-100), so an administrator without two-step verification of their own cannot reset anyone's, and five wrong codes lock the confirmation for 15 minutes. The person is emailed, and so are the organisation's other administrators. If there is no other, the bootstrap command will not help (it creates an administrator only while the master has nobody). Create a second master administrator with identity-service's internal call instead, from a throwaway container on the private network:
 
 ```sh
 set -a; . ./.env; set +a
@@ -46,7 +46,7 @@ docker run --rm --network voice_backplane curlimages/curl -sS \
   -d '{"orgType":"master","email":"second@example.net","displayName":"Second administrator","password":"<at least 12 characters>"}'
 ```
 
-A `201` response means the person exists with the `master_admin` role. Sign in as them and reset the first administrator's two-step verification. The password is on the command line here, so clear your shell history afterwards.
+A `201` response means the person exists with the `master_admin` role. Sign in as them: as a master user they set up their own authenticator app at that first sign-in, which is what lets them confirm the reset. Then reset the first administrator's two-step verification, entering the new administrator's own current code when asked. The password is on the command line here, so clear your shell history afterwards.
 
 ## 3. Upgrades
 
@@ -59,7 +59,7 @@ Every service applies its own database migrations **when it starts**, before it 
 1. Read the release's changes, including new entries in `docs/decisions.md`: new required variables, changed ports, changed behaviour.
 2. **Back up** MariaDB (§4.2) and copy `.env`.
 3. Check out the release, rebuild the console (`flutter build web --release --no-web-resources-cdn`) and the images (`docker compose build`), or pull them from your registry.
-4. Add any new variables to `.env`.
+4. Add any new variables to `.env`. For example, notification-service requires `IDENTITY_SERVICE_URL` from the release that tells an org's other admins about two-step resets (G-100); without it the service refuses to start.
 5. Restart in this order, waiting for each group to be healthy:
    1. data stores, only if their version changes;
    2. identity-service and org-service;
@@ -178,7 +178,7 @@ Readiness checks:
 | FreeSWITCH nodes | `ds_list` shows each node active; `fs_cli -x status` on each | Any node inactive |
 | Registrations | `ul_dump` count, trended | Sudden drop |
 | Trunk registrations | `reg_list` | A trunk not registered |
-| Flood blocks | OpenSIPs log: `pike: blocking flood from` | Any, from a carrier or media server address |
+| Flood blocks | OpenSIPs log: `pike: blocking flood from` | Any from an address you expected to be exempt (a carrier or media server): it is missing from its trunk or from `OPENSIPS_FS_DESTINATION` |
 | Recording spool | Uploader `/metrics`: `cuc_recording_spool_stuck_files`, `cuc_recording_spool_undeletable_files`, `cuc_recording_spool_bytes`, `cuc_recording_upload_failures_total` | stuck or undeletable above 0; spool bytes above half its size |
 | Recording loss | Uploader and recording-service logs | `recording_upload_stuck` or `recording_spool_delete_failed` alerts |
 | Unrecordable calls | telephony-config log: `recording_policy_unavailable` | Any, if recording matters to your tenants |
@@ -235,7 +235,7 @@ Logs may contain telephone numbers and tenant identifiers. Treat log storage as 
 | Phones get 429 | Many phones behind one address rebooting together (limit 300 per minute per IP) | Raise `RATE_LIMIT_IP_MAX` |
 | Phones cannot register | DNS for the tenant domain; wrong credentials; OpenSIPs has not received the tenant's domain yet (telephony-config projection); flood block | `ul_dump`; OpenSIPs log; telephony-config log |
 | Registered phones don't receive calls | Phone behind NAT sending a private Contact ([network §6.5](network-and-firewall.md#65-phones-behind-nat)) | `ul_dump` shows the contact address |
-| Calls fail with 503 | No FreeSWITCH node active in dispatcher; node refusing OpenSIPs (ACL `FS_OPENSIPS_CIDR`); the node flood-blocked by pike | `ds_list`; FreeSWITCH log (`acl` rejections); OpenSIPs log (`pike`) |
+| Calls fail with 503 | No FreeSWITCH node active in dispatcher; node refusing OpenSIPs (ACL `FS_OPENSIPS_CIDR`) | `ds_list`; FreeSWITCH log (`acl` rejections); OpenSIPs log (`pike`) |
 | Calls connect but no audio, or one-way audio | FreeSWITCH advertising a private address (1:1 NAT without `FS_EXTERNAL_RTP_IP`); RTP range blocked; carrier or phone NAT | `sofia status profile internal` (`Ext-RTP-IP`); firewall; packet capture on the RTP range |
 | Calls to extensions fail, FreeSWITCH log shows xml_curl errors | telephony-config unreachable from FreeSWITCH; `FS_XML_CURL_TOKEN` mismatch; `SELF_URL` ≠ `TELEPHONY_CONFIG_URL` | FreeSWITCH log; telephony-config log (401s) |
 | Outbound calls fail | No outbound route; trunk not registered; carrier rejects the caller ID; tenant fraud limits | `reg_list`, `dr_gw_status`; OpenSIPs and telephony-config logs |
@@ -263,7 +263,7 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Telephony | No media relay: media servers need public addresses; no SRTP | O-7 |
 | Telephony | Queues, parking and conferences unreliable with more than one media server | G-46, S4-05 |
 | Telephony | Media server list fixed at OpenSIPs start; no weights or draining | S4-02 |
-| Telephony | Flood protection has no allow list for carriers and media servers; per-tenant call rate fixed at 10 per second | network §6.4, G-31 |
+| Telephony | Per-tenant call rate fixed at 10 per second; repeated SIP authentication failures not blocked | G-31, G-118 |
 | Telephony | Phones behind NAT not verified | network §6.5 |
 | Telephony | Only Yealink auto-provisioning, not verified on hardware | G-103 |
 | Voicemail | **Recorded voicemail audio does not reach object storage**: messages are listed but cannot be played, and voicemail-to-email has nothing to attach | S5-16 |

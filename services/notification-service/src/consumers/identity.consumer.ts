@@ -8,6 +8,7 @@ import { brandOf, NEUTRAL_BRAND, type MailBrand } from '../domain/brand.js';
 import { notificationEvents } from '../events.js';
 import type { IdentityClient, IssuedLink } from '../identity-client.js';
 import type { Mailer } from '../mailer.js';
+import type { IdentityClient } from '../identity-client.js';
 import type { OrgClient } from '../org-client.js';
 import { renderEmail, validFor, type TemplateName } from '../render.js';
 import type { NotificationServiceDb } from '../schema.js';
@@ -27,6 +28,7 @@ interface InvitationData {
 }
 
 interface MfaResetData {
+  readonly userId: string;
   readonly orgId: string;
   readonly email: string;
   readonly displayName: string;
@@ -42,27 +44,28 @@ export interface IdentityConsumerOptions {
   readonly consoleUrlOverride?: string;
 }
 
+/** One email to send for an event. */
+interface Outgoing {
+  readonly template: TemplateName;
+  readonly to: string;
+  readonly name?: string;
+  readonly about?: { readonly name: string; readonly email: string };
+}
+
 /**
  * Sends the emails identity-service's events ask for: a password-reset link,
  * an invitation, and the notice that an admin reset someone's two-step
- * verification (S3-03). The brand comes from org-service (02 §5.2), the
- * email is rendered with it or with the neutral presentation, and it goes out
- * through the SMTP relay.
+ * verification (S3-03), which also goes to the org's other admins (G-100).
+ * The brand comes from org-service (02 §5.2), the email is rendered with it or
+ * with the neutral presentation, and it goes out through the SMTP relay.
  *
- * The reset and invitation events carry no token (G-55). Just before sending,
- * this asks identity-service to issue the link: a fresh token, returned once,
- * which replaces any earlier one. So a retried email carries a new link and
- * the one before it stops working. When identity-service will not issue one
- * (the reset or invitation is gone, used or expired, or the user was disabled
- * since) the event is consumed and nothing is sent.
- *
- * A failure anywhere else (org-service or identity-service unreachable, the
- * relay down) throws, so the event is redelivered and retried; only a stale
- * event, whose link has already expired, is dropped without sending. Delivery
- * is at-least-once: a crash between the relay accepting a message and the row
- * being recorded can send it twice, and then only the later email's link works.
- *
- * The token and the link are credentials: neither is logged or stored here.
+ * A failure anywhere (org-service or identity-service unreachable, the relay
+ * down) throws, so the event is redelivered and retried; only a stale event,
+ * whose link has already expired, is dropped without sending. Everything an
+ * event needs is looked up before the first email goes out, so a failed
+ * lookup sends nothing. Delivery is at-least-once: a crash between the relay
+ * accepting a message and the rows being recorded, or a relay failure part-way
+ * through an event's emails, can send one twice.
  */
 export function createIdentityConsumer(
   db: Database<NotificationServiceDb>,
@@ -162,37 +165,68 @@ export function createIdentityConsumer(
       // The sign-in page carries no credential; the others carry their token.
       const link = `${linkBase(resolved?.consoleHostname ?? null)}${path}${query}`;
 
-      const mail = await renderEmail({
-        template,
-        brand,
-        email: data.email,
-        ...('displayName' in data ? { name: data.displayName } : {}),
-        link,
-        ...(expiresAt === undefined ? {} : { validFor: validFor(expiresAt) }),
-      });
-
-      await mailer.send({
-        to: data.email,
-        fromName: brand.emailFromName ?? brand.displayName,
-        subject: mail.subject,
-        html: mail.html,
-        text: mail.text,
-      });
-
-      await trx
-        .insertInto('sent_emails')
-        .values({
-          id: randomUUID(),
-          event_id: envelope.id,
+      const outgoing: Outgoing[] = [
+        {
           template,
-          to_address: data.email,
-          org_id: data.orgId,
-          brand_reseller: null,
-          sent_at: new Date(),
-        })
-        .execute();
+          to: data.email,
+          ...('displayName' in data ? { name: data.displayName } : {}),
+        },
+      ];
+      if (envelope.type === 'identity.user.mfa_reset') {
+        // G-100: the org's other admins hear about it too: not the admin who
+        // did it (the envelope's actor), and not the person, who has their own.
+        const reset = data as MfaResetData;
+        const about = { name: reset.displayName, email: reset.email };
+        const admins = await identityClient.admins(reset.orgId);
+        for (const admin of admins) {
+          if (admin.userId === reset.userId || admin.userId === envelope.actor?.id) continue;
+          if (admin.email === reset.email) continue;
+          outgoing.push({
+            template: 'mfa-reset-admin',
+            to: admin.email,
+            name: admin.displayName,
+            about,
+          });
+        }
+      }
+
+      for (const mail of outgoing) {
+        const rendered = await renderEmail({
+          template: mail.template,
+          brand,
+          email: mail.to,
+          ...(mail.name === undefined ? {} : { name: mail.name }),
+          ...(mail.about === undefined ? {} : { about: mail.about }),
+          link,
+          ...(expiresAt === undefined ? {} : { validFor: validFor(expiresAt) }),
+        });
+
+        await mailer.send({
+          to: mail.to,
+          fromName: brand.emailFromName ?? brand.displayName,
+          subject: rendered.subject,
+          html: rendered.html,
+          text: rendered.text,
+        });
+
+        await trx
+          .insertInto('sent_emails')
+          .values({
+            id: randomUUID(),
+            event_id: envelope.id,
+            template: mail.template,
+            to_address: mail.to,
+            org_id: data.orgId,
+            brand_reseller: null,
+            sent_at: new Date(),
+          })
+          .execute();
+      }
       // Never the token or the link: they are credentials.
-      logger.info({ eventId: envelope.id, template, orgId: data.orgId }, 'email sent');
+      logger.info(
+        { eventId: envelope.id, template, orgId: data.orgId, count: outgoing.length },
+        'email sent',
+      );
     },
   });
 }

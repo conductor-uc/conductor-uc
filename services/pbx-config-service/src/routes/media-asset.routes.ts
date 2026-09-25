@@ -32,6 +32,13 @@ const MediaAssetSchema = Type.Object({
 });
 type MediaAssetResponse = Static<typeof MediaAssetSchema>;
 
+const DownloadQuerySchema = Type.Object({
+  /** Which converted copy to play. Defaults to 16 kHz, the better of the two. */
+  variant: Type.Optional(Type.Union([Type.Literal('16k'), Type.Literal('8k')])),
+});
+
+const DownloadUrlSchema = Type.Object({ url: Type.String(), expiresAt: Type.String() });
+
 const CreateMediaAssetBodySchema = Type.Object({
   kind: Type.String({ minLength: 1 }),
   label: Type.String({ minLength: 1 }),
@@ -99,6 +106,32 @@ export function registerMediaAssetRoutes(app: Server, assets: MediaAssetRepo): v
       const found = await assets.findById(ctxFor(request), request.params.id);
       if (found === undefined) throw ProblemError.notFound('No media asset with that id.');
       return toResponse(found);
+    },
+  );
+
+  // A short-lived address to play a ready asset's converted audio from (G-80). The
+  // console opens it in a new tab, where the browser plays the WAV.
+  app.get(
+    '/v1/tenants/:tenantId/media-assets/:id/download-url',
+    {
+      config: { permission: 'media.read', dataClass: 'config' },
+      schema: {
+        params: AssetParamsSchema,
+        querystring: DownloadQuerySchema,
+        response: { 200: DownloadUrlSchema },
+      },
+    },
+    async (request) => {
+      try {
+        const { url, expiresAt } = await assets.downloadUrl(
+          ctxFor(request),
+          request.params.id,
+          request.query.variant ?? '16k',
+        );
+        return { url, expiresAt: expiresAt.toISOString() };
+      } catch (error) {
+        throw toProblem(error);
+      }
     },
   );
 

@@ -103,7 +103,7 @@ It believes `X-Forwarded-For` and `X-Forwarded-Proto` only from the proxies list
 
 What it does on each request:
 
-1. **Flood protection (`pike`):** more than 30 requests in 2 seconds from one source IP blocks that IP for 120 seconds. This applies to every source, including FreeSWITCH nodes and carriers.
+1. **Flood protection (`pike`):** more than 30 requests in 2 seconds from one source IP blocks that IP for 120 seconds. FreeSWITCH nodes and addresses listed on a trunk are exempt (G-117); phones and unknown sources are not.
 2. **Phones:** digest authentication against `subscriber`, registration into `location`, and presence subscriptions (BLF).
 3. **Carriers:** calls from a trunk's IP addresses are recognised through the `address` table. Registration-based trunks register out through `uac_registrant`.
 4. **To FreeSWITCH:** every call is sent round-robin to a FreeSWITCH node from dispatcher set 1, with the tenant (`X-Tenant-Id`), direction and trunk added as headers.

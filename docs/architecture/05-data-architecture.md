@@ -138,6 +138,8 @@ bucket: {STORAGE_BUCKET_PREFIX}-platform
 
 - Server-side encryption is enabled on every bucket. Public access is always blocked.
 - Clients access objects only through presigned URLs, with TTL ≤ 5 min for downloads and ≤ 15 min for uploads.
+- Every bucket carries one CORS rule so browsers can use those URLs from the console's origin (G-80): `PUT`, `GET` and `HEAD` from any origin, the `Content-Type` header, no credentials, no exposed headers. `@cuc/storage` sets it when it provisions a bucket and re-applies it once per process per bucket, the first time the process presigns a URL there, so existing tenant buckets get it after a deploy without listing them. Any origin is safe because every URL is individually signed and short-lived.
+- A ready media asset's converted audio is served through `GET /v1/tenants/{t}/media-assets/{id}/download-url` (`media.read`): a presigned GET for `16k.wav` (or `8k.wav` with `?variant=8k`), so the console can play prompts and hold music back. The raw upload is never served.
 - Retention runs on lifecycle rules set from the tenant's retention policy (recordings, voicemail, fax, exports).
 - Every object's metadata row (in the owning service) records `sha256`, `size`, `content_type`, and `object_key`. Objects are never listed to discover data. The DB is the index.
 

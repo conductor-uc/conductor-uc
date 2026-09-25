@@ -20,7 +20,7 @@ const { createServer } = await load('packages/http/dist/index.js');
 // [service dir, route module, exported register function, extra stub args]
 const SOURCES = [
   ['identity-service', 'auth', 'registerAuthRoutes', 1],
-  ['identity-service', 'users', 'registerUserRoutes', 4],
+  ['identity-service', 'users', 'registerUserRoutes', 5],
   ['identity-service', 'roles', 'registerRoleRoutes', 4],
   ['identity-service', 'audit', 'registerAuditRoutes', 2],
   ['identity-service', 'me', 'registerMeRoutes', 2],
@@ -120,6 +120,7 @@ const OVERRIDES = {
   'get /v1/tenants/{tenantId}/recordings/{id}/play-url': 'getRecordingPlayUrl',
   'get /v1/tenants/{tenantId}/recordings/{id}/download-url': 'getRecordingDownloadUrl',
   'get /v1/tenants/{tenantId}/recording-settings': 'getRecordingSettings',
+  'get /v1/tenants/{tenantId}/media-assets/{id}/download-url': 'getMediaAssetDownloadUrl',
   'put /v1/tenants/{tenantId}/recording-settings': 'saveRecordingSettings',
   // End-user self-service (parity 1e): a person's own extension, voicemail and history.
   'get /v1/tenants/{tenantId}/me/extension': 'getMyExtension',
