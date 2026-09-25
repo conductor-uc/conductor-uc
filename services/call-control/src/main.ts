@@ -10,6 +10,7 @@ import { createChannelHandler } from './channel-handler.js';
 import { configSchema, loadServiceConfig, parseFsNodes } from './config.js';
 import { createEslClient, type EslClient } from './esl/client.js';
 import { createCallRegistry } from './redis/registry.js';
+import { createSerialQueue } from './serial.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import type { CallControlDb } from './schema.js';
 
@@ -80,6 +81,10 @@ const fsNodes = parseFsNodes(config.FS_NODES);
 const heartbeatIntervals = new Map<string, ReturnType<typeof setInterval>>();
 const eslClientsById = new Map<string, EslClient>();
 
+const handleInOrder = createSerialQueue((nodeId, error) => {
+  logger.error({ nodeId, err: error }, 'failed to handle ESL event');
+});
+
 const eslClients = fsNodes.map((node) =>
   createEslClient({
     node,
@@ -87,10 +92,9 @@ const eslClients = fsNodes.map((node) =>
     logger,
     reconnectMinDelayMs: config.ESL_RECONNECT_MIN_DELAY_MS,
     reconnectMaxDelayMs: config.ESL_RECONNECT_MAX_DELAY_MS,
+    // One node's events in the order FreeSWITCH raised them (`serial.ts`).
     onEvent: (nodeId, raw) => {
-      void channelHandler.handleEvent(nodeId, raw).catch((error: unknown) => {
-        logger.error({ nodeId, err: error }, 'failed to handle ESL event');
-      });
+      handleInOrder(nodeId, () => channelHandler.handleEvent(nodeId, raw));
     },
     onConnect: (nodeId) => {
       void registry.heartbeat(nodeId, config.HEARTBEAT_TTL_MS);
@@ -136,7 +140,7 @@ const app = await createServer({
   logger,
 });
 
-registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN);
+registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN, registry);
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));

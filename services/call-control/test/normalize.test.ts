@@ -51,6 +51,7 @@ describe('normalizeEslEvent', () => {
       kind: 'answered',
       callUuid: 'abc',
       nodeId: 'fs-1',
+      tenantId: null,
       answeredAt: '1700000000000',
     });
   });
@@ -62,7 +63,13 @@ describe('normalizeEslEvent', () => {
         'Unique-ID': 'abc',
         'Other-Leg-Unique-ID': 'def',
       }),
-    ).toEqual({ kind: 'bridged', callUuid: 'abc', nodeId: 'fs-1', bridgedTo: 'def' });
+    ).toEqual({
+      kind: 'bridged',
+      callUuid: 'abc',
+      nodeId: 'fs-1',
+      tenantId: null,
+      bridgedTo: 'def',
+    });
   });
 
   it('ignores CHANNEL_BRIDGE with no other-leg id', () => {
@@ -79,8 +86,45 @@ describe('normalizeEslEvent', () => {
         kind: 'held',
         callUuid: 'abc',
         nodeId: 'fs-1',
+        tenantId: null,
       },
     );
+  });
+
+  it('maps CHANNEL_UNHOLD, RECORD_START and RECORD_STOP (S5-08)', () => {
+    for (const [eventName, kind] of [
+      ['CHANNEL_UNHOLD', 'unheld'],
+      ['RECORD_START', 'recordingStarted'],
+      ['RECORD_STOP', 'recordingStopped'],
+    ] as const) {
+      expect(
+        normalizeEslEvent('fs-1', {
+          'Event-Name': eventName,
+          'Unique-ID': 'abc',
+          'variable_sip_h_X-Tenant-Id': 'tenant-1',
+        }),
+      ).toEqual({ kind, callUuid: 'abc', nodeId: 'fs-1', tenantId: 'tenant-1' });
+    }
+  });
+
+  it('takes the tenant from cuc_tenant_id when there is no X-Tenant-Id header (a call from a trunk, S5-08)', () => {
+    expect(
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'CHANNEL_ANSWER',
+        'Unique-ID': 'abc',
+        'Event-Date-Timestamp': '1700000000000000',
+        variable_cuc_tenant_id: 'tenant-2',
+      }),
+    ).toMatchObject({ kind: 'answered', tenantId: 'tenant-2' });
+    // The header wins when both are there.
+    expect(
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'CHANNEL_HOLD',
+        'Unique-ID': 'abc',
+        'variable_sip_h_X-Tenant-Id': 'tenant-1',
+        variable_cuc_tenant_id: 'tenant-2',
+      }),
+    ).toMatchObject({ kind: 'held', tenantId: 'tenant-1' });
   });
 
   it('maps CHANNEL_HANGUP_COMPLETE to a hungup action with the hangup cause', () => {

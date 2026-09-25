@@ -86,6 +86,19 @@ describe('BUILT_IN_ROLES', () => {
     }
   });
 
+  it('monitor.calls (S5-08) belongs to tenant_admin, tenant_supervisor and master_support, and to no reseller or plain user', () => {
+    for (const roleId of ['master_admin', 'master_support', 'tenant_admin', 'tenant_supervisor']) {
+      expect(BUILT_IN_ROLES.get(roleId as never)?.permissions.has('monitor.calls'), roleId).toBe(
+        true,
+      );
+    }
+    for (const roleId of ['reseller_admin', 'reseller_support', 'tenant_user']) {
+      expect(BUILT_IN_ROLES.get(roleId as never)?.permissions.has('monitor.calls'), roleId).toBe(
+        false,
+      );
+    }
+  });
+
   it('tenant_user holds only the self-service permissions plus the two every signed-in person needs', () => {
     const tenantUser = BUILT_IN_ROLES.get('tenant_user');
     expect([...(tenantUser?.permissions ?? [])].sort()).toEqual(
@@ -152,6 +165,7 @@ describe('support roles read configuration (G-10, S1-15)', () => {
       'analytics.view',
       'audit.read',
       'monitor.presence',
+      'monitor.calls',
       'billing.read',
     ]) {
       expect(role?.permissions.has(permission), permission).toBe(true);

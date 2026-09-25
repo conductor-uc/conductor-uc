@@ -24,7 +24,7 @@ Everything private can sit behind NAT or on a network with no internet route, **
 
 | Component | Port | Protocol | Bind | Who connects | Auth | Notes |
 |---|---|---|---|---|---|---|
-| api-gateway | 443 (`HTTP_PORT`) | TCP, HTTPS (TLS 1.2 minimum) | `HTTP_HOST` (0.0.0.0) | Browsers, phones, API clients | Access token (JWT) on `/v1/*` except `/v1/auth` and `/v1/public` | Serves plain HTTP if no certificate source is configured. Must be 443 inside the container too, or HTTPS redirects point at the wrong port ([all-in-one §7.5](deploy-all-in-one.md#75-api-gateway)). |
+| api-gateway | 443 (`HTTP_PORT`) | TCP, HTTPS (TLS 1.2 minimum); WebSocket (`wss`) on `/v1/ws` | `HTTP_HOST` (0.0.0.0) | Browsers, phones, API clients | Access token (JWT) on `/v1/*` except `/v1/auth` and `/v1/public`; `/v1/ws` takes it in its first message | Serves plain HTTP if no certificate source is configured. Must be 443 inside the container too, or HTTPS redirects point at the wrong port ([all-in-one §7.5](deploy-all-in-one.md#75-api-gateway)). The console's live connection (S5-08) is upgraded on this same port: nothing else to open. |
 | api-gateway | 80 (`HTTP_REDIRECT_PORT`) | TCP, HTTP | `HTTP_HOST` | Let's Encrypt validation servers; browsers typing `http://` | None | Answers `/.well-known/acme-challenge/*`; redirects everything else (308) to HTTPS. Only opened if `HTTP_REDIRECT_PORT` is set. |
 | OpenSIPs | 5060 (`OPENSIPS_SIP_PORT`) | UDP | all interfaces | Phones, carriers, FreeSWITCH nodes | Digest for phones; source IP for trunks; dispatcher membership (IP and port) for FreeSWITCH | Flood limit: 30 requests per 2 s per source IP |
 | OpenSIPs | 5060 | TCP | all interfaces | Phones, carriers | Same | |
@@ -44,7 +44,7 @@ WebSocket SIP (WS/WSS), SIP over IPv6 and HEP capture are not configured.
 | recording-uploader | 9464 (`METRICS_PORT`) | TCP, HTTP | `METRICS_HOST` (0.0.0.0) | Your monitoring system | None | Your monitoring system |
 | MariaDB | 3306 | TCP (no TLS) | container default | Every service except api-gateway; OpenSIPs; telephony-config (also the `opensips` schema) | Per-service user and password | Those hosts |
 | Redis | 6379 | TCP (no TLS) | container default | api-gateway, call-control, telephony-config, FreeSWITCH, OpenSIPs | **None** (FreeSWITCH's Redis module has no password option) | Those hosts |
-| NATS client | 4222 | TCP (no TLS) | container default | Every application service | None in the development stack; username and password supported (`NATS_USER`, `NATS_PASSWORD`) | Those hosts |
+| NATS client | 4222 | TCP (no TLS) | container default | Every application service, and api-gateway (its realtime hub reads call events, S5-08) | None in the development stack; username and password supported (`NATS_USER`, `NATS_PASSWORD`) | Those hosts |
 | NATS monitoring | 8222 | TCP, HTTP | container default | Your monitoring system | None | Monitoring only, or do not publish it |
 | MinIO console | 9001 | TCP, HTTP | container default | Administrators | MinIO root credentials | Do not publish it, or administrators' addresses only |
 | MinIO API (self-hosted object storage) | 9000 | TCP, HTTP (HTTPS if you give MinIO a certificate) | container default | Services, uploaders; browsers **via HTTPS** | S3 signatures | See [§1](#1-public-or-private-at-a-glance): browsers need it over HTTPS |
@@ -57,8 +57,8 @@ Every application service listens on 8080. This is the complete list of callers,
 
 | Service (port 8080) | Called by | Over |
 |---|---|---|
-| identity-service | api-gateway (`/v1/auth`, `/v1/orgs`, and JWKS), org-service, pbx-config, trunk, callflow, voicemail, recording and cdr services (permission lookups), notification-service (reset and invitation links) | HTTP |
-| org-service | api-gateway (`/v1/public`, `/v1/resellers`, `/v1/tenants`, `/v1/session`, `/v1/platform/...`, certificates, ACME challenges), identity, pbx-config, trunk, telephony-config, cdr and notification services | HTTP |
+| identity-service | api-gateway (`/v1/auth`, `/v1/orgs`, JWKS, and the realtime hub's permission lookups), org-service, pbx-config, trunk, callflow, voicemail, recording and cdr services (permission lookups), notification-service (reset and invitation links) | HTTP |
+| org-service | api-gateway (`/v1/public`, `/v1/resellers`, `/v1/tenants`, `/v1/session`, `/v1/platform/...`, certificates, ACME challenges, and the realtime hub's org lineage lookups), identity, pbx-config, trunk, telephony-config, cdr and notification services | HTTP |
 | pbx-config-service | api-gateway, telephony-config, media-worker, voicemail-service, cdr-service | HTTP |
 | trunk-service | api-gateway, pbx-config-service, telephony-config | HTTP |
 | callflow-service | api-gateway, telephony-config | HTTP |
@@ -66,7 +66,7 @@ Every application service listens on 8080. This is the complete list of callers,
 | recording-service | api-gateway, telephony-config, **every recording-uploader** | HTTP |
 | cdr-service | api-gateway, **every FreeSWITCH node** (`/ingest/json-cdr`) | HTTP |
 | telephony-config | **every FreeSWITCH node** (`/fs/*`), trunk-service | HTTP |
-| call-control | telephony-config | HTTP |
+| call-control | telephony-config, api-gateway (the realtime hub asks for a tenant's live calls, `/internal/v1/tenants/{t}/calls`) | HTTP |
 | media-worker | nobody (health checks only) | — |
 | notification-service | nobody (health checks only) | — |
 
@@ -86,6 +86,7 @@ Every application service listens on 8080. This is the complete list of callers,
 1. The browser loads the console from the gateway (`https://console.<domain>/`) and signs in (`/v1/auth/*`).
 2. Every API call goes to the gateway, which checks the access token and forwards the call to the right service with signed identity headers.
 3. Listening to a recording or voicemail, downloading an export, or uploading a prompt or logo: the service returns a presigned URL (valid at most 5 minutes for downloads, 15 for uploads), and **the browser talks to object storage directly**.
+4. Live monitoring (the Monitoring page): the browser opens a WebSocket to the gateway (`wss://<console host>/v1/ws`, the same port 443) and keeps it open. The gateway reads call events from NATS and asks call-control for the tenant's live calls; nothing else connects to the browser.
 
 ### 3.3 Port 80 must share the SIP edge's address
 
@@ -153,7 +154,7 @@ The internal secrets are what protects the services now. `INTERNAL_SERVICE_TOKEN
 
 - **OpenSIPs MI (8888)**: no authentication, listens on every interface. Allow only telephony-config.
 - **Redis (6379)**: must not require a password, because FreeSWITCH's Redis module cannot send one. Allow only the gateway, call-control, telephony-config, FreeSWITCH and OpenSIPs.
-- **NATS (4222)**: no authentication unless you configure a NATS user and give every service `NATS_USER` and `NATS_PASSWORD`. NKeys are not supported (`NATS_NKEY_SEED` is accepted but ignored). The account needs permission to create and update streams.
+- **NATS (4222)**: no authentication unless you configure a NATS user and give every service `NATS_USER` and `NATS_PASSWORD`. NKeys are not supported (`NATS_NKEY_SEED` is accepted but ignored). The account needs permission to create and update streams. api-gateway needs less: to subscribe to `call.>`, create ordered (ephemeral) consumers on the `CALL` stream through the JetStream API (`$JS.API.>`), and publish `audit.event.recorded`.
 - **FreeSWITCH ESL (8021)**: a password, plus one allowed CIDR.
 - **MariaDB, Redis, NATS** connections carry no TLS, and the clients have no TLS options. Keep them on a private network. On untrusted links, use a VPN or WireGuard between servers.
 
@@ -166,6 +167,8 @@ The gateway takes the client's address from the connection itself, and ignores `
 - **Behind a layer-4 balancer that passes TLS through**: it cannot set these headers. Leave `TRUSTED_PROXIES` empty; the gateway sees the balancer's address for every client, with the same shared rate limit, unless the balancer preserves the client's source address (transparent mode or direct server return).
 
 Never list an address that ordinary clients can connect from: whatever it sends in `X-Forwarded-For` is believed.
+
+**WebSockets through a proxy or load balancer.** The console's live connection (`/v1/ws`) is an HTTP upgrade on the same listener. A proxy or balancer in front of the gateway must pass the `Upgrade` and `Connection` headers (nginx: `proxy_http_version 1.1` and `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";`) and must not close an idle connection sooner than the gateway's ping interval (`REALTIME_HEARTBEAT_INTERVAL_MS`, 30 s; give it 60 s or more). Sticky sessions are **not** needed: each gateway replica serves its own connections, and a client that lands on another replica after a reconnect simply subscribes again. The per-address connection limit (`REALTIME_MAX_CONNECTIONS_PER_IP`) counts the address found through `TRUSTED_PROXIES`, like the rate limit.
 
 ### 6.4 SIP flood protection
 

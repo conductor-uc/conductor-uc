@@ -205,13 +205,22 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         const result = await caller.result();
         expect(result.successfulCalls, result.stdout).toBe(1);
 
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        const messages = await tenantAdminCurlJson(
-          seed.resellerId,
-          'GET',
-          `${VOICEMAIL_SERVICE_URL}/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages`,
-        );
-        expect(messages.status, JSON.stringify(messages.json)).toBe(200);
+        // The message exists once the node's uploader has put the audio in
+        // object storage (S5-16), which waits for the file to settle (30 s in
+        // compose) first, so this polls.
+        const deadline = Date.now() + 90_000;
+        let messages = { status: 0, json: undefined as unknown };
+        for (;;) {
+          messages = await tenantAdminCurlJson(
+            seed.resellerId,
+            'GET',
+            `${VOICEMAIL_SERVICE_URL}/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages`,
+          );
+          expect(messages.status, JSON.stringify(messages.json)).toBe(200);
+          const rows = (messages.json as { rows: unknown[] }).rows;
+          if (rows.length >= 1 || Date.now() > deadline) break;
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
         expect((messages.json as { rows: unknown[] }).rows.length).toBeGreaterThanOrEqual(1);
 
         // The call leaves a CDR for the tenant, and step 6 of the journey: the
@@ -302,7 +311,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
       }),
       false,
     );
-  }, 60_000);
+  }, 240_000);
 
   it('the caller presses 2 at a menu and is taken to voicemail', async () => {
     await callFlow(
@@ -329,7 +338,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
       }),
       true,
     );
-  }, 90_000);
+  }, 240_000);
 
   it('a play node plays its prompt and the call carries on to voicemail', async () => {
     await callFlow(
@@ -353,7 +362,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
       }),
       true,
     );
-  }, 90_000);
+  }, 240_000);
 
   async function schedule(
     tenantId: string,
@@ -415,7 +424,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         ),
       }),
     );
-  }, 90_000);
+  }, 240_000);
 
   it('a time_condition takes noMatch outside the schedule and reaches voicemail by that branch', async () => {
     await callFlow(
@@ -426,7 +435,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         scheduleId: await schedule(tenantId, 'S3-11 never open', [], cleanup),
       }),
     );
-  }, 90_000);
+  }, 240_000);
 
   it('a goto_flow node continues in another published flow, which reaches voicemail', async () => {
     await callFlow(
@@ -480,5 +489,5 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
         return { targetFlowId: target.id };
       },
     );
-  }, 90_000);
+  }, 240_000);
 });

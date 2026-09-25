@@ -41,7 +41,7 @@ export function escapeRegex(value: string): string {
 }
 
 /**
- * `<action application="set" data="cuc_tenant_id=...">` +
+ * `<action application="export" data="cuc_tenant_id=...">` +
  * `<action application="set" data="cuc_node_id=$${cuc_node_id}">` (S2-18/
  * S2-19) — every dialplan document's own first actions, on every branch.
  *
@@ -52,7 +52,12 @@ export function escapeRegex(value: string): string {
  * variable every branch can agree to set explicitly, giving cdr-service
  * (`domain/cdr.ts`) a single, direction-independent field to read off
  * `mod_json_cdr`'s own `variables.cuc_tenant_id` rather than needing
- * direction-dependent fallback logic.
+ * direction-dependent fallback logic. It is `export`ed (set here and on every
+ * leg this channel bridges to) so the leg FreeSWITCH creates to ring an
+ * extension, which carries no `X-Tenant-Id`, names its tenant from its first
+ * event: call-control's live registry and the realtime hub's live calls and
+ * presence (S5-08) rely on it. The B-leg posts no CDR (`log-b-leg=false`), so
+ * cdr-service is unaffected.
  *
  * `cuc_node_id`: confirmed live (S2-19's own two-node verification) that
  * `vars.xml`'s `X-PRE-PROCESS cmd="set" data="cuc_node_id=..."` only
@@ -72,7 +77,7 @@ export function escapeRegex(value: string): string {
  */
 function tenantIdAction(tenantId: string): string {
   return (
-    `<action application="set" data="${escapeXml(`cuc_tenant_id=${tenantId}`)}"/>\n` +
+    `<action application="export" data="${escapeXml(`cuc_tenant_id=${tenantId}`)}"/>\n` +
     '          <action application="set" data="cuc_node_id=$${cuc_node_id}"/>'
   );
 }

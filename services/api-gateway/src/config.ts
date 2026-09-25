@@ -201,6 +201,55 @@ export const configSchema = Type.Object({
   /** Other origins the console may call: the object store it uploads media to. */
   CONSOLE_CONNECT_SOURCES: Env.list({ default: [] }),
   CONSOLE_HOSTNAMES: Env.list({ default: [] }),
+
+  /**
+   * The realtime hub (S5-08): `GET /v1/ws`, a WebSocket that streams live
+   * calls, presence and queue state to the console, filtered per subscriber
+   * by the same rules as the API (06, api-gateway). On by default; it needs
+   * NATS, `CALL_CONTROL_URL` and `INTERNAL_SERVICE_TOKEN`, and the gateway
+   * refuses to start with it on and either of the last two unset. Off, the
+   * gateway holds no NATS connection and `/v1/ws` does not exist.
+   */
+  REALTIME_ENABLED: Env.bool({ default: true }),
+  /** NATS, where the hub reads `call.*` events (an ordered consumer per gateway process). */
+  NATS_SERVERS: Env.list({
+    default: ['127.0.0.1:4222'],
+    description: 'Comma-separated NATS endpoints, e.g. nats-1:4222,nats-2:4222.',
+  }),
+  NATS_USER: Env.optional(Env.string({ description: 'NATS user, when not using an nkey.' })),
+  NATS_PASSWORD: Env.optional(Env.secret()),
+  /** call-control, e.g. http://call-control:8080: the tenant's live calls when someone subscribes. */
+  CALL_CONTROL_URL: Env.optional(Env.url()),
+  /**
+   * How long a new connection has to send its access token (`{type:"auth"}`)
+   * before it is closed.
+   */
+  REALTIME_AUTH_TIMEOUT_MS: Env.int({ minimum: 1_000, default: 10_000 }),
+  /** Open realtime connections from one client address, per gateway process. */
+  REALTIME_MAX_CONNECTIONS_PER_IP: Env.int({ minimum: 1, default: 50 }),
+  /** Open realtime connections for one signed-in person, per gateway process. */
+  REALTIME_MAX_CONNECTIONS_PER_USER: Env.int({ minimum: 1, default: 10 }),
+  /** Topics one connection may subscribe to at once. */
+  REALTIME_MAX_SUBSCRIPTIONS: Env.int({ minimum: 1, default: 20 }),
+  /** The largest message a client may send; a larger one closes the connection (1009). */
+  REALTIME_MAX_MESSAGE_BYTES: Env.int({ minimum: 1_024, default: 16_384 }),
+  /** Messages one connection may send per minute before it is closed (1008). */
+  REALTIME_MAX_MESSAGES_PER_MINUTE: Env.int({ minimum: 1, default: 120 }),
+  /**
+   * Unsent data one connection may queue before it is dropped as too slow (1013):
+   * one slow browser must not hold the gateway's memory.
+   */
+  REALTIME_MAX_BUFFERED_BYTES: Env.int({ minimum: 65_536, default: 1_048_576 }),
+  /** How often the gateway pings each connection; one that has not answered the last ping is dropped. */
+  REALTIME_HEARTBEAT_INTERVAL_MS: Env.int({ minimum: 1_000, default: 30_000 }),
+  /**
+   * How often every subscription's permission is checked again, so a role taken
+   * away stops the stream. Permissions are cached for
+   * `REALTIME_PERMISSION_CACHE_TTL_MS`, so a revocation bites within the sum of
+   * the two.
+   */
+  REALTIME_PERMISSION_RECHECK_MS: Env.int({ minimum: 1_000, default: 30_000 }),
+  REALTIME_PERMISSION_CACHE_TTL_MS: Env.int({ minimum: 0, default: 5_000 }),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

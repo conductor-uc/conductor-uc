@@ -102,6 +102,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'billing.read': 'usage',
   'voicemail.access': 'private',
   'monitor.presence': 'config',
+  'monitor.calls': 'private',
   'monitor.listen': 'private',
   'monitor.whisper': 'private',
   'monitor.barge': 'private',
@@ -113,6 +114,19 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'self.history': 'private',
 };
 
+/**
+ * `monitor.calls` is not in 07 §3.3's initial catalog either: S5-08's realtime
+ * hub needs a permission for "watch the tenant's live calls" (the
+ * `tenant:{t}:calls` topic: parties' numbers, state, duration, recording
+ * state). 07 §3.2 classes live call monitoring as `private`, so none of the
+ * config-class permissions fit (`monitor.presence` is held by every tenant
+ * user), and the private ones each mean something else: `monitor.listen`/
+ * `whisper`/`barge` act on a call and are not held by tenant admins,
+ * `cdr.read` is call history and not held by supervisors, and
+ * `analytics.view` is reports and wallboards. It is `private`, so H1 keeps
+ * every reseller out, and like every private permission it has no read twin
+ * and nothing implies it (docs/decisions.md G-119).
+ */
 /**
  * `self.settings`, `self.voicemail` and `self.history` are not in 07 §3.3
  * either: they are the end-user self-service portal's (parity 1e) permissions

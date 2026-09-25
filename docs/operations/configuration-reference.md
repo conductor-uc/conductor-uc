@@ -28,7 +28,7 @@ Generate every one of these per installation. The development values in `infra/c
 | `FS_EVENT_SOCKET_PASSWORD` | FreeSWITCH (every node), call-control | Those (call-control uses one password for all nodes) | `openssl rand -hex 24` |
 | One database password per service, plus `OPENSIPS_DB_PASSWORD` and the MariaDB root password | MariaDB and each service | The service and the MariaDB user it logs in as | `openssl rand -hex 24` each |
 | `STORAGE_ACCESS_KEY_ID`, `STORAGE_SECRET_ACCESS_KEY` | services using storage | All of them (one key pair) | From your S3 provider, or MinIO's root or a MinIO user |
-| `NATS_PASSWORD` (optional) | every service with NATS; the NATS server | All of them | `openssl rand -hex 24` |
+| `NATS_PASSWORD` (optional) | every service with NATS, api-gateway (realtime hub); the NATS server | All of them | `openssl rand -hex 24` |
 | `SMTP_PASSWORD` | notification-service | — | From your mail provider |
 | `PROVISIONING_PASSWORD` (optional) | pbx-config-service | — (typed into phones or your provisioning redirect) | `openssl rand -hex 16` |
 
@@ -66,6 +66,8 @@ Most services include one or more of these groups. The per-service tables in §4
 There is no TLS option for the database connection.
 
 ### 3.3 Events (every service except api-gateway)
+
+api-gateway takes only `NATS_SERVERS`, `NATS_USER` and `NATS_PASSWORD` from this group, for its realtime hub ([§4.1](#41-api-gateway)); it has no outbox and creates no streams.
 
 | Variable | Default | Required | Meaning |
 |---|---|---|---|
@@ -133,7 +135,7 @@ Each table lists the service's own variables. The groups from §3 it includes ar
 
 ### 4.1 api-gateway
 
-Groups: base only. No database, no NATS, no storage.
+Groups: base, and `NATS_SERVERS`/`NATS_USER`/`NATS_PASSWORD` from events (for the realtime hub). No database, no storage.
 
 | Variable | Default | Required | Meaning |
 |---|---|---|---|
@@ -141,7 +143,7 @@ Groups: base only. No database, no NATS, no storage.
 | `IDENTITY_SERVICE_URL` | — | **yes** | Also where it fetches `/.well-known/jwks.json` |
 | `ORG_SERVICE_URL` | — | **yes** | Also used for certificates and ACME challenges |
 | `PBX_CONFIG_SERVICE_URL`, `CALLFLOW_SERVICE_URL`, `VOICEMAIL_SERVICE_URL`, `CDR_SERVICE_URL`, `TRUNK_SERVICE_URL`, `RECORDING_SERVICE_URL` | — | **yes** | Where each service is. `/v1/platform/health` probes each one's `/readyz`. |
-| `INTERNAL_SERVICE_TOKEN` | — | no (secret) | **Set it.** Without it the gateway cannot fetch certificates from org-service or answer ACME challenges. |
+| `INTERNAL_SERVICE_TOKEN` | — | no (secret); **yes** with the realtime hub on | **Set it.** Without it the gateway cannot fetch certificates from org-service or answer ACME challenges, and with `REALTIME_ENABLED` (the default) it refuses to start. The hub uses it for identity-service's permission lookup, org-service's org lineage and call-control's live calls. |
 | `TRUSTED_PROXIES` | empty | no | Addresses or CIDRs of the reverse proxies or load balancers in front of the gateway, comma-separated (for example `10.10.0.5,10.20.0.0/24`). Only their `X-Forwarded-For` and `X-Forwarded-Proto` are believed. **Leave empty when the gateway faces the internet directly**: the client address is then the connection's own. The address found here is what the per-IP rate limit counts and what audit events record. A malformed entry stops the gateway at startup. See [network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers). |
 | `REDIS_URL` | — | **yes** | Rate-limit counters, for example `redis://10.10.0.41:6379`. Keys are `rl:ip:*` and `rl:actor:*` with no prefix: do not share the Redis database with another platform instance. |
 | `RATE_LIMIT_IP_MAX` / `RATE_LIMIT_IP_WINDOW_MS` | `300` / `60000` | no | Requests per IP per window. Phones behind one NAT that reboot together share this. |
@@ -160,6 +162,16 @@ Groups: base only. No database, no NATS, no storage.
 | `ACCESS_TOKEN_ALGORITHM` | `EdDSA` | no | Leave unset |
 | `JWKS_CACHE_MAX_AGE_MS` / `JWKS_COOLDOWN_MS` | `600000` / `30000` | no | Signing-key cache. Keep the cache age shorter than identity-service's `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` (15 minutes), so a new signing key is fetched before it signs. |
 | `PROXY_TIMEOUT_MS` | `15000` | no | Upstream timeout |
+| `REALTIME_ENABLED` | `true` | no | The realtime hub, `/v1/ws` (S5-08): live calls and presence for the console. Needs `INTERNAL_SERVICE_TOKEN`, `CALL_CONTROL_URL` and NATS; the gateway refuses to start with it on and either of the first two unset. `false` removes `/v1/ws` and the NATS connection. |
+| `CALL_CONTROL_URL` | — | **yes** with the realtime hub on | call-control, for example `http://10.10.0.31:8080`: the hub asks it for a tenant's live calls (`GET /internal/v1/tenants/{t}/calls`) when someone subscribes |
+| `NATS_SERVERS`, `NATS_USER`, `NATS_PASSWORD` | `127.0.0.1:4222`, —, — | no | Where the hub reads call events. Connected in the background with retries: NATS being down never stops the gateway from serving the API, but live subscriptions are refused until it is up. |
+| `REALTIME_AUTH_TIMEOUT_MS` | `10000` | no | How long a new live connection has to send its access token |
+| `REALTIME_MAX_CONNECTIONS_PER_IP` / `REALTIME_MAX_CONNECTIONS_PER_USER` | `50` / `10` | no | Open live connections per client address and per person, **per gateway copy**. Browsers behind one NAT share the first. |
+| `REALTIME_MAX_SUBSCRIPTIONS` | `20` | no | Topics per connection |
+| `REALTIME_MAX_MESSAGE_BYTES` / `REALTIME_MAX_MESSAGES_PER_MINUTE` | `16384` / `120` | no | What a client may send; past either, the connection is closed |
+| `REALTIME_MAX_BUFFERED_BYTES` | `1048576` | no | Unsent data one connection may queue before it is dropped as too slow |
+| `REALTIME_HEARTBEAT_INTERVAL_MS` | `30000` | no | Ping interval; a connection that misses a ping is dropped. Keep any proxy's idle timeout above it. |
+| `REALTIME_PERMISSION_RECHECK_MS` / `REALTIME_PERMISSION_CACHE_TTL_MS` | `30000` / `5000` | no | How often each subscription's permission is checked again, and how long a permission answer is reused. A role taken away stops a live stream within their sum. |
 
 Certificate lookup order for each TLS connection: `TLS_CERT_DIR`, then org-service, then the default file. The gateway never presents SIP certificates.
 
@@ -300,6 +312,8 @@ Groups: base, database (`call_control`), events. Run **exactly one copy**.
 | `ESL_RECONNECT_MIN_DELAY_MS` / `ESL_RECONNECT_MAX_DELAY_MS` | `500` / `15000` | no | Reconnect backoff |
 | `AFFINITY_LEASE_TTL_MS` / `AFFINITY_RENEW_INTERVAL_MS` | `30000` / `10000` | no | Queue, parking and conference pinning |
 
+api-gateway calls call-control's `GET /internal/v1/tenants/{t}/calls` (with `INTERNAL_SERVICE_TOKEN`) for the live-calls snapshot, so the gateway must reach call-control's `HTTP_PORT` ([network §2.3](network-and-firewall.md#23-who-calls-which-service)).
+
 ### 4.12 media-worker
 
 Groups: base, database (`media_worker`), events, storage.
@@ -404,6 +418,7 @@ The spool directory must be writable by FreeSWITCH (root) and deletable by the u
 | `CRYPTO_KEKS`, `CRYPTO_KEK_CURRENT` | org, identity, pbx-config, trunk, voicemail services |
 | `INTERNAL_HEADER_SIGNING_SECRET` | api-gateway; identity, org, pbx-config, trunk, callflow, voicemail, recording, cdr services |
 | `INTERNAL_SERVICE_TOKEN` | Every service, api-gateway, every uploader |
+| `NATS_SERVERS` (and `NATS_USER`/`NATS_PASSWORD`) | Every service, and api-gateway when its realtime hub is on |
 | `FS_XML_CURL_TOKEN` | telephony-config, every FreeSWITCH node |
 | `FS_CDR_INGEST_TOKEN` | cdr-service, every FreeSWITCH node |
 | `FS_EVENT_SOCKET_PASSWORD` | call-control, every FreeSWITCH node |

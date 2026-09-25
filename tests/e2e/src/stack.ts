@@ -385,6 +385,8 @@ export async function startStack(): Promise<Stack> {
       RECORDING_SERVICE_URL: url(ports.recording),
       REDIS_URL,
       INTERNAL_HEADER_SIGNING_SECRET: headerSecret,
+      // No call-control in this stack, so no realtime hub (S5-08).
+      REALTIME_ENABLED: 'false',
     });
     running.push(gateway);
 

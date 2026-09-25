@@ -13,7 +13,7 @@
 apps/console/
   lib/
     app/            bootstrap, router, theme, brand loader
-    core/           api client wiring, auth/session, permissions, errors, ws hub
+    core/           api client wiring, auth/session, permissions, errors, realtime client
     features/
       auth/
       master/       resellers
@@ -77,4 +77,8 @@ Play · Menu (IVR) · Time condition · Extension · Ring group · Queue · Voic
 - A WebSocket connection to api-gateway `/v1/ws`, where the client subscribes to topics: `tenant:{t}:presence`, `tenant:{t}:calls`, `tenant:{t}:queues`. The gateway filters by permission.
 - **Presence board:** a grid of extensions showing state (idle, ringing, on call, DND, offline). Sources are call-control events plus registration state.
 - **Live calls:** a table of the tenant's active calls with duration, parties, and queue. When permitted for that target, the row offers actions: **Listen / Whisper / Barge**.
+
+**As built (S5-08).** `lib/core/realtime.dart` holds the client: one connection per signed-in session to `/v1/ws` on the API's origin (the page's own, unless `API_BASE_URL` says otherwise), opened on first use. It sends the access token as its first message (never in the URL), hands over each token the session refreshes (a minute before expiry) on the open connection, and subscribes to every topic being watched. When the connection drops it reconnects after 1 s doubling to 30 s, with jitter, and subscribes again, so each topic gets a fresh snapshot; topics the gateway calls `unavailable` are retried the same way, refusals are not, and a 4403 close stops it until the next sign-in. `realtimeClientProvider` gives the client, `realtimeConnectorProvider` the socket (the browser's `WebSocket` through `package:web`, or demo mode's canned one in `lib/dev/demo_realtime.dart`), and a stream from `client.watch(topic)` is a subscription for as long as it is listened to.
+
+The Monitoring page (`lib/features/monitoring/`) shows **Live calls** so far: the tenant's calls from the `calls` topic (the two bridged legs of a call as one row, caller first), with state, a running duration and whether it is being recorded. It is shown to holders of `monitor.calls` and never to a reseller (H1), and leaving the page unsubscribes. The presence board, the queue column and the monitor actions are S5-09/S5-10.
 - An action calls `POST /v1/tenants/{t}/calls/{uuid}:monitor` with a mode and the supervisor's extension. The supervisor's **own phone rings**, and on answer they're connected in that mode (no in-browser audio, O-14). Each action is audited.

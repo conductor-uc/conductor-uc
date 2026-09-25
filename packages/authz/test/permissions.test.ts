@@ -100,6 +100,13 @@ describe('PERMISSION_CATALOG', () => {
     expect(dataClassOf('billing.read')).toBe('usage');
   });
 
+  it('includes monitor.calls — S5-08, not in 07 §3.3: watching live calls is private (H1), with no read twin', () => {
+    expect(isKnownPermission('monitor.calls')).toBe(true);
+    expect(dataClassOf('monitor.calls')).toBe('private');
+    expect(Object.hasOwn(READ_TWINS, 'monitor.calls')).toBe(false);
+    expect(Object.values(READ_TWINS)).not.toContain('monitor.calls');
+  });
+
   it('includes the self-service permissions (parity 1e): voicemail and history are private, settings are config', () => {
     expect([...SELF_PERMISSIONS]).toEqual(['self.settings', 'self.voicemail', 'self.history']);
     for (const permission of SELF_PERMISSIONS) expect(isKnownPermission(permission)).toBe(true);

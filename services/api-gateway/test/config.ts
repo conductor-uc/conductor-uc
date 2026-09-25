@@ -14,6 +14,9 @@ export function testConfig(overrides: Record<string, string> = {}): ServiceConfi
     RECORDING_SERVICE_URL: 'http://127.0.0.1:1',
     INTERNAL_HEADER_SIGNING_SECRET: 'test-internal-header-secret',
     REDIS_URL: 'redis://127.0.0.1:1',
+    // The realtime hub needs NATS, call-control and a service token; the suites
+    // that test it turn it on with those (realtime.test.ts).
+    REALTIME_ENABLED: 'false',
     ...overrides,
   });
 }

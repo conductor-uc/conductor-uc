@@ -57,7 +57,8 @@ describe('buildCallHandlingDialplanDocument', () => {
   it('rings just the extension when nothing is configured: one bridge, no fallbacks, attributed to the tenant', () => {
     const xml = build({});
     expect(xml).toContain('<condition field="destination_number" expression="^101$">');
-    expect(actions(xml)[0]?.data).toBe('cuc_tenant_id=tenant-1');
+    // Exported, so the leg that rings the extension names its tenant too (S5-08).
+    expect(actions(xml)[0]).toEqual({ app: 'export', data: 'cuc_tenant_id=tenant-1' });
     expect(bridges(xml)).toEqual([
       {
         app: 'bridge',

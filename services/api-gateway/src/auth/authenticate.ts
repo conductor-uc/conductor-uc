@@ -8,6 +8,12 @@ import { isPublicPath } from '../routing/route-table.js';
 export interface AuthenticationOptions {
   readonly verifier: AccessTokenVerifier;
   readonly publicPrefixes: readonly string[];
+  /**
+   * Exact paths that authenticate on their own, after this hook: the realtime
+   * hub's `/v1/ws`, whose token arrives in the first WebSocket message because
+   * a browser cannot send it as a header (`realtime/route.ts`).
+   */
+  readonly selfAuthenticatingPaths?: readonly string[];
 }
 
 /**
@@ -26,6 +32,7 @@ export function registerAuthentication(app: Server, options: AuthenticationOptio
 
     const path = new URL(request.url, 'http://internal').pathname;
     if (isPublicPath(options.publicPrefixes, path)) return;
+    if (options.selfAuthenticatingPaths?.includes(path) === true) return;
 
     const header = request.headers.authorization;
     if (header === undefined) {

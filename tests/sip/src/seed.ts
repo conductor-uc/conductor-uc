@@ -547,6 +547,48 @@ export async function ensureTenantAdmin(
   }
 }
 
+/**
+ * A fresh `tenant_admin` of `tenantId` who can sign in, for the tests that go
+ * through api-gateway as a person would (the realtime hub, S5-08). A new one
+ * each time: signing in enrols the person in two-step verification, and the
+ * secret is only the test's for that run.
+ */
+export async function createSignInAdmin(
+  tenantId: string,
+  resellerId: string,
+): Promise<{ readonly userId: string; readonly email: string; readonly password: string }> {
+  const identityDb = createDatabase<IdentityServiceDb>({
+    host: env('IDENTITY_DB_HOST'),
+    port: Number(env('IDENTITY_DB_PORT')),
+    user: env('IDENTITY_DB_USER'),
+    password: env('IDENTITY_DB_PASSWORD'),
+    database: env('IDENTITY_DB_NAME'),
+    poolSize: 2,
+    logger,
+  });
+  try {
+    const users = createUserRepo(identityDb);
+    const roles = createRoleRepo(identityDb);
+    const email = `sip-test-signin-${randomBytes(6).toString('hex')}@sip-test.invalid`;
+    const password = randomBytes(24).toString('base64url');
+    const { id: userId } = await users.create(
+      { requestId: 'sip-test-seed' },
+      {
+        orgId: tenantId,
+        orgType: 'tenant',
+        resellerId,
+        email,
+        displayName: 'SIP test sign-in administrator',
+        password,
+      },
+    );
+    await roles.assignRole(userId, 'tenant_admin', tenantId);
+    return { userId, email, password };
+  } finally {
+    await identityDb.destroy();
+  }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   if (process.argv[2] === 'set-limits') {
     const tenantId = process.argv[3];
@@ -571,6 +613,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       throw new Error('usage: seed.js tenant-admin <tenantId> <resellerId>');
     }
     const admin = await ensureTenantAdmin(tenantId, resellerId);
+    process.stdout.write(`\n${JSON.stringify(admin)}\n`);
+  } else if (process.argv[2] === 'sign-in-admin') {
+    const tenantId = process.argv[3];
+    const resellerId = process.argv[4];
+    if (tenantId === undefined || resellerId === undefined) {
+      throw new Error('usage: seed.js sign-in-admin <tenantId> <resellerId>');
+    }
+    const admin = await createSignInAdmin(tenantId, resellerId);
     process.stdout.write(`\n${JSON.stringify(admin)}\n`);
   } else {
     const result = await seed();

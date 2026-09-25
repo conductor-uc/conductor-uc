@@ -24,6 +24,11 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * consumer building a CDR timeline keys everything off `callUuid` and reads
  * `occurredAt` off the envelope itself for the state-transition time, rather
  * than this service repeating `tenantId`/`from`/`to` on every event.
+ *
+ * The tenant does travel on every channel event's envelope (`orgContext.
+ * tenantId`) whenever it is known (S5-08): api-gateway's realtime hub routes
+ * each event to the tenant's live topics by it, and must not have to remember
+ * which tenant a call belonged to.
  */
 export const callEvents = defineEvents({
   'call.channel.created': {
@@ -36,6 +41,32 @@ export const callEvents = defineEvents({
       direction: Type.Union([Type.Literal('inbound'), Type.Literal('outbound')]),
       from: Type.String(),
       to: Type.String(),
+    }),
+  },
+  /**
+   * S5-08: the first moment a channel's tenant is known, when its
+   * `call.channel.created` could not say (a call from a trunk, whose tenant
+   * the dialplan names later; a leg created for a bridge that carries no
+   * tenant of its own). Carries the call as it stands, so a live view that
+   * routes by tenant sees it start before it sees it change. Sent once per
+   * channel, always before the event that revealed the tenant.
+   */
+  'call.channel.identified': {
+    schemaVersion: 1,
+    description: "A channel's tenant became known after it was created.",
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+      tenantId: Type.String({ minLength: 1 }),
+      direction: Type.Union([Type.Literal('inbound'), Type.Literal('outbound')]),
+      from: Type.String(),
+      to: Type.String(),
+      state: Type.Union([Type.Literal('ringing'), Type.Literal('answered'), Type.Literal('held')]),
+      /** RFC 3339. */
+      startedAt: Type.String(),
+      answeredAt: Type.Union([Type.String(), Type.Null()]),
+      bridgedTo: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      recording: Type.Union([Type.Literal('on'), Type.Literal('off')]),
     }),
   },
   'call.channel.answered': {
@@ -58,6 +89,30 @@ export const callEvents = defineEvents({
   'call.channel.held': {
     schemaVersion: 1,
     description: 'A channel was placed on hold (ESL CHANNEL_HOLD).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.unheld': {
+    schemaVersion: 1,
+    description: 'A held channel was taken off hold (ESL CHANNEL_UNHOLD).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.recording_started': {
+    schemaVersion: 1,
+    description: 'A recording of the channel started (ESL RECORD_START).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.recording_stopped': {
+    schemaVersion: 1,
+    description: 'A recording of the channel stopped (ESL RECORD_STOP).',
     data: Type.Object({
       callUuid: Type.String({ minLength: 1 }),
       nodeId: Type.String({ minLength: 1 }),

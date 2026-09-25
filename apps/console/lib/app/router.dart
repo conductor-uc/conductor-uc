@@ -13,6 +13,7 @@ import '../features/auth/reset_pages.dart';
 import '../features/callflow/builder/flow_builder_page.dart';
 import '../features/callflow/flows_page.dart';
 import '../features/media/media_page.dart';
+import '../features/monitoring/monitoring_page.dart';
 import '../features/myphone/my_phone_api.dart';
 import '../features/myphone/my_phone_pages.dart';
 import '../features/orgs/domains_panel.dart';
@@ -164,6 +165,7 @@ Widget _pageFor(Section section) {
   if (section.path == '/media') return const MediaPage();
   if (section.path == '/voicemail') return const VoicemailPage();
   if (section.path == '/recordings') return const RecordingsPage();
+  if (section.path == '/monitoring') return const MonitoringPage();
   if (section.path == '/my-phone/call-handling') {
     return const MyCallHandlingPage();
   }

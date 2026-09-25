@@ -1,6 +1,6 @@
 # Implementation status
 
-Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `251ef45`, 2026-09-24; Stage 5 rows updated for call recording (G-111) on 2026-09-25; S1-15 (read permissions, G-10) added on 2026-09-25; S5-16 (voicemail audio) added on 2026-09-25.
+Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `251ef45`, 2026-09-24; Stage 5 rows updated for call recording (G-111) on 2026-09-25; S1-15 (read permissions, G-10) added on 2026-09-25; S5-16 (voicemail audio) added on 2026-09-25; S5-08 (realtime hub) added on 2026-09-25.
 
 **Done** = the task's scope exists and has tests; known caveats are named. **Partial** = some of the scope exists. **Not started** = no code.
 
@@ -13,12 +13,12 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S2 Core telephony (20) | 17 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (11) | 0 | 4 | 7 |
-| S5 Recording, voicemail features, monitoring (11) | 7 | 1 | 3 |
+| S5 Recording, voicemail features, monitoring (11) | 8 | 1 | 2 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | Release readiness (7) | 1 | 1 | 5 |
-| **Total (104)** | **60** | **13** | **31** |
+| **Total (104)** | **61** | **13** | **30** |
 
 Milestones: M1 (S1) reached except API-key auth and organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below. M3, M4 not started.
 
@@ -50,7 +50,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S1-05 | Done | `services/identity-service`: login, TOTP MFA, refresh cookie, JWKS, reset, invitations, MFA reset |
 | S1-06 | Done | `packages/authz` (`hard-rules.ts`, `roles.ts`); identity `roles.routes.ts`, `grants.routes.ts` |
 | S1-07 | Done | `packages/audit`, identity `audit.consumer.ts`, `GET /v1/orgs/:orgId/audit-events`. Gaps: G-12 (partition upkeep), G-15 (not all writes audited) |
-| S1-08 | Partial | `services/api-gateway`: JWT auth, signed context, rate limit, CORS, path routing. API-key auth returns `api_key_auth_not_implemented` (G-14); no WebSocket |
+| S1-08 | Partial | `services/api-gateway`: JWT auth, signed context, rate limit, CORS, path routing. API-key auth returns `api_key_auth_not_implemented` (G-14). The WebSocket hub came with S5-08 |
 | S1-09 | Done | `pbx-config-service` extensions, SIP credentials, HA1/HA1B, reveal and reset-password routes |
 | S1-10 | Done | `telephony/freeswitch` (Dockerfile, conf), neutral identity, OpenSIPs-only ACL |
 | S1-11 | Done | `telephony/opensips` (`opensips.cfg.template`, db-schema), neutral headers |
@@ -128,9 +128,9 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S5-05 | Done | tenant retention days (`recording_settings`), `retention.ts` sweep (audio deleted, row marked expired, stale pending marked failed) and an S3 lifecycle rule as a backstop |
 | S5-06 | Not started | no transcription adapter (O-3 open) |
 | S5-07 | Done | voicemail-to-email: `voicemail.consumer.ts`, `voicemail.mjml`, mailbox email settings in voicemail-service (G-107). Not tried with a real call or SMTP server |
-| S5-08 | Not started | api-gateway has no WebSocket hub |
+| S5-08 | Done | `api-gateway/src/realtime/`: `GET /v1/ws` (auth by first message and renewal, origin check, per-address/person/connection limits, heartbeat), topics `tenant:{t}:calls` (`monitor.calls`, private, new in `@cuc/authz`), `:presence` (`monitor.presence`, derived from live calls), `:queues` (`queue.read`, nothing publishes yet), each authorized like a route (ancestry via org lineage, H1, identity permission lookup) and rechecked every 30 s; private subscriptions audited. Ordered NATS consumer per gateway process; snapshot from call-control's new `GET /internal/v1/tenants/:t/calls`, which also gained tenant on every channel event, trunk-call tenant attachment, unhold and recording events. Console `core/realtime.dart` and a Live calls panel on Monitoring. Tests: `api-gateway/test/realtime.test.ts` (real NATS, 25), `realtime-model.test.ts`, call-control `live-calls.route.test.ts`, console `monitoring_test.dart`. Registration/DND presence and queue events are G-119; not tried against a real FreeSWITCH (RECORD_START/STOP, CHANNEL_UNHOLD) |
 | S5-09 | Not started | call-control has no listen/whisper/barge |
-| S5-10 | Partial | Voicemail (`features/voicemail`), Call records (`features/cdr`) and Recordings (`features/recordings`: list, filters, play, download, delete, rules, retention) screens exist; `/monitoring` and `/reports` are still placeholders |
+| S5-10 | Partial | Voicemail (`features/voicemail`), Call records (`features/cdr`) and Recordings (`features/recordings`: list, filters, play, download, delete, rules, retention) screens exist; `/monitoring` shows live calls (S5-08) but no presence board or monitor actions; `/reports` is still a placeholder |
 | S5-16 | Done | Voicemail audio reaches storage: `voicemail.lua` records to `vm-<id>.wav` in the spool and leaves it; the node uploader (`recording-service/src/uploader`, `createVoicemailApi`) delivers it to voicemail-service's `routes/upload.routes.ts` (`upload-url`, `complete` verifying size and MD5 against storage, `fail`); pending sweep (`pending-sweep.ts`). Tests: `voicemail-service/test/upload.routes.test.ts` (real MinIO), uploader voicemail cases. The live check in `tests/sip/test/voicemail.test.ts` (audio playable, spool emptied) is written; not yet run (G-2) |
 
 ## Stage 6
@@ -205,10 +205,10 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 1. Recording (S5-01 to S5-05): no service, policy, upload, or retention.
 2. No HA (S4-03 to S4-08): no failover handling, OpenSIPs clustering, data-store HA, or chaos tests; only one dispatcher path over two nodes.
 3. No production deployment manifests or topology ADR (S4-01, S4-11).
-4. Console has no monitoring, recordings, or reports screens (S5-10, S7-07). Voicemail, call records and outbound routes have screens now (G-106, G-107).
+4. Console has no presence board, monitor actions, or reports screens (S5-10, S7-07); Monitoring shows live calls (S5-08). Voicemail, call records and outbound routes have screens now (G-106, G-107).
 5. Release readiness: no security review, pen test, backup/restore, runbooks, or license (O-6).
 6. Voicemail transcription and MWI wiring (S5-06, G-42, G-108). Voicemail-to-email is built (G-107).
-7. No realtime layer: no gateway WebSocket, live calls, monitor/whisper/barge, or wallboards (S5-08, S5-09, S7-06).
+7. Realtime is partial: the gateway WebSocket hub and live calls exist (S5-08), but no monitor/whisper/barge (S5-09), no registration or DND presence and no queue events (G-119), and no wallboards (S7-06).
 8. Emergency calling incomplete: no emergency-call notification, carrier-specific location format unresolved (S2-06, G-1, G-33).
 9. Fax, SMS, chat, video, analytics all unbuilt (S6, S7); five services are empty.
 10. API-key auth missing (G-14); provisioning limited to Yealink with no BLF keys and no zero-touch redirection (S8-02, S8-03); audit covers only some writes (G-15).
