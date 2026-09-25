@@ -242,6 +242,7 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Telephony | Flood protection has no allow list for carriers and media servers; per-tenant call rate fixed at 10 per second | network §6.4, G-31 |
 | Telephony | Phones behind NAT not verified | network §6.5 |
 | Telephony | Only Yealink auto-provisioning, not verified on hardware | G-103 |
+| Voicemail | **Recorded voicemail audio does not reach object storage**: messages are listed but cannot be played, and voicemail-to-email has nothing to attach | S5-16 |
 | Operations | No production manifests; no backup tooling; no metrics beyond the uploader; no tracing | S4-11, release readiness |
 | Operations | `make seed` / `seed.sh` cannot bootstrap a current installation | G-115 |
 | Operations | Audit and CDR tables have no retention: partitions are never extended or pruned | G-12, G-52 |

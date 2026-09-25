@@ -380,7 +380,7 @@ To remove one: take it out of `OPENSIPS_FS_DESTINATION` and restart OpenSIPs, wa
 | One media server | Its calls drop, and its recordings not yet uploaded are lost (O-13, accepted). OpenSIPs stops sending new calls to it once its OPTIONS probe (every 10 seconds) goes unanswered, so within tens of seconds; calls routed to it before then fail. call-control marks it down. **Its call records are not written** (synthetic CDRs are S4-04, not built). | Other nodes carry new calls. Restart it; it rejoins without configuration changes. |
 | app-1 | New calls fail, because FreeSWITCH asks telephony-config for every call. Established calls stay up, but anything in them that needs telephony-config (a transfer, an IVR step, voicemail) fails. The console and API stop. | Restart. Services reconnect and catch up on events from NATS. |
 | data-1 | Everything stops: services cannot reach MariaDB, and OpenSIPs cannot authenticate. | Restore MariaDB from backup ([operations §4](operations.md#4-backups-and-restore)). Redis needs no restore. |
-| object storage | Recording and voicemail playback, prompt uploads and exports fail. Recordings wait on the media servers' spool and upload later. **Voicemail recording fails** (FreeSWITCH uploads messages directly). Calls otherwise work: FreeSWITCH caches prompts. | Provider's concern. |
+| object storage | Recording and voicemail playback, prompt uploads and exports fail. Recordings wait on the media servers' spool and upload later. Voicemail messages lose their audio (FreeSWITCH is meant to upload them directly; that upload is broken anyway until S5-16). Calls otherwise work: FreeSWITCH caches prompts. | Provider's concern. |
 | SMTP relay | Emails fail. Nothing else is affected. | — |
 
 ## 9. Checklist before going live

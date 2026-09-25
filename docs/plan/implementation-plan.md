@@ -127,6 +127,8 @@ Stage 3's non-telephony screens can start as soon as Stage 1 lands, in parallel 
 | S1-12 | telephony-config: read model + OpenSIPs projection | S1-03, S1-09, S1-11 |
 | S1-13 | telephony-config: xml_curl directory + dialplan (ext→ext) | S1-12, S1-10 |
 | S1-14 | SIP test harness + M1 scenarios | S1-13 |
+| S1-15 | Read permissions: a `.read` twin for every `.manage`, `.manage` implies `.read`, support roles fixed, console read-only screens (G-10) | S1-06 |
+| S1-16 | Organisation deletion: pending deletion with a 30-day grace period, data export, hard delete across every service on `org.deleted` (G-11) | S1-02 |
 
 **S1-01 org-service schema.** The `orgs`, `tenant_domains`, `reseller_base_domains`, and `brands` tables. The single-master constraint and parent-type rules. A bootstrap CLI `org-service bootstrap-master` creates the master org and its first admin user. That admin user is created through identity-service's internal API, which is stubbed until S1-05.
 *Done when:* invariant tests reject a tenant under master, a reseller under reseller, and a second master.
@@ -205,6 +207,7 @@ Stage 3's non-telephony screens can start as soon as Stage 1 lands, in parallel 
 | S2-18 | cdr-service: ingest + CDR v1 + export API | S2-11 |
 | S2-19 | Second FS node in dev stack + node-agnostic test pass | S2-10, S2-13, S2-16 |
 | S2-20 | M2 backend SIP regression suite | all above |
+| S2-21 | Retention job for partitioned tables: `CDR_RETENTION_MONTHS` (13) for call and billing records, `AUDIT_RETENTION_MONTHS` (12) for the audit log; add upcoming monthly partitions, drop expired ones (G-12, G-52) | S1-07, S2-18 |
 
 **S2-01 trunk-service.** Trunk CRUD (register, IP, or both auth modes), encrypted credentials, trunk IPs, codec preferences, `max_channels`, and caller-ID policy. Resellers can manage their tenants' trunks. Tenant admins can view them, and edit them with the `trunk.manage` grant.
 *Done when:* credentials are never returned, and the H1/tenancy tests pass.
@@ -369,6 +372,12 @@ Key acceptance criteria:
 | S5-08 | WebSocket hub in api-gateway + permission-filtered topics | S2-11, S1-08 |
 | S5-09 | Monitor actions: listen/whisper/barge via call-control on the owning node | S2-11, S1-06 |
 | S5-10 | Console: recordings, voicemail settings/messages, presence board, live calls + monitor actions | S5-04, S5-07, S5-08, S5-09 |
+| S5-11 | Recording for calls through IVR flows: tenant and DID rules at flow entry; extension, ring-group and queue rules at the flow's hand-off (G-111) | S5-02 |
+| S5-12 | Per-tenant "recording required" option: refuse the call when a required recording cannot be set up, working while recording-service is down (G-111) | S5-02 |
+| S5-13 | On-demand recording and pause/resume by feature code; per-rule "allow on demand" flag; audited (G-111) | S5-02 |
+| S5-14 | Agent-scoped recording rules for queue calls, started when the agent answers (G-111) | S5-02, S2-13 |
+| S5-15 | Console and self-service record, stop and pause buttons for live calls (G-111) | S5-08, S5-13 |
+| S5-16 | Voicemail audio really reaches storage: the node uploader also uploads voicemail messages; completion verifies the stored object (G-2, G-107) | S5-03 |
 
 Key acceptance criteria:
 
