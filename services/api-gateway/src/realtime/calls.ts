@@ -93,6 +93,19 @@ export function callEventFromEnvelope(
         },
       };
     }
+    // A call whose tenant became known after it was created (a trunk call, a
+    // leg created for a bridge): this is where it starts for the tenant, with
+    // its state so far.
+    case 'call.channel.identified': {
+      const iso = (value: unknown) =>
+        typeof value === 'string' && !Number.isNaN(Date.parse(value)) ? Date.parse(value) : value;
+      const call = liveCallFromSnapshot({
+        ...data,
+        startedAt: iso(data['startedAt']),
+        answeredAt: iso(data['answeredAt']),
+      });
+      return call === undefined ? undefined : { tenantId, event: { type: 'call.started', call } };
+    }
     case 'call.channel.answered':
       return updated({ state: 'answered', answeredAt: envelope.occurredAt });
     case 'call.channel.bridged': {

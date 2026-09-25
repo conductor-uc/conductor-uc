@@ -133,6 +133,43 @@ describe('live call events', () => {
     expect(JSON.stringify(mapped)).not.toContain('fs-1');
   });
 
+  it('maps call.channel.identified (a tenant learned mid-call) to a started call as it stands', () => {
+    const mapped = callEventFromEnvelope(
+      envelope('call.channel.identified', {
+        callUuid: 'c1',
+        nodeId: 'fs-1',
+        tenantId: TENANT,
+        direction: 'inbound',
+        from: 'carrier',
+        to: '+15551234567',
+        state: 'answered',
+        startedAt: '2026-09-25T09:59:58.000Z',
+        answeredAt: '2026-09-25T09:59:59.000Z',
+        bridgedTo: 'c2',
+        recording: 'on',
+      }),
+    );
+    expect(mapped).toEqual({
+      tenantId: TENANT,
+      event: {
+        type: 'call.started',
+        call: call({
+          from: 'carrier',
+          to: '+15551234567',
+          state: 'answered',
+          startedAt: '2026-09-25T09:59:58.000Z',
+          answeredAt: '2026-09-25T09:59:59.000Z',
+          bridgedTo: 'c2',
+          recording: 'on',
+        }),
+      },
+    });
+    expect(JSON.stringify(mapped)).not.toContain('fs-1');
+    expect(
+      callEventFromEnvelope(envelope('call.channel.identified', { callUuid: 'c1', from: 'x' })),
+    ).toBeUndefined();
+  });
+
   it('maps every other channel event to an update or an end', () => {
     const base = { callUuid: 'c1', nodeId: 'fs-1' };
     const cases: [string, object, object][] = [
