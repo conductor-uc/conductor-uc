@@ -33,7 +33,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S0-03 | Done | `packages/db` (`scoped.ts`, `unscoped.ts`, `cli.ts`); `packages/testing/src/cross-tenant.ts` probe harness |
 | S0-04 | Done | `packages/events` (`outbox.ts`, `relay.ts`, `consumer.ts`), `test/relay.test.ts` |
 | S0-05 | Done | `infra/compose/docker-compose.yml` (MariaDB, Redis, NATS, MinIO, Mailpit), `Makefile`, `seed.sh` |
-| S0-06 | Done | `.github/workflows/ci.yml`: `check`, `sip-smoke` (per PR plus nightly), `console` jobs |
+| S0-06 | Done | `.github/workflows/ci.yml`: `check`, `sip`, `console` jobs, nightly and by hand (G-110) |
 | S0-07 | Done | `tools/brand-leak` + `brand-leak.config.json`; CI runs it on source and `build/web` |
 | S0-08 | Done | `tools/gen` (service template), `services/example-service` |
 | S0-09 | Done | `packages/crypto` (`kek.ts`, `envelope.ts`) with tests |
@@ -56,7 +56,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S1-11 | Done | `telephony/opensips` (`opensips.cfg.template`, db-schema), neutral headers |
 | S1-12 | Done | `telephony-config` read model, `opensips-projection.repo.ts`, `reconcile.ts` (reconciles itself only, G-16) |
 | S1-13 | Done | `telephony-config` `routes/fs.routes.ts` (`/fs/directory`, `/fs/dialplan`) |
-| S1-14 | Done | `tests/sip` (`scenarios.test.ts`, `register.xml`, `answer_call.xml`); CI `sip-smoke` |
+| S1-14 | Done | `tests/sip` (`scenarios.test.ts`, `register.xml`, `answer_call.xml`); CI `sip` job |
 
 ## Stage 2
 
