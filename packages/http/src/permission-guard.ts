@@ -125,7 +125,7 @@ export interface RemotePermissionResolverOptions {
   /** identity-service, e.g. `http://identity-service:8080`. */
   readonly baseUrl: string;
   readonly internalServiceToken: string;
-  /** How long an answer is reused. Short: a role change takes at most this long to bite. */
+  /** How long what a person holds is reused. Short: taking a role away takes at most this long to bite. */
   readonly ttlMs?: number;
   /** Injected in tests. */
   readonly fetchImpl?: typeof fetch;
@@ -170,8 +170,13 @@ export function createRemotePermissionResolver(
     } else {
       throw ProblemError.unavailable('Could not check your permissions. Try again shortly.');
     }
-    cache.set(key, { expires: now() + ttlMs, permissions });
-    if (cache.size > 10_000) cache.clear();
+    // Only what a person holds is remembered. "Holds nothing" is asked again
+    // every time, so a role given a moment ago works at once; taking a role
+    // away takes at most `ttlMs` to bite.
+    if (permissions.size > 0) {
+      cache.set(key, { expires: now() + ttlMs, permissions });
+      if (cache.size > 10_000) cache.clear();
+    }
     return permissions;
   }
 

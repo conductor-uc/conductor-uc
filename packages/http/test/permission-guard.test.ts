@@ -210,15 +210,27 @@ describe('createRemotePermissionResolver', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it('does not remember "holds nothing", so a role just given works at once', async () => {
+    let body: unknown = null;
+    const fetchImpl = vi.fn(() =>
+      Promise.resolve(body === null ? new Response(null, { status: 404 }) : Response.json(body)),
+    );
+    const resolve = resolver(fetchImpl as never);
+    expect(await resolve(actor, 'self.settings')).toBe(false);
+    body = { permissions: ['self.settings'] };
+    expect(await resolve(actor, 'self.settings')).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('treats an unknown person as holding nothing', async () => {
-    const resolve = resolver((() => Promise.resolve(new Response(null, { status: 404 }))));
+    const resolve = resolver(() => Promise.resolve(new Response(null, { status: 404 })));
     expect(await resolve(actor, 'self.settings')).toBe(false);
   });
 
   it('fails closed when identity-service is unreachable or errors', async () => {
-    const down = resolver((() => Promise.reject(new Error('refused'))));
+    const down = resolver(() => Promise.reject(new Error('refused')));
     await expect(down(actor, 'self.settings')).rejects.toMatchObject({ status: 503 });
-    const broken = resolver((() => Promise.resolve(new Response(null, { status: 500 }))));
+    const broken = resolver(() => Promise.resolve(new Response(null, { status: 500 })));
     await expect(broken(actor, 'self.settings')).rejects.toMatchObject({ status: 503 });
   });
 });
