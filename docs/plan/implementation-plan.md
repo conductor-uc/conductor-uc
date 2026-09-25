@@ -369,6 +369,12 @@ Key acceptance criteria:
 | S5-08 | WebSocket hub in api-gateway + permission-filtered topics | S2-11, S1-08 |
 | S5-09 | Monitor actions: listen/whisper/barge via call-control on the owning node | S2-11, S1-06 |
 | S5-10 | Console: recordings, voicemail settings/messages, presence board, live calls + monitor actions | S5-04, S5-07, S5-08, S5-09 |
+| S5-11 | Recording for calls through IVR flows: tenant and DID rules at flow entry; extension, ring-group and queue rules at the flow's hand-off (G-111) | S5-02 |
+| S5-12 | Per-tenant "recording required" option: refuse the call when a required recording cannot be set up, working while recording-service is down (G-111) | S5-02 |
+| S5-13 | On-demand recording and pause/resume by feature code; per-rule "allow on demand" flag; audited (G-111) | S5-02 |
+| S5-14 | Agent-scoped recording rules for queue calls, started when the agent answers (G-111) | S5-02, S2-13 |
+| S5-15 | Console and self-service record, stop and pause buttons for live calls (G-111) | S5-08, S5-13 |
+| S5-16 | Voicemail audio really reaches storage: the node uploader also uploads voicemail messages; completion verifies the stored object (G-2, G-107) | S5-03 |
 
 Key acceptance criteria:
 
