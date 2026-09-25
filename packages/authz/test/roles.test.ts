@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { allPermissions, isKnownPermission } from '../src/permissions.js';
+import { allPermissions, isKnownPermission, SELF_PERMISSIONS } from '../src/permissions.js';
 import { BUILT_IN_ROLES, BUILT_IN_ROLE_IDS, isBuiltInRoleId, roleCatalog } from '../src/roles.js';
 import type { Role } from '../src/types.js';
 
@@ -78,11 +78,48 @@ describe('BUILT_IN_ROLES', () => {
     }
   });
 
-  it('tenant_user holds only the tenant-wide permission, not voicemail or recordings — those are per-scope grants', () => {
+  it('tenant_user holds only the self-service permissions plus the two every signed-in person needs', () => {
     const tenantUser = BUILT_IN_ROLES.get('tenant_user');
-    expect(tenantUser?.permissions.has('monitor.presence')).toBe(true);
-    expect(tenantUser?.permissions.has('voicemail.access')).toBe(false);
-    expect(tenantUser?.permissions.has('recording.listen')).toBe(false);
+    expect([...(tenantUser?.permissions ?? [])].sort()).toEqual(
+      ['monitor.presence', 'org.view', ...SELF_PERMISSIONS].sort(),
+    );
+  });
+
+  it('tenant_user holds no org-wide voicemail, recording, CDR or management permission', () => {
+    const tenantUser = BUILT_IN_ROLES.get('tenant_user');
+    for (const permission of tenantUser?.permissions ?? []) {
+      if (permission.startsWith('self.')) continue;
+      expect(['org.view', 'monitor.presence'], permission).toContain(permission);
+    }
+    for (const permission of [
+      'voicemail.access',
+      'recording.listen',
+      'cdr.read',
+      'extension.manage',
+      'user.manage',
+      'role.manage',
+      'grant.manage',
+    ]) {
+      expect(tenantUser?.permissions.has(permission), permission).toBe(false);
+    }
+  });
+
+  it('every tenant-tier role holds the self-service permissions, so a linked admin has a My phone too', () => {
+    for (const roleId of ['tenant_admin', 'tenant_supervisor', 'tenant_user']) {
+      for (const permission of SELF_PERMISSIONS) {
+        expect(BUILT_IN_ROLES.get(roleId as never)?.permissions.has(permission), roleId).toBe(true);
+      }
+    }
+  });
+
+  it('no reseller or master-support role holds a self-service permission — there is nothing of their own to see, and voicemail and history are private (H1)', () => {
+    for (const roleId of ['reseller_admin', 'reseller_support', 'master_support']) {
+      for (const permission of SELF_PERMISSIONS) {
+        expect(BUILT_IN_ROLES.get(roleId as never)?.permissions.has(permission), roleId).toBe(
+          false,
+        );
+      }
+    }
   });
 });
 

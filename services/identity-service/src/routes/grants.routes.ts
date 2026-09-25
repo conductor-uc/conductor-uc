@@ -1,6 +1,8 @@
-import { SCOPE_TYPES } from '@cuc/authz';
+import { isKnownPermission, SCOPE_TYPES } from '@cuc/authz';
 import { ProblemError, Type, type Server } from '@cuc/http';
 
+import type { ActorContext, OrgAccess } from '../authz/org-access.js';
+import type { PermissionLookup } from '../authz/permission-lookup.js';
 import { GrantNotFoundError, type GrantRepo } from '../repo/grant.repo.js';
 
 const OrgParamsSchema = Type.Object({ orgId: Type.String({ minLength: 1 }) });
@@ -31,7 +33,20 @@ const GrantSchema = Type.Object({
  * for one principal (07 §3.1) — narrower than a role, and the mechanism for
  * "own extension, voicemail, and recordings where granted" (07 §3.3).
  */
-export function registerGrantRoutes(app: Server, grants: GrantRepo): void {
+export function registerGrantRoutes(
+  app: Server,
+  grants: GrantRepo,
+  access: OrgAccess,
+  lookup: PermissionLookup,
+): void {
+  /** The org the request names, once the actor is known to be allowed to manage it. */
+  async function managedOrg(request: {
+    context: ActorContext;
+    params: { orgId: string };
+  }): Promise<string> {
+    return (await access.resolve(request.context, request.params.orgId)).orgId;
+  }
+
   app.get(
     '/v1/orgs/:orgId/grants',
     {
@@ -41,7 +56,7 @@ export function registerGrantRoutes(app: Server, grants: GrantRepo): void {
         response: { 200: Type.Object({ rows: Type.Array(GrantSchema) }) },
       },
     },
-    async (request) => ({ rows: await grants.listForOrg(request.params.orgId) }),
+    async (request) => ({ rows: await grants.listForOrg(await managedOrg(request)) }),
   );
 
   app.post(
@@ -55,8 +70,30 @@ export function registerGrantRoutes(app: Server, grants: GrantRepo): void {
       },
     },
     async (request, reply) => {
+      const orgId = await managedOrg(request);
+      const { actorId, orgId: actorOrgId } = request.context;
+      if (actorId === undefined || actorOrgId === undefined) {
+        throw ProblemError.unauthorized('Sign in to manage grants.');
+      }
+      // A grant is a way to give someone access: never to yourself, and never
+      // something you do not hold (the master holds every permission).
+      if (request.body.principalType === 'user' && request.body.principalId === actorId) {
+        throw ProblemError.forbidden('You cannot grant yourself access.', {
+          code: 'cannot_grant_self',
+        });
+      }
+      if (!isKnownPermission(request.body.permission)) {
+        throw ProblemError.badRequest(`'${request.body.permission}' is not a permission.`, {
+          code: 'unknown_permission',
+        });
+      }
+      if (!(await lookup.ofUser(actorId, actorOrgId)).has(request.body.permission)) {
+        throw ProblemError.forbidden('You cannot grant a permission you do not hold.', {
+          code: 'permission_escalation',
+        });
+      }
       const created = await grants.create(
-        request.params.orgId,
+        orgId,
         request.body.principalType,
         request.body.principalId,
         request.body.permission,
@@ -74,7 +111,7 @@ export function registerGrantRoutes(app: Server, grants: GrantRepo): void {
     },
     async (request, reply) => {
       try {
-        await grants.revoke(request.params.orgId, request.params.grantId);
+        await grants.revoke(await managedOrg(request), request.params.grantId);
       } catch (error) {
         if (error instanceof GrantNotFoundError) {
           throw ProblemError.notFound(error.message);

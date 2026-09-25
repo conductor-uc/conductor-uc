@@ -1,4 +1,4 @@
-import { allPermissions } from './permissions.js';
+import { allPermissions, SELF_PERMISSIONS } from './permissions.js';
 import type { Permission, Role, RoleCatalog } from './types.js';
 
 /**
@@ -77,6 +77,7 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
   'analytics.view',
   'audit.read',
   'apikey.manage',
+  ...SELF_PERMISSIONS,
 ];
 
 /**
@@ -128,14 +129,19 @@ export const BUILT_IN_ROLES: ReadonlyMap<BuiltInRoleId, Role> = new Map([
       'monitor.whisper',
       'monitor.barge',
       'analytics.view',
+      ...SELF_PERMISSIONS,
     ]),
   ],
-  // Voicemail and recording access for one's own extension/mailbox are
-  // per-scope grants (05 §3.2's "own extension, voicemail, and recordings
-  // where granted"), not a role permission — a role has no scope of its own,
-  // so bundling voicemail.access here would give every tenant user access to
-  // every mailbox in the org, not just their own.
-  ['tenant_user', role('tenant_user', ['org.view', 'monitor.presence'])],
+  // Voicemail and recording access for one's own extension/mailbox used to be
+  // a per-scope grant (05 §3.2's "own extension, voicemail, and recordings
+  // where granted"), and `voicemail.access` still is: a role has no scope of
+  // its own, so bundling it here would give every tenant user every mailbox in
+  // the org. Self-service (parity 1e) is the scope-free answer: the `self.*`
+  // permissions carry no resource, and the services that honour them resolve
+  // the extension from the signed actor id, so they can only ever reach the
+  // caller's own. `tenant_user` holds nothing but these and the two every
+  // signed-in person needs.
+  ['tenant_user', role('tenant_user', ['org.view', 'monitor.presence', ...SELF_PERMISSIONS])],
 ]);
 
 export function isBuiltInRoleId(value: string): value is BuiltInRoleId {

@@ -14,6 +14,7 @@ export {
   dataClassOf,
   isKnownPermission,
   PERMISSION_CATALOG,
+  SELF_PERMISSIONS,
   UnknownPermissionError,
   type CatalogPermission,
 } from './permissions.js';
