@@ -42,12 +42,16 @@ describe.skipIf(skipReason !== undefined)('parking lot HTTP routes', () => {
     });
   }
 
-  it('every route declares permission and dataClass (CLAUDE.md rule 3), gated by parking_lot.manage', () => {
+  it('every route declares permission and dataClass (CLAUDE.md rule 3), gated by parking_lot.read/.manage (G-10)', () => {
     for (const route of app.registeredRoutes) {
       if (route.url.startsWith('/v1/tenants/:tenantId/parking-lots')) {
         expect(route.permission, `${route.method} ${route.url}`).not.toBeNull();
         expect(route.dataClass, `${route.method} ${route.url}`).not.toBeNull();
-        expect(route.permission).toBe('parking_lot.manage');
+        expect(route.permission).toBe(
+          route.method === 'GET' || route.method === 'HEAD'
+            ? 'parking_lot.read'
+            : 'parking_lot.manage',
+        );
       }
     }
   });

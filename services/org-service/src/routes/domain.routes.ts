@@ -80,7 +80,7 @@ export function registerDomainRoutes(app: Server, repo: DomainRepo, resolver: Dn
   app.get(
     '/v1/resellers/:id/base-domains',
     {
-      config: { permission: 'domain.manage', dataClass: 'config' },
+      config: { permission: 'domain.read', dataClass: 'config' },
       schema: {
         params: OrgIdParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(BaseDomainSchema) }) },
@@ -92,7 +92,7 @@ export function registerDomainRoutes(app: Server, repo: DomainRepo, resolver: Dn
   app.get(
     '/v1/resellers/:id/base-domains/:domainId',
     {
-      config: { permission: 'domain.manage', dataClass: 'config' },
+      config: { permission: 'domain.read', dataClass: 'config' },
       schema: { params: BaseDomainParamsSchema, response: { 200: BaseDomainSchema } },
     },
     async (request) => {
@@ -132,7 +132,7 @@ export function registerDomainRoutes(app: Server, repo: DomainRepo, resolver: Dn
   app.get(
     '/v1/tenants/:id/domain',
     {
-      config: { permission: 'tenant.manage', dataClass: 'config' },
+      config: { permission: 'tenant.read', dataClass: 'config' },
       schema: {
         params: OrgIdParamsSchema,
         response: {

@@ -74,10 +74,12 @@ describe.skipIf(skipReason !== undefined)('ring group HTTP routes', () => {
     }
   });
 
-  it('every route requires group.manage (already in the permission catalog)', () => {
+  it('every route requires group.read (reads) or group.manage (writes) (G-10)', () => {
     for (const route of app.registeredRoutes) {
       if (route.url.startsWith('/v1/tenants/:tenantId/ring-groups')) {
-        expect(route.permission).toBe('group.manage');
+        expect(route.permission).toBe(
+          route.method === 'GET' || route.method === 'HEAD' ? 'group.read' : 'group.manage',
+        );
       }
     }
   });

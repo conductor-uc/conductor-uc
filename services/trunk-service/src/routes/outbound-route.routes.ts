@@ -69,15 +69,16 @@ function toProblem(error: unknown): ProblemError {
 
 /**
  * Registers `/v1/tenants/{tenantId}/outbound-routes` (S2-04; 06's
- * trunk-service section). `trunk.manage` — the same permission trunk CRUD
- * itself uses, since outbound routing is squarely part of a tenant's trunk
- * configuration (05 §3.4 lists this table right alongside `trunks`).
+ * trunk-service section). `trunk.manage` for writes and `trunk.read` for
+ * reads (G-10) — the same permissions trunk CRUD itself uses, since outbound
+ * routing is squarely part of a tenant's trunk configuration (05 §3.4 lists
+ * this table right alongside `trunks`).
  */
 export function registerOutboundRouteRoutes(app: Server, routes: OutboundRouteRepo): void {
   app.get(
     '/v1/tenants/:tenantId/outbound-routes',
     {
-      config: { permission: 'trunk.manage', dataClass: 'config' },
+      config: { permission: 'trunk.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(OutboundRouteSchema) }) },
@@ -89,7 +90,7 @@ export function registerOutboundRouteRoutes(app: Server, routes: OutboundRouteRe
   app.get(
     '/v1/tenants/:tenantId/outbound-routes/:id',
     {
-      config: { permission: 'trunk.manage', dataClass: 'config' },
+      config: { permission: 'trunk.read', dataClass: 'config' },
       schema: { params: OutboundRouteParamsSchema, response: { 200: OutboundRouteSchema } },
     },
     async (request) => {

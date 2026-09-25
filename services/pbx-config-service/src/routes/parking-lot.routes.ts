@@ -65,7 +65,7 @@ export function registerParkingLotRoutes(app: Server, parkingLots: ParkingLotRep
   app.get(
     '/v1/tenants/:tenantId/parking-lots',
     {
-      config: { permission: 'parking_lot.manage', dataClass: 'config' },
+      config: { permission: 'parking_lot.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(ParkingLotSchema) }) },
@@ -77,7 +77,7 @@ export function registerParkingLotRoutes(app: Server, parkingLots: ParkingLotRep
   app.get(
     '/v1/tenants/:tenantId/parking-lots/:id',
     {
-      config: { permission: 'parking_lot.manage', dataClass: 'config' },
+      config: { permission: 'parking_lot.read', dataClass: 'config' },
       schema: { params: ParkingLotParamsSchema, response: { 200: ParkingLotSchema } },
     },
     async (request) => {

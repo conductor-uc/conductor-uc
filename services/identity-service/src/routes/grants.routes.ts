@@ -50,7 +50,7 @@ export function registerGrantRoutes(
   app.get(
     '/v1/orgs/:orgId/grants',
     {
-      config: { permission: 'grant.manage', dataClass: 'config' },
+      config: { permission: 'grant.read', dataClass: 'config' },
       schema: {
         params: OrgParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(GrantSchema) }) },
