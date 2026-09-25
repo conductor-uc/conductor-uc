@@ -1,4 +1,3 @@
-import { signInternalHeaders } from '@cuc/http';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -10,6 +9,7 @@ import {
   startUas,
   uasReceivedCall,
   stopContainer,
+  tenantAdminHeaders,
   withSingleFsNode,
   type SeedResult,
 } from '../src/run-scenario.js';
@@ -48,24 +48,16 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
 
   /**
    * Calls a service as a tenant administrator would reach it through the
-   * gateway: the compose stack trusts signed context headers, and a change
-   * that is audited needs to know who made it.
+   * gateway: the compose stack trusts signed context headers, the services ask
+   * identity-service what that person holds, and a change that is audited
+   * needs to know who made it.
    */
   async function call(method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, body?: unknown) {
-    const secret =
-      process.env['INTERNAL_HEADER_SIGNING_SECRET'] ?? 'dev-internal-header-signing-secret';
-    const tenantId = seed.tenantVoicemail.id;
     return dockerCurlJson(
       method,
       url,
       body,
-      signInternalHeaders(secret, {
-        actorId: 'sip-test-admin',
-        actorType: 'user',
-        orgId: tenantId,
-        orgType: 'tenant',
-        tenantId,
-      }),
+      await tenantAdminHeaders(seed.tenantVoicemail.id, seed.resellerId),
     );
   }
 
