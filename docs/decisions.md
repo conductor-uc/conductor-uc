@@ -20,7 +20,7 @@ Status values:
 | D-008 | Call flows compile to an immutable, versioned JSON IR executed by a Lua runner on FS. The alternative (generating XML dialplan or `ivr.conf` menus) is rejected because it handles branching, loops, and versioning poorly. | Proposed | S2 | [03 §4](architecture/03-signaling-and-media.md#4-call-flows-ivr--auto-attendant) |
 | D-009 | Voicemail audio, greetings, and prompts live centrally in S3. Voicemail runs as a Lua app backed by `voicemail-service`, not stock `mod_voicemail` storage. This is required for non-pinned nodes. | Proposed | S2 | [03 §5](architecture/03-signaling-and-media.md#5-stateless-node-rules-for-features) |
 | D-010 | Queues, parking lots, and conference rooms are pinned to one node at a time through Redis affinity leases | Proposed | S2 (abstraction) / S4 (multi-node) | [04 §3.3](architecture/04-high-availability.md#33-resource-affinity-leases) |
-| D-011 | Recordings go to a transient node spool, then an uploader pushes them to S3 and deletes the local copy. No durable node storage. | Proposed | S5 | [03 §6](architecture/03-signaling-and-media.md#6-recording-pipeline-summary) |
+| D-011 | Recordings go to a transient node spool, then an uploader pushes them to S3 and deletes the local copy. No durable node storage. | **Accepted** (2026-09-25) | S5 | [03 §6](architecture/03-signaling-and-media.md#6-recording-pipeline-summary) |
 | D-012 | Short-lived EdDSA JWT access tokens + rotating refresh cookies. MFA required for master and reseller users. | Proposed | S1 | [07 §2](architecture/07-security-and-permissions.md#2-tokens) |
 | D-013 | **Reseller access to billing data.** See conflict C-1. | **Accepted** (2026-09-15, issue #95) | S2 | below |
 | D-014 | Five services added to the SAD §7 list: api-gateway, pbx-config-service, telephony-config, call-control, notification-service | Proposed | S1 | [06](architecture/06-services.md) |
@@ -51,11 +51,11 @@ New questions raised during breakdown:
 | O-6 | Open-core license for platform code | Needs an owner decision. Note the upstream licenses: FreeSWITCH is MPL 1.1 and OpenSIPs is GPLv2. The platform services are separate programs that talk over network protocols, but modified upstream code or configs shipped in images must follow their licenses. Evaluate AGPLv3 (protects against closed SaaS forks) vs. Apache-2.0/MPL-2.0 (friendlier to integrators). | Before first public release |
 | O-7 | Media anchoring (RTPengine) at the edge | Deferred. Without it, FS node media IPs appear in SDP, so topology hiding covers signaling only. Decide in S4 based on NAT and topology-hiding needs. | S4 |
 | O-8 | Which carriers get SMS adapters first | Owner to name the carriers most common among target resellers | S7 |
-| O-9 | Bucket-per-tenant vs. prefix-per-tenant | Implement both in `@cuc/storage`, with per-tenant buckets as the default per the SAD. Confirm the chosen S3 provider's bucket limits before production. | S5 |
+| O-9 | Bucket-per-tenant vs. prefix-per-tenant | **Accepted** (2026-09-25): implement both in `@cuc/storage`, with per-tenant buckets as the default per the SAD. Confirm the chosen S3 provider's bucket limits before production. | S5 |
 | O-10 | Per-tenant logo under a reseller brand | Not in v1. Resellers brand; tenants inherit. | Post-v1 |
 | O-11 | Where the operator's own direct customers live | A normal "house" reseller. Master still provisions resellers only. | S1 |
-| O-12 | Recording consent and legal notices | Provide a per-policy consent announcement. Legal defaults are the tenant's responsibility and are documented as such. | S5 |
-| O-13 | Recordings in flight when a node dies | Accept loss in v1, or add a replicated spool (for example, a small per-node volume replicated via the uploader). The recommendation is to accept loss and alert. | S5 |
+| O-12 | Recording consent and legal notices | **Accepted** (2026-09-25): provide a per-policy consent announcement. Legal defaults are the tenant's responsibility and are documented as such. | S5 |
+| O-13 | Recordings in flight when a node dies | **Accepted** (2026-09-25): accept the loss in v1 and alert on it. The alternative, a replicated spool (for example, a small per-node volume replicated via the uploader), was not chosen. | S5 |
 | O-14 | In-browser listen/whisper/barge | Out of scope (no softphone). The supervisor's own SIP device is used. Revisit if WebRTC is ever added. | S5 |
 | O-15 | Bridge SIP "on a call" state into XMPP presence | Nice to have. Optional adapter in S6. | S6 |
 | O-16 | Moving a tenant between resellers | Master-only, audited, post-v1 | Post-v1 |
