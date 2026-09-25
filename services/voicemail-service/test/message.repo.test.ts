@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { crossTenantProbe, databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 
-import { MessageNotFoundError } from '../src/repo/message.repo.js';
+import { MessageAlreadyReadyError, MessageNotFoundError } from '../src/repo/message.repo.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
 const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
@@ -29,11 +29,11 @@ describe.skipIf(skipReason !== undefined)('message repo', () => {
     return h.mailboxes.create(ctxFor(tenantId), { extensionId: crypto.randomUUID(), pin: '1234' });
   }
 
-  it('creates a pending message with a real, usable presigned upload URL', async () => {
+  it('creates a pending message under its mailbox’s object prefix', async () => {
     const tenantId = crypto.randomUUID();
     const mailbox = await seedMailbox(tenantId);
 
-    const { message, uploadUrl } = await h.messages.create(ctxFor(tenantId), mailbox.id, {
+    const { message } = await h.messages.create(ctxFor(tenantId), mailbox.id, {
       callerIdName: 'Alice',
       callerIdNumber: '+15005550001',
     });
@@ -41,17 +41,14 @@ describe.skipIf(skipReason !== undefined)('message repo', () => {
       tenantId,
       mailboxId: mailbox.id,
       status: 'pending',
+      objectKey: `voicemail/${mailbox.id}/${message.id}.wav`,
       callerIdName: 'Alice',
       callerIdNumber: '+15005550001',
+      sha256: null,
+      failureReason: null,
       isRead: false,
     });
-
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'content-type': 'audio/wav' },
-      body: 'not really wav bytes, just proving the URL/bucket work',
-    });
-    expect(response.ok).toBe(true);
+    expect(message.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
   it('complete moves status to ready and enqueues voicemail.message.created and voicemail.mailbox.mwi_changed', async () => {
@@ -86,14 +83,93 @@ describe.skipIf(skipReason !== undefined)('message repo', () => {
     );
   });
 
-  it('fail moves status to failed', async () => {
+  it('fail moves status to failed with its reason, and leaves a ready message alone', async () => {
     const tenantId = crypto.randomUUID();
     const mailbox = await seedMailbox(tenantId);
     const { message } = await h.messages.create(ctxFor(tenantId), mailbox.id, {});
 
-    await h.messages.fail(ctxFor(tenantId), message.id);
+    await h.messages.fail(ctxFor(tenantId), message.id, 'empty_file');
     const found = await h.messages.findById(ctxFor(tenantId), message.id);
-    expect(found?.status).toBe('failed');
+    expect(found).toMatchObject({ status: 'failed', failureReason: 'empty_file' });
+
+    const { message: ready } = await h.messages.create(ctxFor(tenantId), mailbox.id, {});
+    await h.messages.complete(ctxFor(tenantId), ready.id, { durationMs: 1, sizeBytes: 1 });
+    await h.messages.fail(ctxFor(tenantId), ready.id, 'late');
+    expect((await h.messages.findById(ctxFor(tenantId), ready.id))?.status).toBe('ready');
+
+    await expect(
+      h.messages.fail(ctxFor(tenantId), crypto.randomUUID(), 'empty_file'),
+    ).rejects.toThrow(MessageNotFoundError);
+  });
+
+  it('complete stores the sha256, refuses a message that is already ready, and revives a failed one (S5-16)', async () => {
+    const tenantId = crypto.randomUUID();
+    const mailbox = await seedMailbox(tenantId);
+    const { message } = await h.messages.create(ctxFor(tenantId), mailbox.id, {});
+    const sha256 = 'a'.repeat(64);
+
+    await h.messages.fail(ctxFor(tenantId), message.id, 'never_uploaded');
+    const completed = await h.messages.complete(ctxFor(tenantId), message.id, {
+      durationMs: null,
+      sizeBytes: 44,
+      sha256,
+    });
+    expect(completed).toMatchObject({ status: 'ready', sha256, failureReason: null });
+    expect(await h.messages.findById(ctxFor(tenantId), message.id)).toMatchObject({
+      status: 'ready',
+      sha256,
+      sizeBytes: 44,
+      durationMs: null,
+      failureReason: null,
+    });
+
+    await expect(
+      h.messages.complete(ctxFor(tenantId), message.id, { durationMs: 1, sizeBytes: 1 }),
+    ).rejects.toThrow(MessageAlreadyReadyError);
+    // The retried complete emitted nothing more.
+    const created = await h.db.kysely
+      .selectFrom('outbox')
+      .select('type')
+      .where('type', '=', 'voicemail.message.created')
+      .execute();
+    expect(created).toHaveLength(1);
+  });
+
+  it('finds a message by id alone for the node uploader, whatever its tenant', async () => {
+    const tenantId = crypto.randomUUID();
+    const mailbox = await seedMailbox(tenantId);
+    const { message } = await h.messages.create(ctxFor(tenantId), mailbox.id, {});
+
+    expect(await h.messages.findByIdForUpload({}, message.id)).toMatchObject({
+      id: message.id,
+      tenantId,
+      status: 'pending',
+    });
+    expect(await h.messages.findByIdForUpload({}, crypto.randomUUID())).toBeUndefined();
+  });
+
+  it('failStalePending marks only pending messages older than the cutoff failed', async () => {
+    const tenantId = crypto.randomUUID();
+    const mailbox = await seedMailbox(tenantId);
+    const { message: stale } = await h.messages.create(ctxFor(tenantId), mailbox.id, {});
+    const { message: fresh } = await h.messages.create(ctxFor(tenantId), mailbox.id, {});
+    const { message: ready } = await h.messages.create(ctxFor(tenantId), mailbox.id, {});
+    await h.messages.complete(ctxFor(tenantId), ready.id, { durationMs: 1, sizeBytes: 1 });
+    const longAgo = new Date(Date.now() - 100 * 60 * 60 * 1000);
+    await h.db.kysely
+      .updateTable('messages')
+      .set({ created_at: longAgo })
+      .where('id', 'in', [stale.id, ready.id])
+      .execute();
+
+    const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000);
+    expect(await h.messages.failStalePending({}, cutoff)).toBe(1);
+    expect(await h.messages.findById(ctxFor(tenantId), stale.id)).toMatchObject({
+      status: 'failed',
+      failureReason: 'never_uploaded',
+    });
+    expect((await h.messages.findById(ctxFor(tenantId), fresh.id))?.status).toBe('pending');
+    expect((await h.messages.findById(ctxFor(tenantId), ready.id))?.status).toBe('ready');
   });
 
   it('404s completing a message that does not exist', async () => {

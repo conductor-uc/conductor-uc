@@ -61,7 +61,7 @@ export async function startHarness(): Promise<Harness> {
     logger,
   });
   const mailboxes = createMailboxRepo(db, storage, kek);
-  const messages = createMessageRepo(db, storage);
+  const messages = createMessageRepo(db);
 
   return {
     db,
@@ -101,6 +101,20 @@ export async function startBusHarness(): Promise<BusHarness> {
       await base.close();
     },
   };
+}
+
+/** Puts a message's audio in storage directly, standing in for the node uploader's presigned PUT. */
+export async function storeAudio(
+  h: Harness,
+  tenantId: string,
+  objectKey: string,
+  bytes: string | Buffer,
+): Promise<void> {
+  const scoped = h.storage.forTenant(tenantId);
+  await scoped.provisionBucket();
+  await scoped.putObject(objectKey, Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes), {
+    contentType: 'audio/wav',
+  });
 }
 
 export async function resetSchema(db: Database<VoicemailServiceDb>): Promise<void> {

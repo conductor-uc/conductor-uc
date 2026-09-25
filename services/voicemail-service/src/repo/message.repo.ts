@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { Database, DbContext } from '@cuc/db';
 import { requireTenant } from '@cuc/db';
 import { enqueueEvent } from '@cuc/events';
-import type { Storage } from '@cuc/storage';
 
+import { messageObjectKey } from '../domain/message.js';
 import { voicemailEvents } from '../events.js';
 import type { VoicemailServiceDb } from '../schema.js';
 
@@ -18,6 +18,8 @@ export interface VoicemailMessage {
   readonly callerIdNumber: string | null;
   readonly durationMs: number | null;
   readonly sizeBytes: number | null;
+  readonly sha256: string | null;
+  readonly failureReason: string | null;
   readonly isRead: boolean;
   readonly createdAt: Date;
 }
@@ -28,12 +30,18 @@ export interface CreateMessageInput {
 }
 
 export interface CompleteMessageInput {
-  readonly durationMs: number;
+  readonly durationMs: number | null;
   readonly sizeBytes: number;
+  readonly sha256?: string | null;
 }
 
 export class MessageNotFoundError extends Error {
   override readonly name = 'MessageNotFoundError';
+}
+
+/** The message is already ready: its audio arrived before. */
+export class MessageAlreadyReadyError extends Error {
+  override readonly name = 'MessageAlreadyReadyError';
 }
 
 const COLUMNS = [
@@ -46,6 +54,8 @@ const COLUMNS = [
   'caller_id_number as callerIdNumber',
   'duration_ms as durationMs',
   'size_bytes as sizeBytes',
+  'sha256',
+  'failure_reason as failureReason',
   'is_read as isRead',
   'created_at as createdAt',
 ] as const;
@@ -60,6 +70,8 @@ function toMessage(row: {
   callerIdNumber: string | null;
   durationMs: number | null;
   sizeBytes: number | null;
+  sha256: string | null;
+  failureReason: string | null;
   isRead: boolean | number;
   createdAt: Date;
 }): VoicemailMessage {
@@ -70,21 +82,20 @@ function toMessage(row: {
   };
 }
 
-/** 05 §4-style object layout: one WAV per message, under its own mailbox's prefix. */
-function messageObjectKey(mailboxId: string, messageId: string): string {
-  return `voicemail/${mailboxId}/${messageId}.wav`;
-}
-
 /**
- * Data access for voicemail messages (S2-16). Every query goes through
- * `scoped(ctx)` (CLAUDE.md rule 2).
+ * Data access for voicemail messages (S2-16, S5-16). Every tenant query goes
+ * through `scoped(ctx)` (CLAUDE.md rule 2). The two cross-tenant ones,
+ * `findByIdForUpload` (the node uploader knows only the opaque message id in
+ * a spool file name) and the pending sweep's `failStalePending`, use
+ * `unscoped(ctx, reason)`, as recording-service's do; the uploader's routes
+ * then act on the row through a `scoped` context for its own tenant.
  *
  * `voicemail.mailbox.mwi_changed` is enqueued in the same transaction as
  * every write that changes a mailbox's unread state (`complete`, `markRead`,
  * `remove` of an unread message) — CLAUDE.md rule 6, the transactional
  * outbox, not a direct publish.
  */
-export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Storage) {
+export function createMessageRepo(db: Database<VoicemailServiceDb>) {
   return {
     /** Ready messages only, oldest first — what the retrieval menu and the console both walk through. */
     listReady(ctx: DbContext, mailboxId: string): Promise<VoicemailMessage[]> {
@@ -109,18 +120,30 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Sto
         .then((row) => (row === undefined ? undefined : toMessage(row)));
     },
 
-    /** Creates a `pending` row and returns a presigned PUT URL for the FS-side spool uploader (via telephony-config) to upload the recorded WAV directly to. */
+    /** For the node uploader, which holds only the opaque id from a `vm-<id>.wav` spool file name. */
+    findByIdForUpload(ctx: DbContext, id: string): Promise<VoicemailMessage | undefined> {
+      return db
+        .unscoped(ctx, 'node uploader resolving a voicemail spool file by its opaque message id')
+        .selectFrom('messages')
+        .select(COLUMNS)
+        .where('id', '=', id)
+        .executeTakeFirst()
+        .then((row) => (row === undefined ? undefined : toMessage(row)));
+    },
+
+    /**
+     * Creates the `pending` row before the caller is recorded (S5-16): its id names the spool
+     * file `voicemail.lua` records to, which the node uploader later delivers through the
+     * `/internal/v1/voicemail/messages/:id/...` routes.
+     */
     async create(
       ctx: DbContext,
       mailboxId: string,
       input: CreateMessageInput,
-    ): Promise<{ message: VoicemailMessage; uploadUrl: string }> {
+    ): Promise<{ message: VoicemailMessage }> {
       const { tenantId } = requireTenant(ctx);
       const id = randomUUID();
       const objectKey = messageObjectKey(mailboxId, id);
-      const uploadUrl = await storage
-        .forTenant(tenantId)
-        .presignPut(objectKey, { contentType: 'audio/wav' });
 
       const now = new Date();
       await db
@@ -135,6 +158,8 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Sto
           caller_id_number: input.callerIdNumber ?? null,
           duration_ms: null,
           size_bytes: null,
+          sha256: null,
+          failure_reason: null,
           is_read: false,
           created_at: now,
           updated_at: now,
@@ -153,13 +178,20 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Sto
           callerIdNumber: input.callerIdNumber ?? null,
           durationMs: null,
           sizeBytes: null,
+          sha256: null,
+          failureReason: null,
           isRead: false,
           createdAt: now,
         },
-        uploadUrl,
       };
     },
 
+    /**
+     * Marks a message ready once its audio is verified in storage (the uploader's route does
+     * the verifying). A `failed` one may still complete: audio that arrives after the pending
+     * sweep gave up on it (a long storage outage) is not thrown away, as with recordings.
+     * Emits `voicemail.message.created` and `voicemail.mailbox.mwi_changed`.
+     */
     async complete(
       ctx: DbContext,
       id: string,
@@ -175,6 +207,9 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Sto
           .where('id', '=', id)
           .executeTakeFirst();
         if (existing === undefined) throw new MessageNotFoundError(`No message with id '${id}'.`);
+        if (existing.status === 'ready') {
+          throw new MessageAlreadyReadyError(`Message '${id}' is already ready.`);
+        }
 
         await trx
           .updateTable('messages')
@@ -182,6 +217,8 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Sto
             status: 'ready',
             duration_ms: input.durationMs,
             size_bytes: input.sizeBytes,
+            sha256: input.sha256 ?? null,
+            failure_reason: null,
             updated_at: new Date(),
           })
           .where('id', '=', id)
@@ -203,21 +240,43 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>, storage: Sto
           status: 'ready',
           durationMs: input.durationMs,
           sizeBytes: input.sizeBytes,
+          sha256: input.sha256 ?? null,
+          failureReason: null,
         });
       });
 
       return result!;
     },
 
-    async fail(ctx: DbContext, id: string): Promise<void> {
+    /** Marks a message that never got usable audio failed. A ready message is left alone. */
+    async fail(ctx: DbContext, id: string, reason: string): Promise<void> {
       const result = await db
         .scoped(ctx)
         .updateTable('messages')
-        .set({ status: 'failed', updated_at: new Date() })
+        .set({ status: 'failed', failure_reason: reason.slice(0, 128), updated_at: new Date() })
         .where('id', '=', id)
+        .where('status', 'in', ['pending', 'failed'])
         .executeTakeFirst();
-      if (Number(result.numUpdatedRows) === 0)
-        throw new MessageNotFoundError(`No message with id '${id}'.`);
+      if (Number(result.numUpdatedRows) === 0) {
+        const exists = await this.findById(ctx, id);
+        if (exists === undefined) throw new MessageNotFoundError(`No message with id '${id}'.`);
+      }
+    },
+
+    /**
+     * Pending messages created before `cutoff` whose audio never arrived (the caller hung up
+     * before anything was recorded, or the node died with the file): marks them failed.
+     * Returns how many. Background job only.
+     */
+    async failStalePending(ctx: DbContext, cutoff: Date): Promise<number> {
+      const result = await db
+        .unscoped(ctx, 'pending sweep: voicemail messages created but never uploaded')
+        .updateTable('messages')
+        .set({ status: 'failed', failure_reason: 'never_uploaded', updated_at: new Date() })
+        .where('status', '=', 'pending')
+        .where('created_at', '<', cutoff)
+        .executeTakeFirst();
+      return Number(result.numUpdatedRows);
     },
 
     async markRead(ctx: DbContext, id: string): Promise<VoicemailMessage> {

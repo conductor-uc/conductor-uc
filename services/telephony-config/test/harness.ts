@@ -54,7 +54,6 @@ import type {
 } from '../src/trunk-config-client.js';
 import type { CallflowClient, PublishedFlowIr } from '../src/callflow-client.js';
 import type {
-  CompleteVoicemailMessageInput,
   CreateVoicemailMessageInput,
   VoicemailClient,
   VoicemailMailbox,
@@ -318,9 +317,11 @@ export interface FakeVoicemailClient extends VoicemailClient {
 
 /**
  * A real-storage-backed stand-in for voicemail-service's own internal API —
- * no live voicemail-service needed. Real presigned URLs (via `storage`, the
- * same real MinIO the harness already runs) so `/fs/voicemail/...`'s own
- * byte-proxy routes are exercised against real bytes, not a mock — the same
+ * no live voicemail-service needed. Real presigned URLs and objects (via
+ * `storage`, the same real MinIO the harness already runs; a test stands in
+ * for the node uploader by writing a message's object and marking it ready)
+ * so `/fs/voicemail/...`'s own byte-proxy routes are exercised against real
+ * bytes, not a mock — the same
  * discipline `fakePbxConfigClient`'s media-asset test coverage already
  * established for `/fs/media/...` in S2-07.
  */
@@ -341,12 +342,9 @@ function fakeVoicemailClient(storage: Storage): FakeVoicemailClient {
       Promise.resolve(state.messages[messageId]),
     verifyPin: (_tenantId: string, mailboxId: string, pin: string) =>
       Promise.resolve(state.mailboxes[mailboxId]?.pin === pin),
-    async createMessage(tenantId: string, mailboxId: string, input: CreateVoicemailMessageInput) {
+    createMessage(tenantId: string, mailboxId: string, input: CreateVoicemailMessageInput) {
       const messageId = `msg-${String((messageCounter += 1))}`;
       const objectKey = `voicemail/${mailboxId}/${messageId}.wav`;
-      const uploadUrl = await storage
-        .forTenant(tenantId)
-        .presignPut(objectKey, { contentType: 'audio/wav' });
       state.messages[messageId] = {
         id: messageId,
         tenantId,
@@ -357,23 +355,7 @@ function fakeVoicemailClient(storage: Storage): FakeVoicemailClient {
         createdAt: new Date().toISOString(),
       };
       void input;
-      return { messageId, uploadUrl, objectKey };
-    },
-    completeMessage: (
-      _tenantId: string,
-      _mailboxId: string,
-      messageId: string,
-      _input: CompleteVoicemailMessageInput,
-    ) => {
-      const message = state.messages[messageId];
-      if (message === undefined) throw new Error(`No fake message '${messageId}'.`);
-      state.messages[messageId] = { ...message, status: 'ready' };
-      return Promise.resolve(state.messages[messageId]);
-    },
-    failMessage: (_tenantId: string, _mailboxId: string, messageId: string) => {
-      const message = state.messages[messageId];
-      if (message !== undefined) state.messages[messageId] = { ...message, status: 'failed' };
-      return Promise.resolve();
+      return Promise.resolve({ messageId, fileName: `vm-${messageId}.wav`, objectKey });
     },
     listMessages: (tenantId: string, mailboxId: string) =>
       Promise.resolve(

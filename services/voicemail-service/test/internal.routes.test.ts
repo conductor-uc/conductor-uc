@@ -3,7 +3,7 @@ import { databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 import { createServer, type Server } from '@cuc/http';
 
 import { registerInternalRoutes } from '../src/routes/internal.routes.js';
-import { resetSchema, startHarness, type Harness } from './harness.js';
+import { resetSchema, startHarness, storeAudio, type Harness } from './harness.js';
 
 const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
 const TOKEN = 'test-internal-service-token';
@@ -89,7 +89,7 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
     expect(invalid.json()).toMatchObject({ valid: false });
   });
 
-  it('creates, completes, lists, marks read, and deletes a message — the FS leave-message/retrieval round trip', async () => {
+  it('creates, lists, marks read, and deletes a message — the FS leave-message/retrieval round trip', async () => {
     const tenantId = crypto.randomUUID();
     const mailbox = await h.mailboxes.create(
       { tenantId },
@@ -103,24 +103,21 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
       payload: { callerIdNumber: '+15005550001' },
     });
     expect(created.statusCode).toBe(201);
-    const { messageId, uploadUrl }: { messageId: string; uploadUrl: string; objectKey: string } =
-      created.json();
+    const body: { messageId: string; fileName: string; objectKey: string } = created.json();
+    const { messageId } = body;
+    // The spool file voicemail.lua records to; the node uploader delivers it (S5-16).
+    expect(body.fileName).toBe(`vm-${messageId}.wav`);
+    expect(body).not.toHaveProperty('uploadUrl');
 
-    const uploaded = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: { 'content-type': 'audio/wav' },
-      body: 'spool bytes',
-    });
-    expect(uploaded.ok).toBe(true);
-
-    const completed = await app.inject({
-      method: 'POST',
-      url: `/internal/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages/${messageId}/complete`,
+    // Pending: not listed until its audio is verified in storage.
+    const before = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages`,
       headers: authHeader(),
-      payload: { durationMs: 5000, sizeBytes: 4096 },
     });
-    expect(completed.statusCode).toBe(200);
-    expect(completed.json()).toMatchObject({ status: 'ready', isRead: false });
+    expect(before.json()).toMatchObject({ rows: [] });
+    await storeAudio(h, tenantId, body.objectKey, 'spool bytes');
+    await h.messages.complete({ tenantId }, messageId, { durationMs: 5000, sizeBytes: 11 });
 
     const list = await app.inject({
       method: 'GET',
@@ -150,23 +147,6 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
       headers: authHeader(),
     });
     expect(deleted.statusCode).toBe(204);
-  });
-
-  it('fails a message', async () => {
-    const tenantId = crypto.randomUUID();
-    const mailbox = await h.mailboxes.create(
-      { tenantId },
-      { extensionId: crypto.randomUUID(), pin: '1234' },
-    );
-    const { message } = await h.messages.create({ tenantId }, mailbox.id, {});
-
-    const response = await app.inject({
-      method: 'POST',
-      url: `/internal/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages/${message.id}/fail`,
-      headers: authHeader(),
-    });
-    expect(response.statusCode).toBe(204);
-    expect((await h.messages.findById({ tenantId }, message.id))?.status).toBe('failed');
   });
 
   it('presigns and completes a greeting', async () => {
@@ -202,11 +182,11 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
       attachAudio: true,
       afterEmail: 'mark_read',
     });
-    const { message, uploadUrl } = await h.messages.create({ tenantId }, mailbox.id, {
+    const { message } = await h.messages.create({ tenantId }, mailbox.id, {
       callerIdName: 'Pat',
       callerIdNumber: '+15005550002',
     });
-    await fetch(uploadUrl, { method: 'PUT', body: 'wav-bytes' });
+    await storeAudio(h, tenantId, message.objectKey, 'wav-bytes');
     await h.messages.complete({ tenantId }, message.id, { durationMs: 7000, sizeBytes: 9 });
 
     const box = await app.inject({
@@ -240,8 +220,8 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
       { tenantId },
       { extensionId: crypto.randomUUID(), pin: '1234' },
     );
-    const { message, uploadUrl } = await h.messages.create({ tenantId }, mailbox.id, {});
-    await fetch(uploadUrl, { method: 'PUT', body: 'wav-bytes' });
+    const { message } = await h.messages.create({ tenantId }, mailbox.id, {});
+    await storeAudio(h, tenantId, message.objectKey, 'wav-bytes');
     const url = `/internal/v1/tenants/${tenantId}/voicemail/mailboxes/${mailbox.id}/messages/${message.id}/audio`;
 
     // Still pending: not readable yet.
