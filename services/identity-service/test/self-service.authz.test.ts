@@ -40,7 +40,7 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
         (await lookup.ofUser(actor.id, actor.orgId)).has(permission),
     });
     registerAuthRoutes(app, h.auth, { cookieSecure: true, refreshTokenTtlDays: 30 });
-    registerUserRoutes(app, h.users, h.roles, access, h.mfa);
+    registerUserRoutes(app, h.users, h.roles, access, h.mfa, h.stepUp);
     registerRoleRoutes(app, h.roles, access, h.users, lookup);
     registerGrantRoutes(app, h.grants, access, lookup);
     registerMeRoutes(app, h.roles, h.grants);

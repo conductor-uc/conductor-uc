@@ -59,6 +59,11 @@ export interface IdentityServiceDb extends EventTables {
      */
     confirmed_at: Date | null;
     created_at: Date;
+    /** The TOTP time step of the last code accepted as a step-up (G-100); a replay names no later one. */
+    last_step_up_step: ColumnType<number | null, number | null | undefined, number | null>;
+    /** Wrong step-up codes since the window that `step_up_failed_at` started. */
+    step_up_failures: ColumnType<number, number | undefined, number>;
+    step_up_failed_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
   };
 
   sessions: {

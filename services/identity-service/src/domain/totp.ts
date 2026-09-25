@@ -49,6 +49,25 @@ export function verifyTotpCode(secretBase32: string, code: string): boolean {
   return totp.validate({ token: code, window: VERIFY_WINDOW }) !== null;
 }
 
+/**
+ * Like [verifyTotpCode], but says which time step the code belongs to (unix
+ * seconds / 30), or null when it matches none within the drift window. The
+ * step is what replay protection compares: a code accepted for step N is not
+ * accepted again, nor is any code for a step at or before N (see
+ * `auth/step-up.ts`).
+ */
+export function matchTotpStep(
+  secretBase32: string,
+  code: string,
+  nowMs: number = Date.now(),
+): number | null {
+  if (!/^\d{6}$/.test(code)) return null;
+
+  const totp = buildTotp(Secret.fromBase32(secretBase32), 'verify', 'verify');
+  const delta = totp.validate({ token: code, window: VERIFY_WINDOW, timestamp: nowMs });
+  return delta === null ? null : Math.floor(nowMs / 1000 / PERIOD) + delta;
+}
+
 function buildTotp(secret: Secret, issuer: string, label: string): TOTP {
   return new TOTP({
     issuer,

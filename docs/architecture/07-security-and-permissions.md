@@ -19,6 +19,7 @@ MFA is **required** for master and reseller users. For tenant users it is config
 - The refresh token is opaque and lives 30 days (sliding), with rotation and reuse detection. On reuse, the whole family is revoked.
 - The console stores the access token in memory and the refresh token in an `HttpOnly; Secure; SameSite=Strict` cookie scoped to the console hostname.
 - Keys are published via JWKS and rotated every 90 days with overlap.
+- **Step-up confirmation (G-100).** A valid access token is not enough for a sensitive action: the acting person also sends a current code from their own authenticator (`stepUpCode` in the body; identity-service `auth/step-up.ts`). Today this guards resetting another person's two-step verification; credential reveal and key rotation are meant to reuse it. A missing code is 401 `step_up_required`, a wrong or already-used one 401 `step_up_invalid` (each accepted code spends its TOTP time step, so a code confirms one action only), and an actor with no confirmed authenticator of their own (a tenant user, an API key) 403 `step_up_not_enrolled`: refused, never waved through. Five wrong codes within 15 minutes give 429 `step_up_locked` until 15 minutes have passed since the last one. Every failure is audited (`auth.step_up_failed`, with the action and why, never the code).
 
 ## 3. Authorization
 

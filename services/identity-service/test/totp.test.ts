@@ -1,7 +1,7 @@
 import { TOTP, Secret } from 'otpauth';
 import { describe, expect, it } from 'vitest';
 
-import { generateTotpSecret, verifyTotpCode } from '../src/domain/totp.js';
+import { generateTotpSecret, matchTotpStep, verifyTotpCode } from '../src/domain/totp.js';
 
 describe('generateTotpSecret', () => {
   it('returns a base32 secret and a matching otpauth URI', () => {
@@ -64,5 +64,29 @@ describe('verifyTotpCode', () => {
     expect(verifyTotpCode(secret.base32, 'abcdef')).toBe(false);
     expect(verifyTotpCode(secret.base32, '12345')).toBe(false);
     expect(verifyTotpCode(secret.base32, '')).toBe(false);
+  });
+});
+
+describe('matchTotpStep', () => {
+  const secret = generateTotpSecret('Org', 'u@x.com').base32;
+  const at = (timestamp: number) =>
+    new TOTP({
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+      secret: Secret.fromBase32(secret),
+    }).generate({ timestamp });
+  const now = 1_800_000_015_000; // 15 s into step 60_000_000
+
+  it('names the time step a code belongs to, within one step of drift', () => {
+    expect(matchTotpStep(secret, at(now), now)).toBe(60_000_000);
+    expect(matchTotpStep(secret, at(now - 30_000), now)).toBe(59_999_999);
+    expect(matchTotpStep(secret, at(now + 30_000), now)).toBe(60_000_001);
+  });
+
+  it('is null for a code outside the window, or not six digits', () => {
+    expect(matchTotpStep(secret, at(now - 90_000), now)).toBeNull();
+    expect(matchTotpStep(secret, 'abcdef', now)).toBeNull();
+    expect(matchTotpStep(secret, '12345', now)).toBeNull();
   });
 });

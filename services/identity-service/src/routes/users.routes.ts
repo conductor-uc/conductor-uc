@@ -1,5 +1,6 @@
 import { ProblemError, Type, type Server } from '@cuc/http';
 
+import { missingBodyAsEmpty, StepUpBodyFields, type StepUp } from '../auth/step-up.js';
 import { type ActorContext, type OrgAccess } from '../authz/org-access.js';
 import type { MfaRepo } from '../repo/mfa.repo.js';
 import type { RoleRepo } from '../repo/role.repo.js';
@@ -23,6 +24,8 @@ const UserSchema = Type.Object({
   roleIds: Type.Array(Type.String()),
 });
 
+const MfaResetBodySchema = Type.Object({ ...StepUpBodyFields });
+
 const UpdateUserBodySchema = Type.Object({
   displayName: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
   status: Type.Optional(StatusSchema),
@@ -44,6 +47,7 @@ export function registerUserRoutes(
   roles: RoleRepo,
   access: OrgAccess,
   mfa: MfaRepo,
+  stepUp: StepUp,
 ): void {
   async function managedOrg(request: {
     context: ActorContext;
@@ -117,15 +121,26 @@ export function registerUserRoutes(
   /**
    * An admin removes a user's authenticator, for a lost phone. The user is
    * signed out everywhere and asked to enroll a new one at the next sign-in,
-   * and is emailed that it happened. Not for yourself: resetting your own
-   * would end the session you are using, and a lost phone is what another
-   * admin is for.
+   * and is emailed that it happened, as are the org's other admins. Not for
+   * yourself: resetting your own would end the session you are using, and a
+   * lost phone is what another admin is for.
+   *
+   * The admin confirms with a current code from their own authenticator
+   * (G-100 step-up, `stepUpCode` in the body), so a stolen session alone
+   * cannot strip someone's second factor. It is asked for only once the reset
+   * could actually happen (the user is here, is not you, and has one), so a
+   * code is never spent on a request that was going to be refused anyway.
    */
   app.post(
     '/v1/orgs/:orgId/users/:userId/mfa-reset',
     {
       config: { permission: 'user.manage', dataClass: 'config' },
-      schema: { params: UserParamsSchema, response: { 200: UserSchema } },
+      schema: {
+        params: UserParamsSchema,
+        body: MfaResetBodySchema,
+        response: { 200: UserSchema },
+      },
+      preValidation: missingBodyAsEmpty,
     },
     async (request) => {
       const orgId = await managedOrg(request);
@@ -139,6 +154,13 @@ export function registerUserRoutes(
           code: 'cannot_reset_self',
         });
       }
+      const target = await users.findById(userId);
+      if (target === undefined || target.orgId !== orgId) {
+        throw ProblemError.notFound('No such user in this organization.');
+      }
+      if (!target.mfaEnrolled) throw notEnrolled();
+      await stepUp.require(request, { action: 'user.mfa_reset', targetOrgId: orgId });
+
       const result = await mfa.reset(
         { ...request.context, actorId, orgId: actorOrgId },
         orgId,
@@ -147,11 +169,7 @@ export function registerUserRoutes(
       if (result.outcome === 'not_found') {
         throw ProblemError.notFound('No such user in this organization.');
       }
-      if (result.outcome === 'not_enrolled') {
-        throw ProblemError.conflict('That user has not set up two-step verification.', {
-          code: 'mfa_not_enrolled',
-        });
-      }
+      if (result.outcome === 'not_enrolled') throw notEnrolled();
       const [user, roleIds] = await Promise.all([
         users.listByOrg(orgId).then((rows) => rows.find((u) => u.id === userId)),
         roles.roleIdsByUserIn(orgId),
@@ -168,4 +186,10 @@ export function registerUserRoutes(
       };
     },
   );
+}
+
+function notEnrolled(): ProblemError {
+  return ProblemError.conflict('That user has not set up two-step verification.', {
+    code: 'mfa_not_enrolled',
+  });
 }
