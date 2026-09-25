@@ -21,7 +21,7 @@ const { createServer } = await load('packages/http/dist/index.js');
 const SOURCES = [
   ['identity-service', 'auth', 'registerAuthRoutes', 1],
   ['identity-service', 'users', 'registerUserRoutes', 4],
-  ['identity-service', 'roles', 'registerRoleRoutes', 3],
+  ['identity-service', 'roles', 'registerRoleRoutes', 4],
   ['identity-service', 'audit', 'registerAuditRoutes', 2],
   ['identity-service', 'me', 'registerMeRoutes', 2],
   ['org-service', 'brand', 'registerBrandRoutes', 4],
@@ -44,12 +44,15 @@ const SOURCES = [
   ['pbx-config-service', 'conference-room', 'registerConferenceRoomRoutes', 1],
   ['pbx-config-service', 'schedule', 'registerScheduleRoutes', 1],
   ['pbx-config-service', 'call-handling', 'registerCallHandlingRoutes', 2],
+  ['pbx-config-service', 'me', 'registerMeRoutes', 3],
   ['callflow-service', 'flow', 'registerFlowRoutes', 1],
   ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
   ['voicemail-service', 'mailbox', 'registerMailboxRoutes', 3],
+  ['voicemail-service', 'me', 'registerMeRoutes', 5],
   ['trunk-service', 'outbound-route', 'registerOutboundRouteRoutes', 1],
   ['trunk-service', 'emergency-route', 'registerEmergencyRouteRoutes', 1],
   ['cdr-service', 'cdr', 'registerCdrRoutes', 3],
+  ['cdr-service', 'me', 'registerMeRoutes', 2],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
   ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
@@ -112,6 +115,19 @@ const OVERRIDES = {
   'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/presign': 'presignMailboxGreeting',
   'post /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/greeting/complete': 'completeMailboxGreeting',
   'get /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/messages/{messageId}/play-url': 'getMessagePlayUrl',
+  // End-user self-service (parity 1e): a person's own extension, voicemail and history.
+  'get /v1/tenants/{tenantId}/me/extension': 'getMyExtension',
+  'get /v1/tenants/{tenantId}/me/directory': 'listMyDirectory',
+  'get /v1/tenants/{tenantId}/me/call-handling': 'getMyCallHandling',
+  'put /v1/tenants/{tenantId}/me/call-handling': 'saveMyCallHandling',
+  'get /v1/tenants/{tenantId}/me/voicemail': 'getMyVoicemail',
+  'get /v1/tenants/{tenantId}/me/voicemail/messages': 'listMyVoicemailMessages',
+  'get /v1/tenants/{tenantId}/me/voicemail/messages/{messageId}/play-url': 'getMyMessagePlayUrl',
+  'post /v1/tenants/{tenantId}/me/voicemail/messages/{messageId}/read': 'markMyMessageRead',
+  'delete /v1/tenants/{tenantId}/me/voicemail/messages/{messageId}': 'deleteMyMessage',
+  'post /v1/tenants/{tenantId}/me/voicemail/reset-pin': 'resetMyVoicemailPin',
+  'put /v1/tenants/{tenantId}/me/voicemail/email-settings': 'saveMyVoicemailEmailSettings',
+  'get /v1/tenants/{tenantId}/me/calls': 'listMyCalls',
 };
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };
 
