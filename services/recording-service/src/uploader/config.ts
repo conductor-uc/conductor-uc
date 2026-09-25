@@ -2,7 +2,8 @@ import { Env, Type, loadConfig } from '@cuc/config';
 
 /**
  * The node uploader's environment. Deliberately small: no database, no storage credentials,
- * no event bus. It needs to reach recording-service and read and delete files in the spool.
+ * no event bus. It needs to reach recording-service and voicemail-service, and read and delete
+ * files in the spool.
  */
 export const uploaderConfigSchema = Type.Object({
   NODE_ENV: Env.enum(['development', 'test', 'production'], { default: 'development' }),
@@ -12,7 +13,13 @@ export const uploaderConfigSchema = Type.Object({
 
   /** recording-service, e.g. http://recording-service:8080. */
   RECORDING_SERVICE_URL: Env.url(),
-  /** The bearer token its internal routes expect. */
+  /**
+   * voicemail-service, e.g. http://voicemail-service:8080 (S5-16): where `vm-<id>.wav` files
+   * (voicemail messages) go. Required, not optional: every node records voicemail, and an
+   * uploader without it would leave every message's audio on the node.
+   */
+  VOICEMAIL_SERVICE_URL: Env.url(),
+  /** The bearer token both services' internal routes expect. */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
 
   /** Where FreeSWITCH writes recordings; the same path telephony-config's RECORDING_SPOOL_DIR names. */

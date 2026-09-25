@@ -1,15 +1,19 @@
 /**
- * The uploader's client for recording-service's internal API (`/internal/v1/recordings/...`).
- * Talks HTTP only: the node holds this service's bearer token and nothing else. It has no
+ * The uploader's clients for the services that own what lands in the node spool: call
+ * recordings (recording-service, `/internal/v1/recordings/...`) and voicemail messages
+ * (voicemail-service, `/internal/v1/voicemail/messages/...`, S5-16). Both speak the same
+ * contract: `upload-url`, `complete`, `fail`, addressed by the opaque id in the file name.
+ *
+ * Talks HTTP only: the node holds these services' bearer token and nothing else. It has no
  * database or storage credentials, which is why the uploader can run beside FreeSWITCH.
  */
 
-/** The recording id in the file name is not one the service knows. Retrying will not help until it does. */
-export class UnknownRecordingError extends Error {
-  override readonly name = 'UnknownRecordingError';
+/** The id in the file name is not one the service knows. Retrying will not help until it does. */
+export class UnknownSpoolFileError extends Error {
+  override readonly name = 'UnknownSpoolFileError';
 }
 
-/** The service already holds this recording (a duplicate spool file): the local copy is redundant. */
+/** The service already holds this file's audio (a duplicate spool file): the local copy is redundant. */
 export class AlreadyUploadedError extends Error {
   override readonly name = 'AlreadyUploadedError';
 }
@@ -36,28 +40,38 @@ export interface CompleteInput {
   readonly durationMs: number | null;
 }
 
-export interface RecordingApi {
-  requestUploadUrl(recordingId: string): Promise<UploadTarget>;
-  complete(recordingId: string, input: CompleteInput): Promise<{ sizeBytes: number | null }>;
-  fail(recordingId: string, reason: string): Promise<void>;
+/** One service's side of the upload contract. */
+export interface UploadApi {
+  requestUploadUrl(id: string): Promise<UploadTarget>;
+  complete(id: string, input: CompleteInput): Promise<{ sizeBytes: number | null }>;
+  fail(id: string, reason: string): Promise<void>;
 }
 
-export interface RecordingApiOptions {
+export interface UploadApiOptions {
   readonly baseUrl: string;
   readonly internalServiceToken: string;
   readonly timeoutMs?: number;
   readonly fetchImpl?: typeof fetch;
 }
 
-export function createRecordingApi(options: RecordingApiOptions): RecordingApi {
+/** Where a kind of spool file is delivered, and what to call it in errors. */
+interface UploadEndpoint {
+  readonly service: string;
+  /** e.g. `/internal/v1/recordings`; the id and action follow. */
+  readonly path: string;
+  readonly noun: string;
+}
+
+function createUploadApi(endpoint: UploadEndpoint, options: UploadApiOptions): UploadApi {
   const fetchImpl = options.fetchImpl ?? fetch;
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
   const timeoutMs = options.timeoutMs ?? 15_000;
+  const { service, noun } = endpoint;
 
-  async function post(path: string, body?: unknown): Promise<Response> {
+  async function post(id: string, action: string, body?: unknown): Promise<Response> {
     let response: Response;
     try {
-      response = await fetchImpl(`${baseUrl}/internal/v1/recordings/${path}`, {
+      response = await fetchImpl(`${baseUrl}${endpoint.path}/${encodeURIComponent(id)}/${action}`, {
         method: 'POST',
         headers: {
           authorization: `Bearer ${options.internalServiceToken}`,
@@ -68,7 +82,7 @@ export function createRecordingApi(options: RecordingApiOptions): RecordingApi {
       });
     } catch (error) {
       throw new TransientUploadError(
-        `recording-service could not be reached: ${error instanceof Error ? error.message : String(error)}`,
+        `${service} could not be reached: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
     return response;
@@ -83,38 +97,63 @@ export function createRecordingApi(options: RecordingApiOptions): RecordingApi {
   }
 
   return {
-    async requestUploadUrl(recordingId) {
-      const response = await post(`${encodeURIComponent(recordingId)}/upload-url`);
+    async requestUploadUrl(id) {
+      const response = await post(id, 'upload-url');
       if (response.status === 404)
-        throw new UnknownRecordingError('recording-service has no such recording.');
+        throw new UnknownSpoolFileError(`${service} has no such ${noun}.`);
       if (response.status === 409)
-        throw new AlreadyUploadedError('recording-service already has this recording.');
+        throw new AlreadyUploadedError(`${service} already has this ${noun}.`);
       if (!response.ok) {
         throw new TransientUploadError(`upload-url answered ${String(response.status)}.`);
       }
       return (await response.json()) as UploadTarget;
     },
 
-    async complete(recordingId, input) {
-      const response = await post(`${encodeURIComponent(recordingId)}/complete`, input);
+    async complete(id, input) {
+      const response = await post(id, 'complete', input);
       if (response.status === 409) {
+        const reason = await code(response);
+        // voicemail-service answers a retried complete this way; recording-service's is a 200.
+        if (reason === 'already_uploaded') {
+          throw new AlreadyUploadedError(`${service} already has this ${noun}.`);
+        }
         throw new VerificationFailedError(
-          `recording-service rejected the upload (${(await code(response)) ?? 'conflict'}).`,
+          `${service} rejected the upload (${reason ?? 'conflict'}).`,
         );
       }
       if (response.status === 404)
-        throw new UnknownRecordingError('recording-service has no such recording.');
+        throw new UnknownSpoolFileError(`${service} has no such ${noun}.`);
       if (!response.ok) {
         throw new TransientUploadError(`complete answered ${String(response.status)}.`);
       }
       return (await response.json()) as { sizeBytes: number | null };
     },
 
-    async fail(recordingId, reason) {
-      const response = await post(`${encodeURIComponent(recordingId)}/fail`, { reason });
+    async fail(id, reason) {
+      const response = await post(id, 'fail', { reason });
       if (!response.ok && response.status !== 404) {
         throw new TransientUploadError(`fail answered ${String(response.status)}.`);
       }
     },
   };
+}
+
+/** recording-service: `<recording id>.wav` files. */
+export function createRecordingApi(options: UploadApiOptions): UploadApi {
+  return createUploadApi(
+    { service: 'recording-service', path: '/internal/v1/recordings', noun: 'recording' },
+    options,
+  );
+}
+
+/** voicemail-service: `vm-<message id>.wav` files (S5-16). */
+export function createVoicemailApi(options: UploadApiOptions): UploadApi {
+  return createUploadApi(
+    {
+      service: 'voicemail-service',
+      path: '/internal/v1/voicemail/messages',
+      noun: 'voicemail message',
+    },
+    options,
+  );
 }

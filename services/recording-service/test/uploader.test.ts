@@ -16,9 +16,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { Logger } from '@cuc/logger';
 import { databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 
-import { createRecordingApi } from '../src/uploader/client.js';
-import { createUploader, renderMetrics } from '../src/uploader/uploader.js';
+import { createRecordingApi, createVoicemailApi } from '../src/uploader/client.js';
+import { createUploader, parseSpoolFileName, renderMetrics } from '../src/uploader/uploader.js';
 import { buildWav } from '../src/uploader/wav.js';
+import { startFakeVoicemailService, type FakeVoicemailService } from './fake-voicemail-service.js';
 import {
   INTERNAL_TOKEN,
   resetSchema,
@@ -64,6 +65,7 @@ describe.skipIf(skipReason !== undefined)(
     let h: Harness;
     let r: RoutesHarness;
     let baseUrl: string;
+    let voicemail: FakeVoicemailService;
     let spool: string;
     /** The uploader's clock; tests move it to skip backoff. */
     let clock: number;
@@ -72,8 +74,10 @@ describe.skipIf(skipReason !== undefined)(
       h = await startHarness();
       r = await startRoutes(h);
       baseUrl = await r.app.listen({ port: 0, host: '127.0.0.1' });
+      voicemail = await startFakeVoicemailService(h.storage, INTERNAL_TOKEN);
     });
     afterAll(async () => {
+      await voicemail?.close();
       await r?.app.close();
       await h?.close();
     });
@@ -85,6 +89,9 @@ describe.skipIf(skipReason !== undefined)(
     afterEach(async () => {
       await resetSchema(h.db);
       await rm(spool, { recursive: true, force: true });
+      voicemail.messages.clear();
+      voicemail.calls.length = 0;
+      voicemail.down = null;
     });
 
     type FetchLike = typeof fetch;
@@ -94,11 +101,18 @@ describe.skipIf(skipReason !== undefined)(
     ) {
       return createUploader({
         spoolDir: spool,
-        api: createRecordingApi({
-          baseUrl,
-          internalServiceToken: INTERNAL_TOKEN,
-          ...(options.apiFetch === undefined ? {} : { fetchImpl: options.apiFetch }),
-        }),
+        apis: {
+          recording: createRecordingApi({
+            baseUrl,
+            internalServiceToken: INTERNAL_TOKEN,
+            ...(options.apiFetch === undefined ? {} : { fetchImpl: options.apiFetch }),
+          }),
+          voicemail: createVoicemailApi({
+            baseUrl: voicemail.url,
+            internalServiceToken: INTERNAL_TOKEN,
+            ...(options.apiFetch === undefined ? {} : { fetchImpl: options.apiFetch }),
+          }),
+        },
         logger: options.logger ?? capturingLogger().logger,
         now: () => clock,
         settleMs: 1_000,
@@ -434,6 +448,169 @@ describe.skipIf(skipReason !== undefined)(
       expect(result.uploaded).toBe(5);
       for (const file of files) expect(await status(file.id)).toBe('ready');
       expect(await spoolNames()).toEqual([]);
+    });
+
+    describe('voicemail messages in the same spool (S5-16)', () => {
+      const vmTenant = 'tenant-vm';
+
+      /** Creates a pending message and writes `vm-<id>.wav`, as voicemail.lua does. */
+      async function voicemailFile(audio: Buffer, ageMs = 5 * MINUTE) {
+        const message = voicemail.create(vmTenant);
+        const path = join(spool, `vm-${message.id}.wav`);
+        await writeFile(path, audio);
+        const touched = new Date(clock - ageMs);
+        await utimes(path, touched, touched);
+        return { message, path, audio };
+      }
+
+      it('names: only `<uuid>.wav` and `vm-<uuid>.wav`, exactly', () => {
+        const id = crypto.randomUUID();
+        expect(parseSpoolFileName(`${id}.wav`)).toEqual({ kind: 'recording', id });
+        expect(parseSpoolFileName(`vm-${id}.wav`)).toEqual({ kind: 'voicemail', id });
+        for (const other of [
+          `vm-${id}.wav.part`,
+          `vm-${id.toUpperCase()}.wav`,
+          `vm-${id}`,
+          `vmx-${id}.wav`,
+          `vm-vm-${id}.wav`,
+          `x-${id}.wav`,
+          'vm-not-a-uuid.wav',
+          `${id}.WAV`,
+        ]) {
+          expect(parseSpoolFileName(other)).toBeUndefined();
+        }
+      });
+
+      it('delivers a voicemail file to voicemail-service and a recording to recording-service, in one pass', async () => {
+        await fresh();
+        const recording = await spoolFile(wav(2));
+        const vm = await voicemailFile(wav(3));
+
+        const result = await build().scanOnce();
+        expect(result).toMatchObject({ uploaded: 2, failed: 0 });
+        expect(await spoolNames()).toEqual([]);
+
+        // The message: verified by the service against what storage holds, with its facts.
+        expect(vm.message).toMatchObject({
+          status: 'ready',
+          sizeBytes: vm.audio.length,
+          durationMs: 3000,
+          sha256: sha256(vm.audio),
+        });
+        const stored = await h.storage.forTenant(vmTenant).getObject(vm.message.objectKey);
+        expect(stored.equals(vm.audio)).toBe(true);
+        expect(voicemail.calls).toEqual([
+          `upload-url ${vm.message.id}`,
+          `complete ${vm.message.id}`,
+        ]);
+
+        // The recording went where it always did, and not to voicemail-service.
+        expect(await status(recording.id)).toBe('ready');
+      });
+
+      it('reports an empty voicemail file (the caller hung up) to voicemail-service and drops it', async () => {
+        await fresh();
+        // A closed 44-byte header and nothing else: what a hang-up before speaking leaves.
+        const vm = await voicemailFile(wav(0));
+
+        const result = await build().scanOnce();
+        expect(result.uploaded).toBe(0);
+        expect(await spoolNames()).toEqual([]);
+        expect(vm.message).toMatchObject({ status: 'failed', failureReason: 'empty_file' });
+        expect(voicemail.calls).toEqual([`fail ${vm.message.id}`]);
+      });
+
+      it('drops a duplicate voicemail file whose message is already ready, without uploading it', async () => {
+        await fresh();
+        const vm = await voicemailFile(wav());
+        vm.message.status = 'ready';
+
+        await build().scanOnce();
+        expect(await spoolNames()).toEqual([]);
+        expect(voicemail.calls).toEqual([`upload-url ${vm.message.id}`]);
+        expect(
+          await h.storage.forTenant(vmTenant).headObject(vm.message.objectKey),
+        ).toBeUndefined();
+      });
+
+      it('takes `already_uploaded` from complete as done (a retried complete), and deletes the file', async () => {
+        await fresh();
+        const vm = await voicemailFile(wav());
+        // Another attempt finished first: the message turns ready between the PUT and complete.
+        const racing: FetchLike = async (input, init) => {
+          const response = await fetch(input, init);
+          if (init?.method === 'PUT') vm.message.status = 'ready';
+          return response;
+        };
+
+        const result = await build({ storageFetch: racing }).scanOnce();
+        expect(result).toMatchObject({ uploaded: 0, failed: 0 });
+        expect(await spoolNames()).toEqual([]);
+      });
+
+      it('keeps a voicemail file while voicemail-service is down or refuses the upload, and delivers it after', async () => {
+        await fresh();
+        const vm = await voicemailFile(wav());
+        const recording = await spoolFile(wav());
+        const uploader = build();
+
+        voicemail.down = 503;
+        expect(await uploader.scanOnce()).toMatchObject({ uploaded: 1, failed: 1 });
+        // The outage holds back only the voicemail file.
+        expect(await status(recording.id)).toBe('ready');
+        expect(await spoolNames()).toEqual([`vm-${vm.message.id}.wav`]);
+        expect(vm.message.status).toBe('pending');
+
+        voicemail.down = null;
+        clock += 5_000;
+        expect(await uploader.scanOnce()).toMatchObject({ uploaded: 1, failed: 0 });
+        expect(await spoolNames()).toEqual([]);
+        expect(vm.message.status).toBe('ready');
+      });
+
+      it('keeps a voicemail file whose transfer was corrupted, and re-uploads it intact', async () => {
+        await fresh();
+        const vm = await voicemailFile(wav());
+        let lied = false;
+        const lyingApi: FetchLike = (input, init) => {
+          if (urlOf(input).endsWith('/complete') && !lied) {
+            lied = true;
+            const body = JSON.parse(typeof init?.body === 'string' ? init.body : '{}') as {
+              md5: string;
+            };
+            body.md5 = 'f'.repeat(32);
+            return fetch(input, { ...init, body: JSON.stringify(body) });
+          }
+          return fetch(input, init);
+        };
+        const uploader = build({ apiFetch: lyingApi });
+
+        expect(await uploader.scanOnce()).toMatchObject({ uploaded: 0, failed: 1 });
+        expect(await spoolNames()).toEqual([`vm-${vm.message.id}.wav`]);
+        expect(vm.message.status).toBe('pending');
+
+        clock += 5_000;
+        expect(await uploader.scanOnce()).toMatchObject({ uploaded: 1 });
+        expect(vm.message.status).toBe('ready');
+      });
+
+      it('holds a voicemail file voicemail-service does not know, and raises the same stuck alert', async () => {
+        await fresh();
+        const orphanId = crypto.randomUUID();
+        const orphan = join(spool, `vm-${orphanId}.wav`);
+        await writeFile(orphan, wav());
+        const touched = new Date(clock - 61 * MINUTE);
+        await utimes(orphan, touched, touched);
+        const { logger, lines } = capturingLogger();
+        const uploader = build({ logger });
+
+        expect(await uploader.scanOnce()).toMatchObject({ uploaded: 0, failed: 1 });
+        expect(await spoolNames()).toEqual([`vm-${orphanId}.wav`]);
+        expect(uploader.metrics()).toMatchObject({ spoolFiles: 1, stuckFiles: 1 });
+        const alert = lines.find((l) => l.fields['alert'] === 'recording_upload_stuck');
+        expect(alert?.fields['voicemailMessageId']).toBe(orphanId);
+        expect(JSON.stringify(alert?.fields)).not.toContain(vmTenant);
+      });
     });
   },
 );
