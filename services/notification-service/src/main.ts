@@ -9,7 +9,6 @@ import { createIdentityConsumer } from './consumers/identity.consumer.js';
 import { createVoicemailConsumer } from './consumers/voicemail.consumer.js';
 import { createIdentityClient } from './identity-client.js';
 import { createMailer } from './mailer.js';
-import { createIdentityClient } from './identity-client.js';
 import { createOrgClient } from './org-client.js';
 import type { NotificationServiceDb } from './schema.js';
 import { createVoicemailClient } from './voicemail-client.js';

@@ -8,7 +8,6 @@ import { brandOf, NEUTRAL_BRAND, type MailBrand } from '../domain/brand.js';
 import { notificationEvents } from '../events.js';
 import type { IdentityClient, IssuedLink } from '../identity-client.js';
 import type { Mailer } from '../mailer.js';
-import type { IdentityClient } from '../identity-client.js';
 import type { OrgClient } from '../org-client.js';
 import { renderEmail, validFor, type TemplateName } from '../render.js';
 import type { NotificationServiceDb } from '../schema.js';

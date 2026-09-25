@@ -89,7 +89,6 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
   const linkExpiry = new Map<string, string>();
   const refusals = new Map<string, { status: number; code?: string }>();
   const linkCalls: { path: string; authorization: string | undefined }[] = [];
-  let identityDown = false;
   /** Everything the consumer logged, to check no token ever reaches a log line. */
   const logLines: string[] = [];
 
@@ -112,7 +111,7 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
       bus,
       captureLogger(),
       createOrgClient({ baseUrl: orgUrl, internalServiceToken: INTERNAL_TOKEN }),
-      // The same fake server plays identity-service's internal admins route.
+      // The same fake server plays identity-service's internal routes.
       createIdentityClient({ baseUrl: orgUrl, internalServiceToken: INTERNAL_TOKEN }),
       createMailer({ host: SMTP_HOST, port: smtpPort, secure: false, fromAddress: NOREPLY }),
       {
@@ -140,8 +139,48 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
     bus = await connectBus({ servers: [nats.server], logger, name: 'notification-test' });
     await bus.ensureStreams();
 
-    // One fake for both org-service (the brand) and identity-service (the link).
+    // One fake for org-service (the brand) and identity-service (the link, G-55,
+    // and the org's admins, G-100).
     org = createServer((request, response) => {
+      const link =
+        /^\/internal\/v1\/orgs\/([^/]+)\/(password-resets|invitations)\/([^/]+)\/link$/.exec(
+          request.url ?? '',
+        );
+      if (link !== null) {
+        linkCalls.push({ path: request.url ?? '', authorization: request.headers.authorization });
+        if (identityDown) {
+          response.writeHead(503).end();
+          return;
+        }
+        if (
+          request.method !== 'POST' ||
+          request.headers.authorization !== `Bearer ${INTERNAL_TOKEN}`
+        ) {
+          response.writeHead(401).end();
+          return;
+        }
+        const id = decodeURIComponent(link[3]!);
+        const refusal = refusals.get(id);
+        if (refusal !== undefined) {
+          response
+            .writeHead(refusal.status, { 'content-type': 'application/problem+json' })
+            .end(JSON.stringify(refusal.code === undefined ? {} : { code: refusal.code }));
+          return;
+        }
+        const base = tokens.get(id);
+        if (base === undefined) {
+          response.writeHead(404).end();
+          return;
+        }
+        const count = linkCalls.filter((call) => call.path === request.url).length;
+        response.writeHead(200, { 'content-type': 'application/json' }).end(
+          JSON.stringify({
+            token: count === 1 ? base : `${base}-${String(count)}`,
+            expiresAt: linkExpiry.get(id) ?? new Date(Date.now() + 60 * 60_000).toISOString(),
+          }),
+        );
+        return;
+      }
       const adminsOf = /^\/internal\/v1\/orgs\/([^/]+)\/admins$/.exec(request.url ?? '');
       if (adminsOf !== null) {
         if (identityDown) {
@@ -194,6 +233,11 @@ describe.skipIf(skipReason !== undefined)('identity email consumer', () => {
     orgDown = false;
     admins.clear();
     identityDown = false;
+    tokens.clear();
+    linkExpiry.clear();
+    refusals.clear();
+    linkCalls.length = 0;
+    logLines.length = 0;
     await clearMailbox();
   });
 
