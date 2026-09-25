@@ -1,6 +1,6 @@
 # Implementation status
 
-Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `251ef45`, 2026-09-24.
+Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `251ef45`, 2026-09-24; Stage 5 rows updated for call recording (G-111) on 2026-09-25.
 
 **Done** = the task's scope exists and has tests; known caveats are named. **Partial** = some of the scope exists. **Not started** = no code.
 
@@ -13,16 +13,16 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S2 Core telephony (20) | 17 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (11) | 0 | 4 | 7 |
-| S5 Recording, voicemail features, monitoring (10) | 0 | 0 | 10 |
+| S5 Recording, voicemail features, monitoring (10) | 6 | 1 | 3 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | Release readiness (7) | 1 | 1 | 5 |
-| **Total (101)** | **52** | **12** | **37** |
+| **Total (101)** | **58** | **13** | **30** |
 
 Milestones: M1 (S1) reached except API-key auth. M2 (S2 + S3) reached in code, with the caveats below. M3, M4 not started.
 
-Services with an empty `src` (verified, no files): `analytics-service`, `chat-service`, `fax-service`, `provisioning-service`, `recording-service`, `sms-service`. `example-service` is the S0-08 sample.
+Services with an empty `src` (verified, no files): `analytics-service`, `chat-service`, `fax-service`, `provisioning-service`, `sms-service`. `example-service` is the S0-08 sample.
 
 ## Stage 0
 
@@ -119,16 +119,16 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 
 | ID | Status | Evidence |
 |---|---|---|
-| S5-01 | Not started | `services/recording-service` has no source |
-| S5-02 | Not started | no recording decision or consent in dialplan |
-| S5-03 | Not started | no uploader sidecar |
-| S5-04 | Not started | no recording search or playback |
-| S5-05 | Not started | no retention handling |
+| S5-01 | Done | `services/recording-service`: policies by tenant, extension, queue and DID and by direction (`domain/policy.ts`, narrowest scope wins, ties go to not recording), `/internal/v1/recordings/evaluate` and `/register`. No agent scope (G-111) |
+| S5-02 | Done | telephony-config `recording-client.ts` (cached, fails open and flags the call) and `recordingActions` in `xml.ts`: announcement as early media, then `record_session` armed with `execute_on_answer`, into the spool. Covers extension, outbound, and DID to extension, ring group or queue; not calls through an IVR flow (G-111) |
+| S5-03 | Done | `recording-service/src/uploader` (settle, presigned PUT, server-side size and MD5 check, delete, backoff, stuck-file alert and metrics); one sidecar per node in compose on a shared tmpfs spool; verified live by `tests/sip/test/recording.test.ts` (G-111) |
+| S5-04 | Done | search with filters and cursor paging, play and download URLs, delete; per-request grants scoped to extension, queue or DID (`authorize.ts`, identity `/access`); every URL issuance and delete audited |
+| S5-05 | Done | tenant retention days (`recording_settings`), `retention.ts` sweep (audio deleted, row marked expired, stale pending marked failed) and an S3 lifecycle rule as a backstop |
 | S5-06 | Not started | no transcription adapter (O-3 open) |
 | S5-07 | Done | voicemail-to-email: `voicemail.consumer.ts`, `voicemail.mjml`, mailbox email settings in voicemail-service (G-107). Not tried with a real call or SMTP server |
 | S5-08 | Not started | api-gateway has no WebSocket hub |
 | S5-09 | Not started | call-control has no listen/whisper/barge |
-| S5-10 | Partial | Voicemail (`features/voicemail`) and Call records (`features/cdr`) screens exist; `/monitoring`, `/recordings`, `/reports` are still placeholders |
+| S5-10 | Partial | Voicemail (`features/voicemail`), Call records (`features/cdr`) and Recordings (`features/recordings`: list, filters, play, download, delete, rules, retention) screens exist; `/monitoring` and `/reports` are still placeholders |
 
 ## Stage 6
 
