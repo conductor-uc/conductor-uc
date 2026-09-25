@@ -1,11 +1,12 @@
 import { redactConfig } from '@cuc/config';
 import { fileKekFromConfig } from '@cuc/crypto';
-import { createDatabase, migrateToLatest } from '@cuc/db';
+import { createDatabase, migrateToLatest, REWRAP_INTERVAL_MS } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createRemotePermissionResolver, createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
 import { configSchema, loadServiceConfig } from './config.js';
+import { createKekRewrapJob } from './kek-rewrap.js';
 import { createOrgClient } from './org-client.js';
 import { createEmergencyRouteRepo } from './repo/emergency-route.repo.js';
 import { createOutboundRouteRepo } from './repo/outbound-route.repo.js';
@@ -111,6 +112,13 @@ registerInternalRoutes(
   config.INTERNAL_SERVICE_TOKEN,
 );
 
+// G-116: values still under an older KEK version are moved to the current one
+// in the background, and `/readyz` says how many remain, so an old version
+// can be removed from CRYPTO_KEKS once every service reports 0.
+const kekRewrap = createKekRewrapJob(db, kek, logger);
+app.addReadinessCheck('kek_rewrap', kekRewrap.readinessCheck);
+kekRewrap.start(REWRAP_INTERVAL_MS);
+
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
 
@@ -128,6 +136,7 @@ async function shutdown(signal: string): Promise<void> {
   ]);
   await relayLoop;
   await bus.close();
+  await kekRewrap.stop();
   await db.destroy();
   logger.info('shutdown complete');
   process.exit(0);
