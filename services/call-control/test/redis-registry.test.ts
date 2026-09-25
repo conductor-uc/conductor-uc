@@ -173,20 +173,28 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
       const callUuid = await create(null);
       expect(await h.registry.callsForTenant(tenantId)).toEqual([]);
 
-      await h.registry.attachTenant(callUuid, tenantId);
-      await h.registry.attachTenant(callUuid, crypto.randomUUID());
+      expect(await h.registry.tenantOf(callUuid)).toBeNull();
+      // The first attach returns the call as it stands; a later one returns nothing.
+      expect(await h.registry.attachTenant(callUuid, tenantId)).toMatchObject({
+        callUuid,
+        tenantId,
+        state: 'ringing',
+      });
+      expect(await h.registry.attachTenant(callUuid, crypto.randomUUID())).toBeUndefined();
 
       expect((await h.registry.callsForTenant(tenantId)).map((c) => c.callUuid)).toEqual([
         callUuid,
       ]);
       expect(await h.registry.getCall(callUuid)).toMatchObject({ tenant: tenantId });
+      expect(await h.registry.tenantOf(callUuid)).toBe(tenantId);
     });
 
     it('does not recreate a call that has already ended when a late update or attach arrives', async () => {
       const callUuid = crypto.randomUUID();
       await h.registry.updateCall(callUuid, { recording: 'off' });
-      await h.registry.attachTenant(callUuid, crypto.randomUUID());
+      expect(await h.registry.attachTenant(callUuid, crypto.randomUUID())).toBeUndefined();
       expect(await h.registry.getCall(callUuid)).toBeUndefined();
+      expect(await h.registry.tenantOf(callUuid)).toBeNull();
     });
   });
 });

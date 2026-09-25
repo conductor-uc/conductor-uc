@@ -278,6 +278,113 @@ describe.skipIf(skipReason !== undefined)(
         .where('type', '=', 'call.channel.answered')
         .executeTakeFirst();
       expect(answered?.tenant_id).toBe(tenantId);
+
+      // The call is announced once, as it stood, before the event that named its tenant.
+      const rows = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['type', 'tenant_id', 'payload'])
+        .orderBy('created_at')
+        .orderBy('id')
+        .execute();
+      expect(rows.map((r) => r.type)).toEqual([
+        'call.channel.created',
+        'call.channel.identified',
+        'call.channel.answered',
+      ]);
+      expect(rows[1]?.tenant_id).toBe(tenantId);
+      expect(parsePayload(rows[1]?.payload)).toMatchObject({
+        callUuid,
+        nodeId: 'fs-1',
+        tenantId,
+        direction: 'inbound',
+        from: '+15550001111',
+        to: '+15551234567',
+        state: 'ringing',
+        answeredAt: null,
+        bridgedTo: null,
+        recording: 'off',
+      });
+
+      // A later event naming the same tenant announces nothing new.
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_HOLD',
+        'Unique-ID': callUuid,
+        variable_cuc_tenant_id: tenantId,
+      });
+      const identified = await h.db.kysely
+        .selectFrom('outbox')
+        .select('id')
+        .where('type', '=', 'call.channel.identified')
+        .execute();
+      expect(identified).toHaveLength(1);
+    });
+
+    it('a leg created with no tenant of its own takes the tenant of the leg bridged to it, through to its hangup (S5-08)', async () => {
+      const handler = createChannelHandler({
+        db: h.db.kysely,
+        registry: h.registry,
+        logger: h.logger,
+        callSafetyTtlMs: 6 * 60 * 60 * 1000,
+        heartbeatTtlMs: 10_000,
+      });
+      const aLeg = crypto.randomUUID();
+      const bLeg = crypto.randomUUID();
+      const tenantId = crypto.randomUUID();
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_CREATE',
+        'Unique-ID': aLeg,
+        'Call-Direction': 'inbound',
+        'Caller-Caller-ID-Number': '+15550001111',
+        'Caller-Destination-Number': '+15551234567',
+        variable_cuc_tenant_id: tenantId,
+      });
+      // FreeSWITCH's leg to the agent's phone: nothing on it names the tenant.
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_CREATE',
+        'Unique-ID': bLeg,
+        'Call-Direction': 'outbound',
+        'Caller-Caller-ID-Number': '+15550001111',
+        'Caller-Destination-Number': '401',
+      });
+      await handler.handleEvent('fs-1', { 'Event-Name': 'CHANNEL_ANSWER', 'Unique-ID': bLeg });
+      expect(await h.registry.callsForTenant(tenantId)).toHaveLength(1);
+
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_BRIDGE',
+        'Unique-ID': aLeg,
+        'Other-Leg-Unique-ID': bLeg,
+        variable_cuc_tenant_id: tenantId,
+      });
+      expect((await h.registry.callsForTenant(tenantId)).map((c) => c.callUuid).sort()).toEqual(
+        [aLeg, bLeg].sort(),
+      );
+
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_HANGUP_COMPLETE',
+        'Unique-ID': bLeg,
+        'Hangup-Cause': 'NORMAL_CLEARING',
+      });
+      expect((await h.registry.callsForTenant(tenantId)).map((c) => c.callUuid)).toEqual([aLeg]);
+
+      const rows = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['type', 'tenant_id', 'payload'])
+        .orderBy('created_at')
+        .orderBy('id')
+        .execute();
+      const forB = rows.filter((r) => parsePayload(r.payload)['callUuid'] === bLeg);
+      expect(forB.map((r) => [r.type, r.tenant_id])).toEqual([
+        ['call.channel.created', null],
+        ['call.channel.answered', null],
+        ['call.channel.identified', tenantId],
+        ['call.channel.hungup', tenantId],
+      ]);
+      expect(parsePayload(forB[2]?.payload)).toMatchObject({ state: 'answered', to: '401' });
+      // The leg is announced before the bridge that names it.
+      const types = rows.map((r) => r.type);
+      expect(types.indexOf('call.channel.identified')).toBeLessThan(
+        types.indexOf('call.channel.bridged'),
+      );
     });
 
     it('CHANNEL_UNHOLD, RECORD_START and RECORD_STOP update the registry and enqueue their events with the tenant (S5-08)', async () => {

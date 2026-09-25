@@ -28,8 +28,14 @@ export interface CallRegistry {
    * trunk: see `normalize.ts`'s `tenantIdOf`). Only fills an empty tenant, so a
    * call never moves between tenants. Does nothing for a call not in the
    * registry.
+   *
+   * Returns the call as it stands when this attached the tenant, so the caller
+   * can announce it (`call.channel.identified`); undefined when the call
+   * already had a tenant or is gone.
    */
-  attachTenant(callUuid: string, tenantId: string): Promise<void>;
+  attachTenant(callUuid: string, tenantId: string): Promise<LiveCall | undefined>;
+  /** The call's tenant as the registry has it; null when unknown or the call is gone. */
+  tenantOf(callUuid: string): Promise<string | null>;
   /**
    * The tenant's live calls (S5-08: api-gateway's live-calls snapshot, through
    * `GET /internal/v1/tenants/:tenantId/calls`). Index entries whose call hash
@@ -62,10 +68,11 @@ export interface CallRecord {
 const UPDATE_IF_EXISTS = `if redis.call('EXISTS', KEYS[1]) == 1 then return redis.call('HSET', KEYS[1], unpack(ARGV)) end return 0`;
 
 /**
- * Sets the tenant of a call that has none yet (`''`), and indexes it. A missing
- * hash (HGET gives false) or one that already has a tenant is left alone.
+ * Sets the tenant of a call that has none yet (`''`), indexes it, and returns
+ * the whole hash (as a flat field/value list). A missing hash (HGET gives
+ * false) or one that already has a tenant is left alone, and gives an empty list.
  */
-const ATTACH_TENANT = `if redis.call('HGET', KEYS[1], 'tenant') == '' then redis.call('HSET', KEYS[1], 'tenant', ARGV[1]) redis.call('SADD', KEYS[2], ARGV[2]) return 1 end return 0`;
+const ATTACH_TENANT = `if redis.call('HGET', KEYS[1], 'tenant') == '' then redis.call('HSET', KEYS[1], 'tenant', ARGV[1]) redis.call('SADD', KEYS[2], ARGV[2]) return redis.call('HGETALL', KEYS[1]) end return {}`;
 
 /** One live call as the registry holds it, for readers outside this service. */
 export interface LiveCall {
@@ -176,14 +183,23 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
     },
 
     async attachTenant(callUuid, tenantId) {
-      await redis.eval(
+      const flat = (await redis.eval(
         ATTACH_TENANT,
         2,
         k(`call:${callUuid}`),
         k(`tenant:${tenantId}:calls`),
         tenantId,
         callUuid,
-      );
+      )) as string[];
+      if (flat.length === 0) return undefined;
+      const hash: Record<string, string> = {};
+      for (let i = 0; i + 1 < flat.length; i += 2) hash[flat[i] ?? ''] = flat[i + 1] ?? '';
+      return toLiveCall(callUuid, tenantId, hash);
+    },
+
+    async tenantOf(callUuid) {
+      const tenant = await redis.hget(k(`call:${callUuid}`), 'tenant');
+      return tenant === null || tenant === '' ? null : tenant;
     },
 
     async callsForTenant(tenantId) {

@@ -43,6 +43,32 @@ export const callEvents = defineEvents({
       to: Type.String(),
     }),
   },
+  /**
+   * S5-08: the first moment a channel's tenant is known, when its
+   * `call.channel.created` could not say (a call from a trunk, whose tenant
+   * the dialplan names later; a leg created for a bridge that carries no
+   * tenant of its own). Carries the call as it stands, so a live view that
+   * routes by tenant sees it start before it sees it change. Sent once per
+   * channel, always before the event that revealed the tenant.
+   */
+  'call.channel.identified': {
+    schemaVersion: 1,
+    description: "A channel's tenant became known after it was created.",
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+      tenantId: Type.String({ minLength: 1 }),
+      direction: Type.Union([Type.Literal('inbound'), Type.Literal('outbound')]),
+      from: Type.String(),
+      to: Type.String(),
+      state: Type.Union([Type.Literal('ringing'), Type.Literal('answered'), Type.Literal('held')]),
+      /** RFC 3339. */
+      startedAt: Type.String(),
+      answeredAt: Type.Union([Type.String(), Type.Null()]),
+      bridgedTo: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      recording: Type.Union([Type.Literal('on'), Type.Literal('off')]),
+    }),
+  },
   'call.channel.answered': {
     schemaVersion: 1,
     description: 'A channel was answered (ESL CHANNEL_ANSWER).',
