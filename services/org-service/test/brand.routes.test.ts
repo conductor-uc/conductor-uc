@@ -62,7 +62,7 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
       forcePathStyle: s3Handle.forcePathStyle,
       logger,
     });
-    await storage.forPlatform().provisionBucket();
+    // No provisioning here: the upload route creates the platform bucket itself (G-37).
 
     app = await createServer({
       serviceName: 'org-service',
@@ -181,6 +181,59 @@ describe.skipIf(skipReason !== undefined)('brand-service HTTP routes', () => {
   });
 
   describe('brand assets', () => {
+    it('works on a fresh installation, where the platform bucket does not exist yet (G-37)', async () => {
+      const logger = silentLogger();
+      const fresh = createStorage({
+        mode: 'bucket-per-tenant',
+        bucketPrefix: `cuc-test-${randomUUID().slice(0, 8)}`,
+        endpoint: s3Handle.endpoint,
+        region: s3Handle.region,
+        accessKeyId: s3Handle.accessKeyId,
+        secretAccessKey: s3Handle.secretAccessKey,
+        forcePathStyle: s3Handle.forcePathStyle,
+        logger,
+      });
+      // Proof the bucket is missing: a presigned upload straight into it is refused.
+      const before = await fetch(await fresh.forPlatform().presignPut('probe'), {
+        method: 'PUT',
+        body: 'x',
+      });
+      expect(before.status).toBe(404);
+
+      const freshApp = await createServer({
+        serviceName: 'org-service',
+        logger,
+        context: {
+          trustInternalHeaders: true,
+          internalHeaderSigningSecret: TEST_INTERNAL_SECRET,
+          internalServiceToken: TEST_SERVICE_TOKEN,
+        },
+      });
+      registerBrandRoutes(freshApp, brandsRepo, fresh, PLATFORM_CONSOLE_HOSTNAME, orgs);
+      await freshApp.ready();
+      try {
+        const reseller = await makeReseller();
+        const response = await freshApp.inject({
+          method: 'POST',
+          url: `/v1/resellers/${reseller.id}/brand/assets`,
+          headers: asService,
+          payload: { kind: 'logoLight', contentType: 'image/svg+xml' },
+        });
+        expect(response.statusCode).toBe(201);
+        const body: { uploadUrl: string; key: string } = response.json();
+
+        const upload = await fetch(body.uploadUrl, {
+          method: 'PUT',
+          headers: { 'content-type': 'image/svg+xml' },
+          body: '<svg>acme</svg>',
+        });
+        expect(upload.ok).toBe(true);
+        expect(await fresh.forPlatform().headObject(body.key)).toMatchObject({ sizeBytes: 15 });
+      } finally {
+        await freshApp.close();
+      }
+    });
+
     it('issues a real presigned upload URL that actually accepts an upload', async () => {
       const reseller = await makeReseller();
 
