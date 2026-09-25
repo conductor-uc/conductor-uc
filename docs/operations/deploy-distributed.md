@@ -60,7 +60,7 @@ Each application service is published on app-1's private address with its own po
 
 - Every server needs a private address on one network, or on several routed networks.
 - **Traffic on it is not encrypted**: MariaDB, Redis, NATS, the services' HTTP, FreeSWITCH's configuration requests (which carry `FS_XML_CURL_TOKEN`) and the event socket (which carries its password). Use a private network you trust: a cloud VPC, a dedicated VLAN, or WireGuard between the servers if they are in different places.
-- The private network is also the **security boundary for tenant data** ([network §6.1](network-and-firewall.md#61-backend-services-trust-the-network)). Keep other workloads off it, or filter every port as in §5.
+- The private network is also the **security boundary for tenant data** ([network §6.1](network-and-firewall.md#61-keep-backend-service-ports-private)). Keep other workloads off it, or filter every port as in §5.
 - app-1 and data-1 need outbound internet access through NAT: app-1 for Let's Encrypt, SMTP and hosted S3; data-1 only for NTP and pulling images.
 - Media servers talk to the edge over their **public** addresses for SIP (FreeSWITCH binds SIP only to the public address). Everything else between servers uses private addresses.
 
@@ -366,7 +366,7 @@ backend pbx_config
     server app2 10.10.0.32:8103 check
 ```
 
-That load balancer is itself a single point of failure unless you make it redundant (keepalived and a floating address). The platform does not provide one. Scale the gateway the same way on the edge, behind a layer-4 balancer that passes TLS through. Remember that a layer-4 balancer cannot set `X-Forwarded-For` ([network §6.3](network-and-firewall.md#63-the-gateway-believes-x-forwarded-headers)).
+That load balancer is itself a single point of failure unless you make it redundant (keepalived and a floating address). The platform does not provide one. Scale the gateway the same way on the edge, behind a layer-4 balancer that passes TLS through. A layer-4 balancer cannot set `X-Forwarded-For`, so the gateway sees the balancer's address for every client ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)). A balancer that terminates TLS and sets the header must be listed in `TRUSTED_PROXIES`.
 
 Database connections grow with copies: each copy of each service opens up to `DB_POOL_SIZE` (10) connections. Raise MariaDB's `max_connections` accordingly.
 

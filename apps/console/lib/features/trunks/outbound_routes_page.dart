@@ -22,8 +22,8 @@ class OutboundRoutesPage extends ConsumerWidget {
         child: Text('Choose a tenant to configure its outbound routes.'),
       );
     }
-    final routes = ref.watch(canProvider('trunk.manage'));
-    final emergency = ref.watch(canProvider('emergency_route.manage'));
+    final routes = ref.watch(canProvider('trunk.read'));
+    final emergency = ref.watch(canProvider('emergency_route.read'));
     final tabs = [
       if (routes) ('Outbound routes', ResourceView(def: outboundRoutesDef)),
       if (emergency) ('Emergency route', const EmergencyRoutePanel()),

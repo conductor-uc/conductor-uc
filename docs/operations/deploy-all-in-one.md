@@ -698,7 +698,7 @@ services:
 
 - `HTTP_PORT` must be 443 inside the container, because the HTTP-to-HTTPS redirect is built from it. `net.ipv4.ip_unprivileged_port_start=0` lets the non-root process bind 80 and 443 inside its own network namespace only.
 - Put the bootstrap certificate ([DNS/TLS §4](dns-tls-and-certificates.md#4-the-bootstrap-certificate-first-installation)) in `/opt/voice/bootstrap-tls/fullchain.pem` and `privkey.pem`, readable by uid 65532 (`chmod 644 fullchain.pem; chmod 640 privkey.pem; chgrp 65532 privkey.pem`).
-- It faces the internet directly, so `X-Forwarded-For` from clients is believed ([network §6.3](network-and-firewall.md#63-the-gateway-believes-x-forwarded-headers)).
+- It faces the internet directly, so leave `TRUSTED_PROXIES` unset: the client address is the connection's own, and `X-Forwarded-For` from clients is ignored ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)).
 
 ### 7.6 Self-hosted MinIO instead of hosted S3
 
@@ -735,13 +735,34 @@ Services create their tables on first start. If a service keeps restarting, read
 
 ## 9. Bootstrap the platform
 
-### 9.1 Create the master organisation
+### 9.1 Create the master organisation and its first administrator
+
+One command creates the single master organisation and its first administrator, a person with the `master_admin` role:
 
 ```sh
-docker compose run --rm org-service dist/src/cli/bootstrap-master.js --slug master --name Master
+docker compose run --rm org-service dist/src/cli/bootstrap-master.js \
+  --slug master --name Master \
+  --admin-email you@example.net --admin-name 'Platform administrator'
 ```
 
-The command runs migrations and creates the single master organisation. It logs a JSON line containing `"orgId":"…"`; note that id. Run again, it reports that the master already exists and changes nothing. To look the id up later:
+It asks for the administrator's password twice without showing it (at least 12 characters). The password is never a command-line argument. To run it unattended, put the password in `BOOTSTRAP_ADMIN_PASSWORD` and pass that through, or pipe it in as one line with `-T`:
+
+```sh
+read -rs BOOTSTRAP_ADMIN_PASSWORD && export BOOTSTRAP_ADMIN_PASSWORD
+docker compose run --rm -e BOOTSTRAP_ADMIN_PASSWORD org-service dist/src/cli/bootstrap-master.js \
+  --slug master --name Master --admin-email you@example.net --admin-name 'Platform administrator'
+unset BOOTSTRAP_ADMIN_PASSWORD
+
+# or
+printf '%s\n' "$PASSWORD" | docker compose run --rm -T org-service dist/src/cli/bootstrap-master.js \
+  --slug master --name Master --admin-email you@example.net --admin-name 'Platform administrator'
+```
+
+The command runs org-service's migrations, creates the master organisation, then creates the administrator through identity-service's internal API on the private network (so identity-service must be running: `docker compose ps` shows it `healthy`). It logs JSON lines with the `"orgId"` of the master and the `"userId"` of the administrator, never the password.
+
+It is safe to run again. An existing master is kept, and the administrator is created only while the master has no users at all: once anyone exists, it creates nobody and exits 0, whatever email you give. If the organisation was created but the administrator was not (identity-service not reachable, for example), it exits 1 with the reason; run the same command again and it creates only the administrator.
+
+To look up the master's id later:
 
 ```sh
 docker compose exec mariadb mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" \
@@ -750,22 +771,9 @@ docker compose exec mariadb mariadb -uroot -p"$MARIADB_ROOT_PASSWORD" \
 
 (`$MARIADB_ROOT_PASSWORD` is in `.env`; `set -a; . ./.env; set +a` loads it into your shell.)
 
-`infra/compose/seed.sh` and `make seed` do **not** work for this: they do not set `CRYPTO_KEKS`, which org-service now requires (G-115).
+### 9.2 More master administrators
 
-### 9.2 Create the first master administrator
-
-The bootstrap does not create a person. identity-service creates one through an internal route that the gateway does not expose. Call it from a throwaway container on the private network:
-
-```sh
-set -a; . ./.env; set +a
-docker run --rm --network voice_backplane curlimages/curl -sS \
-  -X POST "http://identity-service:8080/internal/v1/orgs/<orgId>/admin-user" \
-  -H "Authorization: Bearer ${INTERNAL_SERVICE_TOKEN}" \
-  -H 'Content-Type: application/json' \
-  -d '{"orgType":"master","email":"you@example.net","displayName":"Platform administrator","password":"<at least 12 characters>"}'
-```
-
-A `201` response means the person exists with the `master_admin` role.
+Invite further master administrators from the console (**Users**). If the only one has lost their two-step device, see [operations §2](operations.md#2-first-administrator-resellers-and-tenants).
 
 ### 9.3 Sign in and finish setup in the console
 

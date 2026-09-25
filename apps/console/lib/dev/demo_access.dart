@@ -98,6 +98,53 @@ const _masterAdmin = [
   ..._tenantAdmin,
 ];
 
+/// Configuration reads (G-10) a tenant's own configuration screens need.
+const _tenantReads = [
+  'user.read',
+  'role.read',
+  'grant.read',
+  'extension.read',
+  'did.read',
+  'emergency_location.read',
+  'emergency_route.read',
+  'group.read',
+  'queue.read',
+  'parking_lot.read',
+  'conference_room.read',
+  'schedule.read',
+  'media.read',
+  'trunk.read',
+  'callflow.read',
+  'recording.policy.read',
+];
+
+/// Read-only support roles (`master_support`, `reseller_support`), and a
+/// tenant person who can read the configuration and change none of it.
+List<String> _support(String orgType) => switch (orgType) {
+  'master' => const [
+    'org.view',
+    'cdr.read',
+    'analytics.view',
+    'audit.read',
+    'monitor.presence',
+    'billing.read',
+    'reseller.read',
+    'tenant.read',
+    'domain.read',
+    'brand.read',
+    ..._tenantReads,
+  ],
+  'reseller' => const [
+    'org.view',
+    'audit.read',
+    'tenant.read',
+    'domain.read',
+    'brand.read',
+    ..._tenantReads,
+  ],
+  _ => const ['org.view', 'monitor.presence', ..._tenantReads],
+};
+
 /// The permissions the demo gives a user, or null to make the lookup fail
 /// (the console then falls back to the org type's sections).
 ///
@@ -109,6 +156,9 @@ const _masterAdmin = [
 /// - `listener@...` is a tenant who can play recordings but not download or delete
 ///   them, or change what is recorded.
 /// - `noperm@...` is a tenant whose permission lookup fails.
+/// - `support@...`, `reseller-support@...` and `master-support@...` hold the
+///   configuration reads and no writes: the support role of their org type,
+///   or, in a tenant, someone who only looks (G-10).
 /// - `user@...` is an ordinary person of a tenant (the `tenant_user` role):
 ///   only their own phone. They own extension 101.
 /// - `nophone@...` is the same, but nobody has linked an extension to them.
@@ -128,6 +178,7 @@ List<String>? demoPermissions(String orgType, String email) {
   }
   if (email.startsWith('routes')) return const ['org.view', 'trunk.manage'];
   if (email.startsWith('editor')) return const ['org.view', 'callflow.edit'];
+  if (email.split('@').first.endsWith('support')) return _support(orgType);
   return switch (orgType) {
     'master' => [
       ...{..._masterAdmin},

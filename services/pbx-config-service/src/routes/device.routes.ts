@@ -1,7 +1,7 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { DbContext } from '@cuc/db';
 import type { Bus } from '@cuc/events';
-import { ProblemError, Type, type Server } from '@cuc/http';
+import { clientIpOf, ProblemError, Type, type Server } from '@cuc/http';
 
 import { InvalidMacError } from '../domain/provisioning.js';
 import {
@@ -130,7 +130,7 @@ export function registerDeviceRoutes(
   app.get(
     '/v1/tenants/:tenantId/devices',
     {
-      config: { permission: 'extension.manage', dataClass: 'config' },
+      config: { permission: 'extension.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(DeviceSchema) }) },
@@ -142,7 +142,7 @@ export function registerDeviceRoutes(
   app.get(
     '/v1/tenants/:tenantId/devices/:id',
     {
-      config: { permission: 'extension.manage', dataClass: 'config' },
+      config: { permission: 'extension.read', dataClass: 'config' },
       schema: { params: DeviceParamsSchema, response: { 200: DeviceSchema } },
     },
     async (request) => {
@@ -242,7 +242,7 @@ export function registerDeviceRoutes(
         resource: request.params.id,
         dataClass: 'secret',
         ...(request.body.reason === undefined ? {} : { reason: request.body.reason }),
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         requestId: request.context.requestId,
       });
 

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
-  dockerCurlJson,
+  tenantAdminCurlJson,
   seedFixtures,
   sipInfraOrSkipReason,
   startBackgroundUas,
@@ -46,7 +46,8 @@ describe.skipIf(skipReason !== undefined)('S2-02 trunk registration', () => {
     );
     await registrar.ready();
 
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${seed.tenantA.id}/trunks`,
       {
@@ -64,10 +65,11 @@ describe.skipIf(skipReason !== undefined)('S2-02 trunk registration', () => {
     const trunkId = (created.json as { id: string }).id;
 
     try {
-      const status = await pollUntilRegistered(seed.tenantA.id, trunkId, 45_000);
+      const status = await pollUntilRegistered(seed.resellerId, seed.tenantA.id, trunkId, 45_000);
       expect(status).toBe('registered');
     } finally {
-      await dockerCurlJson(
+      await tenantAdminCurlJson(
+        seed.resellerId,
         'DELETE',
         `${TRUNK_SERVICE_URL}/v1/tenants/${seed.tenantA.id}/trunks/${trunkId}`,
       );
@@ -76,13 +78,15 @@ describe.skipIf(skipReason !== undefined)('S2-02 trunk registration', () => {
 });
 
 async function pollUntilRegistered(
+  resellerId: string,
   tenantId: string,
   trunkId: string,
   timeoutMs: number,
 ): Promise<string> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
-    const response = await dockerCurlJson(
+    const response = await tenantAdminCurlJson(
+      resellerId,
       'GET',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}/status`,
     );

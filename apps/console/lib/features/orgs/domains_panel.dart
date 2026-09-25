@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
@@ -65,6 +66,7 @@ class BaseDomainsPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final domains = ref.watch(baseDomainsProvider(resellerId));
     final theme = Theme.of(context);
+    final canChange = ref.watch(canProvider('domain.manage'));
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,11 +75,12 @@ class BaseDomainsPanel extends ConsumerWidget {
             title: 'Domains',
             subtitle: 'Base domains your tenants get their own names under. Prove you control one by publishing a DNS record, then verify it.',
             actions: [
-              FilledButton.icon(
-                onPressed: () => _add(context, ref),
-                icon: const Icon(Icons.add),
-                label: const Text('Add domain'),
-              ),
+              if (canChange)
+                FilledButton.icon(
+                  onPressed: () => _add(context, ref),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add domain'),
+                ),
             ],
           ),
           const SizedBox(height: 16),
@@ -120,11 +123,13 @@ class BaseDomainsPanel extends ConsumerWidget {
                                 '${d['verificationRecordName']}  →  ${d['verificationToken']}',
                                 style: const TextStyle(fontFamily: 'monospace'),
                               ),
-                              const SizedBox(height: 8),
-                              OutlinedButton(
-                                onPressed: () => _verify(context, ref, d),
-                                child: const Text('Verify now'),
-                              ),
+                              if (canChange) ...[
+                                const SizedBox(height: 8),
+                                OutlinedButton(
+                                  onPressed: () => _verify(context, ref, d),
+                                  child: const Text('Verify now'),
+                                ),
+                              ],
                             ],
                           ],
                         ),

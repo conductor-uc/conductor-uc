@@ -1,3 +1,4 @@
+import type { ColumnType } from '@cuc/db';
 import type { EventTables } from '@cuc/events';
 
 export type UserStatus = 'active' | 'disabled';
@@ -97,6 +98,18 @@ export interface IdentityServiceDb extends EventTables {
      * it keeps verifying tokens already issued but signs no new ones.
      */
     retired_at: Date | null;
+    /**
+     * When the key started signing (G-116). Null on a live key means it is
+     * the *next* key: already published in the JWKS so verifiers fetch it
+     * before it signs anything, but not yet used. Required on insert, so a
+     * new key is always explicitly one or the other.
+     */
+    activated_at: ColumnType<Date | null, Date | null, Date | null>;
+    /**
+     * Set by `rotate-signing-key --revoke-previous` (G-116): the key leaves
+     * the JWKS at once rather than when its overlap window ends.
+     */
+    revoked_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
   };
 
   /**

@@ -2,7 +2,8 @@
  * Calls identity-service's internal admin-user-creation endpoint
  * (`POST /internal/v1/orgs/:orgId/admin-user`, S1-05) so that creating a
  * reseller or a tenant also creates its first admin user (06's org-service
- * "Depends on: identity-service").
+ * "Depends on: identity-service"), and so that `bootstrap-master` can create
+ * the master's first administrator (G-115).
  *
  * Gated by the same shared bearer token identity-service's own internal
  * routes expect (07 §1's precedent for FS nodes and OpenSIPs) — real
@@ -15,12 +16,17 @@
 
 export interface AdminUserInput {
   readonly orgId: string;
-  readonly orgType: 'reseller' | 'tenant';
-  /** Null for a reseller's own admin; the owning reseller's id for a tenant's. */
+  readonly orgType: 'master' | 'reseller' | 'tenant';
+  /** Null for a master's or reseller's own admin; the owning reseller's id for a tenant's. */
   readonly resellerId: string | null;
   readonly email: string;
   readonly displayName: string;
   readonly password: string;
+  /**
+   * Create the user only if the org has no users yet; otherwise identity-service
+   * answers 409 `org_has_users` ({@link OrgHasUsersError}) and creates nothing.
+   */
+  readonly firstUserOnly?: boolean;
 }
 
 export interface CreatedAdminUser {
@@ -37,6 +43,11 @@ export class AdminUserCreationError extends Error {
 /** identity-service rejected the email as already taken (409). */
 export class AdminUserEmailTakenError extends Error {
   override readonly name = 'AdminUserEmailTakenError';
+}
+
+/** `firstUserOnly` was set and the org already has users (409 `org_has_users`). */
+export class OrgHasUsersError extends Error {
+  override readonly name = 'OrgHasUsersError';
 }
 
 export interface IdentityClientOptions {
@@ -71,6 +82,7 @@ export function createIdentityClient(options: IdentityClientOptions): {
               email: input.email,
               displayName: input.displayName,
               password: input.password,
+              ...(input.firstUserOnly === true ? { firstUserOnly: true } : {}),
             }),
           },
         );
@@ -81,12 +93,14 @@ export function createIdentityClient(options: IdentityClientOptions): {
       }
 
       if (response.status === 409) {
-        throw new AdminUserEmailTakenError(await responseDetail(response));
+        const problem = await problemOf(response);
+        if (problem.code === 'org_has_users') throw new OrgHasUsersError(problem.detail);
+        throw new AdminUserEmailTakenError(problem.detail);
       }
       if (!response.ok) {
         throw new AdminUserCreationError(
           `identity-service rejected admin-user creation (${String(response.status)}): ` +
-            (await responseDetail(response)),
+            (await problemOf(response)).detail,
         );
       }
 
@@ -96,11 +110,14 @@ export function createIdentityClient(options: IdentityClientOptions): {
   };
 }
 
-async function responseDetail(response: Response): Promise<string> {
+async function problemOf(response: Response): Promise<{ code?: string; detail: string }> {
   try {
-    const body = (await response.json()) as { title?: string; detail?: string };
-    return body.detail ?? body.title ?? response.statusText;
+    const body = (await response.json()) as { code?: string; title?: string; detail?: string };
+    return {
+      ...(body.code === undefined ? {} : { code: body.code }),
+      detail: body.detail ?? body.title ?? response.statusText,
+    };
   } catch {
-    return response.statusText;
+    return { detail: response.statusText };
   }
 }

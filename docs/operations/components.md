@@ -88,7 +88,7 @@ There are four groups.
 
 It checks the access token on every request (EdDSA, keys published by identity-service), applies per-IP and per-user rate limits, and forwards the request with signed `x-internal-*` headers that tell the service who is calling. It forwards only `/v1/*`. The services' `/internal/v1/*` routes can never be reached through it.
 
-It believes `X-Forwarded-For` and `X-Forwarded-Proto` from any client (`trustProxy: true`, hard-coded in `services/api-gateway/src/app.ts`). See [network §6.3](network-and-firewall.md#63-the-gateway-believes-x-forwarded-headers).
+It believes `X-Forwarded-For` and `X-Forwarded-Proto` only from the proxies listed in `TRUSTED_PROXIES` (none by default), and signs the client address it settles on into the forwarded headers, for audit events and sessions. See [network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers).
 
 ### 2.2 OpenSIPs
 

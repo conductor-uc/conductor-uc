@@ -9,18 +9,26 @@ Node services the SIP scenarios and the console need, behind api-gateway.
 From the repo root:
 
 ```sh
-make up      # creates infra/compose/.env from .env.example if missing, then
-             # brings every container up and waits for it to report healthy
-make seed    # applies each service's migrations and bootstraps the master org
-             # (needs `pnpm build` to have run at least once)
+make up      # creates infra/compose/.env from .env.example if missing, builds
+             # the images, brings every container up and waits (up to 180 s)
+             # for every one of them to report healthy
+make seed    # creates the master org and a master administrator to sign in
+             # with (DEV_ADMIN_* in .env); safe to re-run
 make down    # stops the stack, keeps the data volumes
 make reset   # stops the stack, deletes the data volumes, brings it back up clean
 make ps      # docker compose ps for this stack
 make logs    # follow every container's logs
 ```
 
-`make up` is the S0-05 acceptance check: every container healthy in under 60
-seconds on a laptop.
+`make up` ends when every container is healthy. The infrastructure alone was
+S0-05's 60-second check; the Node services add their migrations at startup, so
+the wait is now up to 180 seconds (as in CI). The first `make up` builds every
+image, which takes several minutes; later ones reuse the build cache.
+
+Every Node service has a compose health check that asks its own `/readyz`
+(database, NATS and so on, never another service); the recording uploaders
+answer `/healthz` on 9464. FreeSWITCH and OpenSIPs have theirs in their
+Dockerfiles.
 
 ## What's running
 
@@ -51,16 +59,17 @@ Override any port in `.env` if something on your machine already owns it —
 
 ## Environment variables
 
-Every variable below has a development default in `docker-compose.yml`; those
-marked "in `.env.example`" are also listed there. Others can be added to `.env`.
-The defaults are for a laptop only.
+Every variable `docker-compose.yml` reads has a development default there and
+is also listed, with the same value, in `.env.example`. The defaults are for a
+laptop only.
 
 | Variable | Default | Used by | Meaning |
 |---|---|---|---|
 | `INTERNAL_HEADER_SIGNING_SECRET` | dev value (in `.env.example`) | gateway, services | The gateway signs who is calling; every service verifies with the same secret |
 | `INTERNAL_SERVICE_TOKEN` | dev value | services, gateway | Service-to-service token for internal routes (the gateway uses it only to fetch ACME challenge answers from org-service; telephony-config uses it to fetch certificates) |
-| `CRYPTO_KEKS`, `CRYPTO_KEK_CURRENT` | dev key, `1` | org, pbx-config, trunk, identity, ... | Envelope-encryption key set. Dev-only key: production uses a KMS. org-service uses it for certificate private keys and the ACME account key |
-| `PLATFORM_BASE_DOMAIN` | `platform.test` (org-service), `local.test` (notification-service) | org-service, notification-service | The platform base domain. Determines `sip.<domain>` and the console hostname |
+| `CRYPTO_KEKS`, `CRYPTO_KEK_CURRENT` | dev key, `1` (in `.env.example`) | org, pbx-config, trunk, identity, ... | Envelope-encryption key set. Dev-only key: production uses a KMS. org-service uses it for certificate private keys and the ACME account key |
+| `PLATFORM_BASE_DOMAIN` | `platform.test` (in `.env.example`) | org-service, notification-service | The platform base domain. Determines `sip.<domain>` and the console hostname |
+| `DEV_ADMIN_EMAIL`, `DEV_ADMIN_NAME`, `DEV_ADMIN_PASSWORD` | `admin@local.test`, `Development administrator`, `dev-admin-password` (in `.env.example`) | `make seed` only | The master administrator `seed.sh` creates. Not read by compose |
 | `PLATFORM_NOREPLY_ADDRESS`, `CONSOLE_LINK_SCHEME`, `CONSOLE_URL_OVERRIDE` | `noreply@local.test`, `http`, empty | notification-service | Email sender and where links in emails point (`CONSOLE_URL_OVERRIDE` in `.env.example`, commented) |
 | `OPENSIPS_TLS_ENABLED` | `true` | opensips | Turn on the 5061 listener; certificates come from the `tls_mgm` table (kept there by telephony-config) |
 | `OPENSIPS_TLS_CERT_FILE`, `OPENSIPS_TLS_KEY_FILE` | `/etc/opensips/tls/cert.pem`, `.../key.pem` | opensips | Fallback default certificate for names the database has none for. Setting the cert also turns TLS on |
@@ -112,14 +121,43 @@ needs three edits:
 
 ## Seeding
 
-`make seed` (or `infra/compose/seed.sh` directly) applies every service's
-built migrations (`dist/migrations`, the same layout used in production —
-run `pnpm build` first) against the compose MariaDB, then runs org-service's
-`bootstrap-master` CLI to create the single master org. Both steps are
-idempotent: re-running `make seed` after the stack already has data is safe.
+There is no migration step: every service migrates its own schema when it
+starts. `make seed` (or `infra/compose/seed.sh` directly) creates the single
+master org and a master administrator, by running org-service's
+`bootstrap-master` CLI (G-115) in a one-off container of the org-service image:
 
-The master org has no admin user yet — creating one through identity-service
-is wired up in a later task (S1-02), not here.
+```sh
+docker compose run --rm --no-deps -T -e BOOTSTRAP_ADMIN_PASSWORD \
+  org-service dist/src/cli/bootstrap-master.js \
+  --slug master --name Master --admin-email "$DEV_ADMIN_EMAIL" --admin-name "$DEV_ADMIN_NAME"
+```
+
+It runs inside the compose network rather than on the host because
+identity-service, which creates the administrator, is not published to the
+host, and because the container already has every setting org-service needs
+(database, `CRYPTO_KEKS`, storage). So seeding needs no host `pnpm build`, only
+current images (`make up` builds them). The password goes in through
+`BOOTSTRAP_ADMIN_PASSWORD` (from `DEV_ADMIN_PASSWORD` in `.env`), never as an
+argument. `seed.sh` reads only the `DEV_ADMIN_*` and `GATEWAY_PORT` lines of
+`.env`; it does not source the file.
+
+Re-running is safe: an existing master is kept, and the administrator is
+created only while the master has no users.
+
+To sign in, `POST /v1/auth/login` on the gateway with the master's `orgId`
+(printed by `make seed`) and the administrator's email and password. The dev
+gateway does not serve the console and the console hostname does not resolve,
+so name the org in the body:
+
+```sh
+curl -s localhost:8080/v1/auth/login -H 'content-type: application/json' \
+  -d '{"orgId":"<orgId>","email":"admin@local.test","password":"dev-admin-password"}'
+```
+
+A master administrator gets `"status":"mfa_enrollment_required"` with a TOTP
+secret: two-step verification is required for master and reseller
+administrators, and `POST /v1/auth/mfa/enroll/confirm` with the ticket and a
+code finishes the sign-in.
 
 ## Troubleshooting
 

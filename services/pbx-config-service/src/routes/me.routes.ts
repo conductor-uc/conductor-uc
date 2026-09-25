@@ -1,7 +1,7 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { DbContext } from '@cuc/db';
 import type { Bus } from '@cuc/events';
-import { ProblemError, selfActor, Type, type Server, type Static } from '@cuc/http';
+import { clientIpOf, ProblemError, selfActor, Type, type Server, type Static } from '@cuc/http';
 
 import { InvalidCallHandlingError } from '../domain/call-handling.js';
 import {
@@ -94,7 +94,7 @@ export function registerMeRoutes(
    * The people a person can forward to: every extension's id, number and
    * display name in their own tenant, nothing else. Call handling names another
    * extension by id, and an ordinary user cannot list extensions (that is
-   * `extension.manage`), so this is what the picker reads.
+   * `extension.read`), so this is what the picker reads.
    */
   app.get(
     '/v1/tenants/:tenantId/me/directory',
@@ -170,7 +170,7 @@ export function registerMeRoutes(
         resource: extension.id,
         dataClass: 'config',
         reason: 'self-service',
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         requestId: request.context.requestId,
       });
 

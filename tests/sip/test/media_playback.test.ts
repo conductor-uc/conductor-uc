@@ -6,6 +6,7 @@ import {
   dockerCurlJson,
   dockerCurlUpload,
   fsCli,
+  internalServiceHeaders,
   sipInfraOrSkipReason,
   startBackgroundUas,
   stopContainer,
@@ -69,6 +70,8 @@ describe.skipIf(skipReason !== undefined)('S2-07 media asset playback', () => {
       const response = await dockerCurlJson(
         'GET',
         `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/media-assets/${assetId}`,
+        undefined,
+        internalServiceHeaders(),
       );
       const status = (response.json as MediaAssetStatus | undefined)?.status;
       if (status === 'ready') return;
@@ -93,6 +96,7 @@ describe.skipIf(skipReason !== undefined)('S2-07 media asset playback', () => {
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/media-assets`,
       { kind: 'prompt', label: 'SIP test prompt', contentType: 'audio/mpeg' },
+      internalServiceHeaders(),
     );
     expect(created.status, JSON.stringify(created.json)).toBe(201);
     const { asset, uploadUrl } = created.json as CreatedMediaAsset;
@@ -103,6 +107,8 @@ describe.skipIf(skipReason !== undefined)('S2-07 media asset playback', () => {
     const finalized = await dockerCurlJson(
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/media-assets/${asset.id}/finalize`,
+      undefined,
+      internalServiceHeaders(),
     );
     expect(finalized.status, JSON.stringify(finalized.json)).toBe(200);
 

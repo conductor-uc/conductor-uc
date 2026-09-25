@@ -1,3 +1,4 @@
+import { expandPermissions } from '@cuc/authz';
 import { ProblemError, Type, type Server } from '@cuc/http';
 
 import type { GrantRepo } from '../repo/grant.repo.js';
@@ -17,6 +18,10 @@ const OrgParamsSchema = Type.Object({ orgId: Type.String({ minLength: 1 }) });
  *
  * Only the caller's own org may be named, and only their own permissions come
  * back, so there is nothing here to enumerate.
+ *
+ * The list includes implied reads (G-10): a person holding `extension.manage`
+ * is also told `extension.read`, so the console shows the screen and the
+ * services, which apply the same implication, agree.
  */
 export function registerMeRoutes(app: Server, roles: RoleRepo, grants: GrantRepo): void {
   app.get(
@@ -63,7 +68,13 @@ export function registerMeRoutes(app: Server, roles: RoleRepo, grants: GrantRepo
         permissions.add(grant.permission);
       }
 
-      return { userId: actorId, orgId, orgType, roleIds, permissions: [...permissions].sort() };
+      return {
+        userId: actorId,
+        orgId,
+        orgType,
+        roleIds,
+        permissions: [...expandPermissions(permissions)].sort(),
+      };
     },
   );
 }

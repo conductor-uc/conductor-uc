@@ -1,7 +1,7 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { DbContext } from '@cuc/db';
 import type { Bus } from '@cuc/events';
-import { ProblemError, Type, type Server, type Static } from '@cuc/http';
+import { clientIpOf, ProblemError, Type, type Server, type Static } from '@cuc/http';
 
 import { DND_ACTIONS, InvalidCallHandlingError } from '../domain/call-handling.js';
 import {
@@ -82,7 +82,7 @@ export function registerCallHandlingRoutes(
   app.get(
     '/v1/tenants/:tenantId/extensions/:extensionId/call-handling',
     {
-      config: { permission: 'extension.manage', dataClass: 'config' },
+      config: { permission: 'extension.read', dataClass: 'config' },
       schema: { params: ParamsSchema, response: { 200: CallHandlingSchema } },
     },
     async (request) => {
@@ -130,7 +130,7 @@ export function registerCallHandlingRoutes(
         action: 'extension.call_handling.updated',
         resource: request.params.extensionId,
         dataClass: 'config',
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         requestId: request.context.requestId,
       });
 

@@ -1,7 +1,14 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { DbContext } from '@cuc/db';
 import type { Bus } from '@cuc/events';
-import { ProblemError, selfActor, Type, type RequestContext, type Server } from '@cuc/http';
+import {
+  clientIpOf,
+  ProblemError,
+  selfActor,
+  Type,
+  type RequestContext,
+  type Server,
+} from '@cuc/http';
 import type { Storage } from '@cuc/storage';
 
 import { InvalidEmailSettingsError, InvalidPinError } from '../domain/mailbox.js';
@@ -127,7 +134,7 @@ export function registerMeRoutes(
   }
 
   async function audit(
-    request: { readonly context: RequestContext; readonly ip?: string | undefined },
+    request: { readonly context: RequestContext; readonly ip: string },
     tenantId: string,
     userId: string,
     action: string,
@@ -142,7 +149,7 @@ export function registerMeRoutes(
       resource,
       dataClass: 'private',
       reason: 'self-service',
-      ...(request.ip === undefined ? {} : { ip: request.ip }),
+      ip: clientIpOf(request),
       requestId: request.context.requestId,
     });
   }

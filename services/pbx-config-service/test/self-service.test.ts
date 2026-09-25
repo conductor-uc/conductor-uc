@@ -2,7 +2,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { EventEnvelope } from '@cuc/api-contracts';
 import type { Bus } from '@cuc/events';
 import { databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
-import { createServer, signInternalHeaders, type Server } from '@cuc/http';
+import {
+  createRemotePermissionResolver,
+  createServer,
+  signInternalHeaders,
+  type Server,
+} from '@cuc/http';
 
 import { ExtensionUserTakenError } from '../src/repo/extension.repo.js';
 import { registerCallHandlingRoutes } from '../src/routes/call-handling.routes.js';
@@ -59,9 +64,23 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in pbx-config-s
       serviceName: 'pbx-config-service',
       logger: h.logger,
       context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
-      // The same guard main.ts wires, with the permission lookup replaced.
-      permissions: (actor, permission) =>
-        Promise.resolve(held[actor.id]?.includes(permission) ?? false),
+      // The same guard and resolver main.ts wires, with identity-service replaced
+      // by `held` (and without implied reads, so the resolver's own G-10
+      // implication is what lets a `.manage` holder read).
+      permissions: createRemotePermissionResolver({
+        baseUrl: 'http://identity-service',
+        internalServiceToken: SERVICE_TOKEN,
+        ttlMs: 0,
+        fetchImpl: (input) => {
+          const userId = /\/users\/([^/]+)\/permissions$/.exec(input as string)?.[1] ?? '';
+          const permissions = held[decodeURIComponent(userId)] ?? [];
+          return Promise.resolve(
+            permissions.length === 0
+              ? new Response(null, { status: 404 })
+              : Response.json({ permissions }),
+          );
+        },
+      }),
     });
     registerExtensionRoutes(app, h.extensions, bus);
     registerCallHandlingRoutes(app, h.callHandling, bus);
@@ -447,6 +466,49 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in pbx-config-s
       });
       expect(response.statusCode).toBe(403);
       expect(response.json()).toMatchObject({ code: 'permission_denied' });
+    });
+
+    it('a person holding extension.read sees extensions and call handling but changes nothing (G-10)', async () => {
+      const tenantId = crypto.randomUUID();
+      const ext = await makeExtension(tenantId, '101', 'user-a');
+      const support = person(tenantId, 'support-1', ['extension.read']);
+      for (const path of [
+        'extensions',
+        `extensions/${ext.id}`,
+        `extensions/${ext.id}/call-handling`,
+      ]) {
+        const response = await app.inject({
+          method: 'GET',
+          url: `/v1/tenants/${tenantId}/${path}`,
+          headers: support,
+        });
+        expect(response.statusCode, path).toBe(200);
+      }
+      for (const [method, path] of [
+        ['PATCH', `extensions/${ext.id}`],
+        ['PUT', `extensions/${ext.id}/call-handling`],
+        ['POST', `extensions/${ext.id}/reveal`],
+        ['DELETE', `extensions/${ext.id}`],
+      ] as const) {
+        const response = await app.inject({
+          method,
+          url: `/v1/tenants/${tenantId}/${path}`,
+          headers: support,
+          payload: method === 'PUT' ? ALL_HANDLING : method === 'PATCH' ? { userId: null } : {},
+        });
+        expect(response.statusCode, `${method} ${path}`).toBe(403);
+      }
+    });
+
+    it('a person holding only extension.manage still lists extensions: .manage implies .read (G-10)', async () => {
+      const tenantId = crypto.randomUUID();
+      await makeExtension(tenantId, '101');
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/tenants/${tenantId}/extensions`,
+        headers: person(tenantId, 'admin-1', ['extension.manage']),
+      });
+      expect(response.statusCode).toBe(200);
     });
 
     it('a self-service user cannot use the admin routes to read or change anyone', async () => {

@@ -40,7 +40,9 @@ class RecordingsPage extends ConsumerWidget {
         ref.watch(canProvider('recording.listen')) ||
         ref.watch(canProvider('recording.download')) ||
         ref.watch(canProvider('recording.delete'));
-    final canManage = ref.watch(canProvider('recording.policy.manage'));
+    // The rules are shown to someone who can read them; changing them is the
+    // panel's own check (recording.policy.manage).
+    final canManage = ref.watch(canProvider('recording.policy.read'));
     if (!canSee && !canManage) {
       return const PageFrame(
         children: [

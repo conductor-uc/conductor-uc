@@ -10,7 +10,8 @@ The rules below apply to all Node.js services, from `packages/config`.
 - An **empty value counts as unset**, so the default applies.
 - Booleans accept `true`, `false`, `1`, `0` (any case). Lists are comma-separated and trimmed. URLs must be absolute (`http://host:port`).
 - "Required" below means there is no default: the service will not start without it.
-- **Secret** variables are masked as `[redacted]` in the configuration each service logs at startup. Nothing reads a secret from a file: there is no `*_FILE` convention. Use your orchestrator's secret mechanism to put the value in the environment.
+- **Secret** variables are masked as `[redacted]` in the configuration each service logs at startup.
+- **Any variable can be read from a file** instead: set `<NAME>_FILE` to the file's path (for example `DB_PASSWORD_FILE=/run/secrets/db_password`, the way Docker and Kubernetes secrets are mounted). The file is read as UTF-8 at startup and trailing whitespace, such as the final newline, is removed. It is meant for secrets, but works for every variable in this reference, including the recording uploader's. A value read from a file is masked in the startup log like any other secret. The service refuses to start if both `<NAME>` and `<NAME>_FILE` are set, or if the file cannot be read or is empty; the error names the variable and the path, never the contents. Variables whose own name ends in `_FILE` (api-gateway's `TLS_CERT_FILE` and `TLS_KEY_FILE`) keep their meaning.
 - Changes take effect only on restart.
 
 ## 2. Secrets to generate
@@ -85,7 +86,9 @@ media-worker and notification-service accept the `OUTBOX_*` variables but do not
 | `TRUST_INTERNAL_HEADERS` | `false` | no | **Set `true`** on identity, org, pbx-config, trunk, callflow, voicemail, recording and cdr services. With `false`, requests from the gateway arrive with no user and are refused ("Sign in to continue"). |
 | `INTERNAL_HEADER_SIGNING_SECRET` | — | **yes when the above is `true`** (secret) | Same value as the gateway's |
 
-The signature is an HMAC-SHA256 over the six identity headers plus a millisecond timestamp. A signature more than 60 seconds old or from the future is rejected (`internal_headers_forged`), so **server clocks must agree**.
+The signed context carries who is calling (six identity headers) and the client's address as the gateway saw it (`x-internal-client-ip`), which services record in audit events and sessions instead of the gateway's own address. The signature is an HMAC-SHA256 over those seven values plus a millisecond timestamp. A signature more than 60 seconds old or from the future is rejected (`internal_headers_forged`), so **server clocks must agree**.
+
+With `TRUST_INTERNAL_HEADERS=true`, a request that carries neither a valid signed context nor `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>` is refused (401 `authentication_required`) on every route except sign-in, the public routes and health checks. The token is how one service or tool calls another's API directly: it is accepted as a trusted machine caller, not as a person, so routes that act for a person (revealing a credential, recordings) still refuse it.
 
 call-control, media-worker and telephony-config accept these variables but ignore them. notification-service never trusts them.
 
@@ -102,7 +105,11 @@ What it protects: SIP passwords, trunk credentials, voicemail PINs, TLS private 
 
 **If you lose `CRYPTO_KEKS`, every one of those becomes unreadable. Nobody can sign in, phones cannot register, trunks cannot authenticate, and TLS certificates cannot be served.** Store it outside the servers: a password manager, a secrets vault, or a sealed offline copy. Include it in your disaster-recovery plan ([operations §4](operations.md#4-backups-and-restore)).
 
-To introduce a new key, add it with a new version and make it current: `CRYPTO_KEKS=1:<old>,2:<new>` and `CRYPTO_KEK_CURRENT=2`. **Keep the old version listed for as long as any record is encrypted under it.** Nothing re-encrypts existing records, so in practice that means forever. There is no KMS integration: the Vault provider in `packages/crypto` throws "not implemented".
+To introduce a new key, add it with a new version and make it current: `CRYPTO_KEKS=1:<old>,2:<new>` and `CRYPTO_KEK_CURRENT=2`, identically in all five services, and restart them. Each of the five then **re-wraps existing records in the background**: at startup and every 10 minutes it moves records still under an older version to the current one, 100 at a time. Only each record's data key is re-encrypted, so this is quick and a record stays readable throughout. Several copies of a service can run it at once.
+
+**Keep the old version listed until every record has moved.** Each service reports how many of its records are still under an older version in `GET /readyz`, as the `kek_rewrap` check (`"detail": "N values under older key versions"`; it always passes), and logs the count after every pass while it is above 0, then once when it reaches 0. When all five services report `0 values under older key versions`, remove the old version from `CRYPTO_KEKS` and restart them. A record that cannot be moved (its version is already missing from `CRYPTO_KEKS`) is logged with its table and row and keeps being counted. Backups taken before the change still need the old key to be restored ([operations §6](operations.md#6-rotating-secrets)).
+
+There is no KMS integration: the Vault provider in `packages/crypto` throws "not implemented" (deferred, G-116).
 
 ### 3.6 Object storage (org, pbx-config, voicemail, recording, cdr, telephony-config, media-worker)
 
@@ -133,6 +140,7 @@ Groups: base only. No database, no NATS, no storage.
 | `ORG_SERVICE_URL` | — | **yes** | Also used for certificates and ACME challenges |
 | `PBX_CONFIG_SERVICE_URL`, `CALLFLOW_SERVICE_URL`, `VOICEMAIL_SERVICE_URL`, `CDR_SERVICE_URL`, `TRUNK_SERVICE_URL`, `RECORDING_SERVICE_URL` | — | **yes** | Where each service is. `/v1/platform/health` probes each one's `/readyz`. |
 | `INTERNAL_SERVICE_TOKEN` | — | no (secret) | **Set it.** Without it the gateway cannot fetch certificates from org-service or answer ACME challenges. |
+| `TRUSTED_PROXIES` | empty | no | Addresses or CIDRs of the reverse proxies or load balancers in front of the gateway, comma-separated (for example `10.10.0.5,10.20.0.0/24`). Only their `X-Forwarded-For` and `X-Forwarded-Proto` are believed. **Leave empty when the gateway faces the internet directly**: the client address is then the connection's own. The address found here is what the per-IP rate limit counts and what audit events record. A malformed entry stops the gateway at startup. See [network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers). |
 | `REDIS_URL` | — | **yes** | Rate-limit counters, for example `redis://10.10.0.41:6379`. Keys are `rl:ip:*` and `rl:actor:*` with no prefix: do not share the Redis database with another platform instance. |
 | `RATE_LIMIT_IP_MAX` / `RATE_LIMIT_IP_WINDOW_MS` | `300` / `60000` | no | Requests per IP per window. Phones behind one NAT that reboot together share this. |
 | `RATE_LIMIT_ACTOR_MAX` / `RATE_LIMIT_ACTOR_WINDOW_MS` | `600` / `60000` | no | Per signed-in user |
@@ -148,7 +156,7 @@ Groups: base only. No database, no NATS, no storage.
 | `ROUTE_TABLE` | built-in table | no | Path-to-service map. **Leave unset**: the default matches the services. |
 | `PUBLIC_ROUTE_PREFIXES` | `/v1/auth,/v1/public` | no | Paths reachable without a token. Leave unset. |
 | `ACCESS_TOKEN_ALGORITHM` | `EdDSA` | no | Leave unset |
-| `JWKS_CACHE_MAX_AGE_MS` / `JWKS_COOLDOWN_MS` | `600000` / `30000` | no | Signing-key cache |
+| `JWKS_CACHE_MAX_AGE_MS` / `JWKS_COOLDOWN_MS` | `600000` / `30000` | no | Signing-key cache. Keep the cache age shorter than identity-service's `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` (15 minutes), so a new signing key is fetched before it signs. |
 | `PROXY_TIMEOUT_MS` | `15000` | no | Upstream timeout |
 
 Certificate lookup order for each TLS connection: `TLS_CERT_DIR`, then org-service, then the default file. The gateway never presents SIP certificates.
@@ -164,13 +172,15 @@ Groups: base, database (`identity_service`), events, signed headers, crypto.
 | `ACCESS_TOKEN_TTL_SECONDS` | `600` | no | Access-token lifetime |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | no | Sliding session lifetime |
 | `MFA_TICKET_TTL_SECONDS` | `300` | no | Time to enter a two-step code |
-| `SIGNING_KEY_OVERLAP_DAYS` | `7` | no | How long a retired signing key stays published. Nothing rotates keys yet ([operations §6](operations.md#6-rotating-secrets)). |
+| `SIGNING_KEY_OVERLAP_DAYS` | `7` | no | How long a retired signing key stays published, so tokens it signed keep verifying. Keep it longer than `ACCESS_TOKEN_TTL_SECONDS`. |
+| `SIGNING_KEY_ROTATION_DAYS` | `90` | no | Start rotating the signing key once it has signed for this many days: a new key is published, then promoted after `SIGNING_KEY_PUBLISH_AHEAD_MINUTES`. Every copy checks every 5 minutes and 30 s after startup; exactly one acts. `0` turns automatic rotation off (a key published by `rotate-signing-key` is still promoted on time). |
+| `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` | `15` | no | How long a new signing key is published in the key set before it signs anything. **Must be longer than api-gateway's `JWKS_CACHE_MAX_AGE_MS`** (10 minutes by default), so every gateway has refetched the key set, and holds the new key, before the first token it signed arrives. Raise both together. |
 | `PASSWORD_RESET_TTL_MINUTES` | `60` | no | |
 | `INVITATION_TTL_DAYS` | `7` | no | |
 | `COOKIE_SECURE` | `true` | no | `Secure` flag on the refresh cookie. **Keep `true`** in production (HTTPS only). |
 | `DEV_EXPOSE_TOKENS` | `false` | no | Logs reset and invitation tokens. **Never in production.** |
 
-Signing keys (Ed25519) are generated at first start and stored in its database, encrypted with `CRYPTO_KEKS`.
+Signing keys (Ed25519) are generated at first start and stored in its database, encrypted with `CRYPTO_KEKS`. Rotation is published ahead, in two steps: the next key is first added to the key set (`/.well-known/jwks.json`) without signing anything, and only after `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` does it become the key that signs; the previous key stays published for `SIGNING_KEY_OVERLAP_DAYS`. So the gateway never sees a token signed with a key it has not fetched. This happens automatically (`SIGNING_KEY_ROTATION_DAYS`), and an operator can start it at any time with the `rotate-signing-key` command, or switch at once with `--now` or, if a key may have leaked, `--revoke-previous` ([operations §6](operations.md#6-rotating-secrets)). Every copy signs with the new key from its next token after the switch; nothing needs a restart.
 
 ### 4.3 org-service
 

@@ -1,13 +1,14 @@
 import { toUnscopedAccessSink } from '@cuc/audit';
 import { redactConfig } from '@cuc/config';
 import { fileKekFromConfig } from '@cuc/crypto';
-import { createDatabase, migrateToLatest } from '@cuc/db';
+import { createDatabase, migrateToLatest, REWRAP_INTERVAL_MS } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
 import { createAuthService } from './auth/auth-service.js';
 import { configSchema, loadServiceConfig } from './config.js';
+import { createKekRewrapJob } from './kek-rewrap.js';
 import { createAuditConsumer } from './consumers/audit.consumer.js';
 import { createAuditRepo } from './repo/audit.repo.js';
 import { createGrantRepo } from './repo/grant.repo.js';
@@ -16,6 +17,7 @@ import { createRoleRepo } from './repo/role.repo.js';
 import { createSessionRepo } from './repo/session.repo.js';
 import { createTokenRepo } from './repo/token.repo.js';
 import { createSigningKeyRepo } from './repo/signing-key.repo.js';
+import { createSigningKeyRotator } from './signing-key-rotation.js';
 import { createUserRepo } from './repo/user.repo.js';
 import { registerAuditRoutes } from './routes/audit.routes.js';
 import { registerMeRoutes } from './routes/me.routes.js';
@@ -102,6 +104,8 @@ const app = await createServer({
     ...(config.INTERNAL_HEADER_SIGNING_SECRET === undefined
       ? {}
       : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
+    // Other services and tools calling a protected route directly (G-112).
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
   },
   // Per-request permission checks for people (07 §3.1): without them a signed-in
   // person could manage users, roles and grants, whatever they hold.
@@ -127,6 +131,22 @@ const tokenRepo = createTokenRepo(db);
 // otherwise finds the one already current. Must happen before any route that
 // signs or verifies a token.
 await signingKeyRepo.ensureCurrentKey();
+
+// G-116: publish-ahead rotation. Stages a next key once the current one is
+// SIGNING_KEY_ROTATION_DAYS old and promotes it after
+// SIGNING_KEY_PUBLISH_AHEAD_MINUTES. Runs even with rotation days at 0, so a key
+// staged by `rotate-signing-key` is still promoted. Safe in every copy of the
+// service; see createSigningKeyRotator.
+const signingKeyRotator = createSigningKeyRotator({
+  signingKeys: signingKeyRepo,
+  rotationDays: config.SIGNING_KEY_ROTATION_DAYS,
+  publishAheadMinutes: config.SIGNING_KEY_PUBLISH_AHEAD_MINUTES,
+  logger,
+});
+if (config.SIGNING_KEY_ROTATION_DAYS === 0) {
+  logger.warn('SIGNING_KEY_ROTATION_DAYS is 0: signing keys are not rotated automatically');
+}
+signingKeyRotator.start();
 
 const authService = createAuthService({
   users: userRepo,
@@ -165,6 +185,13 @@ registerMeRoutes(app, roleRepo, grantRepo);
 registerAccessRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
 registerAuditRoutes(app, auditRepo, orgAccess);
 
+// G-116: values still under an older KEK version are moved to the current one
+// in the background, and `/readyz` says how many remain, so an old version
+// can be removed from CRYPTO_KEKS once every service reports 0.
+const kekRewrap = createKekRewrapJob(db, kek, logger);
+app.addReadinessCheck('kek_rewrap', kekRewrap.readinessCheck);
+kekRewrap.start(REWRAP_INTERVAL_MS);
+
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
 
@@ -184,6 +211,8 @@ async function shutdown(signal: string): Promise<void> {
   await relayLoop;
   await auditConsumerLoop;
   await bus.close();
+  await kekRewrap.stop();
+  await signingKeyRotator.stop();
   await db.destroy();
   logger.info('shutdown complete');
   process.exit(0);

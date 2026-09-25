@@ -43,7 +43,7 @@ overrides it:
   (it denies a reseller reading its *own* `private`-classed config, which H1 proper
   allows), and that's the safe direction for an approximation to err in.
 - **H2** — an actor cannot act outside its own org's ancestry, full stop.
-- **H3** — `reseller.create` and `reseller.manage` are master-only, unconditionally, no
+- **H3** — `reseller.create`, `reseller.manage` and `reseller.read` are master-only, unconditionally, no
   matter whose resource is being touched. `h3RouteLevelLifecycle` is the same framework-level
   hook as H1's, using only the actor's org type and the route's declared `permission` — but
   unlike H1 it needs no resource-aware counterpart, since H3 was never resource-dependent to
@@ -69,11 +69,16 @@ as code, not rows, because nothing about them varies per deployment. `roleCatalo
 merges those built-ins with an org's custom roles (identity-service's `roles` table) into
 the `RoleCatalog` `roleHas` reads.
 
-**Known catalog gap:** `master_support`'s and `reseller_support`'s "read everything" /
-"read config" descriptions in 07 §3.3 can't be fully realized — the catalog has no
-read-counterpart permissions for most `*.manage` verbs (there's no `tenant.read` etc.).
-This is flagged in `roles.ts` rather than papered over with invented permissions; closing
-it is a `docs/decisions.md`-worthy change to 07 §3.3, not something to guess at here.
+**Read twins (G-10, S1-15).** Every configuration management permission has a `.read`
+twin of the same data class (`extension.read`, `trunk.read`, `callflow.read` for
+`callflow.edit`/`callflow.publish`, `recording.policy.read`, …). List and view routes declare
+the twin; writes keep the management permission. `READ_TWINS` (`permissions.ts`) is the one
+definition of "holding `.manage` implies `.read`": `roleHas` and `grantMatches` apply it,
+`expandPermissions`/`holdsPermission` apply it to a flat set (identity-service's permission
+lookup and `/me`, `@cuc/http`'s permission resolver), so an admin or a custom role naming only
+`.manage` keeps reading. `master_support` holds every read plus its read-shaped and private
+reads; `reseller_support` holds the reads of what `reseller_admin` manages. The secret-class
+permissions have no twin.
 
 ## The matrix test
 

@@ -3,10 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import {
+  CIPHERTEXT_PREFIX,
+  currentVersionPrefix,
   decrypt,
   decryptString,
   encrypt,
   isCiphertext,
+  kekRewrapper,
   keyVersionOf,
   needsRotation,
   rotate,
@@ -316,5 +319,39 @@ describe('rotation', () => {
 
     await expect(rotate(only2, ciphertext)).rejects.toThrow(UnknownKeyVersionError);
     await expect(rotate(only2, ciphertext)).rejects.toThrow(/must stay available/);
+  });
+});
+
+describe('re-wrap prefixes (G-116)', () => {
+  it('every value starts with the format prefix, whatever its version', async () => {
+    expect((await encrypt(v1(), 'x')).startsWith(CIPHERTEXT_PREFIX)).toBe(true);
+    expect((await encrypt(v2(), 'x')).startsWith(CIPHERTEXT_PREFIX)).toBe(true);
+  });
+
+  it('only values under the current version start with the current prefix', async () => {
+    const old = await encrypt(v1(), 'x');
+    const current = await encrypt(v2(), 'x');
+
+    expect(current.startsWith(currentVersionPrefix(v2()))).toBe(true);
+    expect(old.startsWith(currentVersionPrefix(v2()))).toBe(false);
+  });
+
+  it('a version whose name is a prefix of another is not mistaken for it', async () => {
+    const kek10 = new FileKekProvider({ keys: { '1': KEY_1, '10': KEY_2 }, currentVersion: '10' });
+    const underOne = await encrypt(v1(), 'x');
+
+    expect(underOne.startsWith(currentVersionPrefix(kek10))).toBe(false);
+  });
+
+  it('the rewrapper rotates, keeping the associated data valid', async () => {
+    const aad = 'tenant-a:mailboxes.pin_enc:row-1';
+    const old = await encrypt(v1(), '1234', aad);
+    const rewrapper = kekRewrapper(v2());
+
+    const rewrapped = await rewrapper.rewrap(old);
+
+    expect(rewrapper.formatPrefix).toBe(CIPHERTEXT_PREFIX);
+    expect(rewrapped.startsWith(rewrapper.currentPrefix())).toBe(true);
+    expect(await decryptString(v2(), rewrapped, aad)).toBe('1234');
   });
 });

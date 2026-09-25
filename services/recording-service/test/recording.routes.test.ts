@@ -1,9 +1,12 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { signInternalHeaders } from '@cuc/http';
 import { databaseOrSkipReason, s3OrSkipReason } from '@cuc/testing';
 
 import type { RegisterRecordingInput } from '../src/repo/recording.repo.js';
 import { buildWav } from '../src/uploader/wav.js';
 import {
+  HEADER_SECRET,
+  INTERNAL_TOKEN,
   TENANT_ADMIN_ROLE,
   grant,
   resetSchema,
@@ -84,6 +87,14 @@ describe.skipIf(skipReason !== undefined)('recording routes (S5-04)', () => {
 
   it('turns away a caller who is not signed in', async () => {
     expect((await get(`/v1/tenants/${tenant}/recordings`, {})).statusCode).toBe(401);
+  });
+
+  it('turns away a machine caller: recordings are for people (G-112)', async () => {
+    const response = await get(`/v1/tenants/${tenant}/recordings`, {
+      authorization: `Bearer ${INTERNAL_TOKEN}`,
+    });
+    expect(response.statusCode).toBe(401);
+    expect(r.audited).toEqual([]);
   });
 
   describe('validation', () => {
@@ -191,6 +202,30 @@ describe.skipIf(skipReason !== undefined)('recording routes (S5-04)', () => {
       expect(next.json<{ rows: unknown[]; nextCursor: string | null }>()).toMatchObject({
         nextCursor: null,
       });
+    });
+
+    it('audits the client address the gateway signed, not its own (G-113)', async () => {
+      const recording = await seed();
+      r.access.set('admin', { roles: [TENANT_ADMIN_ROLE] });
+      await r.app.inject({
+        method: 'GET',
+        url: `/v1/tenants/${tenant}/recordings/${recording.id}/play-url`,
+        headers: signInternalHeaders(HEADER_SECRET, {
+          actorId: 'admin',
+          actorType: 'user',
+          orgId: tenant,
+          orgType: 'tenant',
+          tenantId: tenant,
+          clientIp: '203.0.113.9',
+        }),
+        remoteAddress: '10.0.0.2',
+      });
+
+      expect(r.audited.find((event) => event.action === 'recording.play_url_issued')).toMatchObject(
+        {
+          ip: '203.0.113.9',
+        },
+      );
     });
 
     it('audits every URL issuance with who, what, and where', async () => {

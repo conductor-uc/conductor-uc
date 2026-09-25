@@ -210,6 +210,18 @@ describe('createRemotePermissionResolver', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it('treats a held .manage permission as holding its .read twin (G-10), never the reverse', async () => {
+    const fetchImpl = vi.fn(() =>
+      Promise.resolve(Response.json({ permissions: ['extension.manage', 'trunk.read'] })),
+    );
+    const resolve = resolver(fetchImpl);
+
+    expect(await resolve(actor, 'extension.read')).toBe(true);
+    expect(await resolve(actor, 'trunk.read')).toBe(true);
+    expect(await resolve(actor, 'trunk.manage')).toBe(false);
+    expect(await resolve(actor, 'did.read')).toBe(false);
+  });
+
   it('does not remember "holds nothing", so a role just given works at once', async () => {
     let body: unknown = null;
     const fetchImpl = vi.fn(() =>

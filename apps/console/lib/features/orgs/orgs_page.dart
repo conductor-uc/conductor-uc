@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/acting.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
@@ -46,15 +47,20 @@ class OrgsPage extends ConsumerWidget {
                 )
               : null,
           actions: [
-            FilledButton.icon(
-              onPressed: () => _create(
-                context,
-                ref,
-                showingResellers ? null : resellerId ?? session.orgId,
+            if (ref.watch(
+              canProvider(
+                showingResellers ? 'reseller.create' : 'tenant.create',
               ),
-              icon: const Icon(Icons.add),
-              label: Text(showingResellers ? 'New reseller' : 'New tenant'),
-            ),
+            ))
+              FilledButton.icon(
+                onPressed: () => _create(
+                  context,
+                  ref,
+                  showingResellers ? null : resellerId ?? session.orgId,
+                ),
+                icon: const Icon(Icons.add),
+                label: Text(showingResellers ? 'New reseller' : 'New tenant'),
+              ),
           ],
         ),
         const SizedBox(height: 16),
@@ -120,6 +126,12 @@ class _OrgTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final suspended = org['status'] != 'active';
+    final canEdit = ref.watch(
+      canProvider(isReseller ? 'reseller.manage' : 'tenant.manage'),
+    );
+    final canSuspend = ref.watch(
+      canProvider(isReseller ? 'reseller.manage' : 'tenant.suspend'),
+    );
     // A tenant's own name under a reseller base domain (S1-03).
     final domain = isReseller
         ? null
@@ -159,20 +171,23 @@ class _OrgTile extends ConsumerWidget {
                     },
               child: const Text('Act as'),
             ),
-          PopupMenuButton<String>(
-            tooltip: 'More',
-            onSelected: (choice) =>
-                orgAction(context, ref, org, isReseller, choice),
-            itemBuilder: (_) => [
-              const PopupMenuItem(value: 'edit', child: Text('Edit')),
-              if (!isReseller)
-                const PopupMenuItem(value: 'people', child: Text('People')),
-              PopupMenuItem(
-                value: 'suspend',
-                child: Text(suspended ? 'Resume' : 'Suspend'),
-              ),
-            ],
-          ),
+          if (canEdit || canSuspend || !isReseller)
+            PopupMenuButton<String>(
+              tooltip: 'More',
+              onSelected: (choice) =>
+                  orgAction(context, ref, org, isReseller, choice),
+              itemBuilder: (_) => [
+                if (canEdit)
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                if (!isReseller)
+                  const PopupMenuItem(value: 'people', child: Text('People')),
+                if (canSuspend)
+                  PopupMenuItem(
+                    value: 'suspend',
+                    child: Text(suspended ? 'Resume' : 'Suspend'),
+                  ),
+              ],
+            ),
           if (isReseller) const Icon(Icons.chevron_right),
         ],
       ),

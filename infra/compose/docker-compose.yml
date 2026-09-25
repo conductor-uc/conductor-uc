@@ -8,6 +8,34 @@
 # ./README.md for details and troubleshooting.
 name: conductor-uc
 
+# G-115: health checks for the Node services, so `make up` (wait-healthy.sh)
+# and `docker compose up --wait` see them become ready. Each asks the service's
+# own `/readyz` (its database, NATS and similar, never another service).
+# Distroless images have no shell or curl, and keep node at /nodejs/bin/node;
+# Node 22 has fetch built in. Every check starts a node process, so checks are
+# every 2s only while starting (`start_period` covers migrations) and every 15s
+# after that; four failures in a row (a minute) mark a service unhealthy.
+x-node-healthcheck: &node-healthcheck
+  test:
+    - CMD
+    - /nodejs/bin/node
+    - -e
+    - "fetch('http://127.0.0.1:8080/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+  interval: 15s
+  timeout: 5s
+  retries: 4
+  start_period: 90s
+  start_interval: 2s
+
+# The recording uploaders serve only `/healthz` and `/metrics`, on 9464.
+x-uploader-healthcheck: &uploader-healthcheck
+  <<: *node-healthcheck
+  test:
+    - CMD
+    - /nodejs/bin/node
+    - -e
+    - "fetch('http://127.0.0.1:9464/healthz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+
 services:
   mariadb:
     # Matches production and CI (05 §1, .github/workflows/ci.yml): a test or
@@ -206,6 +234,7 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       SPOOL_DIR: /var/spool/cuc/rec
       SERVICE_NAME: recording-uploader
+    healthcheck: *uploader-healthcheck
 
   recording-uploader-2:
     build:
@@ -223,6 +252,7 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       SPOOL_DIR: /var/spool/cuc/rec
       SERVICE_NAME: recording-uploader-2
+    healthcheck: *uploader-healthcheck
 
   opensips:
     # S1-11. telephony/opensips's own Dockerfile builds this from the
@@ -275,14 +305,11 @@ services:
       - '${OPENSIPS_TLS_PORT:-5061}:5061/tcp'
 
   org-service:
-    # S1-14: the first Node service to actually run in this stack (09 §1's
-    # "each service builds a single container image", never exercised until
-    # a task needed real cross-service HTTP + event flow, not just each
-    # service's own integration tests). `identity-service` deliberately does
-    # not run here — tests/sip provisions fixtures through this service's
-    # own repo layer directly (bypassing the admin-user side effect on
-    # `POST /v1/.../tenants`, which SIP scenarios have no use for), so
-    # nothing in this stack ever calls out to it.
+    # S1-14: the first Node service to run in this stack. Its image also
+    # carries the `bootstrap-master` CLI that `make seed` runs
+    # (`docker compose run --rm org-service dist/src/cli/bootstrap-master.js`).
+    # tests/sip provisions its fixtures through this service's repo layer
+    # directly, so SIP scenarios do not need identity-service.
     build:
       context: ../..
       dockerfile: services/org-service/Dockerfile
@@ -305,21 +332,22 @@ services:
       # G-60: these services sit behind api-gateway, which signs who is calling.
       TRUST_INTERNAL_HEADERS: 'true'
       INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
-      # Creates a tenant's first admin, and answers what a signed-in person
-      # may do (per-request permission checks). SIP scenarios never call it.
+      # Creates each new org's first admin (the master's through
+      # bootstrap-master), and answers what a signed-in person may do.
       IDENTITY_SERVICE_URL: http://identity-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # G-105: the certificates org-service keeps have their private keys
       # envelope-encrypted with this. Dev-only key (packages/crypto/src/config.ts);
       # production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
-      CRYPTO_KEK_CURRENT: '1'
+      CRYPTO_KEK_CURRENT: ${CRYPTO_KEK_CURRENT:-1}
       PLATFORM_BASE_DOMAIN: ${PLATFORM_BASE_DOMAIN:-platform.test}
       STORAGE_BUCKET_PREFIX: cuc-dev
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
+    healthcheck: *node-healthcheck
 
   pbx-config-service:
     build:
@@ -369,7 +397,7 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
-      CRYPTO_KEK_CURRENT: '1'
+      CRYPTO_KEK_CURRENT: ${CRYPTO_KEK_CURRENT:-1}
       # S2-07: media-asset uploads land here (presigned PUT), same bucket
       # story org-service's own brand assets already use.
       STORAGE_BUCKET_PREFIX: cuc-dev
@@ -377,6 +405,7 @@ services:
       STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
+    healthcheck: *node-healthcheck
 
   trunk-service:
     build:
@@ -410,7 +439,8 @@ services:
       IDENTITY_SERVICE_URL: http://identity-service:8080
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
-      CRYPTO_KEK_CURRENT: '1'
+      CRYPTO_KEK_CURRENT: ${CRYPTO_KEK_CURRENT:-1}
+    healthcheck: *node-healthcheck
 
   telephony-config:
     build:
@@ -482,6 +512,7 @@ services:
       # default to 'cuc:dev:' already, set explicitly here so the dependency
       # is visible rather than incidental.
       REDIS_KEY_PREFIX: 'cuc:dev:'
+    healthcheck: *node-healthcheck
 
   media-worker:
     # S2-07: isolated from pbx-config-service on purpose — the one service
@@ -517,6 +548,14 @@ services:
       STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
+    healthcheck:
+      # node:22-bookworm-slim (it needs ffmpeg), so node is on PATH.
+      <<: *node-healthcheck
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 
   call-control:
     # S2-11. Speaks ESL to every configured FreeSWITCH node and owns the
@@ -569,6 +608,7 @@ services:
       # S2-12: `/internal/v1/affinity/...`'s own gate (07 §1's precedent) —
       # same shared value every other service's own INTERNAL_SERVICE_TOKEN uses.
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+    healthcheck: *node-healthcheck
 
   callflow-service:
     build:
@@ -596,6 +636,7 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # Asked what a signed-in person may do (per-request permission checks).
       IDENTITY_SERVICE_URL: http://identity-service:8080
+    healthcheck: *node-healthcheck
 
   voicemail-service:
     build:
@@ -628,12 +669,13 @@ services:
       PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
-      CRYPTO_KEK_CURRENT: '1'
+      CRYPTO_KEK_CURRENT: ${CRYPTO_KEK_CURRENT:-1}
       STORAGE_BUCKET_PREFIX: cuc-dev
       STORAGE_ENDPOINT: http://minio:9000
       STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
+    healthcheck: *node-healthcheck
 
   recording-service:
     # S5-01, S5-04, S5-05: policies, recording metadata, playback URLs, retention.
@@ -669,6 +711,7 @@ services:
       STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
+    healthcheck: *node-healthcheck
 
   cdr-service:
     build:
@@ -710,11 +753,8 @@ services:
       STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
+    healthcheck: *node-healthcheck
 
-  # S3-03. Consumes identity's reset and invitation events and sends the email
-  # through Mailpit. Links point at the console at CONSOLE_URL_OVERRIDE when set
-  # (a local `flutter run` or a served build), otherwise at
-  # https://console.$PLATFORM_BASE_DOMAIN.
   identity-service:
     # G-60: signs users in and issues the access tokens api-gateway verifies.
     build:
@@ -744,9 +784,10 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       # Dev-only KEK (packages/crypto/src/config.ts) — production uses a KMS.
       CRYPTO_KEKS: ${CRYPTO_KEKS:-1:u4SpMlDTAL6cVMC2rzCxhoKCRAJxpgoc7h+hX3OfdfY=}
-      CRYPTO_KEK_CURRENT: '1'
+      CRYPTO_KEK_CURRENT: ${CRYPTO_KEK_CURRENT:-1}
       # Plain HTTP on a laptop: a browser would refuse a Secure cookie.
       COOKIE_SECURE: 'false'
+    healthcheck: *node-healthcheck
 
   api-gateway:
     # G-60: the one public entry point. Verifies the access token, then sends
@@ -758,10 +799,12 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      # Sign-in needs both; waiting for them keeps the gateway from answering
+      # 502 while they migrate.
       identity-service:
-        condition: service_started
+        condition: service_healthy
       org-service:
-        condition: service_started
+        condition: service_healthy
       pbx-config-service:
         condition: service_started
       callflow-service:
@@ -799,8 +842,13 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       REQUIRE_HTTPS_FOR_PROVISIONING: ${REQUIRE_HTTPS_FOR_PROVISIONING:-false}
       HSTS_MAX_AGE_SECONDS: ${HSTS_MAX_AGE_SECONDS:-0}
+    healthcheck: *node-healthcheck
 
   notification-service:
+    # S3-03. Consumes identity's reset and invitation events and sends the email
+    # through Mailpit. Links point at the console at CONSOLE_URL_OVERRIDE when set
+    # (a local `flutter run` or a served build), otherwise at
+    # $CONSOLE_LINK_SCHEME://console.$PLATFORM_BASE_DOMAIN.
     build:
       context: ../..
       dockerfile: services/notification-service/Dockerfile
@@ -829,9 +877,10 @@ services:
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       PLATFORM_NOREPLY_ADDRESS: ${PLATFORM_NOREPLY_ADDRESS:-noreply@local.test}
-      PLATFORM_BASE_DOMAIN: ${PLATFORM_BASE_DOMAIN:-local.test}
+      PLATFORM_BASE_DOMAIN: ${PLATFORM_BASE_DOMAIN:-platform.test}
       CONSOLE_LINK_SCHEME: ${CONSOLE_LINK_SCHEME:-http}
       CONSOLE_URL_OVERRIDE: ${CONSOLE_URL_OVERRIDE:-}
+    healthcheck: *node-healthcheck
 
 volumes:
   # The node spool recordings are written to before upload (S5-03). tmpfs-backed, so it is

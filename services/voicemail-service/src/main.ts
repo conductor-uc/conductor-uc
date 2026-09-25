@@ -1,12 +1,13 @@
 import { redactConfig } from '@cuc/config';
 import { fileKekFromConfig } from '@cuc/crypto';
-import { createDatabase, migrateToLatest } from '@cuc/db';
+import { createDatabase, migrateToLatest, REWRAP_INTERVAL_MS } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createRemotePermissionResolver, createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { storageFromConfig } from '@cuc/storage';
 
 import { configSchema, loadServiceConfig } from './config.js';
+import { createKekRewrapJob } from './kek-rewrap.js';
 import { createMailboxRepo } from './repo/mailbox.repo.js';
 import { createMessageRepo } from './repo/message.repo.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
@@ -73,6 +74,8 @@ const app = await createServer({
     ...(config.INTERNAL_HEADER_SIGNING_SECRET === undefined
       ? {}
       : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
+    // Other services and tools calling a protected route directly (G-112).
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
   },
   permissions: createRemotePermissionResolver({
     baseUrl: config.IDENTITY_SERVICE_URL,
@@ -95,6 +98,13 @@ const pbxClient = createPbxClient({
 registerMeRoutes(app, mailboxRepo, messageRepo, storage, pbxClient.userExtension, bus);
 registerInternalRoutes(app, mailboxRepo, messageRepo, config.INTERNAL_SERVICE_TOKEN, storage);
 
+// G-116: values still under an older KEK version are moved to the current one
+// in the background, and `/readyz` says how many remain, so an old version
+// can be removed from CRYPTO_KEKS once every service reports 0.
+const kekRewrap = createKekRewrapJob(db, kek, logger);
+app.addReadinessCheck('kek_rewrap', kekRewrap.readinessCheck);
+kekRewrap.start(REWRAP_INTERVAL_MS);
+
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
 
@@ -107,6 +117,7 @@ async function shutdown(signal: string): Promise<void> {
   ]);
   await relayLoop;
   await bus.close();
+  await kekRewrap.stop();
   await db.destroy();
   logger.info('shutdown complete');
   process.exit(0);

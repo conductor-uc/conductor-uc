@@ -1,5 +1,5 @@
 import type { DbContext } from '@cuc/db';
-import { ProblemError, Type, type Server } from '@cuc/http';
+import { clientIpOf, ProblemError, Type, type Server } from '@cuc/http';
 
 import {
   globalCredentialMatches,
@@ -99,7 +99,7 @@ export function registerProvisionRoutes(
       const outboundProxy = await activeSipProxy(options.sipProxy, target.tenantId);
       const transport = edge.transports[0] ?? 'udp';
       await devices.recordFetch(ctx, target.id, {
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         ...(typeof request.headers['user-agent'] === 'string'
           ? { userAgent: request.headers['user-agent'] }
           : {}),

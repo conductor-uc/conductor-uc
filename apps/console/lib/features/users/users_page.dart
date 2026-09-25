@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/acting.dart';
+import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
@@ -33,6 +34,7 @@ class UsersPage extends ConsumerWidget {
     if (target == null) return const SizedBox.shrink();
     final rows = ref.watch(usersForProvider(target));
     final name = orgName ?? acting?.name;
+    final canChange = ref.watch(canProvider('user.manage'));
     return PageFrame(
       children: [
         PageHeader(
@@ -41,11 +43,12 @@ class UsersPage extends ConsumerWidget {
               ? 'People who can sign in. Invite someone by email, then give them a role.'
               : "People who can sign in to $name. Invite someone by email, then give them a role.",
           actions: [
-            FilledButton.icon(
-              onPressed: () => _invite(context, ref, target),
-              icon: const Icon(Icons.person_add_alt_outlined),
-              label: const Text('Invite user'),
-            ),
+            if (canChange)
+              FilledButton.icon(
+                onPressed: () => _invite(context, ref, target),
+                icon: const Icon(Icons.person_add_alt_outlined),
+                label: const Text('Invite user'),
+              ),
           ],
         ),
         const SizedBox(height: 16),
@@ -72,7 +75,7 @@ class UsersPage extends ConsumerWidget {
                     ],
                     rows: [
                       for (final u in data)
-                        _row(context, ref, session, target, u),
+                        _row(context, ref, session, target, u, canChange),
                     ],
                   ),
                 ),
@@ -90,6 +93,7 @@ class UsersPage extends ConsumerWidget {
     Session session,
     UsersTarget target,
     Json u,
+    bool canChange,
   ) {
     final mine = u['id'] == session.userId;
     final disabled = u['status'] == 'disabled';
@@ -109,18 +113,19 @@ class UsersPage extends ConsumerWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              IconButton(
-                tooltip: 'Edit',
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () => _edit(context, ref, target, u),
-              ),
-              if (!mine && u['mfaEnrolled'] == true)
+              if (canChange)
+                IconButton(
+                  tooltip: 'Edit',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => _edit(context, ref, target, u),
+                ),
+              if (canChange && !mine && u['mfaEnrolled'] == true)
                 IconButton(
                   tooltip: 'Reset two-step verification',
                   icon: const Icon(Icons.phonelink_erase_outlined),
                   onPressed: () => _confirmResetMfa(context, ref, target, u),
                 ),
-              if (!mine)
+              if (canChange && !mine)
                 IconButton(
                   tooltip: disabled ? 'Allow sign-in' : 'Disable',
                   icon: Icon(

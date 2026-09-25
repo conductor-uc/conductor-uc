@@ -1,6 +1,6 @@
 import { publishAuditEvent } from '@cuc/audit';
 import type { Bus } from '@cuc/events';
-import { ProblemError, Type, type Server } from '@cuc/http';
+import { clientIpOf, ProblemError, Type, type Server } from '@cuc/http';
 
 import { InvalidPublicAddressError, recordTypeFor } from '../domain/dns.js';
 import type { CertificateRepo } from '../repo/certificate.repo.js';
@@ -38,7 +38,7 @@ export function registerNetworkRoutes(
   app.get(
     '/v1/platform/network-settings',
     {
-      config: { permission: 'domain.manage', dataClass: 'config' },
+      config: { permission: 'domain.read', dataClass: 'config' },
       schema: { response: { 200: NetworkSchema } },
     },
     async (request) => {
@@ -82,7 +82,7 @@ export function registerNetworkRoutes(
         action: 'platform.network_settings.updated',
         resource: publicAddress ?? 'cleared',
         dataClass: 'config',
-        ...(request.ip === undefined ? {} : { ip: request.ip }),
+        ip: clientIpOf(request),
         requestId: request.context.requestId,
       });
       return { publicAddress };
@@ -92,7 +92,7 @@ export function registerNetworkRoutes(
   app.get(
     '/v1/resellers/:id/dns-records',
     {
-      config: { permission: 'domain.manage', dataClass: 'config' },
+      config: { permission: 'domain.read', dataClass: 'config' },
       schema: {
         params: Type.Object({ id: Type.String({ minLength: 1 }) }),
         response: { 200: DnsRecordsSchema },

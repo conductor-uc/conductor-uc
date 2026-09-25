@@ -146,7 +146,7 @@ export function registerBrandRoutes(
   app.get(
     '/v1/resellers/:id/brand',
     {
-      config: { permission: 'brand.manage', dataClass: 'config' },
+      config: { permission: 'brand.read', dataClass: 'config' },
       schema: { params: OrgIdParamsSchema, response: { 200: BrandSchema } },
     },
     async (request) => {
@@ -203,7 +203,7 @@ export function registerBrandRoutes(
   app.get(
     '/v1/resellers/:id/console-hostnames',
     {
-      config: { permission: 'brand.manage', dataClass: 'config' },
+      config: { permission: 'brand.read', dataClass: 'config' },
       schema: {
         params: OrgIdParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(ConsoleHostnameSchema) }) },

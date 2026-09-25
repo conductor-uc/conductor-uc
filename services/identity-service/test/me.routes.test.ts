@@ -121,7 +121,24 @@ describe.skipIf(skipReason !== undefined)('GET /v1/orgs/:orgId/me', () => {
         headers: asUser(u2, 'org-1', 'tenant'),
       })
     ).json<MeBody>();
-    expect(body.permissions).toEqual(['cdr.read', 'did.manage']);
+    // did.manage brings its read twin (G-10), so the console shows the screen.
+    expect(body.permissions).toEqual(['cdr.read', 'did.manage', 'did.read']);
+  });
+
+  it('a support role is told its reads and no writes (G-10)', async () => {
+    const s1 = await makeUser('org-1', 'tenant', 's1@example.test');
+    await h.roles.assignRole(s1, 'tenant_supervisor', 'org-1');
+    const body = (
+      await app.inject({
+        method: 'GET',
+        url: '/v1/orgs/org-1/me',
+        headers: asUser(s1, 'org-1', 'tenant'),
+      })
+    ).json<MeBody>();
+    expect(body.permissions).toContain('queue.read');
+    expect(body.permissions).toContain('extension.read');
+    expect(body.permissions).not.toContain('queue.manage');
+    expect(body.permissions).not.toContain('extension.manage');
   });
 
   it('the master holds everything the catalog defines', async () => {

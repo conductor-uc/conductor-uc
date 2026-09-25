@@ -90,7 +90,7 @@ export function registerEmergencyLocationRoutes(
   app.get(
     '/v1/tenants/:tenantId/emergency-locations',
     {
-      config: { permission: 'emergency_location.manage', dataClass: 'config' },
+      config: { permission: 'emergency_location.read', dataClass: 'config' },
       schema: {
         params: TenantParamsSchema,
         response: { 200: Type.Object({ rows: Type.Array(EmergencyLocationSchema) }) },
@@ -102,7 +102,7 @@ export function registerEmergencyLocationRoutes(
   app.get(
     '/v1/tenants/:tenantId/emergency-locations/:id',
     {
-      config: { permission: 'emergency_location.manage', dataClass: 'config' },
+      config: { permission: 'emergency_location.read', dataClass: 'config' },
       schema: { params: LocationParamsSchema, response: { 200: EmergencyLocationSchema } },
     },
     async (request) => {

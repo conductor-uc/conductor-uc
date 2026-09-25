@@ -138,6 +138,48 @@ export async function rotate(kek: KekProvider, ciphertext: string): Promise<stri
   }
 }
 
+/**
+ * What every value {@link encrypt} produces starts with, whatever its KEK
+ * version. A stored column can be filtered on it without decrypting anything.
+ */
+export const CIPHERTEXT_PREFIX = `${FORMAT}${SEPARATOR}`;
+
+/**
+ * What every value wrapped under `kek`'s current version starts with. A value
+ * with {@link CIPHERTEXT_PREFIX} but not this prefix is under an older version
+ * and needs {@link rotate}; the version is followed by the separator, which
+ * base64url never contains, so one version's prefix is never another's.
+ */
+export function currentVersionPrefix(kek: KekProvider): string {
+  return `${CIPHERTEXT_PREFIX}${encodeVersion(kek.currentVersion())}${SEPARATOR}`;
+}
+
+/** The three things a background re-wrap job needs from this package (G-116). */
+export interface KekRewrapper {
+  /** {@link CIPHERTEXT_PREFIX}. */
+  readonly formatPrefix: string;
+  /** {@link currentVersionPrefix}, read each time so a changed provider is honoured. */
+  currentPrefix(): string;
+  /** {@link rotate}: rewraps the data key only, so the value's associated data still applies. */
+  rewrap(ciphertext: string): Promise<string>;
+}
+
+/**
+ * Packages `rotate` and the prefixes for a re-wrap job, such as `@cuc/db`'s
+ * `createRewrapJob`, without that job depending on this package.
+ *
+ * The job never needs a value's associated data: `rotate` leaves the payload
+ * (IV, tag and ciphertext, which the associated data authenticates) byte for
+ * byte as it was, and only the wrapped data key changes.
+ */
+export function kekRewrapper(kek: KekProvider): KekRewrapper {
+  return {
+    formatPrefix: CIPHERTEXT_PREFIX,
+    currentPrefix: () => currentVersionPrefix(kek),
+    rewrap: (ciphertext) => rotate(kek, ciphertext),
+  };
+}
+
 /** True when `value` looks like this package's format. */
 export function isCiphertext(value: string): boolean {
   try {

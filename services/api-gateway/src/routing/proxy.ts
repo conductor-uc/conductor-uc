@@ -26,7 +26,16 @@ const HOP_BY_HOP_HEADERS = new Set([
   'x-powered-by',
 ]);
 
-function contextFields(context: RequestContext): Parameters<typeof signInternalHeaders>[1] {
+/**
+ * The identity to sign for a forwarded request, plus the client's address
+ * (G-113): services record it in audit events and sessions, since their own
+ * view of the connection is this gateway. `ip` is the socket's address, or the
+ * one a `TRUSTED_PROXIES` proxy forwarded.
+ */
+function contextFields(
+  context: RequestContext,
+  ip: string | undefined,
+): Parameters<typeof signInternalHeaders>[1] {
   return {
     ...(context.actorId === undefined ? {} : { actorId: context.actorId }),
     ...(context.actorType === undefined ? {} : { actorType: context.actorType }),
@@ -34,6 +43,7 @@ function contextFields(context: RequestContext): Parameters<typeof signInternalH
     ...(context.orgType === undefined ? {} : { orgType: context.orgType }),
     ...(context.resellerId === undefined ? {} : { resellerId: context.resellerId }),
     ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+    ...(ip === undefined ? {} : { clientIp: ip }),
   };
 }
 
@@ -143,11 +153,11 @@ function buildForwardHeaders(
   const traceparent = request.headers[TRACEPARENT_HEADER];
   if (typeof traceparent === 'string') headers.set(TRACEPARENT_HEADER, traceparent);
 
-  // Sessions record where they were opened from; without these, identity-service
-  // would see the gateway's own address and the proxy's User-Agent.
+  // Sessions record what they were opened from; without this, identity-service
+  // would see the proxy's own User-Agent. The client's address travels signed,
+  // in the context headers below.
   const userAgent = request.headers['user-agent'];
   if (typeof userAgent === 'string') headers.set('user-agent', userAgent);
-  if (request.ip !== undefined) headers.set('x-forwarded-for', request.ip);
 
   if (path === AUTH_PREFIX || path.startsWith(`${AUTH_PREFIX}/`)) {
     const cookie = request.headers['cookie'];
@@ -166,7 +176,7 @@ function buildForwardHeaders(
     if (typeof authorization === 'string') headers.set('authorization', authorization);
   }
 
-  const signed = signInternalHeaders(secret, contextFields(request.context));
+  const signed = signInternalHeaders(secret, contextFields(request.context, request.ip));
   for (const [name, value] of Object.entries(signed)) headers.set(name, value);
 
   return headers;

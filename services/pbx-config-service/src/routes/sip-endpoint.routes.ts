@@ -69,7 +69,7 @@ export function registerSipEndpointRoutes(
   app.get(
     '/v1/tenants/:tenantId/sip-endpoint',
     {
-      config: { permission: 'extension.manage', dataClass: 'config' },
+      config: { permission: 'extension.read', dataClass: 'config' },
       schema: { params: TenantParamsSchema, response: { 200: SipEndpointSchema } },
     },
     async (request) => {

@@ -1,6 +1,6 @@
 # Implementation status
 
-Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `251ef45`, 2026-09-24; Stage 5 rows updated for call recording (G-111) on 2026-09-25.
+Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `251ef45`, 2026-09-24; Stage 5 rows updated for call recording (G-111) on 2026-09-25; S1-15 (read permissions, G-10) added on 2026-09-25.
 
 **Done** = the task's scope exists and has tests; known caveats are named. **Partial** = some of the scope exists. **Not started** = no code.
 
@@ -9,7 +9,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | Stage | Done | Partial | Not started |
 |---|---|---|---|
 | S0 Foundations (10) | 10 | 0 | 0 |
-| S1 Orgs, identity, single-node (14) | 13 | 1 | 0 |
+| S1 Orgs, identity, single-node (16) | 14 | 1 | 1 |
 | S2 Core telephony (20) | 17 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (11) | 0 | 4 | 7 |
@@ -18,9 +18,9 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | Release readiness (7) | 1 | 1 | 5 |
-| **Total (101)** | **58** | **13** | **30** |
+| **Total (103)** | **59** | **13** | **31** |
 
-Milestones: M1 (S1) reached except API-key auth. M2 (S2 + S3) reached in code, with the caveats below. M3, M4 not started.
+Milestones: M1 (S1) reached except API-key auth and organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below. M3, M4 not started.
 
 Services with an empty `src` (verified, no files): `analytics-service`, `chat-service`, `fax-service`, `provisioning-service`, `sms-service`. `example-service` is the S0-08 sample.
 
@@ -57,6 +57,8 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S1-12 | Done | `telephony-config` read model, `opensips-projection.repo.ts`, `reconcile.ts` (reconciles itself only, G-16) |
 | S1-13 | Done | `telephony-config` `routes/fs.routes.ts` (`/fs/directory`, `/fs/dialplan`) |
 | S1-14 | Done | `tests/sip` (`scenarios.test.ts`, `register.xml`, `answer_call.xml`); CI `sip` job |
+| S1-15 | Done | G-10: `packages/authz` `READ_TWINS` (21 `.read` permissions, `.manage` implies `.read`), support roles; identity `permission-lookup.ts` and `/me` expand implied reads; `@cuc/http` resolver; 55 GET routes declare the read; console `core/permissions.dart` (`holds`), sections and read-only screens (`test/read_only_test.dart`) |
+| S1-16 | Not started | Organisation deletion (G-11) |
 
 ## Stage 2
 
