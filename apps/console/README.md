@@ -29,7 +29,9 @@ while acting, and a reseller does not see the private-data sections (voicemail,
 recordings).
 
 Sign-in details for the demo: `master@` is asked for a code, `reseller@` first sets up
-an authenticator (both accept `123456`), any other email signs in directly. Open
+an authenticator (both accept `123456`), any other email signs in directly. Resetting
+someone's two-step verification under **Users** asks for your own code too (`123456`;
+anything else shows the wrong-code message). Open
 `/reset` for password reset (a token of `expired` is rejected on the confirm page) and
 `/invite?token=x` for an invitation (`expired` is invalid, `taken` conflicts).
 

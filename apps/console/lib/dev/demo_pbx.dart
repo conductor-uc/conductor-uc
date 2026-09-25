@@ -801,12 +801,33 @@ class DemoPbx {
           return _problem(
             409,
             'You cannot reset your own two-step verification.',
+            code: 'cannot_reset_self',
           );
         }
         if (people[index]['mfaEnrolled'] != true) {
           return _problem(
             409,
             'That user has not set up two-step verification.',
+            code: 'mfa_not_enrolled',
+          );
+        }
+        // G-100 step-up: the signed-in admin confirms with their own current
+        // code. The demo accepts 123456, as its sign-in does.
+        final sent = options.data == null ? const {} : _body(options);
+        final code = '${sent['stepUpCode'] ?? ''}'.trim();
+        if (code.isEmpty) {
+          return _problem(
+            401,
+            'Enter the current code from your authenticator app to confirm.',
+            code: 'step_up_required',
+          );
+        }
+        if (code != '123456') {
+          return _problem(
+            401,
+            'That code is not right, or it was already used. Wait for the next '
+            'code and try again.',
+            code: 'step_up_invalid',
           );
         }
         people[index] = {...people[index], 'mfaEnrolled': false};
