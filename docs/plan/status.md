@@ -93,7 +93,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S3-04 | Done | `features/auth/*` (login, MFA, reset, invite); `auth_flows_test.dart` |
 | S3-05 | Done | `shell/sections.dart`, `core/acting.dart`, `core/permissions.dart`; `act_as_test.dart` |
 | S3-06 | Done | `orgs_page.dart`, `reseller_page.dart`; `reseller_screens_test.dart` |
-| S3-07 | Done | `orgs_page.dart` (tenants), `domains_panel.dart`, `brand_page.dart`, `trunks_page.dart` (no outbound-route screen) |
+| S3-07 | Done | `orgs_page.dart` (tenants), `domains_panel.dart`, `brand_page.dart`, `trunks_page.dart`, `outbound_routes_page.dart` (G-106) |
 | S3-08 | Done | `pbx/resource.dart` defs (extensions, DIDs, ring groups, queues, agents, rooms, parking, schedules, emergency locations), `users_page.dart`, `media_page.dart` |
 | S3-09 | Done | `apps/console/lib/canvas/*`; `test/canvas` |
 | S3-10 | Done | `features/callflow/builder/*` (palette, properties, local validation, publish); `test/callflow` |
@@ -125,10 +125,10 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S5-04 | Not started | no recording search or playback |
 | S5-05 | Not started | no retention handling |
 | S5-06 | Not started | no transcription adapter (O-3 open) |
-| S5-07 | Not started | notification-service has identity templates only |
+| S5-07 | Done | voicemail-to-email: `voicemail.consumer.ts`, `voicemail.mjml`, mailbox email settings in voicemail-service (G-107). Not tried with a real call or SMTP server |
 | S5-08 | Not started | api-gateway has no WebSocket hub |
 | S5-09 | Not started | call-control has no listen/whisper/barge |
-| S5-10 | Not started | `/monitoring`, `/recordings`, `/voicemail`, `/reports` render placeholder `SectionPage` |
+| S5-10 | Partial | Voicemail (`features/voicemail`) and Call records (`features/cdr`) screens exist; `/monitoring`, `/recordings`, `/reports` are still placeholders |
 
 ## Stage 6
 
@@ -188,6 +188,8 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | ACME / Let's Encrypt issuance and renewal in the background | Unplanned | G-105; `org-service` `acme-issuer.ts`, `certificate-worker.ts`, `acme-settings.routes.ts`; gateway `acme-challenge.ts` |
 | Certificate screens and Let's Encrypt settings | Unplanned (near S3-06) | `features/certificates/certificates_page.dart` |
 | Reseller console hostnames and DNS verification | Near S1-03 | `console-hostnames` routes, `dns-resolver.ts` |
+| Per-extension call handling: DND, forwarding, simultaneous ring (G-109) | Unplanned (parity 1a) | `pbx-config-service` `call-handling.routes.ts`; `telephony-config` `buildCallHandlingDialplanDocument`; console `call_handling_dialog.dart`. Not tried on a real call |
+| Platform public address and reseller DNS records | Unplanned | `org-service` `network.routes.ts`, migration 005; console Certificates and the reseller Certificates tab |
 | Platform health screen | Unplanned | `platform-health.ts`, `platform_health_page.dart` |
 | Extension SIP password reset; `password_reset.test.ts` | Near S1-09 | `POST .../extensions/:id/reset-password` |
 | Hostname-based org resolution at sign-in | Near S3-04 | G-61 |
@@ -200,9 +202,9 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 1. Recording (S5-01 to S5-05): no service, policy, upload, or retention.
 2. No HA (S4-03 to S4-08): no failover handling, OpenSIPs clustering, data-store HA, or chaos tests; only one dispatcher path over two nodes.
 3. No production deployment manifests or topology ADR (S4-01, S4-11).
-4. Console has no voicemail, monitoring, recordings, or reports screens (S5-10, S7-07); CDRs have API and export but no screen.
+4. Console has no monitoring, recordings, or reports screens (S5-10, S7-07). Voicemail, call records and outbound routes have screens now (G-106, G-107).
 5. Release readiness: no security review, pen test, backup/restore, runbooks, or license (O-6).
-6. Voicemail-to-email, transcription, and MWI wiring (S5-06, S5-07, G-42).
+6. Voicemail transcription and MWI wiring (S5-06, G-42, G-108). Voicemail-to-email is built (G-107).
 7. No realtime layer: no gateway WebSocket, live calls, monitor/whisper/barge, or wallboards (S5-08, S5-09, S7-06).
 8. Emergency calling incomplete: no emergency-call notification, carrier-specific location format unresolved (S2-06, G-1, G-33).
 9. Fax, SMS, chat, video, analytics all unbuilt (S6, S7); five services are empty.
@@ -221,16 +223,16 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | Extensions and devices | Extensions, SIP credentials, reveal, reset password | pbx-config-service `/extensions`; console Extensions |
 | Extensions and devices | Connect a phone; Yealink phones by MAC | `/sip-endpoint`, `/devices`, `/v1/public/provision/yealink/:file`; console Phones |
 | DIDs and trunks | DIDs with destination types | pbx-config-service `/dids`; console Phone numbers |
-| DIDs and trunks | Trunks (register or IP auth), IPs, status; outbound routes; emergency route | trunk-service `/trunks`, `/outbound-routes`, `/emergency-route`; console Trunks (routes: API only) |
+| DIDs and trunks | Trunks (register or IP auth), IPs, status; outbound routes; emergency route | trunk-service `/trunks`, `/outbound-routes`, `/emergency-route`; console Trunks and Outbound routes |
 | Groups | Ring groups | `/ring-groups`; console Ring groups |
 | Groups | Queues, agents, tiers | `/queues`, `/agents`, `.../tiers`; console Queues |
 | Groups | Parking lots; conference rooms (audio, PIN) | `/parking-lots`, `/conference-rooms`; console Parking lots, Conference rooms |
 | Call flows | Draft, validate, publish, rollback, versions; visual builder | callflow-service `/flows`; console Call flows |
-| Voicemail | Mailboxes, PIN reset, greeting upload, messages, play URL | voicemail-service `/voicemail/mailboxes`; API only, no console screen |
+| Voicemail | Mailboxes, PIN reset, greeting upload, messages, play URL, email settings, voicemail to email | voicemail-service `/voicemail/mailboxes`; notification-service `voicemail.consumer.ts`; console Voicemail (no mailbox create or greeting upload) |
 | Schedules | Business hours and holidays; used by `time_condition` | pbx-config-service `/schedules`; console Schedules |
 | Emergency | Emergency locations per extension | `/emergency-locations`; console Settings |
 | Media | Upload, transcode, playback via `http_cache` | pbx-config-service `/media-assets`, media-worker; console Media |
-| CDR | CDR list and detail, async export, billing records | cdr-service `/cdrs`, `/cdr-exports`, `/billing-records`; API only |
+| CDR | CDR list and detail, async export, billing records | cdr-service `/cdrs`, `/cdr-exports`, `/billing-records`; console Call records (billing records: API only) |
 | Audit | Audit events by org | identity-service `/audit-events`; console Audit |
 | Certificates | Let's Encrypt settings, issuance, renewal; SIP and console certs | org-service `/v1/platform/acme-settings`, `/certificates`; console Certificates |
 | Provisioning | HTTPS-only Yealink config with per-device credentials | pbx-config-service `provision.routes.ts`; console Phones |
