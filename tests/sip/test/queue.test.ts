@@ -2,7 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
-  dockerCurlJson,
+  tenantAdminCurlJson,
   fsCli,
   seedFixtures,
   sipInfraOrSkipReason,
@@ -69,7 +69,8 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
   });
 
   async function createQueue(tenantId: string): Promise<{ id: string }> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/queues`,
       { label: 'S2-20 queue', strategy: 'ring-all', maxWaitSeconds: 60, announcePosition: false },
@@ -79,11 +80,16 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
   }
 
   async function deleteQueue(tenantId: string, id: string): Promise<void> {
-    await dockerCurlJson('DELETE', `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/queues/${id}`);
+    await tenantAdminCurlJson(
+      seed.resellerId,
+      'DELETE',
+      `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/queues/${id}`,
+    );
   }
 
   async function findExtension(tenantId: string, number: string): Promise<ExtensionRow> {
-    const response = await dockerCurlJson(
+    const response = await tenantAdminCurlJson(
+      seed.resellerId,
       'GET',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/extensions`,
     );
@@ -95,7 +101,8 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
   }
 
   async function createAgent(tenantId: string, extensionId: string): Promise<{ id: string }> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/agents`,
       { extensionId },
@@ -105,11 +112,16 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
   }
 
   async function deleteAgent(tenantId: string, id: string): Promise<void> {
-    await dockerCurlJson('DELETE', `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/agents/${id}`);
+    await tenantAdminCurlJson(
+      seed.resellerId,
+      'DELETE',
+      `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/agents/${id}`,
+    );
   }
 
   async function addTier(tenantId: string, queueId: string, agentId: string): Promise<void> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/queues/${queueId}/tiers`,
       { agentId },
@@ -118,7 +130,8 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
   }
 
   async function createIpTrunk(tenantId: string, ip: string): Promise<{ id: string }> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks`,
       {
@@ -137,7 +150,8 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
   }
 
   async function addTrunkIp(tenantId: string, trunkId: string, ip: string): Promise<void> {
-    const ipAdded = await dockerCurlJson(
+    const ipAdded = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}/ips`,
       { cidr: `${ip}/32` },
@@ -146,7 +160,11 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
   }
 
   async function deleteTrunk(tenantId: string, trunkId: string): Promise<void> {
-    await dockerCurlJson('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`);
+    await tenantAdminCurlJson(
+      seed.resellerId,
+      'DELETE',
+      `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`,
+    );
     // Same settle window `trunk_did_routing.test.ts` already uses before a
     // freed IP could be recycled by the very next test's own caller
     // container.
@@ -159,7 +177,8 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
     trunkId: string,
     queueId: string,
   ): Promise<string> {
-    const created = await dockerCurlJson(
+    const created = await tenantAdminCurlJson(
+      seed.resellerId,
       'POST',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/dids`,
       { e164, trunkId, destinationType: 'queue', destinationId: queueId },
@@ -169,7 +188,8 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
   }
 
   async function deleteDid(tenantId: string, didId: string): Promise<void> {
-    await dockerCurlJson(
+    await tenantAdminCurlJson(
+      seed.resellerId,
       'DELETE',
       `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/dids/${didId}`,
     );

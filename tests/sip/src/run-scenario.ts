@@ -414,6 +414,36 @@ export async function tenantAdminHeaders(
   );
 }
 
+/**
+ * {@link dockerCurlJson} as the administrator of the tenant the
+ * `/v1/tenants/{tenantId}/…` URL names ({@link tenantAdminHeaders}). A service
+ * refuses a protected route to a caller with no identity (G-112), so every
+ * administrative call a test makes is signed as a real person, the way
+ * api-gateway would send it. The headers are signed afresh for each call: a
+ * signature is only good for a minute.
+ */
+export async function tenantAdminCurlJson(
+  resellerId: string,
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  url: string,
+  body?: unknown,
+): Promise<{ status: number; json: unknown }> {
+  const tenantId = /^\/v1\/tenants\/([^/]+)\//.exec(new URL(url).pathname)?.[1];
+  if (tenantId === undefined) throw new Error(`not a tenant route: ${url}`);
+  return dockerCurlJson(method, url, body, await tenantAdminHeaders(tenantId, resellerId));
+}
+
+/**
+ * `Authorization` for a call that is not one tenant's, or that needs more than
+ * a tenant administrator holds: the shared internal service token, which a
+ * service accepts as a trusted machine caller (G-112).
+ */
+export function internalServiceHeaders(): Record<string, string> {
+  return {
+    authorization: `Bearer ${envOr('INTERNAL_SERVICE_TOKEN', 'dev-internal-service-token')}`,
+  };
+}
+
 /** `docker exec`s the real MI command — see `project_s1_14_checkpoint.md`:
  * `usrloc`/`subscriber` are DB-persisted, so a stale registration from a
  * prior run (same AOR) can make a fresh REGISTER fail with "Invalid CSeq
