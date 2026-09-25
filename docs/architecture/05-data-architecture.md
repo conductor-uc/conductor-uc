@@ -147,6 +147,8 @@ Transport: **NATS JetStream**, with one stream per domain (`ORG`, `IDENTITY`, `P
 
 Publishing uses the **transactional outbox**: the service writes its business rows and an `outbox` row in the same DB transaction, and a relay publishes and marks the row sent. Consumers are durable, deduplicate by event `id`, and are idempotent.
 
+**Retention (G-55).** Neither copy of an event is kept for ever. The relay deletes published `outbox` rows once they are `OUTBOX_RETENTION_DAYS` old (7 by default; unpublished rows, parked ones included, are never deleted), and every stream has a `max_age` of `NATS_STREAM_MAX_AGE_DAYS` (7 by default), set by `ensureStreams()` at each service's startup, including on streams that already exist. A consumer that is down longer than that loses what it missed. Events never carry credentials: a password-reset or invitation token is issued by identity-service when notification-service sends the email ([06](06-services.md#identity-service)), so the reset and invitation events carry ids only.
+
 Envelope:
 
 ```json
@@ -172,5 +174,5 @@ Principal event consumers:
 | call-control | `pbx.queue.*`, `pbx.conference.*`, `org.tenant.suspended` (tear down calls) |
 | cdr-service | `call.lost` |
 | chat-service | `identity.user.*`, `org.tenant.*` |
-| notification-service | `voicemail.message.created`, `fax.received`, `identity.user.password_reset_requested` |
+| notification-service | `voicemail.message.created`, `fax.received`, `identity.user.password_reset_requested`, `identity.invitation.created`, `identity.user.mfa_reset` |
 | analytics-service | `cdr.record.created`, `call.*`, queue events |

@@ -73,11 +73,18 @@ Every service applies its own database migrations **when it starts**, before it 
 
 **Releases that change the signed identity headers** (the first is the one that added the client address to them, G-113; its release notes say so): the gateway and the eight services that trust those headers (identity, org, pbx-config, trunk, callflow, voicemail, recording, cdr) must run the same version. While one side is old, every request through the gateway is answered 401 `internal_headers_forged`. Upgrade them together, in one step, and expect the API to be unavailable until both sides are restarted. The same release makes those services refuse a request that reaches them directly without signed headers or `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>` (G-112): check that any script or tool of your own that calls a service's port directly sends the token. It also stops the gateway believing `X-Forwarded-For` and `X-Forwarded-Proto` unless you list your proxies in `TRUSTED_PROXIES` ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)); set it before upgrading if the gateway sits behind a load balancer.
 
+**The release that issues reset and invitation links at send time** (G-55; its release notes say so):
+
+- `INVITATION_TTL_DAYS` is renamed `INVITATION_TTL_HOURS`, and invitations now last **72 hours** by default instead of 7 days. The old variable is ignored; if you set it, set `INVITATION_TTL_HOURS` instead (for example `168` to keep seven days). Invitations made before the upgrade keep their expiry.
+- notification-service needs a new required variable, `IDENTITY_SERVICE_URL` (the all-in-one and distributed files already pass it through `x-urls`; add it if you wrote your own). It must reach identity-service's port.
+- The password-reset and invitation events change version. **Upgrade identity-service and notification-service in the same step.** A reset or invitation requested in the few seconds while one is old and the other new is not emailed (notification-service logs `terminating event that does not match its contract` at error). The person can ask for a new reset. An invitation that was not emailed can be sent again only once it expires, so avoid inviting people during the upgrade. Links emailed before the upgrade keep working until they expire.
+- Two new settings apply to every service: `OUTBOX_RETENTION_DAYS` and `NATS_STREAM_MAX_AGE_DAYS`, both 7 by default ([configuration §3.3](configuration-reference.md#33-events-every-service-except-api-gateway)). At first start, every service deletes the events it published more than 7 days ago (on an old installation, the first run takes a while; it works in batches and does not block anything), and every stream gets a 7-day age limit, so messages older than that are removed from NATS at once. Make sure no consumer is stopped with a backlog older than 7 days before upgrading, or set a larger `NATS_STREAM_MAX_AGE_DAYS` in every service first.
+
 What a restart costs:
 
 | Restarting | Effect |
 |---|---|
-| An application service | Requests to it fail for a few seconds. Events wait in NATS and are processed afterwards. |
+| An application service | Requests to it fail for a few seconds. Events wait in NATS and are processed afterwards (for up to `NATS_STREAM_MAX_AGE_DAYS`, 7 days by default). |
 | telephony-config | **New calls fail while it is down**: FreeSWITCH asks it for every call. |
 | call-control | Live-call tracking and resource leases restart. Calls continue. |
 | api-gateway | Console and API unavailable for a few seconds. Signed-in users stay signed in. |
@@ -97,6 +104,8 @@ What a restart costs:
 | Bootstrap TLS files, MinIO certificates | Needed to start the gateway and MinIO | With `.env` | On renewal |
 
 Not needed: Redis (live state only), NATS (undelivered events stay in the services' outbox tables; losing the stream loses at most events already published but not yet consumed), FreeSWITCH, OpenSIPs and the gateway (no state of their own).
+
+Event retention (G-55): each service deletes events from its `outbox` table 7 days after publishing them (`OUTBOX_RETENTION_DAYS`), and NATS removes a message 7 days after it arrived, consumed or not (`NATS_STREAM_MAX_AGE_DAYS`). So a consumer stopped for longer than that loses the events it missed. No event carries a password-reset or invitation token: the token is created when the email is sent and only its hash is stored, so neither a dump nor a NATS store holds a usable one.
 
 There is no backup tooling in the platform (release-readiness task, not started). Nothing checks that backups work, so test restores.
 
@@ -176,6 +185,8 @@ Readiness checks:
 | Certificates | Console **Certificates** list; org-service log | A certificate failing, or active and expiring within 20 days (renewal starts at 30) |
 | Email | notification-service log | SMTP errors |
 | Outbox backlog | `/readyz` outbox detail (`N pending`) on each service | Growing steadily (NATS unreachable, or events failing) |
+| Consumers stopped | A consumer service not ready, or `nats consumer report <stream>` showing unprocessed messages | Any consumer down for more than a day: after `NATS_STREAM_MAX_AGE_DAYS` (7 days) its missed events are gone |
+| Reset and invitation emails skipped | notification-service log: `identity-service issued no link; not sending` (info) | Many at once: identity-service refusing links (the reset was used or expired, the user disabled, the invitation accepted) is normal one at a time |
 | NATS | `http://<nats>:8222/jsz` (if you publish monitoring) | Stream or consumer errors; storage full |
 | MariaDB | Your usual MariaDB monitoring | Connections near `max_connections`; replication lag if used; disk |
 | Disk | Host monitoring | MariaDB and NATS volumes above 80% |
