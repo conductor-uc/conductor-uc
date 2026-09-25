@@ -85,7 +85,9 @@ media-worker and notification-service accept the `OUTBOX_*` variables but do not
 | `TRUST_INTERNAL_HEADERS` | `false` | no | **Set `true`** on identity, org, pbx-config, trunk, callflow, voicemail, recording and cdr services. With `false`, requests from the gateway arrive with no user and are refused ("Sign in to continue"). |
 | `INTERNAL_HEADER_SIGNING_SECRET` | — | **yes when the above is `true`** (secret) | Same value as the gateway's |
 
-The signature is an HMAC-SHA256 over the six identity headers plus a millisecond timestamp. A signature more than 60 seconds old or from the future is rejected (`internal_headers_forged`), so **server clocks must agree**.
+The signed context carries who is calling (six identity headers) and the client's address as the gateway saw it (`x-internal-client-ip`), which services record in audit events and sessions instead of the gateway's own address. The signature is an HMAC-SHA256 over those seven values plus a millisecond timestamp. A signature more than 60 seconds old or from the future is rejected (`internal_headers_forged`), so **server clocks must agree**.
+
+With `TRUST_INTERNAL_HEADERS=true`, a request that carries neither a valid signed context nor `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>` is refused (401 `authentication_required`) on every route except sign-in, the public routes and health checks. The token is how one service or tool calls another's API directly: it is accepted as a trusted machine caller, not as a person, so routes that act for a person (revealing a credential, recordings) still refuse it.
 
 call-control, media-worker and telephony-config accept these variables but ignore them. notification-service never trusts them.
 
@@ -133,6 +135,7 @@ Groups: base only. No database, no NATS, no storage.
 | `ORG_SERVICE_URL` | — | **yes** | Also used for certificates and ACME challenges |
 | `PBX_CONFIG_SERVICE_URL`, `CALLFLOW_SERVICE_URL`, `VOICEMAIL_SERVICE_URL`, `CDR_SERVICE_URL`, `TRUNK_SERVICE_URL`, `RECORDING_SERVICE_URL` | — | **yes** | Where each service is. `/v1/platform/health` probes each one's `/readyz`. |
 | `INTERNAL_SERVICE_TOKEN` | — | no (secret) | **Set it.** Without it the gateway cannot fetch certificates from org-service or answer ACME challenges. |
+| `TRUSTED_PROXIES` | empty | no | Addresses or CIDRs of the reverse proxies or load balancers in front of the gateway, comma-separated (for example `10.10.0.5,10.20.0.0/24`). Only their `X-Forwarded-For` and `X-Forwarded-Proto` are believed. **Leave empty when the gateway faces the internet directly**: the client address is then the connection's own. The address found here is what the per-IP rate limit counts and what audit events record. A malformed entry stops the gateway at startup. See [network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers). |
 | `REDIS_URL` | — | **yes** | Rate-limit counters, for example `redis://10.10.0.41:6379`. Keys are `rl:ip:*` and `rl:actor:*` with no prefix: do not share the Redis database with another platform instance. |
 | `RATE_LIMIT_IP_MAX` / `RATE_LIMIT_IP_WINDOW_MS` | `300` / `60000` | no | Requests per IP per window. Phones behind one NAT that reboot together share this. |
 | `RATE_LIMIT_ACTOR_MAX` / `RATE_LIMIT_ACTOR_WINDOW_MS` | `600` / `60000` | no | Per signed-in user |

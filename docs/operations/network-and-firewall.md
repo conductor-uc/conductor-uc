@@ -11,7 +11,7 @@ Every port the platform listens on and every connection it makes: who opens it, 
 | **FreeSWITCH** | **Yes, for media**: UDP 16384–32768 | Audio flows straight between phones or carriers and FreeSWITCH, and FreeSWITCH advertises its own interface address in SDP ([§4](#4-media-rtp-and-why-freeswitch-needs-a-public-address)). Its SIP port and event socket must stay private. |
 | **Object storage** | **Reachable over HTTPS by browsers** (and by FreeSWITCH servers) | Browsers download recordings, voicemail and exports, and upload prompts and logos, through presigned URLs on `STORAGE_ENDPOINT`. A hosted S3 provider satisfies this; a self-hosted MinIO needs a public HTTPS name. |
 | recording-uploader | No | Outbound only, plus a private metrics port |
-| All twelve application services | **No, never** | They trust the network ([§6.1](#61-backend-services-trust-the-network)) |
+| All twelve application services | **No, never** | Private by design; shared internal secrets protect them ([§6.1](#61-keep-backend-service-ports-private)) |
 | MariaDB, Redis, NATS | **No, never** | No TLS support in the clients; Redis and (by default) NATS have no password |
 
 Everything private can sit behind NAT or on a network with no internet route, **except** where it needs outbound internet access ([§5](#5-outbound-connections)): org-service (Let's Encrypt, DNS), notification-service (SMTP relay), and anything that talks to a hosted object store.
@@ -40,7 +40,7 @@ WebSocket SIP (WS/WSS), SIP over IPv6 and HEP capture are not configured.
 | OpenSIPs MI | 8888 (`OPENSIPS_MI_PORT`) | TCP, HTTP JSON-RPC | **all interfaces** | telephony-config; the container's own health check (127.0.0.1) | **None** | telephony-config's address. Anyone who reaches it can reload or change OpenSIPs' state. |
 | FreeSWITCH SIP | 5060 (`FS_SIP_PORT`) | UDP and TCP | detected interface address only | OpenSIPs | ACL `FS_OPENSIPS_CIDR` (one CIDR) | OpenSIPs' address |
 | FreeSWITCH ESL | 8021 (fixed) | TCP | 0.0.0.0 (`FS_EVENT_SOCKET_BIND_IP`) | call-control | ACL `FS_CLUSTER_CIDR` (one CIDR) plus `FS_EVENT_SOCKET_PASSWORD` | call-control's address. ESL can run any FreeSWITCH command. |
-| Every application service | 8080 (`HTTP_PORT`) | TCP, HTTP | `HTTP_HOST` (0.0.0.0) | The gateway and other services ([§2.3](#23-who-calls-which-service)) | Depends on the route ([§6.1](#61-backend-services-trust-the-network)) | Only the callers in §2.3 |
+| Every application service | 8080 (`HTTP_PORT`) | TCP, HTTP | `HTTP_HOST` (0.0.0.0) | The gateway and other services ([§2.3](#23-who-calls-which-service)) | Signed identity headers from the gateway, or `INTERNAL_SERVICE_TOKEN`; public routes need none ([§6.1](#61-keep-backend-service-ports-private)) | Only the callers in §2.3 |
 | recording-uploader | 9464 (`METRICS_PORT`) | TCP, HTTP | `METRICS_HOST` (0.0.0.0) | Your monitoring system | None | Your monitoring system |
 | MariaDB | 3306 | TCP (no TLS) | container default | Every service except api-gateway; OpenSIPs; telephony-config (also the `opensips` schema) | Per-service user and password | Those hosts |
 | Redis | 6379 | TCP (no TLS) | container default | api-gateway, call-control, telephony-config, FreeSWITCH, OpenSIPs | **None** (FreeSWITCH's Redis module has no password option) | Those hosts |
@@ -150,17 +150,17 @@ Carriers that authenticate you by IP address must allow **OpenSIPs' public addre
 
 ## 6. Security properties that decide placement
 
-### 6.1 Backend services trust the network
+### 6.1 Keep backend service ports private
 
-The eight services the gateway forwards to (identity, org, pbx-config, trunk, callflow, voicemail, recording and cdr) decide who is calling from the signed `x-internal-*` headers the gateway adds. A request **with no such headers at all** is treated as an anonymous internal caller: the per-request permission check (`packages/http/src/permission-guard.ts`) only runs for signed-in people, and the handler serves the tenant named in the URL. The live SIP test suite relies on this to call services directly.
+The eight services the gateway forwards to (identity, org, pbx-config, trunk, callflow, voicemail, recording and cdr) decide who is calling from the signed `x-internal-*` headers the gateway adds. A request that reaches one of them directly, with **no** signed headers, is refused (401 `authentication_required`) on every route except sign-in, the public routes and health checks, unless it presents `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>`. The token marks a trusted machine caller: another service, or a tool of your own. This closed gap G-112 in [decisions](../decisions.md); before it, such a request was served for whatever tenant its URL named.
 
-So **anyone who can reach port 8080 of one of these services can read and change any tenant's configuration and private data without logging in.** This is recorded as gap G-112 in [decisions](../decisions.md). Until it is fixed:
+Keep the service ports private anyway, as defence in depth:
 
 - Never publish any application service's port on a public interface.
 - On a shared or multi-purpose network, restrict each service's port to the callers listed in [§2.3](#23-who-calls-which-service).
-- Treat the private network between gateway, services and FreeSWITCH as part of the trusted core. Anything else on that network (a jump host, a monitoring agent, another tenant's VM) can reach tenant data.
+- Treat the private network between gateway, services and FreeSWITCH as part of the trusted core. Anything on it that learns a shared secret can reach tenant data.
 
-The other internal secrets matter too. `INTERNAL_SERVICE_TOKEN` (one shared token) opens every service's `/internal/v1/*` routes, including one that returns TLS private keys. `FS_XML_CURL_TOKEN` opens telephony-config's `/fs/*` routes. `FS_CDR_INGEST_TOKEN` lets a caller write call records.
+The internal secrets are what protects the services now. `INTERNAL_SERVICE_TOKEN` (one shared token) opens every service's API as a machine caller and every service's `/internal/v1/*` routes, including one that returns TLS private keys. `INTERNAL_HEADER_SIGNING_SECRET` lets its holder sign as any person. `FS_XML_CURL_TOKEN` opens telephony-config's `/fs/*` routes. `FS_CDR_INGEST_TOKEN` lets a caller write call records.
 
 ### 6.2 Internal ports with no password
 
@@ -170,18 +170,15 @@ The other internal secrets matter too. `INTERNAL_SERVICE_TOKEN` (one shared toke
 - **FreeSWITCH ESL (8021)**: a password, plus one allowed CIDR.
 - **MariaDB, Redis, NATS** connections carry no TLS, and the clients have no TLS options. Keep them on a private network. On untrusted links, use a VPN or WireGuard between servers.
 
-### 6.3 The gateway believes X-Forwarded headers
+### 6.3 Client addresses and X-Forwarded headers
 
-The gateway trusts `X-Forwarded-For` and `X-Forwarded-Proto` from any client. When it faces the internet directly, a client can set them to:
+The gateway takes the client's address from the connection itself, and ignores `X-Forwarded-For` and `X-Forwarded-Proto`, unless the connection comes from a proxy listed in `TRUSTED_PROXIES` ([configuration §4.1](configuration-reference.md#41-api-gateway)). The address it settles on is what the per-IP rate limit (300 requests per minute by default) counts, and it is signed into the identity headers it forwards, so services record it in audit events and sign-in sessions instead of the gateway's own address. Before G-113 in [decisions](../decisions.md) was fixed, the gateway believed these headers from any client, which let a client escape the per-IP rate limit, put a false address in the audit log, and claim HTTPS on the provisioning URL.
 
-- spread its requests over made-up IP addresses and escape the per-IP rate limit (300 requests per minute by default);
-- put a false IP address into the audit log (sign-ins, private-data access);
-- claim HTTPS while speaking plain HTTP to the provisioning URL. This only weakens the client's own connection.
+- **Gateway directly on 80 and 443** (what the deployment guides do, because the gateway serves the certificates org-service issues): leave `TRUSTED_PROXIES` empty.
+- **Behind a reverse proxy or load balancer that terminates TLS** and overwrites `X-Forwarded-For` and `X-Forwarded-Proto`: list its addresses (or its subnet) in `TRUSTED_PROXIES`. Otherwise every client appears to come from the proxy, all of them share one per-IP rate limit, and phone provisioning is refused as plain HTTP. The proxy then needs its own certificates for every console hostname; the platform's automatic certificates are served by the gateway.
+- **Behind a layer-4 balancer that passes TLS through**: it cannot set these headers. Leave `TRUSTED_PROXIES` empty; the gateway sees the balancer's address for every client, with the same shared rate limit, unless the balancer preserves the client's source address (transparent mode or direct server return).
 
-Recorded as G-113 in [decisions](../decisions.md). Two ways to deploy:
-
-- **Gateway directly on 80 and 443** (what the deployment guides do, because the gateway serves the certificates org-service issues): accept the limitation above until G-113 is fixed.
-- **Behind a reverse proxy or load balancer that overwrites** `X-Forwarded-For` and `X-Forwarded-Proto`: the headers become trustworthy. But the proxy must then either terminate TLS itself, with its own certificates for every console hostname and without the platform's automatic certificates, or pass TLS through at layer 4, which cannot set those headers. There is no good option for this combination today.
+Never list an address that ordinary clients can connect from: whatever it sends in `X-Forwarded-For` is believed.
 
 ### 6.4 SIP flood protection hits trusted peers too
 

@@ -60,6 +60,8 @@ Every service applies its own database migrations **when it starts**, before it 
    `docker compose up -d` recreates only the containers whose image or settings changed, in dependency order. Use it for steps 2–5 together if a few seconds of API errors are acceptable.
 6. Run the verification list ([all-in-one §10](deploy-all-in-one.md#10-verify)).
 
+**Releases that change the signed identity headers** (the first is the one that added the client address to them, G-113; its release notes say so): the gateway and the eight services that trust those headers (identity, org, pbx-config, trunk, callflow, voicemail, recording, cdr) must run the same version. While one side is old, every request through the gateway is answered 401 `internal_headers_forged`. Upgrade them together, in one step, and expect the API to be unavailable until both sides are restarted. The same release makes those services refuse a request that reaches them directly without signed headers or `Authorization: Bearer <INTERNAL_SERVICE_TOKEN>` (G-112): check that any script or tool of your own that calls a service's port directly sends the token. It also stops the gateway believing `X-Forwarded-For` and `X-Forwarded-Proto` unless you list your proxies in `TRUSTED_PROXIES` ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)); set it before upgrading if the gateway sits behind a load balancer.
+
 What a restart costs:
 
 | Restarting | Effect |
@@ -228,8 +230,6 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 
 | Area | Limitation | Reference |
 |---|---|---|
-| Security | Backend services serve any request that reaches them without gateway headers; network isolation is the only protection | G-112 |
-| Security | The gateway trusts client-supplied `X-Forwarded-For` and `X-Forwarded-Proto` | G-113 |
 | Security | OpenSIPs MI and Redis have no authentication; no TLS to MariaDB, Redis or NATS; NATS NKeys ignored | network §6.2 |
 | Security | One shared internal token for all services; FreeSWITCH tokens are static | 07 §1 |
 | Security | Master key is an environment variable; no KMS; login signing keys never rotate | G-116, 07 §5 |

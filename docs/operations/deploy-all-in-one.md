@@ -698,7 +698,7 @@ services:
 
 - `HTTP_PORT` must be 443 inside the container, because the HTTP-to-HTTPS redirect is built from it. `net.ipv4.ip_unprivileged_port_start=0` lets the non-root process bind 80 and 443 inside its own network namespace only.
 - Put the bootstrap certificate ([DNS/TLS §4](dns-tls-and-certificates.md#4-the-bootstrap-certificate-first-installation)) in `/opt/voice/bootstrap-tls/fullchain.pem` and `privkey.pem`, readable by uid 65532 (`chmod 644 fullchain.pem; chmod 640 privkey.pem; chgrp 65532 privkey.pem`).
-- It faces the internet directly, so `X-Forwarded-For` from clients is believed ([network §6.3](network-and-firewall.md#63-the-gateway-believes-x-forwarded-headers)).
+- It faces the internet directly, so leave `TRUSTED_PROXIES` unset: the client address is the connection's own, and `X-Forwarded-For` from clients is ignored ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)).
 
 ### 7.6 Self-hosted MinIO instead of hosted S3
 

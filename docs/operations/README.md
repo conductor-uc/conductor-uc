@@ -37,7 +37,7 @@ Read this section before you plan a production deployment. It is short on purpos
 ### Four rules that apply to every deployment
 
 1. **Only three things face the internet:** the API gateway (TCP 80 and 443), OpenSIPs (SIP on UDP and TCP 5060, TLS on TCP 5061), and the FreeSWITCH media ports (UDP 16384–32768). Object storage must also be reachable by browsers, over HTTPS. Nothing else may be reachable from outside.
-2. **The backend services trust their network.** A request that reaches a service's port directly, without going through the gateway, is not asked to log in. It can read and change any tenant's data ([network §6.1](network-and-firewall.md#61-backend-services-trust-the-network)). Keeping service ports private is the security boundary, not a precaution.
+2. **The backend services belong on a private network.** A request that reaches a service's port directly, without going through the gateway, is refused unless it carries the shared `INTERNAL_SERVICE_TOKEN` ([network §6.1](network-and-firewall.md#61-keep-backend-service-ports-private)). That one token opens every service's API, so keep service ports private as well.
 3. **Several internal ports have no password at all:** the OpenSIPs management interface (TCP 8888), Redis (6379) and, as configured by the development stack, NATS (4222). A firewall must restrict them.
 4. **Every server's clock must be synchronised** (NTP or chrony). The gateway signs each request it forwards, and services reject signatures more than 60 seconds old.
 
