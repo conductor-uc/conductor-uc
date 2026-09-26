@@ -7,6 +7,7 @@ import { enqueueEvent } from '@cuc/events';
 import type { CallDirection } from '../domain/policy.js';
 import {
   closeOpenPause,
+  isPaused,
   parsePauseIntervals,
   RECORDING_CONTENT_TYPE,
   recordingObjectKey,
@@ -54,6 +55,18 @@ export class RecordingNotFoundError extends Error {
 
 export class RecordingStateError extends Error {
   override readonly name = 'RecordingStateError';
+
+  /**
+   * Why, as the control route's refusal reason: `stopped` (an on-demand recording already
+   * stopped), `rule_recording`, or (S5-15, an explicit pause or resume) `already_paused` /
+   * `not_paused`.
+   */
+  constructor(
+    message: string,
+    readonly reason: string = 'stopped',
+  ) {
+    super(message);
+  }
 }
 
 export interface RegisterRecordingInput {
@@ -307,6 +320,7 @@ export function createRecordingRepo(db: Database<RecordingServiceDb>) {
         if (!current.onDemand) {
           throw new RecordingStateError(
             'A recording a rule started cannot be stopped by feature code.',
+            'rule_recording',
           );
         }
         if (current.stoppedAt !== null) {
@@ -333,11 +347,16 @@ export function createRecordingRepo(db: Database<RecordingServiceDb>) {
      * S5-13: pauses a recording that is running, or resumes one that is paused, with its audit
      * record, in one transaction. `audit(paused)` names the action for the direction taken.
      * Throws `RecordingStateError` for a stopped on-demand recording.
+     *
+     * S5-15: `want` makes it an explicit pause or resume (the console's buttons) rather than a
+     * toggle: checked under the row lock, so two people pressing Pause at once pause it once and
+     * the second is refused (`already_paused`), instead of resuming it again.
      */
     async togglePause(
       ctx: DbContext,
       id: string,
       audit: (paused: boolean) => AuditEventInput,
+      want?: 'pause' | 'resume',
     ): Promise<{ recording: Recording; paused: boolean }> {
       let result: { recording: Recording; paused: boolean } | undefined;
       await db.scoped(ctx).transaction(async (trx, raw) => {
@@ -351,6 +370,13 @@ export function createRecordingRepo(db: Database<RecordingServiceDb>) {
         const current = toRecording(row);
         if (current.stoppedAt !== null) {
           throw new RecordingStateError('That on-demand recording is stopped.');
+        }
+        const paused = isPaused(current.pauses);
+        if (want === 'pause' && paused) {
+          throw new RecordingStateError('That recording is already paused.', 'already_paused');
+        }
+        if (want === 'resume' && !paused) {
+          throw new RecordingStateError('That recording is not paused.', 'not_paused');
         }
         const now = new Date();
         const toggled = togglePauseIntervals(current.pauses, now);
@@ -366,6 +392,23 @@ export function createRecordingRepo(db: Database<RecordingServiceDb>) {
         };
       });
       return result!;
+    },
+
+    /**
+     * S5-15: an on-demand recording of this call that is still running (not stopped), if any. The
+     * console's Start is refused while one runs, even if the channel has not been told its id yet
+     * (a second Start racing the first).
+     */
+    findRunningOnDemand(ctx: DbContext, callUuid: string): Promise<Recording | undefined> {
+      return db
+        .scoped(ctx)
+        .selectFrom('recordings')
+        .select(COLUMNS)
+        .where('call_uuid', '=', callUuid)
+        .where('on_demand', '=', true)
+        .where('stopped_at', 'is', null)
+        .executeTakeFirst()
+        .then((row) => (row === undefined ? undefined : toRecording(row)));
     },
 
     findById(ctx: DbContext, id: string): Promise<Recording | undefined> {
