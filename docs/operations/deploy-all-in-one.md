@@ -491,7 +491,7 @@ services:
       redis: { condition: service_healthy }
     extra_hosts: ['host.docker.internal:host-gateway']
     environment:
-      <<: [*common, *db, *nats]
+      <<: [*common, *db, *nats, *trust, *urls]   # *trust, *urls: the live recording buttons (S5-15)
       SERVICE_NAME: call-control
       DB_USER: call_control
       DB_PASSWORD: ${CALL_CONTROL_DB_PASSWORD}
