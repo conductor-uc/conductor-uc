@@ -382,7 +382,12 @@ describe.skipIf(skipReason !== undefined)('S5-15 live recording buttons (live SI
 
         // 401's own leg (the one the node placed to ring it), once answered and bridged.
         const leg401 = await hub.leg(
-          (leg) => leg.extension === '401' && leg.state === 'answered' && leg.bridgedTo !== null,
+          // FreeSWITCH reports the bridge on the caller's leg, so either leg may name the other.
+          (leg) =>
+            leg.extension === '401' &&
+            leg.state === 'answered' &&
+            (leg.bridgedTo !== null ||
+              [...hub.legs.values()].some((other) => other.bridgedTo === leg.callUuid)),
           'for 401, answered and bridged',
           40_000,
         );
@@ -408,11 +413,28 @@ describe.skipIf(skipReason !== undefined)('S5-15 live recording buttons (live SI
     });
   }
 
+  /** Both legs of `leg`'s call as the hub has them now (either leg may name the other). */
+  const callOf = (hub: HubClient, leg: Leg): Leg[] => {
+    const current = hub.legs.get(leg.callUuid) ?? leg;
+    return [
+      current,
+      ...[...hub.legs.values()].filter(
+        (other) =>
+          other.callUuid !== current.callUuid &&
+          (other.callUuid === current.bridgedTo || other.bridgedTo === current.callUuid),
+      ),
+    ];
+  };
+
   /** The recording state of the call `leg` is on (either of its legs), as the hub shows it. */
   const recordingOf = (hub: HubClient, leg: Leg): string[] =>
-    [hub.legs.get(leg.callUuid), leg.bridgedTo === null ? undefined : hub.legs.get(leg.bridgedTo)]
-      .filter((l): l is Leg => l !== undefined)
-      .map((l) => l.recording);
+    callOf(hub, leg).map((l) => l.recording);
+
+  /** What the buttons may do on the call, as either leg says it (both carry the exported variable). */
+  const controlsOf = (hub: HubClient, leg: Leg): string =>
+    callOf(hub, leg)
+      .map((l) => l.controls)
+      .find((c) => c !== 'none') ?? 'none';
 
   async function until(check: () => boolean, what: string, timeoutMs = 15_000): Promise<void> {
     const deadline = Date.now() + timeoutMs;
@@ -427,7 +449,10 @@ describe.skipIf(skipReason !== undefined)('S5-15 live recording buttons (live SI
     await scenario({
       rule: { action: 'no_record', allowOnDemand: true },
       during: async (hub, leg401) => {
-        expect(leg401.controls).toBe('on_demand');
+        await until(
+          () => controlsOf(hub, leg401) === 'on_demand',
+          'the call to say controls: on_demand',
+        );
         expect(recordingOf(hub, leg401)).not.toContain('on');
 
         const started = await press(leg401.callUuid, 'start');
@@ -470,7 +495,7 @@ describe.skipIf(skipReason !== undefined)('S5-15 live recording buttons (live SI
     await scenario({
       rule: { action: 'record', allowOnDemand: true },
       during: async (hub, leg401) => {
-        expect(leg401.controls).toBe('pause');
+        await until(() => controlsOf(hub, leg401) === 'pause', 'the call to say controls: pause');
         await until(() => recordingOf(hub, leg401).includes('on'), 'the rule recording to start');
 
         const stop = await press(leg401.callUuid, 'stop');
@@ -518,8 +543,8 @@ describe.skipIf(skipReason !== undefined)('S5-15 live recording buttons (live SI
   it('Start is refused where no rule allows on demand, and nothing is recorded', async () => {
     await scenario({
       rule: { action: 'no_record', allowOnDemand: false },
-      during: async (_hub, leg401) => {
-        expect(leg401.controls).toBe('none');
+      during: async (hub, leg401) => {
+        expect(controlsOf(hub, leg401)).toBe('none');
         const refused = await press(leg401.callUuid, 'start');
         expect(refused.status, JSON.stringify(refused.json)).toBe(409);
         expect(refused.json).toMatchObject({ code: 'recording_not_allowed' });
