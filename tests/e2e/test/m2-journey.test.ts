@@ -713,6 +713,7 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
         'monitor.presence',
         'org.view',
         'self.history',
+        'self.recording',
         'self.settings',
         'self.voicemail',
       ]);
