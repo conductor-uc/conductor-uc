@@ -100,3 +100,47 @@ export function createLiveCallsSource(options: InternalClientOptions): LiveCalls
     });
   };
 }
+
+/**
+ * S5-15: a person's own extension number (pbx-config-service's
+ * `GET /internal/v1/tenants/:t/users/:u/extension`, the lookup every
+ * self-service route uses), for the `user:{u}:calls` topic. Undefined when no
+ * extension is linked to the person; throws when pbx-config-service cannot be
+ * asked.
+ */
+export type UserExtensionSource = (tenantId: string, userId: string) => Promise<string | undefined>;
+
+/**
+ * Asks pbx-config-service, keeping each answer for `ttlMs` (default 30 s): a
+ * console that reconnects, or several tabs, do not ask again each time, and a
+ * relinked extension is seen within that time (the hub also checks again on
+ * its periodic permission recheck). "None linked" is not kept, so linking one
+ * shows at once. The cache is bounded.
+ */
+export function createUserExtensionSource(
+  options: InternalClientOptions & { ttlMs?: number; now?: () => number },
+): UserExtensionSource {
+  const now = options.now ?? Date.now;
+  const ttlMs = options.ttlMs ?? 30_000;
+  const cache = new Map<string, { number: string; expires: number }>();
+  return async (tenantId, userId) => {
+    const key = `${tenantId}:${userId}`;
+    const hit = cache.get(key);
+    if (hit !== undefined && hit.expires > now()) return hit.number;
+    const { status, body } = await internalGet(
+      options,
+      `/internal/v1/tenants/${encodeURIComponent(tenantId)}/users/${encodeURIComponent(userId)}/extension`,
+    );
+    if (status === 404) {
+      cache.delete(key);
+      return undefined;
+    }
+    const number = (body as { number?: unknown } | undefined)?.number;
+    if (typeof number !== 'string' || number === '') {
+      throw new SourceUnavailableError('Unexpected extension answer.');
+    }
+    if (cache.size > 10_000) cache.clear();
+    cache.set(key, { number, expires: now() + ttlMs });
+    return number;
+  };
+}

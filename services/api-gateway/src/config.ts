@@ -35,11 +35,17 @@ export const configSchema = Type.Object({
   CDR_SERVICE_URL: Env.url(),
   TRUNK_SERVICE_URL: Env.url(),
   RECORDING_SERVICE_URL: Env.url(),
+  /**
+   * call-control, e.g. http://call-control:8080: the recording buttons on live
+   * calls (S5-15, the `call` routes below), and the tenant's live calls when
+   * someone subscribes to the realtime hub (S5-08).
+   */
+  CALL_CONTROL_URL: Env.url(),
 
   /**
    * The routing table (06, api-gateway): which downstream service owns which
    * public path. Each entry is `pattern=service`, `service` one of `identity`,
-   * `org`, `pbx`, `callflow`, `voicemail`, `cdr`, `trunk` or `recording`. A pattern is a
+   * `org`, `pbx`, `callflow`, `voicemail`, `cdr`, `trunk`, `recording` or `call`. A pattern is a
    * path prefix whose segments are literals or `*` (any one segment), so
    * `/v1/tenants/*` + `/flows` can go to callflow-service while `/v1/tenants`
    * alone still belongs to org-service (G-60). Configurable rather than
@@ -102,6 +108,10 @@ export const configSchema = Type.Object({
       '/v1/tenants/*/recordings=recording',
       '/v1/tenants/*/recording-policies=recording',
       '/v1/tenants/*/recording-settings=recording',
+      // call-control (S5-15): record, stop, pause and resume a live call's
+      // recording, for a supervisor on any call and for a person on their own.
+      '/v1/tenants/*/calls=call',
+      '/v1/tenants/*/me/live-calls=call',
     ],
   }),
 
@@ -206,9 +216,10 @@ export const configSchema = Type.Object({
    * The realtime hub (S5-08): `GET /v1/ws`, a WebSocket that streams live
    * calls, presence and queue state to the console, filtered per subscriber
    * by the same rules as the API (06, api-gateway). On by default; it needs
-   * NATS, `CALL_CONTROL_URL` and `INTERNAL_SERVICE_TOKEN`, and the gateway
-   * refuses to start with it on and either of the last two unset. Off, the
-   * gateway holds no NATS connection and `/v1/ws` does not exist.
+   * NATS and `INTERNAL_SERVICE_TOKEN` (which also asks call-control,
+   * org-service, identity-service and pbx-config-service), and the gateway
+   * refuses to start with it on and the token unset. Off, the gateway holds
+   * no NATS connection and `/v1/ws` does not exist.
    */
   REALTIME_ENABLED: Env.bool({ default: true }),
   /** NATS, where the hub reads `call.*` events (an ordered consumer per gateway process). */
@@ -218,8 +229,6 @@ export const configSchema = Type.Object({
   }),
   NATS_USER: Env.optional(Env.string({ description: 'NATS user, when not using an nkey.' })),
   NATS_PASSWORD: Env.optional(Env.secret()),
-  /** call-control, e.g. http://call-control:8080: the tenant's live calls when someone subscribes. */
-  CALL_CONTROL_URL: Env.optional(Env.url()),
   /**
    * How long a new connection has to send its access token (`{type:"auth"}`)
    * before it is closed.

@@ -96,6 +96,7 @@ describe('api-gateway: GET /v1/platform/health', () => {
       'cdr-service',
       'trunk-service',
       'recording-service',
+      'call-control',
     ]);
     expect(byName['org-service']).toMatchObject({ status: 'up', failing: [] });
     expect(byName['pbx-config-service']).toMatchObject({

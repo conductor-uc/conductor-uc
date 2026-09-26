@@ -19,7 +19,11 @@ import { registerProxy } from './routing/proxy.js';
 import { createRealtimeHub, type RealtimeHub } from './realtime/hub.js';
 import { createTopicAuthorizer } from './realtime/authorize.js';
 import { REALTIME_PATH, registerRealtimeRoute } from './realtime/route.js';
-import { createLineageLookup, createLiveCallsSource } from './realtime/sources.js';
+import {
+  createLineageLookup,
+  createLiveCallsSource,
+  createUserExtensionSource,
+} from './realtime/sources.js';
 import { buildRouteTable } from './routing/route-table.js';
 import type { ServiceConfig } from './config.js';
 
@@ -139,6 +143,7 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     cdr: config.CDR_SERVICE_URL,
     trunk: config.TRUNK_SERVICE_URL,
     recording: config.RECORDING_SERVICE_URL,
+    call: config.CALL_CONTROL_URL,
   });
 
   // Served here rather than proxied: it asks every service, so no one service
@@ -154,6 +159,7 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
       { name: 'cdr-service', url: config.CDR_SERVICE_URL },
       { name: 'trunk-service', url: config.TRUNK_SERVICE_URL },
       { name: 'recording-service', url: config.RECORDING_SERVICE_URL },
+      { name: 'call-control', url: config.CALL_CONTROL_URL },
     ],
   });
 
@@ -162,9 +168,9 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
   if (config.REALTIME_ENABLED) {
     const internalServiceToken = config.INTERNAL_SERVICE_TOKEN;
     const callControlUrl = config.CALL_CONTROL_URL;
-    if (internalServiceToken === undefined || callControlUrl === undefined) {
+    if (internalServiceToken === undefined) {
       throw new Error(
-        'REALTIME_ENABLED needs INTERNAL_SERVICE_TOKEN and CALL_CONTROL_URL (or set REALTIME_ENABLED=false).',
+        'REALTIME_ENABLED needs INTERNAL_SERVICE_TOKEN (or set REALTIME_ENABLED=false).',
       );
     }
     const hub = createRealtimeHub({
@@ -180,6 +186,11 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
         lineage: createLineageLookup({ baseUrl: config.ORG_SERVICE_URL, internalServiceToken }),
       }),
       liveCalls: createLiveCallsSource({ baseUrl: callControlUrl, internalServiceToken }),
+      // S5-15: a person's own extension, for their own calls' topic.
+      userExtensions: createUserExtensionSource({
+        baseUrl: config.PBX_CONFIG_SERVICE_URL,
+        internalServiceToken,
+      }),
       logger: app.log,
       limits: {
         authTimeoutMs: config.REALTIME_AUTH_TIMEOUT_MS,

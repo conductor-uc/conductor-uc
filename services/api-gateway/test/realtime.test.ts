@@ -148,6 +148,8 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
 
   /** The live calls the fake call-control answers with, by tenant. */
   const liveCalls = new Map<string, object[]>();
+  /** S5-15: each person's extension number, as the fake pbx-config-service answers, by user id. */
+  const extensionNumbers = new Map<string, string>();
 
   beforeAll(async () => {
     redisHandle = await startTestRedis();
@@ -184,6 +186,13 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
           return reply(200, { orgId: id, type: 'tenant', resellerId: RESELLER_B });
         return reply(404, {});
       }
+      const own = /^\/internal\/v1\/tenants\/([^/]+)\/users\/([^/]+)\/extension$/.exec(url);
+      if (own !== null) {
+        const number = extensionNumbers.get(own[2] ?? '');
+        return number === undefined
+          ? reply(404, {})
+          : reply(200, { extensionId: `ext-${number}`, number });
+      }
       const calls = /^\/internal\/v1\/tenants\/([^/]+)\/calls$/.exec(url);
       if (calls !== null) {
         if (calls[1] === TENANT_DOWN) return reply(500, {});
@@ -201,6 +210,7 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
         INTERNAL_SERVICE_TOKEN: TOKEN,
         ORG_SERVICE_URL: fakeUrl,
         CALL_CONTROL_URL: fakeUrl,
+        PBX_CONFIG_SERVICE_URL: fakeUrl,
         CONSOLE_HOSTNAMES: CONSOLE_HOST,
         REALTIME_AUTH_TIMEOUT_MS: '1000',
         REALTIME_PERMISSION_RECHECK_MS: '1000',
@@ -620,6 +630,8 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
               answeredAt: '2026-09-25T10:00:03.000Z',
               bridgedTo: null,
               recording: 'on',
+              controls: 'none',
+              extension: null,
             },
           ],
         },
@@ -728,6 +740,121 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
       });
       await new Promise((resolve) => setTimeout(resolve, 300));
       expect(client.messages.filter((m) => m.type === 'event')).toEqual([]);
+      client.close();
+    });
+  });
+
+  describe('a person own live calls (S5-15)', () => {
+    const ownTopic = (tenantId: string, userId: string) =>
+      `tenant:${tenantId}:user:${userId}:calls`;
+    const leg = (fields: Record<string, unknown>) => ({
+      nodeId: 'fs-1',
+      tenantId: TENANT_A,
+      direction: 'inbound',
+      state: 'answered',
+      startedAt: Date.parse('2026-09-25T10:00:00.000Z'),
+      answeredAt: Date.parse('2026-09-25T10:00:03.000Z'),
+      from: '402',
+      to: '401',
+      bridgedTo: null,
+      recording: 'off',
+      controls: 'on_demand',
+      extension: null,
+      ...fields,
+    });
+
+    it('streams only their own legs and the legs bridged to them, including a pause, and audits the subscription', async () => {
+      const a = randomUUID();
+      const b = randomUUID();
+      const stranger = randomUUID();
+      const spoofed = randomUUID();
+      liveCalls.set(TENANT_A, [
+        leg({ callUuid: a, extension: '402', bridgedTo: b, recording: 'on' }),
+        leg({ callUuid: b, direction: 'outbound', extension: '401', bridgedTo: a }),
+        leg({ callUuid: stranger, from: '403', to: '404', extension: '403' }),
+        // A trunk caller whose caller ID looks like 401: never theirs.
+        leg({ callUuid: spoofed, from: '401', to: '+15550100', extension: null }),
+      ]);
+      const me = person(TENANT_A, 'tenant', ['self.history']);
+      extensionNumbers.set(me.sub, '401');
+      const client = await connectAs(me);
+
+      expect(await client.subscribe(ownTopic(TENANT_A, me.sub))).toMatchObject({
+        type: 'subscribed',
+      });
+      const snapshot = await client.next((m) => m.type === 'snapshot');
+      const shown = (snapshot['data'] as { calls: { callUuid: string }[] }).calls;
+      expect(shown.map((c) => c.callUuid).sort()).toEqual([a, b].sort());
+      expect(shown.find((c) => c.callUuid === a)).toMatchObject({
+        recording: 'on',
+        controls: 'on_demand',
+      });
+
+      await publish('call.channel.recording_paused', TENANT_A, { callUuid: a, nodeId: 'fs-1' });
+      await publish('call.channel.held', TENANT_A, { callUuid: stranger, nodeId: 'fs-1' });
+      await publish('call.channel.recording_resumed', TENANT_A, { callUuid: a, nodeId: 'fs-1' });
+      await client.next(
+        (m) =>
+          m.type === 'event' &&
+          (m['event'] as { changes?: { recording?: string } }).changes?.recording === 'on',
+      );
+      const events = client.messages
+        .filter((m) => m.type === 'event')
+        .map((m) => m['event'] as { callUuid: string; changes: object });
+      expect(events).toEqual([
+        { type: 'call.updated', callUuid: a, changes: { recording: 'paused' } },
+        { type: 'call.updated', callUuid: a, changes: { recording: 'on' } },
+      ]);
+
+      await expect
+        .poll(() =>
+          auditRecords.find((r) => (r as { data?: { actorId?: string } }).data?.actorId === me.sub),
+        )
+        .toMatchObject({
+          data: {
+            action: 'realtime.mycalls.subscribed',
+            resource: ownTopic(TENANT_A, me.sub),
+            dataClass: 'private',
+            targetOrgId: TENANT_A,
+          },
+        });
+      client.close();
+    });
+
+    it('is theirs alone: not a colleague, an administrator watching every call, or the master', async () => {
+      const owner = person(TENANT_A, 'tenant', ['self.history']);
+      extensionNumbers.set(owner.sub, '401');
+      for (const [who, code] of [
+        [person(TENANT_A, 'tenant', ['self.history']), 'forbidden'],
+        [person(TENANT_A, 'tenant', ['self.history', 'monitor.calls']), 'forbidden'],
+        [person(MASTER, 'master', ['self.history', 'monitor.calls']), 'forbidden'],
+        [person(RESELLER_A, 'reseller', ['self.history']), 'forbidden'],
+      ] as const) {
+        const client = await connectAs(who);
+        expect(await client.subscribe(ownTopic(TENANT_A, owner.sub))).toMatchObject({
+          type: 'error',
+          code,
+        });
+        client.close();
+      }
+    });
+
+    it('needs self.history, and a linked extension', async () => {
+      const without = person(TENANT_A, 'tenant', ['monitor.presence']);
+      extensionNumbers.set(without.sub, '401');
+      const refused = await connectAs(without);
+      expect(await refused.subscribe(ownTopic(TENANT_A, without.sub))).toMatchObject({
+        type: 'error',
+        code: 'permission_denied',
+      });
+      refused.close();
+
+      const unlinked = person(TENANT_A, 'tenant', ['self.history']);
+      const client = await connectAs(unlinked);
+      expect(await client.subscribe(ownTopic(TENANT_A, unlinked.sub))).toMatchObject({
+        type: 'error',
+        code: 'no_linked_extension',
+      });
       client.close();
     });
   });

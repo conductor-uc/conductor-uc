@@ -25,7 +25,9 @@ export interface TopicAuthorizer {
  *
  * 1. **Org ancestry, with H2.** A tenant's people reach only their own tenant;
  *    a reseller's reach its own tenants (asked of org-service, since the token
- *    says only the person's own org); the master's reach every tenant.
+ *    says only the person's own org); the master's reach every tenant. A
+ *    person's own topic (`user:{u}:calls`, S5-15) is reached by that person
+ *    alone.
  * 2. **H1.** A reseller never receives a `private` topic, whatever it holds.
  * 3. **The topic's permission**, through the same identity-service lookup the
  *    services' permission guard uses (`createRemotePermissionResolver`: a role
@@ -42,6 +44,14 @@ export function createTopicAuthorizer(options: {
       const definition = TOPICS[topic.kind];
       try {
         if (!(await reaches(actor, topic.tenantId))) return { allowed: false, code: 'forbidden' };
+        // S5-15: a person's own calls are theirs alone ("this is me"): a person of that tenant
+        // whose id is the topic's. Not the master, not an administrator, not a colleague.
+        if (
+          topic.userId !== undefined &&
+          (actor.orgType !== 'tenant' || actor.id !== topic.userId)
+        ) {
+          return { allowed: false, code: 'forbidden' };
+        }
         if (!h1RouteLevelWall(actor.orgType, definition.dataClass)) {
           return { allowed: false, code: 'reseller_private_data_denied' };
         }

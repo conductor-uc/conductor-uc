@@ -22,14 +22,28 @@ export interface LiveCall {
   /** The other leg's `callUuid` once bridged. */
   readonly bridgedTo: string | null;
   /**
-   * Whether the channel is being recorded now. `paused` is reserved for
-   * pausing by feature code (S5-13) and is not sent yet.
+   * Whether the channel is being recorded now, and (S5-15) whether that
+   * recording is paused, by feature code or by the console's buttons.
    */
   readonly recording: 'on' | 'off' | 'paused';
+  /**
+   * S5-15: which recording buttons can work on the call, as telephony-config
+   * decided at setup: `on_demand` (start and stop, and pause and resume while
+   * it runs), `pause` (pause and resume a recording a rule started), or
+   * `none`. A hint for display: every action is decided again when asked.
+   */
+  readonly controls: 'none' | 'on_demand' | 'pause';
+  /**
+   * S5-15: the tenant extension this leg belongs to, when the media node can
+   * vouch for it (a registered phone that called in, or the extension a leg
+   * rang), else null. Never taken from a caller ID alone; it is how a person's
+   * own calls are found for the `user:{u}:calls` topic.
+   */
+  readonly extension: string | null;
 }
 
 export type LiveCallChanges = Partial<
-  Pick<LiveCall, 'state' | 'answeredAt' | 'bridgedTo' | 'recording'>
+  Pick<LiveCall, 'state' | 'answeredAt' | 'bridgedTo' | 'recording' | 'controls'>
 >;
 
 /** One change on the `calls` topic (`event` in an `{type:"event"}` message). */
@@ -67,6 +81,9 @@ export function callEventFromEnvelope(
     tenantId,
     event: { type: 'call.updated', callUuid, changes } as const,
   });
+  // S5-15: answer and bridge may say what the recording buttons can do now.
+  const controls = controlsOf(data['controls']);
+  const withControls = controls === undefined ? {} : { controls };
 
   switch (envelope.type) {
     case 'call.channel.created': {
@@ -89,6 +106,8 @@ export function callEventFromEnvelope(
             answeredAt: null,
             bridgedTo: null,
             recording: 'off',
+            controls: controls ?? 'none',
+            extension: extensionOf(data['extension']),
           },
         },
       };
@@ -107,10 +126,10 @@ export function callEventFromEnvelope(
       return call === undefined ? undefined : { tenantId, event: { type: 'call.started', call } };
     }
     case 'call.channel.answered':
-      return updated({ state: 'answered', answeredAt: envelope.occurredAt });
+      return updated({ state: 'answered', answeredAt: envelope.occurredAt, ...withControls });
     case 'call.channel.bridged': {
       const bridgedTo = stringField(data, 'bridgedTo');
-      return bridgedTo === undefined ? undefined : updated({ bridgedTo });
+      return bridgedTo === undefined ? undefined : updated({ bridgedTo, ...withControls });
     }
     case 'call.channel.held':
       return updated({ state: 'held' });
@@ -120,6 +139,11 @@ export function callEventFromEnvelope(
       return updated({ recording: 'on' });
     case 'call.channel.recording_stopped':
       return updated({ recording: 'off' });
+    // S5-15: `uuid_record mask`/`unmask`, by feature code or by the buttons.
+    case 'call.channel.recording_paused':
+      return updated({ recording: 'paused' });
+    case 'call.channel.recording_resumed':
+      return updated({ recording: 'on' });
     case 'call.channel.hungup':
       return {
         tenantId,
@@ -144,7 +168,8 @@ export function liveCallFromSnapshot(entry: unknown): LiveCall | undefined {
   const callUuid = stringField(record, 'callUuid');
   const from = stringField(record, 'from');
   const to = stringField(record, 'to');
-  const { direction, state, startedAt, answeredAt, bridgedTo, recording } = record;
+  const { direction, state, startedAt, answeredAt, bridgedTo, recording, controls, extension } =
+    record;
   if (callUuid === undefined || from === undefined || to === undefined) return undefined;
   if (direction !== 'inbound' && direction !== 'outbound') return undefined;
   if (state !== 'ringing' && state !== 'answered' && state !== 'held') return undefined;
@@ -158,8 +183,18 @@ export function liveCallFromSnapshot(entry: unknown): LiveCall | undefined {
     startedAt: new Date(startedAt).toISOString(),
     answeredAt: typeof answeredAt === 'number' ? new Date(answeredAt).toISOString() : null,
     bridgedTo: typeof bridgedTo === 'string' && bridgedTo !== '' ? bridgedTo : null,
-    recording: recording === 'on' ? 'on' : 'off',
+    recording: recording === 'on' || recording === 'paused' ? recording : 'off',
+    controls: controlsOf(controls) ?? 'none',
+    extension: extensionOf(extension),
   };
+}
+
+function controlsOf(value: unknown): LiveCall['controls'] | undefined {
+  return value === 'none' || value === 'on_demand' || value === 'pause' ? value : undefined;
+}
+
+function extensionOf(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 function stringField(record: Record<string, unknown>, key: string): string | undefined {
