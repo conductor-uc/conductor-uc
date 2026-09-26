@@ -608,13 +608,16 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
     });
     expect(duplicate.status).toBe(409);
 
-    const settings = await tenant<{ retentionDays: number }>('PUT', '/recording-settings', {
-      retentionDays: 30,
-    });
+    const settings = await tenant<{ retentionDays: number; failClosed: boolean }>(
+      'PUT',
+      '/recording-settings',
+      { retentionDays: 30 },
+    );
     expect(settings.status, settings.text).toBe(200);
-    expect((await tenant<{ retentionDays: number }>('GET', '/recording-settings')).json).toEqual({
-      retentionDays: 30,
-    });
+    expect(
+      (await tenant<{ retentionDays: number; failClosed: boolean }>('GET', '/recording-settings'))
+        .json,
+    ).toEqual({ retentionDays: 30, failClosed: false });
 
     // H1 through the gateway: a reseller never reads a tenant's recordings, and holds no
     // permission over its recording rules either.
