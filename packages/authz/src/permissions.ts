@@ -97,6 +97,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'recording.listen': 'private',
   'recording.download': 'private',
   'recording.delete': 'private',
+  'recording.control': 'private',
   'cdr.read': 'private',
   'cdr.export': 'private',
   'billing.read': 'usage',
@@ -112,6 +113,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'self.settings': 'config',
   'self.voicemail': 'private',
   'self.history': 'private',
+  'self.recording': 'private',
 };
 
 /**
@@ -128,6 +130,15 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
  * and nothing implies it (docs/decisions.md G-119).
  */
 /**
+ * `recording.control` is not in 07 §3.3 either (S5-15, docs/decisions.md G-120): start, stop,
+ * pause and resume the recording of any live call in the tenant from the console, with exactly
+ * the rules of the in-call feature codes (S5-13). None of the existing permissions fits:
+ * `monitor.calls` is passive watching (master support holds it, and support never writes),
+ * `recording.policy.manage` is `config`-class rule editing, and `recording.listen`/`.download`/
+ * `.delete` act on stored recordings. It creates and changes recordings, so it is `private`: H1
+ * keeps every reseller out, it has no read twin and nothing implies it.
+ */
+/**
  * `self.settings`, `self.voicemail` and `self.history` are not in 07 §3.3
  * either: they are the end-user self-service portal's (parity 1e) permissions
  * for a person's OWN extension, mailbox and call history. They are a different
@@ -138,7 +149,18 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
  * `self.history` are `private` (voicemail and call history), so H1 keeps every
  * reseller out of them; `self.settings` is `config`.
  */
-export const SELF_PERMISSIONS = ['self.settings', 'self.voicemail', 'self.history'] as const;
+/**
+ * `self.recording` (S5-15, docs/decisions.md G-120) is the same shape: start, stop, pause and
+ * resume the recording of a live call on the person's own extension, with the same rules as the
+ * in-call feature codes (`*1`, `*2`) that person can already press on their phone. `private`,
+ * like the recordings it creates.
+ */
+export const SELF_PERMISSIONS = [
+  'self.settings',
+  'self.voicemail',
+  'self.history',
+  'self.recording',
+] as const;
 
 export type CatalogPermission = keyof typeof PERMISSION_CATALOG;
 

@@ -80,6 +80,7 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
   'recording.listen',
   'recording.download',
   'recording.delete',
+  'recording.control',
   'cdr.read',
   'cdr.export',
   'voicemail.access',
@@ -134,7 +135,9 @@ const RESELLER_SUPPORT_PERMISSIONS: readonly Permission[] = [
  * A supervisor watches queues and the people answering them, so it reads the
  * queue configuration (queues, agents and tiers are all `queue.read`) and the
  * extension directory the agents and monitored calls refer to. It changes
- * neither: that stays with `tenant_admin`.
+ * neither: that stays with `tenant_admin`. It does control the recording of a
+ * live call (`recording.control`, S5-15): pausing while a caller reads out card
+ * or medical details is a supervisor's everyday job, within the tenant's rules.
  */
 const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
   'org.view',
@@ -145,6 +148,7 @@ const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
   'monitor.listen',
   'monitor.whisper',
   'monitor.barge',
+  'recording.control',
   'analytics.view',
   ...SELF_PERMISSIONS,
 ];
