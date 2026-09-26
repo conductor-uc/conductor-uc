@@ -67,6 +67,8 @@ Pressed during a call (the key `*`, then the digit), only on calls whose recordi
 
 A short beep confirms; a low double tone means nothing was done (not allowed here, or the recording system could not be reached). Every start, stop, pause and resume is in the tenant's audit trail. On a call where these codes are armed, that party's `*` key is used by them and is not sent on to the other end.
 
+**The same from the console (S5-15).** **Monitoring**, **Live calls** has Record, Stop, Pause and Resume buttons for anyone with `recording.control` (tenant administrators and supervisors), and each person's **My phone** shows the call they are on with the same buttons for their own calls (`self.recording`). They do exactly what `*1` and `*2` do, under the same rules: Record and Stop only where the rule allows recording on demand and does not record the call already, Pause and Resume only where the rule allows it, and never Stop on a recording a rule started. Only the buttons that can work on a call are shown. Each press is audited as the person who pressed it (the codes are audited as the media node). If the recording system cannot be reached, nothing is done and the console says so. A button pressed with no visible change after 15 seconds comes back; the call's own state on the page is always what the phone system reports.
+
 ## 3. Upgrades
 
 ### 3.1 How schema changes work

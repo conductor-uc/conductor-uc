@@ -57,16 +57,16 @@ Every application service listens on 8080. This is the complete list of callers,
 
 | Service (port 8080) | Called by | Over |
 |---|---|---|
-| identity-service | api-gateway (`/v1/auth`, `/v1/orgs`, JWKS, and the realtime hub's permission lookups), org-service, pbx-config, trunk, callflow, voicemail, recording and cdr services (permission lookups), notification-service (reset and invitation links) | HTTP |
+| identity-service | api-gateway (`/v1/auth`, `/v1/orgs`, JWKS, and the realtime hub's permission lookups), org-service, pbx-config, trunk, callflow, voicemail, recording and cdr services and call-control (permission lookups), notification-service (reset and invitation links) | HTTP |
 | org-service | api-gateway (`/v1/public`, `/v1/resellers`, `/v1/tenants`, `/v1/session`, `/v1/platform/...`, certificates, ACME challenges, and the realtime hub's org lineage lookups), identity, pbx-config, trunk, telephony-config, cdr and notification services | HTTP |
-| pbx-config-service | api-gateway, telephony-config, media-worker, voicemail-service, cdr-service | HTTP |
+| pbx-config-service | api-gateway (also the realtime hub: a person's own extension, S5-15), telephony-config, media-worker, voicemail-service, cdr-service, call-control (a person's own extension, S5-15) | HTTP |
 | trunk-service | api-gateway, pbx-config-service, telephony-config | HTTP |
 | callflow-service | api-gateway, telephony-config | HTTP |
 | voicemail-service | api-gateway, telephony-config, notification-service, **every recording-uploader** (voicemail messages, S5-16) | HTTP |
-| recording-service | api-gateway, telephony-config, **every recording-uploader** | HTTP |
+| recording-service | api-gateway, telephony-config, call-control (the recording buttons on live calls, S5-15), **every recording-uploader** | HTTP |
 | cdr-service | api-gateway, **every FreeSWITCH node** (`/ingest/json-cdr`) | HTTP |
 | telephony-config | **every FreeSWITCH node** (`/fs/*`), trunk-service | HTTP |
-| call-control | telephony-config, api-gateway (the realtime hub asks for a tenant's live calls, `/internal/v1/tenants/{t}/calls`) | HTTP |
+| call-control | telephony-config, api-gateway (the realtime hub asks for a tenant's live calls, `/internal/v1/tenants/{t}/calls`; since S5-15 it also forwards the console's recording buttons, `/v1/tenants/*/calls` and `/v1/tenants/*/me/live-calls`) | HTTP |
 | media-worker | nobody (health checks only) | — |
 | notification-service | nobody (health checks only) | — |
 
