@@ -29,7 +29,12 @@ export interface FakeEslServer {
   apiResponder: ((command: string) => string) | undefined;
   /** S5-15: every `sendevent` received: the event name and its headers, in arrival order. */
   readonly receivedEvents: readonly { name: string; headers: Record<string, string> }[];
-  /** S5-15: when true, a `sendevent` is also delivered back to every ready connection, as FreeSWITCH does. */
+  /**
+   * S5-15: when true, a `sendevent` is also delivered back to every ready connection, as
+   * FreeSWITCH does for an event that names no live channel in `Unique-ID` (one that does is
+   * queued to that channel instead and never reaches a listener, which is why the pause event
+   * names its channel in `Recording-Call-UUID`).
+   */
   echoEvents: boolean;
   close(): Promise<void>;
 }

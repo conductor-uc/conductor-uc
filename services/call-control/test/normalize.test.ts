@@ -108,16 +108,16 @@ describe('normalizeEslEvent', () => {
         'Event-Subclass': 'cuc::recording',
         ...headers,
       });
-    expect(custom({ 'Unique-ID': 'own', 'Recording-Action': 'paused' })).toEqual({
+    expect(custom({ 'Recording-Call-UUID': 'own', 'Recording-Action': 'paused' })).toEqual({
       kind: 'recordingPaused',
       callUuid: 'own',
       nodeId: 'fs-1',
       tenantId: null,
     });
-    expect(custom({ 'Unique-ID': 'own', 'Recording-Action': 'resumed' })).toMatchObject({
+    expect(custom({ 'Recording-Call-UUID': 'own', 'Recording-Action': 'resumed' })).toMatchObject({
       kind: 'recordingResumed',
     });
-    expect(custom({ 'Unique-ID': 'own', 'Recording-Action': 'started' })).toEqual({
+    expect(custom({ 'Recording-Call-UUID': 'own', 'Recording-Action': 'started' })).toEqual({
       kind: 'ignored',
     });
     expect(custom({ 'Recording-Action': 'paused' })).toEqual({ kind: 'ignored' });

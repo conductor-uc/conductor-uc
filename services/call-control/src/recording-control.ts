@@ -299,7 +299,7 @@ export function createRecordingController(
   ): Promise<void> {
     const headers = {
       'Event-Subclass': RECORDING_EVENT_SUBCLASS,
-      'Unique-ID': owner,
+      'Recording-Call-UUID': owner,
       'Recording-Action': result,
     };
     try {

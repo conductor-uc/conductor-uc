@@ -92,14 +92,15 @@ function normalizeCallcenterEvent(
  * S5-15: `CUSTOM cuc::recording`, which `recording_control.lua` (a feature code) and this
  * service (the console's buttons, by `sendevent`) fire after `uuid_record mask`/`unmask`: those
  * raise no event of their own, unlike starting and stopping (RECORD_START/RECORD_STOP).
- * `Unique-ID` is the channel that owns the recording, `Recording-Action` is `paused` or
- * `resumed`. Anything else is ignored. The event names no tenant; the registry knows it.
+ * `Recording-Call-UUID` is the channel that owns the recording, `Recording-Action` is `paused`
+ * or `resumed`. Not `Unique-ID`: `sendevent` with a `Unique-ID` naming a live channel queues the
+ * event to that channel instead of firing it, so no listener would ever see it (found live). Anything else is ignored. The event names no tenant; the registry knows it.
  */
 function normalizeRecordingEvent(
   nodeId: string,
   raw: Readonly<Record<string, string>>,
 ): ChannelAction {
-  const callUuid = raw['Unique-ID'];
+  const callUuid = raw['Recording-Call-UUID'];
   if (callUuid === undefined || callUuid === '') return { kind: 'ignored' };
   switch (raw['Recording-Action']) {
     case 'paused':

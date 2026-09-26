@@ -146,7 +146,7 @@ describe('createEslClient', () => {
       client.sendApi('uuid_getvar a x'),
       client.sendEvent('CUSTOM', {
         'Event-Subclass': 'cuc::recording',
-        'Unique-ID': 'owner-1',
+        'Recording-Call-UUID': 'owner-1',
         'Recording-Action': 'paused',
       }),
       client.sendApi('uuid_getvar a y'),
@@ -160,7 +160,7 @@ describe('createEslClient', () => {
         name: 'CUSTOM',
         headers: {
           'Event-Subclass': 'cuc::recording',
-          'Unique-ID': 'owner-1',
+          'Recording-Call-UUID': 'owner-1',
           'Recording-Action': 'paused',
         },
       },

@@ -32,7 +32,7 @@ Then it plays the neutral tone telephony-config chose back to whoever pressed:
 a short beep when something changed, a low double tone when nothing did.
 
 S5-15: after a pause or a resume it also fires a `CUSTOM cuc::recording` event
-(`Unique-ID` the owner, `Recording-Action` paused or resumed). `uuid_record
+(`Recording-Call-UUID` the owner, `Recording-Action` paused or resumed; not `Unique-ID`, which would queue the event to the channel instead of firing it). `uuid_record
 mask`/`unmask` raise no event of their own (starting and stopping do:
 RECORD_START, RECORD_STOP), and call-control turns this one into
 `call.channel.recording_paused`/`_resumed`, so a live view shows the pause
@@ -149,7 +149,7 @@ elseif decoded.action == "stop" then
 else
   -- S5-15: mask and unmask raise no event; say so, for the live views.
   local event = freeswitch.Event("CUSTOM", "cuc::recording")
-  event:addHeader("Unique-ID", owner)
+  event:addHeader("Recording-Call-UUID", owner)
   event:addHeader("Recording-Action", decoded.action == "mask" and "paused" or "resumed")
   event:fire()
 end

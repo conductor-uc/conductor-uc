@@ -323,7 +323,7 @@ describe.skipIf(skipReason !== undefined)(
             name: 'CUSTOM',
             headers: {
               'Event-Subclass': 'cuc::recording',
-              'Unique-ID': a,
+              'Recording-Call-UUID': a,
               'Recording-Action': 'paused',
             },
           },
@@ -358,7 +358,7 @@ describe.skipIf(skipReason !== undefined)(
             raw: {
               'Event-Name': 'CUSTOM',
               'Event-Subclass': 'cuc::recording',
-              'Unique-ID': a,
+              'Recording-Call-UUID': a,
               'Recording-Action': 'paused',
             },
           },

@@ -458,7 +458,7 @@ describe.skipIf(skipReason !== undefined)(
       const custom = (action: string) => ({
         'Event-Name': 'CUSTOM',
         'Event-Subclass': 'cuc::recording',
-        'Unique-ID': callUuid,
+        'Recording-Call-UUID': callUuid,
         'Recording-Action': action,
       });
       await handler.handleEvent('fs-1', custom('paused'));
