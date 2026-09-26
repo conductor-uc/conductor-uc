@@ -51,6 +51,8 @@ describe.skipIf(skipReason !== undefined)(
           startedAt: String(Date.now()),
           from,
           to: '102',
+          extension: null,
+          controls: 'none',
         },
         60_000,
       );

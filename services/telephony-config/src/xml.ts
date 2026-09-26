@@ -10,6 +10,8 @@
  * (developer.signalwire.com/freeswitch/integration/xml-curl).
  */
 
+import { recordingSpoolPath } from '@cuc/api-contracts';
+
 import { drTag, stripLeadingPlus } from './repo/opensips-projection.repo.js';
 
 /** `mod_callcenter`'s own `<queue name="…">`/`<agent name="…">`/`<tier agent="…" queue="…">` identity convention — `id@domain`, unique within this node the same way a SIP AOR is. Exported for `fs.routes.ts`'s `/fs/configuration` handler, which assembles these across possibly several tenants at once. */
@@ -263,10 +265,11 @@ export interface RecordingDialplan {
  */
 export const CONSENT_TONE = 'tone_stream://%(300,150,880);loops=2';
 
-/** The spool file's path. The name is the opaque recording id and nothing else (no tenant, no number). */
-export function recordingSpoolPath(spoolDir: string, recordingId: string): string {
-  return `${spoolDir.replace(/\/+$/, '')}/${recordingId}.wav`;
-}
+/**
+ * The spool file's path. The name is the opaque recording id and nothing else (no tenant, no
+ * number). Shared with call-control (S5-15), which stops, masks and unmasks recordings by it.
+ */
+export { recordingSpoolPath };
 
 /**
  * The actions that start a recording, in order: mark the channel, play the announcement first if the
@@ -337,8 +340,19 @@ export function featureCodeListenLegs(direction: 'inbound' | 'outbound' | 'inter
 }
 
 /**
+ * S5-15: which recording actions a call allows, put on the channel as `cuc_rec_controls` next to
+ * the feature codes: `pause` when the deciding rule records the call (pause and resume only),
+ * `on_demand` when it does not (start and stop, and pause and resume while it runs). Exported, so
+ * both legs say it; call-control reads it from the channel's events for the console's buttons.
+ */
+export function recordingControlsFor(recorded: boolean): 'on_demand' | 'pause' {
+  return recorded ? 'pause' : 'on_demand';
+}
+
+/**
  * S5-13: the actions that arm the recording feature codes on a call. `contextToken` is the call's
  * context (`recording-context.ts`), which `recording_control.lua` sends back with each code.
+ * `recorded` says whether the deciding rule records the call (S5-15's `cuc_rec_controls`).
  *
  * `cuc_rec_owner` is exported so it reaches the bridged leg too: the Lua script may run on either
  * leg (it runs on the leg that pressed the code, `bind_meta_app`'s `s`), and always acts on the
@@ -351,11 +365,13 @@ export function featureCodeListenLegs(direction: 'inbound' | 'outbound' | 'inter
 export function recordingFeatureCodeActions(options: {
   readonly direction: 'inbound' | 'outbound' | 'internal';
   readonly contextToken: string;
+  readonly recorded: boolean;
 }): string[] {
   const listen = featureCodeListenLegs(options.direction);
   return [
     `<action application="set" data="${escapeXml(`cuc_rec_ctx=${options.contextToken}`)}"/>`,
     '<action application="export" data="cuc_rec_owner=${uuid}"/>',
+    `<action application="export" data="cuc_rec_controls=${recordingControlsFor(options.recorded)}"/>`,
     '<action application="set" data="RECORD_STEREO=true"/>',
     `<action application="bind_meta_app" data="${RECORDING_FEATURE_CODES.record} ${listen} s lua::recording_control.lua record"/>`,
     `<action application="bind_meta_app" data="${RECORDING_FEATURE_CODES.pause} ${listen} s lua::recording_control.lua pause"/>`,

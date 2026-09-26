@@ -11,6 +11,7 @@ const demoSelfService = [
   'self.settings',
   'self.voicemail',
   'self.history',
+  'self.recording',
 ];
 
 /// The id the demo gives the signed-in person, by email: the one an extension
@@ -44,6 +45,7 @@ const _tenantAdmin = [
   'recording.listen',
   'recording.download',
   'recording.delete',
+  'recording.control',
   'cdr.read',
   'cdr.export',
   'voicemail.access',

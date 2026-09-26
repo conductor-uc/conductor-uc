@@ -55,8 +55,37 @@ const CallContextSchema = Type.Object({
 });
 const ControlBodySchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
-  /** `record` (`*1`): start or stop an on-demand recording. `pause` (`*2`): pause or resume. */
-  code: Type.Union([Type.Literal('record'), Type.Literal('pause')]),
+  /**
+   * A feature code, which toggles: `record` (`*1`) starts or stops an on-demand recording,
+   * `pause` (`*2`) pauses or resumes. Exactly one of `code` and `action` is given.
+   */
+  code: Type.Optional(Type.Union([Type.Literal('record'), Type.Literal('pause')])),
+  /**
+   * S5-15: an explicit action (the console's and the self-service portal's buttons, through
+   * call-control), with the same rules as the codes but no toggling: a Start while a recording
+   * runs, a Pause while paused, a Resume while not, is refused rather than undoing someone else's
+   * action.
+   */
+  action: Type.Optional(
+    Type.Union([
+      Type.Literal('start'),
+      Type.Literal('stop'),
+      Type.Literal('pause'),
+      Type.Literal('resume'),
+    ]),
+  ),
+  /**
+   * S5-15: the person who asked, when it was not a phone's feature code. The audit event names
+   * them (actor type `user`) instead of the node. call-control takes it from the signed request.
+   */
+  actor: Type.Optional(
+    Type.Object({
+      id: Type.String({ minLength: 1, maxLength: 64 }),
+      orgId: Type.String({ minLength: 1, maxLength: 64 }),
+    }),
+  ),
+  ip: Type.Optional(Type.String({ maxLength: 64 })),
+  requestId: Type.Optional(Type.String({ maxLength: 128 })),
   /** The channel that owns the call's recording (the A leg). */
   callUuid: Type.String({ minLength: 1, maxLength: 64 }),
   /** The recording running on the call now, if any. */
@@ -75,7 +104,11 @@ const ControlResponseSchema = Type.Object({
   recordingId: Type.Union([Type.String(), Type.Null()]),
   /** The spool file name of the recording acted on. */
   fileName: Type.Union([Type.String(), Type.Null()]),
-  /** Why a request was refused: `not_allowed`, `rule_recording`, `not_recording`, `unknown_recording`, `stopped`. */
+  /**
+   * Why a request was refused: `not_allowed`, `rule_recording`, `not_recording`,
+   * `unknown_recording`, `stopped`, and for an explicit action (S5-15) `already_recording`,
+   * `already_paused`, `not_paused`.
+   */
   reason: Type.Union([Type.String(), Type.Null()]),
 });
 
@@ -204,7 +237,11 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
     },
     async (request): Promise<Static<typeof ControlResponseSchema>> => {
       requireToken(request);
-      const { tenantId, code, callUuid, recordingId, nodeId, context } = request.body;
+      const { tenantId, code, action, callUuid, recordingId, nodeId, context, actor } =
+        request.body;
+      if ((code === undefined) === (action === undefined)) {
+        throw ProblemError.badRequest('Give exactly one of code and action.');
+      }
       const ctx = { tenantId };
       const call = {
         direction: context.direction,
@@ -213,19 +250,39 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
         didId: context.didId,
       };
       const refused = (reason: string): Static<typeof ControlResponseSchema> => {
-        logger.info({ tenantId, callUuid, code, reason }, 'recording: feature code refused');
+        logger.info(
+          { tenantId, callUuid, code, action, reason },
+          'recording: recording action refused',
+        );
         return { result: 'refused', recordingId: recordingId ?? null, fileName: null, reason };
       };
-      const audit = (action: string) => ({
-        actorType: 'node' as const,
-        actorId: nodeId ?? 'node',
-        actorOrgId: tenantId,
-        targetOrgId: tenantId,
-        action,
-        resource: 'recording',
-        dataClass: 'private' as const,
-        reason: `feature code on call ${callUuid}`,
-      });
+      // A person (S5-15) is audited as themselves; a feature code, as the node that relayed it.
+      const audit = (verb: string) =>
+        actor === undefined
+          ? {
+              actorType: 'node' as const,
+              actorId: nodeId ?? 'node',
+              actorOrgId: tenantId,
+              targetOrgId: tenantId,
+              action: verb,
+              resource: 'recording',
+              dataClass: 'private' as const,
+              reason: `feature code on call ${callUuid}`,
+            }
+          : {
+              actorType: 'user' as const,
+              actorId: actor.id,
+              actorOrgId: actor.orgId,
+              targetOrgId: tenantId,
+              action: verb,
+              resource: 'recording',
+              dataClass: 'private' as const,
+              reason: `live call control on call ${callUuid}`,
+              ...(request.body.ip === undefined ? {} : { ip: request.body.ip }),
+              ...(request.body.requestId === undefined
+                ? {}
+                : { requestId: request.body.requestId }),
+            };
       const allowedByRule = async () =>
         evaluatePolicies(await policies.list(ctx), call).allowOnDemand;
 
@@ -239,8 +296,18 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
         }
       }
 
+      const live = running !== undefined && running.stoppedAt === null ? running : undefined;
       try {
-        if (code === 'record') {
+        // S5-15: the explicit actions check what the toggles would have decided by state.
+        if (action === 'start') {
+          if (live !== undefined) return refused('already_recording');
+          if ((await recordings.findRunningOnDemand(ctx, callUuid)) !== undefined) {
+            return refused('already_recording');
+          }
+        } else if (action === 'stop') {
+          if (live === undefined) return refused('not_recording');
+        }
+        if (code === 'record' || action === 'start' || action === 'stop') {
           if (running !== undefined && running.stoppedAt === null) {
             if (!running.onDemand) return refused('rule_recording');
             const stopped = await recordings.stopOnDemand(
@@ -280,12 +347,15 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
           };
         }
 
-        // code === 'pause'
+        // code === 'pause', or action 'pause' / 'resume'
         if (running === undefined) return refused('not_recording');
         if (running.stoppedAt !== null) return refused('stopped');
         if (!running.onDemand && !(await allowedByRule())) return refused('not_allowed');
-        const toggled = await recordings.togglePause(ctx, running.id, (paused) =>
-          audit(paused ? 'recording.paused' : 'recording.resumed'),
+        const toggled = await recordings.togglePause(
+          ctx,
+          running.id,
+          (paused) => audit(paused ? 'recording.paused' : 'recording.resumed'),
+          action === 'pause' || action === 'resume' ? action : undefined,
         );
         return {
           result: toggled.paused ? 'paused' : 'resumed',
@@ -294,7 +364,7 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
           reason: null,
         };
       } catch (error) {
-        if (error instanceof RecordingStateError) return refused('stopped');
+        if (error instanceof RecordingStateError) return refused(error.reason);
         if (error instanceof RecordingNotFoundError) return refused('unknown_recording');
         throw error;
       }

@@ -15,6 +15,8 @@ class LiveCall {
     this.answeredAt,
     this.bridgedTo,
     this.recording = 'off',
+    this.controls = 'none',
+    this.extension,
   });
 
   factory LiveCall.fromJson(Map<String, dynamic> json) => LiveCall(
@@ -28,6 +30,8 @@ class LiveCall {
     answeredAt: DateTime.tryParse(json['answeredAt'] as String? ?? ''),
     bridgedTo: json['bridgedTo'] as String?,
     recording: json['recording'] as String? ?? 'off',
+    controls: json['controls'] as String? ?? 'none',
+    extension: json['extension'] as String?,
   );
 
   final String callUuid;
@@ -44,8 +48,17 @@ class LiveCall {
   final DateTime? answeredAt;
   final String? bridgedTo;
 
-  /// `on`, `off`, or `paused` (reserved for pausing by feature code).
+  /// `on`, `off`, or `paused` (by feature code or by the recording buttons).
   final String recording;
+
+  /// Which recording buttons can work on the call, as decided when it was set
+  /// up: `on_demand` (record and stop, and pause and resume while recording),
+  /// `pause` (pause and resume a recording a rule started), or `none`.
+  final String controls;
+
+  /// The extension this leg belongs to, when the phone system vouches for it
+  /// (a phone that called in, or the extension a leg rang); null otherwise.
+  final String? extension;
 
   LiveCall apply(Map<String, dynamic> changes) => LiveCall(
     callUuid: callUuid,
@@ -61,6 +74,8 @@ class LiveCall {
         ? changes['bridgedTo'] as String?
         : bridgedTo,
     recording: changes['recording'] as String? ?? recording,
+    controls: changes['controls'] as String? ?? controls,
+    extension: extension,
   );
 }
 
@@ -91,7 +106,22 @@ class LiveCallRow {
       .whereType<DateTime>()
       .fold<DateTime?>(null, (a, b) => a == null || b.isBefore(a) ? b : a);
 
-  bool get recording => legs.any((l) => l.recording == 'on');
+  /// Whether the call is being recorded (paused or not).
+  bool get recording => recordingState != 'off';
+
+  /// `paused` if a leg's recording is paused, `on` if one is recording, else
+  /// `off`. The recording runs on one leg of a call (the one that owns it).
+  String get recordingState => legs.any((l) => l.recording == 'paused')
+      ? 'paused'
+      : legs.any((l) => l.recording == 'on')
+      ? 'on'
+      : 'off';
+
+  /// What the recording buttons can do on the call (both legs say the same;
+  /// the first that says anything wins).
+  String get controls => legs
+      .map((l) => l.controls)
+      .firstWhere((c) => c != 'none', orElse: () => 'none');
 }
 
 /// What the live calls panel shows: the calls, or why there are none to show.

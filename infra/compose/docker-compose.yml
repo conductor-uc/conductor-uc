@@ -616,6 +616,18 @@ services:
       # S2-12: `/internal/v1/affinity/...`'s own gate (07 §1's precedent) —
       # same shared value every other service's own INTERNAL_SERVICE_TOKEN uses.
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
+      # S5-15: the recording buttons on live calls are called by people through
+      # api-gateway, which signs who is calling; identity-service answers what
+      # they hold, recording-service decides and audits, pbx-config-service
+      # says which extension is a person's own.
+      TRUST_INTERNAL_HEADERS: 'true'
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET:-dev-internal-header-signing-secret}
+      IDENTITY_SERVICE_URL: http://identity-service:8080
+      RECORDING_SERVICE_URL: http://recording-service:8080
+      PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
+      # Must match telephony-config's RECORDING_SPOOL_DIR: FreeSWITCH stops,
+      # masks and unmasks a recording by its exact path.
+      RECORDING_SPOOL_DIR: /var/spool/cuc/rec
     healthcheck: *node-healthcheck
 
   callflow-service:

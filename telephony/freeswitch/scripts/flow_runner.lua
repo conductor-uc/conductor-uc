@@ -466,6 +466,11 @@ local function armFeatureCodes(codes)
   end
   session:setVariable("cuc_rec_ctx", codes.context)
   session:execute("export", "cuc_rec_owner=" .. session:get_uuid())
+  -- S5-15: what the console's buttons may do on this call (`on_demand` or
+  -- `pause`), read by call-control from the channel's events.
+  if codes.controls == "on_demand" or codes.controls == "pause" then
+    session:execute("export", "cuc_rec_controls=" .. codes.controls)
+  end
   session:setVariable("RECORD_STEREO", "true")
   session:execute("bind_meta_app", "1 " .. codes.listen .. " s lua::recording_control.lua record")
   session:execute("bind_meta_app", "2 " .. codes.listen .. " s lua::recording_control.lua pause")

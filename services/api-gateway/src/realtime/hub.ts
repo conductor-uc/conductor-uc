@@ -5,7 +5,12 @@ import type { WebSocket } from 'ws';
 
 import type { AccessTokenVerifier } from '../auth/access-token-verifier.js';
 import type { RealtimeActor, TopicAuthorizer } from './authorize.js';
-import { callEventFromEnvelope, type BusEnvelope, type CallTopicEvent } from './calls.js';
+import {
+  callEventFromEnvelope,
+  type BusEnvelope,
+  type CallTopicEvent,
+  type LiveCall,
+} from './calls.js';
 import { startEventFeed, type EventFeed } from './feed.js';
 import { TenantPresence } from './presence.js';
 import {
@@ -16,8 +21,9 @@ import {
   type CloseSpec,
   type ErrorCode,
 } from './protocol.js';
-import type { LiveCallsSource } from './sources.js';
+import type { LiveCallsSource, UserExtensionSource } from './sources.js';
 import { parseTopic, TOPICS, topicName, type Topic } from './topics.js';
+import { UserCalls } from './user-calls.js';
 
 export interface RealtimeLimits {
   readonly authTimeoutMs: number;
@@ -42,6 +48,11 @@ export interface RealtimeHubOptions {
   readonly verifier: AccessTokenVerifier;
   readonly authorizer: TopicAuthorizer;
   readonly liveCalls: LiveCallsSource;
+  /**
+   * S5-15: a person's own extension number, for their `user:{u}:calls` topic.
+   * Without it that topic is refused as `unavailable`.
+   */
+  readonly userExtensions?: UserExtensionSource;
   readonly logger: Logger;
   readonly limits: RealtimeLimits;
   /**
@@ -84,6 +95,8 @@ interface Subscription {
   readonly pending: string[];
   /** The presence tracker this subscription holds a share of (presence topics only). */
   tracker?: PresenceTracker;
+  /** S5-15: a person's own calls (`mycalls` topics only): the tenant's legs, and which of them this subscriber is shown. */
+  own?: { readonly calls: CallsTracker; view: UserCalls | undefined };
 }
 
 interface Connection {
@@ -112,6 +125,23 @@ interface PresenceTracker {
   readonly ready: Promise<boolean>;
   subscribers: number;
 }
+
+/**
+ * S5-15: every live leg of a tenant, kept while someone on this gateway
+ * watches their own calls in it: which legs a person is shown depends on the
+ * legs bridged to theirs, so the hub needs the whole picture, as presence does.
+ */
+interface CallsTracker {
+  readonly legs: Map<string, LiveCall>;
+  loaded: boolean;
+  readonly pending: CallTopicEvent[];
+  readonly ready: Promise<boolean>;
+  subscribers: number;
+}
+
+/** What {@link ownNumber} answers instead of a number: an extension number is digits, so neither can be one. */
+const UNAVAILABLE = 'unavailable';
+const NO_EXTENSION = 'no_linked_extension';
 
 /** The longest a Node timer may wait. */
 const MAX_TIMER_MS = 2_147_483_647;
@@ -142,6 +172,9 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
   /** Topic name → the connections subscribed to it. */
   const subscribers = new Map<string, Set<Connection>>();
   const presenceTrackers = new Map<string, PresenceTracker>();
+  const callsTrackers = new Map<string, CallsTracker>();
+  /** S5-15: tenant to the `mycalls` topic names subscribed to on this gateway. */
+  const userTopics = new Map<string, Set<string>>();
   let bus: Bus | undefined;
   let feed: EventFeed | undefined;
   let feedWasLive = false;
@@ -264,6 +297,14 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
     if (subscription.tracker !== undefined) {
       releasePresence(subscription.topic.tenantId, subscription.tracker);
     }
+    if (subscription.own !== undefined) {
+      releaseCalls(subscription.topic.tenantId, subscription.own.calls);
+      if (set === undefined || set.size === 0) {
+        const names = userTopics.get(subscription.topic.tenantId);
+        names?.delete(name);
+        if (names?.size === 0) userTopics.delete(subscription.topic.tenantId);
+      }
+    }
     return subscription;
   }
 
@@ -311,6 +352,56 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
     };
     presenceTrackers.set(tenantId, tracker);
     return tracker;
+  }
+
+  function releaseCalls(tenantId: string, tracker: CallsTracker): void {
+    tracker.subscribers -= 1;
+    if (tracker.subscribers <= 0 && callsTrackers.get(tenantId) === tracker) {
+      callsTrackers.delete(tenantId);
+    }
+  }
+
+  function acquireCalls(tenantId: string): CallsTracker {
+    const existing = callsTrackers.get(tenantId);
+    if (existing !== undefined) {
+      existing.subscribers += 1;
+      return existing;
+    }
+    const legs = new Map<string, LiveCall>();
+    const pending: CallTopicEvent[] = [];
+    const tracker: CallsTracker = {
+      legs,
+      loaded: false,
+      pending,
+      subscribers: 1,
+      ready: options
+        .liveCalls(tenantId)
+        .then((calls) => {
+          for (const call of calls) legs.set(call.callUuid, call);
+          for (const event of pending) applyToLegs(legs, event);
+          pending.length = 0;
+          tracker.loaded = true;
+          return true;
+        })
+        .catch((error: unknown) => {
+          logger.warn({ err: error, tenantId }, 'live calls unavailable for own calls');
+          if (callsTrackers.get(tenantId) === tracker) callsTrackers.delete(tenantId);
+          return false;
+        }),
+    };
+    callsTrackers.set(tenantId, tracker);
+    return tracker;
+  }
+
+  /** A person's own extension number, or the error to refuse their topic with. */
+  async function ownNumber(topic: Topic): Promise<string> {
+    if (options.userExtensions === undefined || topic.userId === undefined) return UNAVAILABLE;
+    try {
+      return (await options.userExtensions(topic.tenantId, topic.userId)) ?? NO_EXTENSION;
+    } catch (error) {
+      logger.warn({ err: error, topic: topic.name }, 'own extension unavailable');
+      return UNAVAILABLE;
+    }
   }
 
   async function handleAuth(connection: Connection, token: string): Promise<void> {
@@ -472,6 +563,39 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
       case 'queues':
         // Nothing to start from yet (see topics.ts).
         break;
+      case 'mycalls': {
+        // S5-15: the person's own extension, then the tenant's legs, then theirs among them.
+        let names = userTopics.get(topic.tenantId);
+        if (names === undefined) {
+          names = new Set();
+          userTopics.set(topic.tenantId, names);
+        }
+        names.add(name);
+        const own: NonNullable<Subscription['own']> = {
+          calls: acquireCalls(topic.tenantId),
+          view: undefined,
+        };
+        subscription.own = own;
+        const number = await ownNumber(topic);
+        const loaded = await own.calls.ready;
+        if (connection.subscriptions.get(name) !== subscription) return;
+        if (!loaded || number === UNAVAILABLE || number === NO_EXTENSION) {
+          removeSubscription(connection, name);
+          sendError(
+            connection,
+            loaded && number === NO_EXTENSION ? 'no_linked_extension' : 'unavailable',
+            {
+              topic: name,
+              id,
+            },
+          );
+          return;
+        }
+        const view = new UserCalls(number);
+        own.view = view;
+        snapshot = { calls: view.load(own.calls.legs) };
+        break;
+      }
     }
 
     // Unsubscribed, replaced, or closed while the snapshot was on its way.
@@ -492,6 +616,22 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
       if (!verdict.allowed) {
         logger.info({ topic: name, code: verdict.code }, 'realtime subscription ended');
         endSubscription(connection, name, verdict.code);
+        continue;
+      }
+      // S5-15: a person's extension may have been unlinked or changed. Their view was built for
+      // the old one; ending it (the client subscribes again) gives them a fresh, right one.
+      const view = subscription.own?.view;
+      if (view !== undefined) {
+        const number = await ownNumber(subscription.topic);
+        if (connection.subscriptions.get(name) !== subscription) continue;
+        if (number !== view.number && number !== UNAVAILABLE) {
+          logger.info({ topic: name }, 'own extension changed; subscription ended');
+          endSubscription(
+            connection,
+            name,
+            number === NO_EXTENSION ? 'no_linked_extension' : 'unavailable',
+          );
+        }
       }
     }
   }
@@ -565,11 +705,40 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
     }
   }
 
+  /** Sends to one subscription, after its snapshot. */
+  function deliverTo(connection: Connection, subscription: Subscription, event: object): void {
+    const message = JSON.stringify({ type: 'event', topic: subscription.topic.name, event });
+    if (subscription.ready) send(connection, message);
+    else subscription.pending.push(message);
+  }
+
+  /** S5-15: a change to the tenant's legs, and what each person watching their own calls in it is shown of it. */
+  function dispatchOwn(tenantId: string, event: CallTopicEvent): void {
+    const tracker = callsTrackers.get(tenantId);
+    if (tracker === undefined) return;
+    if (!tracker.loaded) {
+      tracker.pending.push(event);
+      return;
+    }
+    applyToLegs(tracker.legs, event);
+    for (const name of userTopics.get(tenantId) ?? []) {
+      for (const connection of subscribers.get(name) ?? []) {
+        const subscription = connection.subscriptions.get(name);
+        const view = subscription?.own?.view;
+        if (subscription === undefined || view === undefined) continue;
+        for (const change of view.apply(tracker.legs, event)) {
+          deliverTo(connection, subscription, change);
+        }
+      }
+    }
+  }
+
   function dispatch(envelope: BusEnvelope): void {
     const mapped = callEventFromEnvelope(envelope);
     if (mapped === undefined) return;
     const { tenantId, event } = mapped;
     deliver(topicName(tenantId, 'calls'), event);
+    dispatchOwn(tenantId, event);
 
     const tracker = presenceTrackers.get(tenantId);
     if (tracker === undefined) return;
@@ -652,4 +821,21 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
       await feed?.stop();
     },
   };
+}
+
+/** Applies one change to a tenant's legs. */
+function applyToLegs(legs: Map<string, LiveCall>, event: CallTopicEvent): void {
+  switch (event.type) {
+    case 'call.started':
+      legs.set(event.call.callUuid, event.call);
+      return;
+    case 'call.updated': {
+      const leg = legs.get(event.callUuid);
+      if (leg !== undefined) legs.set(event.callUuid, { ...leg, ...event.changes });
+      return;
+    }
+    case 'call.ended':
+      legs.delete(event.callUuid);
+      return;
+  }
 }

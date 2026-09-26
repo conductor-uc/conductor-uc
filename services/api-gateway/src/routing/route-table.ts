@@ -17,6 +17,8 @@ export const KNOWN_SERVICES = [
   'cdr',
   'trunk',
   'recording',
+  // S5-15: call-control, for the recording buttons on live calls.
+  'call',
 ] as const;
 export type ServiceKey = (typeof KNOWN_SERVICES)[number];
 

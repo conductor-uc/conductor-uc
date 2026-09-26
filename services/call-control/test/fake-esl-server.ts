@@ -22,6 +22,20 @@ export interface FakeEslServer {
   readonly receivedApiCommands: readonly string[];
   /** Overrides the `api/response` body for the next `api` command received; defaults to `+OK`. */
   nextApiResponse: string;
+  /**
+   * S5-15: answers `api` commands by a function instead (`nextApiResponse` still wins for the
+   * next one when set to something other than `+OK`).
+   */
+  apiResponder: ((command: string) => string) | undefined;
+  /** S5-15: every `sendevent` received: the event name and its headers, in arrival order. */
+  readonly receivedEvents: readonly { name: string; headers: Record<string, string> }[];
+  /**
+   * S5-15: when true, a `sendevent` is also delivered back to every ready connection, as
+   * FreeSWITCH does for an event that names no live channel in `Unique-ID` (one that does is
+   * queued to that channel instead and never reaches a listener, which is why the pause event
+   * names its channel in `Recording-Call-UUID`).
+   */
+  echoEvents: boolean;
   close(): Promise<void>;
 }
 
@@ -31,6 +45,15 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
   let rejectNextAuth = false;
   const receivedApiCommands: string[] = [];
   let nextApiResponse = '+OK';
+  let apiResponder: ((command: string) => string) | undefined;
+  const receivedEvents: { name: string; headers: Record<string, string> }[] = [];
+  let echoEvents = false;
+
+  function deliver(event: Record<string, unknown>): void {
+    const body = JSON.stringify(event);
+    const frame = `Content-Type: text/event-json\nContent-Length: ${String(Buffer.byteLength(body))}\n\n${body}`;
+    for (const socket of readySockets) socket.write(frame);
+  }
 
   const server: Server = createServer((socket) => {
     let buffer = '';
@@ -58,9 +81,24 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
           socket.write('Content-Type: command/reply\nReply-Text: +OK\n\n');
           readySockets.add(socket);
           readyCount += 1;
+        } else if (line.startsWith('sendevent ')) {
+          const [first = '', ...rest] = line.split('\n');
+          const headers: Record<string, string> = {};
+          for (const header of rest) {
+            const colon = header.indexOf(':');
+            if (colon > 0) headers[header.slice(0, colon).trim()] = header.slice(colon + 1).trim();
+          }
+          const name = first.slice('sendevent '.length).trim();
+          receivedEvents.push({ name, headers });
+          socket.write('Content-Type: command/reply\nReply-Text: +OK 0000-event\n\n');
+          if (echoEvents) deliver({ 'Event-Name': name, ...headers });
         } else if (line.startsWith('api ')) {
-          receivedApiCommands.push(line.slice(4));
-          const body = nextApiResponse;
+          const command = line.slice(4);
+          receivedApiCommands.push(command);
+          const body =
+            nextApiResponse === '+OK' && apiResponder !== undefined
+              ? apiResponder(command)
+              : nextApiResponse;
           nextApiResponse = '+OK';
           socket.write(
             `Content-Type: api/response\nContent-Length: ${String(Buffer.byteLength(body))}\n\n${body}`,
@@ -85,9 +123,7 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
     port,
     readyConnectionCount: () => readyCount,
     broadcastEvent(event) {
-      const body = JSON.stringify(event);
-      const frame = `Content-Type: text/event-json\nContent-Length: ${String(Buffer.byteLength(body))}\n\n${body}`;
-      for (const socket of readySockets) socket.write(frame);
+      deliver(event);
     },
     dropAllConnections() {
       for (const socket of readySockets) socket.destroy();
@@ -105,6 +141,19 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
     },
     set nextApiResponse(value: string) {
       nextApiResponse = value;
+    },
+    get apiResponder() {
+      return apiResponder;
+    },
+    set apiResponder(value: ((command: string) => string) | undefined) {
+      apiResponder = value;
+    },
+    receivedEvents,
+    get echoEvents() {
+      return echoEvents;
+    },
+    set echoEvents(value: boolean) {
+      echoEvents = value;
     },
     async close() {
       for (const socket of readySockets) socket.destroy();

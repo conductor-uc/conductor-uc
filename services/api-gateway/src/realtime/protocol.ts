@@ -74,7 +74,9 @@ export type ErrorCode =
   /** The person does not hold the topic's permission (any more). */
   | 'permission_denied'
   /** Something the hub depends on could not be reached; try again later. */
-  | 'unavailable';
+  | 'unavailable'
+  /** S5-15: a person's own calls, when no extension is linked to them. */
+  | 'no_linked_extension';
 
 export type ClientMessage =
   | { readonly type: 'auth'; readonly token: string }
@@ -139,4 +141,5 @@ export const ERROR_MESSAGES: Readonly<Record<ErrorCode, string>> = {
   reseller_private_data_denied: 'Resellers cannot access private tenant data.',
   permission_denied: 'You do not have permission to do that.',
   unavailable: 'Live updates are unavailable right now. Try again shortly.',
+  no_linked_extension: 'No extension is linked to your account.',
 };

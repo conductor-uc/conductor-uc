@@ -1,3 +1,5 @@
+import { parseRecordingControls, type RecordingControls } from '@cuc/api-contracts';
+
 import type { CallRecord } from './redis/registry.js';
 
 /**
@@ -23,6 +25,8 @@ export type ChannelAction =
       readonly nodeId: string;
       readonly tenantId: string | null;
       readonly answeredAt: string;
+      /** S5-15: `cuc_rec_controls` as the channel says it now, when it says it at all. */
+      readonly controls?: RecordingControls;
     }
   | {
       readonly kind: 'bridged';
@@ -30,9 +34,16 @@ export type ChannelAction =
       readonly nodeId: string;
       readonly tenantId: string | null;
       readonly bridgedTo: string;
+      readonly controls?: RecordingControls;
     }
   | {
-      readonly kind: 'held' | 'unheld' | 'recordingStarted' | 'recordingStopped';
+      readonly kind:
+        | 'held'
+        | 'unheld'
+        | 'recordingStarted'
+        | 'recordingStopped'
+        | 'recordingPaused'
+        | 'recordingResumed';
       readonly callUuid: string;
       readonly nodeId: string;
       readonly tenantId: string | null;
@@ -77,6 +88,33 @@ function normalizeCallcenterEvent(
   return { kind: 'queueAgentStateChanged', nodeId, agentName, status };
 }
 
+/**
+ * S5-15: `CUSTOM cuc::recording`, which `recording_control.lua` (a feature code) and this
+ * service (the console's buttons, by `sendevent`) fire after `uuid_record mask`/`unmask`: those
+ * raise no event of their own, unlike starting and stopping (RECORD_START/RECORD_STOP).
+ * `Recording-Call-UUID` is the channel that owns the recording, `Recording-Action` is `paused`
+ * or `resumed`. Not `Unique-ID`: `sendevent` with a `Unique-ID` naming a live channel queues the
+ * event to that channel instead of firing it, so no listener would ever see it (found live). Anything else is ignored. The event names no tenant; the registry knows it.
+ */
+function normalizeRecordingEvent(
+  nodeId: string,
+  raw: Readonly<Record<string, string>>,
+): ChannelAction {
+  const callUuid = raw['Recording-Call-UUID'];
+  if (callUuid === undefined || callUuid === '') return { kind: 'ignored' };
+  switch (raw['Recording-Action']) {
+    case 'paused':
+      return { kind: 'recordingPaused', callUuid, nodeId, tenantId: null };
+    case 'resumed':
+      return { kind: 'recordingResumed', callUuid, nodeId, tenantId: null };
+    default:
+      return { kind: 'ignored' };
+  }
+}
+
+/** The CUSTOM subclass of {@link normalizeRecordingEvent}. */
+export const RECORDING_EVENT_SUBCLASS = 'cuc::recording';
+
 export function normalizeEslEvent(
   nodeId: string,
   raw: Readonly<Record<string, string>>,
@@ -87,6 +125,9 @@ export function normalizeEslEvent(
   if (eventName === 'CUSTOM' && raw['Event-Subclass'] === 'callcenter::info') {
     return normalizeCallcenterEvent(nodeId, raw);
   }
+  if (eventName === 'CUSTOM' && raw['Event-Subclass'] === RECORDING_EVENT_SUBCLASS) {
+    return normalizeRecordingEvent(nodeId, raw);
+  }
 
   const callUuid = raw['Unique-ID'];
   if (callUuid === undefined || callUuid === '') return { kind: 'ignored' };
@@ -96,6 +137,8 @@ export function normalizeEslEvent(
   switch (eventName) {
     case 'CHANNEL_CREATE': {
       const direction = raw['Call-Direction'] === 'outbound' ? 'outbound' : 'inbound';
+      const from = raw['Caller-Caller-ID-Number'] ?? raw['Caller-ANI'] ?? '';
+      const to = raw['Caller-Destination-Number'] ?? '';
       return {
         kind: 'created',
         call: {
@@ -105,17 +148,26 @@ export function normalizeEslEvent(
           direction,
           state: 'ringing',
           startedAt: eventTimestampMs(raw),
-          from: raw['Caller-Caller-ID-Number'] ?? raw['Caller-ANI'] ?? '',
-          to: raw['Caller-Destination-Number'] ?? '',
+          from,
+          to,
+          extension: extensionOf(raw, direction, to),
+          controls: parseRecordingControls(raw['variable_cuc_rec_controls']),
         },
       };
     }
     case 'CHANNEL_ANSWER':
-      return { kind: 'answered', callUuid, nodeId, tenantId, answeredAt: eventTimestampMs(raw) };
+      return {
+        kind: 'answered',
+        callUuid,
+        nodeId,
+        tenantId,
+        answeredAt: eventTimestampMs(raw),
+        ...controlsOf(raw),
+      };
     case 'CHANNEL_BRIDGE': {
       const bridgedTo = raw['Other-Leg-Unique-ID'];
       if (bridgedTo === undefined || bridgedTo === '') return { kind: 'ignored' };
-      return { kind: 'bridged', callUuid, nodeId, tenantId, bridgedTo };
+      return { kind: 'bridged', callUuid, nodeId, tenantId, bridgedTo, ...controlsOf(raw) };
     }
     case 'CHANNEL_HOLD':
       return { kind: 'held', callUuid, nodeId, tenantId };
@@ -140,6 +192,41 @@ export function normalizeEslEvent(
     default:
       return { kind: 'ignored' };
   }
+}
+
+/** An extension number's shape (2-6 digits, pbx-config-service's `numbering.ts`). */
+const EXTENSION_NUMBER = /^[0-9]{2,6}$/;
+
+/**
+ * S5-15: the tenant extension a channel is the leg of, when the node can vouch for it, else null.
+ * A person's own live calls (the self-service feed and its recording buttons) are the channels
+ * whose extension is theirs, so this must not be something a caller can claim:
+ *
+ * - An inbound channel (a leg that called in) counts only when it came from a registered phone:
+ *   OpenSIPs sets `X-Tenant-Id` only on requests from a phone it authenticated (and strips any
+ *   the caller sent), and the extension is the SIP From user, as `/fs/dialplan` reads it. A
+ *   trunk caller's caller ID is never taken for an extension, however it looks.
+ * - An outbound channel (one the node placed) is the number it rang, when that is an extension
+ *   number's shape: the dialplan chose it, not the caller.
+ */
+function extensionOf(
+  raw: Readonly<Record<string, string>>,
+  direction: 'inbound' | 'outbound',
+  to: string,
+): string | null {
+  const candidate =
+    direction === 'outbound'
+      ? to
+      : normalizeTenantId(raw['variable_sip_h_X-Tenant-Id']) === null
+        ? undefined
+        : raw['variable_sip_from_user'];
+  return candidate !== undefined && EXTENSION_NUMBER.test(candidate) ? candidate : null;
+}
+
+/** S5-15: `cuc_rec_controls` when the event carries the variable at all (answer and bridge do once the dialplan has set it). */
+function controlsOf(raw: Readonly<Record<string, string>>): { controls?: RecordingControls } {
+  const value = raw['variable_cuc_rec_controls'];
+  return value === undefined ? {} : { controls: parseRecordingControls(value) };
 }
 
 /**

@@ -25,8 +25,102 @@ describe('normalizeEslEvent', () => {
         startedAt: '1700000000000',
         from: '1001',
         to: '+15551234567',
+        // An outbound leg is the number it rang; that is not an extension number here.
+        extension: null,
+        controls: 'none',
       },
     });
+  });
+
+  describe('the extension a leg belongs to (S5-15)', () => {
+    const created = (raw: Record<string, string>) => {
+      const action = normalizeEslEvent('fs-1', {
+        'Event-Name': 'CHANNEL_CREATE',
+        'Unique-ID': 'abc',
+        ...raw,
+      });
+      if (action.kind !== 'created') throw new Error(action.kind);
+      return action.call;
+    };
+
+    it('a phone calling in (OpenSIPs vouched with X-Tenant-Id) is its SIP From user', () => {
+      expect(
+        created({
+          'Call-Direction': 'inbound',
+          'Caller-Caller-ID-Number': '402',
+          'Caller-Destination-Number': '401',
+          'variable_sip_h_X-Tenant-Id': 'tenant-1',
+          variable_sip_from_user: '402',
+        }).extension,
+      ).toBe('402');
+    });
+
+    it('a trunk caller is never an extension, whatever its caller ID looks like', () => {
+      expect(
+        created({
+          'Call-Direction': 'inbound',
+          'Caller-Caller-ID-Number': '401',
+          variable_sip_from_user: '401',
+          variable_cuc_tenant_id: 'tenant-1',
+        }).extension,
+      ).toBeNull();
+    });
+
+    it('a leg the node placed is the extension it rang, when it is an extension number', () => {
+      expect(
+        created({ 'Call-Direction': 'outbound', 'Caller-Destination-Number': '401' }).extension,
+      ).toBe('401');
+      expect(
+        created({ 'Call-Direction': 'outbound', 'Caller-Destination-Number': '+15551234567' })
+          .extension,
+      ).toBeNull();
+    });
+
+    it('reads cuc_rec_controls when the leg already carries it (an exported variable)', () => {
+      expect(created({ variable_cuc_rec_controls: 'pause' }).controls).toBe('pause');
+      expect(created({ variable_cuc_rec_controls: 'bogus' }).controls).toBe('none');
+    });
+  });
+
+  it('S5-15: answer and bridge carry cuc_rec_controls when the channel has it, and only then', () => {
+    expect(
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'CHANNEL_ANSWER',
+        'Unique-ID': 'abc',
+        'Event-Date-Timestamp': '1700000000000000',
+        variable_cuc_rec_controls: 'on_demand',
+      }),
+    ).toMatchObject({ kind: 'answered', controls: 'on_demand' });
+    expect(
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'CHANNEL_BRIDGE',
+        'Unique-ID': 'abc',
+        'Other-Leg-Unique-ID': 'def',
+        variable_cuc_rec_controls: 'pause',
+      }),
+    ).toMatchObject({ kind: 'bridged', controls: 'pause' });
+  });
+
+  it('S5-15: CUSTOM cuc::recording is a pause or a resume of the owner channel', () => {
+    const custom = (headers: Record<string, string>) =>
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'CUSTOM',
+        'Event-Subclass': 'cuc::recording',
+        ...headers,
+      });
+    expect(custom({ 'Recording-Call-UUID': 'own', 'Recording-Action': 'paused' })).toEqual({
+      kind: 'recordingPaused',
+      callUuid: 'own',
+      nodeId: 'fs-1',
+      tenantId: null,
+    });
+    expect(custom({ 'Recording-Call-UUID': 'own', 'Recording-Action': 'resumed' })).toMatchObject({
+      kind: 'recordingResumed',
+    });
+    expect(custom({ 'Recording-Call-UUID': 'own', 'Recording-Action': 'started' })).toEqual({
+      kind: 'ignored',
+    });
+    expect(custom({ 'Recording-Action': 'paused' })).toEqual({ kind: 'ignored' });
   });
 
   it('defaults direction to inbound and tenantId to null when absent', () => {

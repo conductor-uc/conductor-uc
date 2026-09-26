@@ -99,6 +99,21 @@ describe('BUILT_IN_ROLES', () => {
     }
   });
 
+  it('recording.control (S5-15) belongs to tenant_admin and tenant_supervisor (and master_admin, which holds all), never to support, a reseller or a plain user', () => {
+    for (const roleId of ['master_admin', 'tenant_admin', 'tenant_supervisor']) {
+      expect(
+        BUILT_IN_ROLES.get(roleId as never)?.permissions.has('recording.control'),
+        roleId,
+      ).toBe(true);
+    }
+    for (const roleId of ['master_support', 'reseller_admin', 'reseller_support', 'tenant_user']) {
+      expect(
+        BUILT_IN_ROLES.get(roleId as never)?.permissions.has('recording.control'),
+        roleId,
+      ).toBe(false);
+    }
+  });
+
   it('tenant_user holds only the self-service permissions plus the two every signed-in person needs', () => {
     const tenantUser = BUILT_IN_ROLES.get('tenant_user');
     expect([...(tenantUser?.permissions ?? [])].sort()).toEqual(

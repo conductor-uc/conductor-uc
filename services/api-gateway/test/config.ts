@@ -12,6 +12,7 @@ export function testConfig(overrides: Record<string, string> = {}): ServiceConfi
     CDR_SERVICE_URL: 'http://127.0.0.1:1',
     TRUNK_SERVICE_URL: 'http://127.0.0.1:1',
     RECORDING_SERVICE_URL: 'http://127.0.0.1:1',
+    CALL_CONTROL_URL: 'http://127.0.0.1:1',
     INTERNAL_HEADER_SIGNING_SECRET: 'test-internal-header-secret',
     REDIS_URL: 'redis://127.0.0.1:1',
     // The realtime hub needs NATS, call-control and a service token; the suites

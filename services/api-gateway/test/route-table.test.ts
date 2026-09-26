@@ -16,6 +16,7 @@ const SERVICES = {
   cdr: 'http://cdr:8080',
   trunk: 'http://trunk:8080',
   recording: 'http://recording:8080',
+  call: 'http://call:8080',
 };
 
 describe('buildRouteTable', () => {
@@ -119,6 +120,7 @@ describe('the default routing table', () => {
     CDR_SERVICE_URL: SERVICES.cdr,
     TRUNK_SERVICE_URL: SERVICES.trunk,
     RECORDING_SERVICE_URL: SERVICES.recording,
+    CALL_CONTROL_URL: SERVICES.call,
     REDIS_URL: 'redis://localhost:6379',
   });
   const table = buildRouteTable(config.ROUTE_TABLE, SERVICES);
@@ -158,6 +160,9 @@ describe('the default routing table', () => {
     ['/v1/tenants/t1/me/voicemail', SERVICES.voicemail],
     ['/v1/tenants/t1/me/voicemail/messages/m1/play-url', SERVICES.voicemail],
     ['/v1/tenants/t1/me/calls', SERVICES.cdr],
+    // S5-15: the live call recording buttons, not call history.
+    ['/v1/tenants/t1/calls/c1/recording', SERVICES.call],
+    ['/v1/tenants/t1/me/live-calls/c1/recording', SERVICES.call],
   ])('%s goes to its service', (path, target) => {
     expect(resolveRoute(table, path)?.target).toBe(target);
   });
@@ -177,6 +182,7 @@ const OWNERS: Readonly<Record<string, keyof typeof SERVICES>> = {
   'cdr-service': 'cdr',
   'trunk-service': 'trunk',
   'recording-service': 'recording',
+  'call-control': 'call',
 };
 
 const SERVICES_DIR = fileURLToPath(new URL('../../', import.meta.url));
@@ -214,6 +220,7 @@ describe('every service route resolves through the default table', () => {
       CDR_SERVICE_URL: SERVICES.cdr,
       TRUNK_SERVICE_URL: SERVICES.trunk,
       RECORDING_SERVICE_URL: SERVICES.recording,
+      CALL_CONTROL_URL: SERVICES.call,
       REDIS_URL: 'redis://localhost:6379',
     }).ROUTE_TABLE,
     SERVICES,

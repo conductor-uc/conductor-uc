@@ -9,6 +9,7 @@ import { extensionOf, TenantPresence } from '../src/realtime/presence.js';
 import { parseClientMessage } from '../src/realtime/protocol.js';
 import { originAllowed } from '../src/realtime/route.js';
 import { parseTopic, TOPICS } from '../src/realtime/topics.js';
+import { UserCalls } from '../src/realtime/user-calls.js';
 
 const TENANT = '0199a1b2-0000-7000-8000-000000000001';
 
@@ -33,6 +34,8 @@ function call(overrides: Partial<LiveCall> = {}): LiveCall {
     answeredAt: null,
     bridgedTo: null,
     recording: 'off',
+    controls: 'none',
+    extension: null,
     ...overrides,
   };
 }
@@ -89,9 +92,24 @@ describe('realtime topics', () => {
       `tenant:../x:calls`,
       `tenant:${TENANT}/y:calls`,
       `tenant:${TENANT}:calls:extra`,
+      // S5-15: a person's own calls are only ever named with the person.
+      `tenant:${TENANT}:mycalls`,
+      `tenant:${TENANT}:user::calls`,
+      `tenant:${TENANT}:user:u1:presence`,
+      `tenant:${TENANT}:user:../u:calls`,
     ]) {
       expect(parseTopic(name), name).toBeUndefined();
     }
+  });
+
+  it('S5-15: parses a person own calls topic, private, on their own call history permission', () => {
+    expect(parseTopic(`tenant:${TENANT}:user:u-1:calls`)).toEqual({
+      name: `tenant:${TENANT}:user:u-1:calls`,
+      tenantId: TENANT,
+      kind: 'mycalls',
+      userId: 'u-1',
+    });
+    expect(TOPICS.mycalls).toEqual({ permission: 'self.history', dataClass: 'private' });
   });
 
   it('declares a permission and a data class per topic; live calls are private', () => {
@@ -127,10 +145,79 @@ describe('live call events', () => {
           answeredAt: null,
           bridgedTo: null,
           recording: 'off',
+          controls: 'none',
+          extension: null,
         },
       },
     });
     expect(JSON.stringify(mapped)).not.toContain('fs-1');
+  });
+
+  it('S5-15: carries the vouched extension and the recording controls', () => {
+    const mapped = callEventFromEnvelope(
+      envelope('call.channel.created', {
+        callUuid: 'c1',
+        nodeId: 'fs-1',
+        tenantId: TENANT,
+        direction: 'inbound',
+        from: '402',
+        to: '401',
+        extension: '402',
+        controls: 'on_demand',
+      }),
+    );
+    expect(mapped?.event).toMatchObject({
+      type: 'call.started',
+      call: { extension: '402', controls: 'on_demand' },
+    });
+    // Answer and bridge may say what the buttons can do now; an odd value is left out.
+    expect(
+      callEventFromEnvelope(
+        envelope('call.channel.answered', { callUuid: 'c1', nodeId: 'fs-1', controls: 'pause' }),
+      )?.event,
+    ).toEqual({
+      type: 'call.updated',
+      callUuid: 'c1',
+      changes: { state: 'answered', answeredAt: '2026-09-25T10:00:00.000Z', controls: 'pause' },
+    });
+    expect(
+      callEventFromEnvelope(
+        envelope('call.channel.bridged', {
+          callUuid: 'c1',
+          nodeId: 'fs-1',
+          bridgedTo: 'c2',
+          controls: 'bogus',
+        }),
+      )?.event,
+    ).toEqual({ type: 'call.updated', callUuid: 'c1', changes: { bridgedTo: 'c2' } });
+  });
+
+  it('S5-15: a pause and a resume show as the recording being paused, then on again', () => {
+    expect(
+      callEventFromEnvelope(
+        envelope('call.channel.recording_paused', { callUuid: 'c1', nodeId: 'fs-1' }),
+      )?.event,
+    ).toEqual({ type: 'call.updated', callUuid: 'c1', changes: { recording: 'paused' } });
+    expect(
+      callEventFromEnvelope(
+        envelope('call.channel.recording_resumed', { callUuid: 'c1', nodeId: 'fs-1' }),
+      )?.event,
+    ).toEqual({ type: 'call.updated', callUuid: 'c1', changes: { recording: 'on' } });
+    expect(
+      liveCallFromSnapshot({
+        callUuid: 'c1',
+        direction: 'inbound',
+        state: 'answered',
+        from: '402',
+        to: '401',
+        startedAt: 1,
+        answeredAt: 2,
+        bridgedTo: null,
+        recording: 'paused',
+        controls: 'pause',
+        extension: '402',
+      }),
+    ).toMatchObject({ recording: 'paused', controls: 'pause', extension: '402' });
   });
 
   it('maps call.channel.identified (a tenant learned mid-call) to a started call as it stands', () => {
@@ -337,5 +424,81 @@ describe('realtime origin check', () => {
     expect(originAllowed(request('https://gw.example.test:8443'), [])).toBe(false);
     expect(originAllowed(request('null'), [])).toBe(false);
     expect(originAllowed(request('file://gw.example.test'), [])).toBe(false);
+  });
+});
+
+describe('a person own live calls (S5-15)', () => {
+  const legs = (...calls: LiveCall[]) => new Map(calls.map((c) => [c.callUuid, c]));
+
+  it('shows the legs on their extension and the legs bridged to them, never a caller ID match', () => {
+    const view = new UserCalls('401');
+    const all = legs(
+      // 402 calls 401: the caller's leg (owns the recording) and the leg ringing 401.
+      call({ callUuid: 'a', from: '402', to: '401', extension: '402', bridgedTo: 'b' }),
+      call({ callUuid: 'b', direction: 'outbound', from: '402', to: '401', extension: '401' }),
+      // A trunk caller whose caller ID is 401: not theirs.
+      call({ callUuid: 'x', from: '401', to: '+15550100', extension: null }),
+      // Someone else's call.
+      call({ callUuid: 'y', from: '403', to: '404', extension: '403' }),
+    );
+    expect(
+      view
+        .load(all)
+        .map((c) => c.callUuid)
+        .sort(),
+    ).toEqual(['a', 'b']);
+  });
+
+  it('follows a call as it happens: their leg, then the caller leg when bridged, its recording, the end', () => {
+    const view = new UserCalls('401');
+    const all = legs();
+    const step = (event: Parameters<UserCalls['apply']>[1]) => {
+      if (event.type === 'call.started') all.set(event.call.callUuid, event.call);
+      if (event.type === 'call.updated') {
+        const leg = all.get(event.callUuid);
+        if (leg !== undefined) all.set(event.callUuid, { ...leg, ...event.changes });
+      }
+      if (event.type === 'call.ended') all.delete(event.callUuid);
+      return view.apply(all, event);
+    };
+    view.load(all);
+
+    // The caller's leg is not theirs, so nothing yet.
+    const a = call({ callUuid: 'a', from: '402', to: '401', extension: '402' });
+    expect(step({ type: 'call.started', call: a })).toEqual([]);
+    // Their phone rings.
+    const b = call({ callUuid: 'b', direction: 'outbound', to: '401', extension: '401' });
+    expect(step({ type: 'call.started', call: b })).toEqual([{ type: 'call.started', call: b }]);
+    // Bridged: the caller's leg joins their view, as it stands now.
+    const bridged = step({ type: 'call.updated', callUuid: 'a', changes: { bridgedTo: 'b' } });
+    expect(bridged).toEqual([{ type: 'call.started', call: { ...a, bridgedTo: 'b' } }]);
+    // Its recording pausing is theirs to see.
+    expect(step({ type: 'call.updated', callUuid: 'a', changes: { recording: 'paused' } })).toEqual(
+      [{ type: 'call.updated', callUuid: 'a', changes: { recording: 'paused' } }],
+    );
+    // Someone else's call is not.
+    const other = call({ callUuid: 'y', extension: '403' });
+    expect(step({ type: 'call.started', call: other })).toEqual([]);
+    expect(step({ type: 'call.updated', callUuid: 'y', changes: { state: 'held' } })).toEqual([]);
+    // Both legs end.
+    expect(
+      step({ type: 'call.ended', callUuid: 'b', hangupCause: 'NORMAL_CLEARING' }),
+    ).toHaveLength(1);
+    expect(
+      step({ type: 'call.ended', callUuid: 'a', hangupCause: 'NORMAL_CLEARING' }),
+    ).toHaveLength(1);
+    expect(step({ type: 'call.ended', callUuid: 'y', hangupCause: 'NORMAL_CLEARING' })).toEqual([]);
+  });
+
+  it('a leg that starts already bridged to theirs is shown', () => {
+    const view = new UserCalls('402');
+    const mine = call({ callUuid: 'a', from: '402', to: '401', extension: '402' });
+    const all = legs(mine);
+    view.load(all);
+    const theirs = call({ callUuid: 'b', direction: 'outbound', extension: '401', bridgedTo: 'a' });
+    all.set('b', theirs);
+    expect(view.apply(all, { type: 'call.started', call: theirs })).toEqual([
+      { type: 'call.started', call: theirs },
+    ]);
   });
 });

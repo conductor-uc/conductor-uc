@@ -433,5 +433,110 @@ describe.skipIf(skipReason !== undefined)(
         expect(parsePayload(row.payload)).toEqual({ callUuid, nodeId: 'fs-1' });
       }
     });
+
+    it('S5-15: a pause and a resume (CUSTOM cuc::recording) reach the registry and the outbox with the call tenant', async () => {
+      const handler = createChannelHandler({
+        db: h.db.kysely,
+        registry: h.registry,
+        logger: h.logger,
+        callSafetyTtlMs: 6 * 60 * 60 * 1000,
+        heartbeatTtlMs: 10_000,
+      });
+      const callUuid = crypto.randomUUID();
+      const tenantId = crypto.randomUUID();
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_CREATE',
+        'Unique-ID': callUuid,
+        'variable_sip_h_X-Tenant-Id': tenantId,
+      });
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'RECORD_START',
+        'Unique-ID': callUuid,
+        'variable_sip_h_X-Tenant-Id': tenantId,
+      });
+      // The custom event names no tenant; the registry knows it.
+      const custom = (action: string) => ({
+        'Event-Name': 'CUSTOM',
+        'Event-Subclass': 'cuc::recording',
+        'Recording-Call-UUID': callUuid,
+        'Recording-Action': action,
+      });
+      await handler.handleEvent('fs-1', custom('paused'));
+      expect(await h.registry.getCall(callUuid)).toMatchObject({ recording: 'paused' });
+      await handler.handleEvent('fs-1', custom('resumed'));
+      expect(await h.registry.getCall(callUuid)).toMatchObject({ recording: 'on' });
+
+      const rows = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['type', 'tenant_id', 'payload'])
+        .where('type', 'in', ['call.channel.recording_paused', 'call.channel.recording_resumed'])
+        .execute();
+      expect(rows.map((r) => r.type).sort()).toEqual([
+        'call.channel.recording_paused',
+        'call.channel.recording_resumed',
+      ]);
+      for (const row of rows) {
+        expect(row.tenant_id).toBe(tenantId);
+        expect(parsePayload(row.payload)).toEqual({ callUuid, nodeId: 'fs-1' });
+      }
+    });
+
+    it('S5-15: the vouched extension and the recording controls travel on created, answered and bridged', async () => {
+      const handler = createChannelHandler({
+        db: h.db.kysely,
+        registry: h.registry,
+        logger: h.logger,
+        callSafetyTtlMs: 6 * 60 * 60 * 1000,
+        heartbeatTtlMs: 10_000,
+      });
+      const callUuid = crypto.randomUUID();
+      const other = crypto.randomUUID();
+      const tenantId = crypto.randomUUID();
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_CREATE',
+        'Unique-ID': callUuid,
+        'Call-Direction': 'inbound',
+        'Caller-Caller-ID-Number': '402',
+        'Caller-Destination-Number': '401',
+        'variable_sip_h_X-Tenant-Id': tenantId,
+        variable_sip_from_user: '402',
+      });
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_ANSWER',
+        'Unique-ID': callUuid,
+        'variable_sip_h_X-Tenant-Id': tenantId,
+        variable_cuc_rec_controls: 'on_demand',
+      });
+      expect(await h.registry.getCall(callUuid)).toMatchObject({
+        ext: '402',
+        controls: 'on_demand',
+      });
+      await handler.handleEvent('fs-1', {
+        'Event-Name': 'CHANNEL_BRIDGE',
+        'Unique-ID': callUuid,
+        'Other-Leg-Unique-ID': other,
+        'variable_sip_h_X-Tenant-Id': tenantId,
+        variable_cuc_rec_controls: 'pause',
+      });
+      expect(await h.registry.getCall(callUuid)).toMatchObject({ controls: 'pause' });
+
+      const payloads = async (type: string) =>
+        (
+          await h.db.kysely
+            .selectFrom('outbox')
+            .select('payload')
+            .where('type', '=', type)
+            .execute()
+        ).map((r) => parsePayload(r.payload));
+      expect(await payloads('call.channel.created')).toEqual([
+        expect.objectContaining({ extension: '402', controls: 'none' }),
+      ]);
+      expect(await payloads('call.channel.answered')).toEqual([
+        { callUuid, nodeId: 'fs-1', controls: 'on_demand' },
+      ]);
+      expect(await payloads('call.channel.bridged')).toEqual([
+        { callUuid, nodeId: 'fs-1', bridgedTo: other, controls: 'pause' },
+      ]);
+    });
   },
 );

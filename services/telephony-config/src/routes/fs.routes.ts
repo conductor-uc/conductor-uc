@@ -53,6 +53,7 @@ import {
   RECORDING_REFUSAL_TONE,
   RECORDING_UNAVAILABLE_ACTION,
   recordingActions,
+  recordingControlsFor,
   recordingFeatureCodeActions,
   recordingSpoolPath,
   type CallcenterAgentEntry,
@@ -143,7 +144,12 @@ type FlowRecordingQuery = Static<typeof FlowRecordingQuerySchema>;
  * `bind_meta_app` on `listen`, with `context` as the call's `cuc_rec_ctx`.
  */
 interface FlowFeatureCodes {
-  readonly featureCodes?: { readonly listen: string; readonly context: string };
+  readonly featureCodes?: {
+    readonly listen: string;
+    readonly context: string;
+    /** S5-15: what the console's buttons may do on the call (`cuc_rec_controls`). */
+    readonly controls: 'on_demand' | 'pause';
+  };
 }
 
 type FlowRecordingInstruction =
@@ -1359,6 +1365,7 @@ export function registerFsRoutes(
       directive.kind !== 'unavailable' && directive.allowOnDemand === true
         ? recordingFeatureCodeActions({
             direction: target.direction,
+            recorded: directive.kind === 'record',
             contextToken: encodeRecordingContext({
               tenantId: target.tenantId,
               direction: target.direction,
@@ -1437,6 +1444,8 @@ export function registerFsRoutes(
         ? {
             featureCodes: {
               listen: featureCodeListenLegs('inbound'),
+              // S5-15: `cuc_rec_controls`, which the runner exports next to the codes.
+              controls: recordingControlsFor(directive.kind === 'record'),
               context: encodeRecordingContext({
                 tenantId,
                 direction: 'inbound',

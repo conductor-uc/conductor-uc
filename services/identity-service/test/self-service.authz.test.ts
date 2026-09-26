@@ -134,6 +134,7 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
           'monitor.presence',
           'org.view',
           'self.history',
+          'self.recording',
           'self.settings',
           'self.voicemail',
         ],
@@ -292,6 +293,7 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
         'monitor.presence',
         'org.view',
         'self.history',
+        'self.recording',
         'self.settings',
         'self.voicemail',
       ]);

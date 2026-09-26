@@ -19387,6 +19387,298 @@
         ]
       }
     },
+    "/v1/tenants/{tenantId}/calls/{callUuid}/recording": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "start"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "stop"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "pause"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "resume"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z][0-9A-Za-z-]*$"
+            },
+            "in": "path",
+            "name": "callUuid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "recordingId",
+                    "recording"
+                  ],
+                  "properties": {
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "started"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "stopped"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "paused"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "resumed"
+                          ]
+                        }
+                      ]
+                    },
+                    "recordingId": {
+                      "type": "string"
+                    },
+                    "recording": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "on"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "off"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "paused"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "controlCallRecording",
+        "tags": [
+          "Calls"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/me/live-calls/{callUuid}/recording": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action"
+                ],
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "start"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "stop"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "pause"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
+                          "resume"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z][0-9A-Za-z-]*$"
+            },
+            "in": "path",
+            "name": "callUuid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "result",
+                    "recordingId",
+                    "recording"
+                  ],
+                  "properties": {
+                    "result": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "started"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "stopped"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "paused"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "resumed"
+                          ]
+                        }
+                      ]
+                    },
+                    "recordingId": {
+                      "type": "string"
+                    },
+                    "recording": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "on"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "off"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "paused"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "controlMyCallRecording",
+        "tags": [
+          "Me"
+        ]
+      }
+    },
     "/v1/platform/health": {
       "get": {
         "responses": {

@@ -108,11 +108,24 @@ describe('PERMISSION_CATALOG', () => {
   });
 
   it('includes the self-service permissions (parity 1e): voicemail and history are private, settings are config', () => {
-    expect([...SELF_PERMISSIONS]).toEqual(['self.settings', 'self.voicemail', 'self.history']);
+    expect([...SELF_PERMISSIONS]).toEqual([
+      'self.settings',
+      'self.voicemail',
+      'self.history',
+      'self.recording',
+    ]);
     for (const permission of SELF_PERMISSIONS) expect(isKnownPermission(permission)).toBe(true);
     expect(dataClassOf('self.settings')).toBe('config');
     expect(dataClassOf('self.voicemail')).toBe('private');
     expect(dataClassOf('self.history')).toBe('private');
+    expect(dataClassOf('self.recording')).toBe('private');
+  });
+
+  it('includes recording.control — S5-15, not in 07 §3.3: controlling a live recording is private (H1), with no read twin', () => {
+    expect(isKnownPermission('recording.control')).toBe(true);
+    expect(dataClassOf('recording.control')).toBe('private');
+    expect(Object.hasOwn(READ_TWINS, 'recording.control')).toBe(false);
+    expect(Object.values(READ_TWINS)).not.toContain('recording.control');
   });
 });
 

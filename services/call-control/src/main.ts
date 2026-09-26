@@ -1,12 +1,15 @@
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createServer } from '@cuc/http';
+import { createRemotePermissionResolver, createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { Redis } from 'ioredis';
 
 import { createAffinityManager } from './affinity/manager.js';
 import { createChannelHandler } from './channel-handler.js';
+import { createRecordingControlClient, createUserExtensionLookup } from './clients.js';
+import { createRecordingController } from './recording-control.js';
+import { registerRecordingControlRoutes } from './routes/recording.routes.js';
 import { configSchema, loadServiceConfig, parseFsNodes } from './config.js';
 import { createEslClient, type EslClient } from './esl/client.js';
 import { createCallRegistry } from './redis/registry.js';
@@ -138,9 +141,41 @@ const app = await createServer({
   serviceName: config.SERVICE_NAME,
   serviceVersion: config.SERVICE_VERSION,
   logger,
+  // S5-15: people reach the recording buttons through api-gateway, which signs who they are.
+  context: {
+    trustInternalHeaders: config.TRUST_INTERNAL_HEADERS,
+    ...(config.INTERNAL_HEADER_SIGNING_SECRET === undefined
+      ? {}
+      : { internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET }),
+  },
+  permissions: createRemotePermissionResolver({
+    baseUrl: config.IDENTITY_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
 });
 
 registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN, registry);
+
+// S5-15: the recording buttons for live calls.
+registerRecordingControlRoutes(app, {
+  controller: createRecordingController({
+    registry,
+    esl: (nodeId) => eslClientsById.get(nodeId),
+    recording: createRecordingControlClient({
+      baseUrl: config.RECORDING_SERVICE_URL,
+      internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+    }),
+    spoolDir: config.RECORDING_SPOOL_DIR,
+    logger,
+    injectEvent: (nodeId, raw) => {
+      handleInOrder(nodeId, () => channelHandler.handleEvent(nodeId, raw));
+    },
+  }),
+  userExtension: createUserExtensionLookup({
+    baseUrl: config.PBX_CONFIG_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
+});
 
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));

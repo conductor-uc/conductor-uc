@@ -122,6 +122,74 @@ describe('createEslClient', () => {
     expect(result).toEqual({ ok: false, body: '-ERR no such command' });
   });
 
+  it('S5-15: fires an event with sendevent, answered in order with the api commands around it, and hears it back', async () => {
+    server = await startFakeEslServer(PASSWORD);
+    server.echoEvents = true;
+    const connected: string[] = [];
+    const events: Record<string, string>[] = [];
+
+    client = createEslClient({
+      node: { id: 'fs-1', host: '127.0.0.1', port: server.port },
+      password: PASSWORD,
+      logger: silentLogger(),
+      reconnectMinDelayMs: 50,
+      reconnectMaxDelayMs: 200,
+      onEvent: (_nodeId, event) => events.push(event),
+      onConnect: (nodeId) => connected.push(nodeId),
+      connect: (port, host) => netConnect(port, host),
+    });
+    client.start();
+    await waitFor(() => connected.includes('fs-1'));
+
+    server.apiResponder = (command) => `+OK ${command}`;
+    const [before, sent, after] = await Promise.all([
+      client.sendApi('uuid_getvar a x'),
+      client.sendEvent('CUSTOM', {
+        'Event-Subclass': 'cuc::recording',
+        'Recording-Call-UUID': 'owner-1',
+        'Recording-Action': 'paused',
+      }),
+      client.sendApi('uuid_getvar a y'),
+    ]);
+
+    expect(before).toEqual({ ok: true, body: '+OK uuid_getvar a x' });
+    expect(sent.ok).toBe(true);
+    expect(after).toEqual({ ok: true, body: '+OK uuid_getvar a y' });
+    expect(server.receivedEvents).toEqual([
+      {
+        name: 'CUSTOM',
+        headers: {
+          'Event-Subclass': 'cuc::recording',
+          'Recording-Call-UUID': 'owner-1',
+          'Recording-Action': 'paused',
+        },
+      },
+    ]);
+    await waitFor(() => events.length === 1);
+    expect(events[0]).toMatchObject({ 'Event-Name': 'CUSTOM', 'Recording-Action': 'paused' });
+  });
+
+  it('S5-15: refuses an event header that would break the frame', async () => {
+    server = await startFakeEslServer(PASSWORD);
+    const connected: string[] = [];
+    client = createEslClient({
+      node: { id: 'fs-1', host: '127.0.0.1', port: server.port },
+      password: PASSWORD,
+      logger: silentLogger(),
+      reconnectMinDelayMs: 50,
+      reconnectMaxDelayMs: 200,
+      onEvent: () => {},
+      onConnect: (nodeId) => connected.push(nodeId),
+      connect: (port, host) => netConnect(port, host),
+    });
+    client.start();
+    await waitFor(() => connected.includes('fs-1'));
+    await expect(client.sendEvent('CUSTOM', { 'Unique-ID': 'a\n\napi shutdown' })).rejects.toThrow(
+      'single line',
+    );
+    expect(server.receivedEvents).toEqual([]);
+  });
+
   it('rejects sendApi when not connected', async () => {
     client = createEslClient({
       node: { id: 'fs-1', host: '127.0.0.1', port: 1 },

@@ -43,7 +43,12 @@ const LiveCallSchema = Type.Object({
   from: Type.String(),
   to: Type.String(),
   bridgedTo: Type.Union([Type.String(), Type.Null()]),
-  recording: Type.Union([Type.Literal('on'), Type.Literal('off')]),
+  /** `paused` since S5-15. */
+  recording: Type.Union([Type.Literal('on'), Type.Literal('off'), Type.Literal('paused')]),
+  /** S5-15: the extension the leg belongs to, when the node vouches for it (`normalize.ts`). */
+  extension: Type.Union([Type.String(), Type.Null()]),
+  /** S5-15: what the recording buttons may do on the call. */
+  controls: Type.Union([Type.Literal('none'), Type.Literal('on_demand'), Type.Literal('pause')]),
 });
 
 const LiveCallsResponseSchema = Type.Object({ calls: Type.Array(LiveCallSchema) });
