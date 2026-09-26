@@ -827,6 +827,7 @@ void main() {
         'voicemail/reset-pin': ['post'],
         'voicemail/email-settings': ['put'],
         'calls': ['get'],
+        'live-calls/{callUuid}/recording': ['post'],
       };
       for (final e in wanted.entries) {
         expect(paths, contains('$me/${e.key}'), reason: e.key);
@@ -841,7 +842,10 @@ void main() {
         (e) => e.key.startsWith('$me/'),
       )) {
         expect(
-          entry.key.replaceAll('{tenantId}', '').replaceAll('{messageId}', ''),
+          entry.key
+              .replaceAll('{tenantId}', '')
+              .replaceAll('{messageId}', '')
+              .replaceAll('{callUuid}', ''),
           isNot(contains('{')),
           reason: '${entry.key} names something a person should not choose',
         );
@@ -853,9 +857,11 @@ void main() {
               isNot(anyOf('number', 'did', 'extensionId', 'userId', 'id')),
               reason: '${entry.key} takes ${p['name']}',
             );
-            // The path takes the tenant, and a message inside my own mailbox.
+            // The path takes the tenant, a message inside my own mailbox, and
+            // a leg of my own live call (from my own calls feed; call-control
+            // answers "not found" for a leg that is not on my extension).
             if (p['in'] == 'path') {
-              expect(p['name'], anyOf('tenantId', 'messageId'));
+              expect(p['name'], anyOf('tenantId', 'messageId', 'callUuid'));
             }
           }
         }
