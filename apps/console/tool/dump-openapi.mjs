@@ -55,6 +55,8 @@ const SOURCES = [
   ['recording-service', 'recording', 'registerRecordingRoutes', 1],
   ['recording-service', 'policy', 'registerPolicyRoutes', 1],
   ['cdr-service', 'me', 'registerMeRoutes', 2],
+  // S5-15: the recording buttons on live calls.
+  ['call-control', 'recording', 'registerRecordingControlRoutes', 1],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
   ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
@@ -135,6 +137,9 @@ const OVERRIDES = {
   'post /v1/tenants/{tenantId}/me/voicemail/reset-pin': 'resetMyVoicemailPin',
   'put /v1/tenants/{tenantId}/me/voicemail/email-settings': 'saveMyVoicemailEmailSettings',
   'get /v1/tenants/{tenantId}/me/calls': 'listMyCalls',
+  // S5-15: record, stop, pause and resume a live call's recording.
+  'post /v1/tenants/{tenantId}/calls/{callUuid}/recording': 'controlCallRecording',
+  'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/recording': 'controlMyCallRecording',
 };
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };
 
