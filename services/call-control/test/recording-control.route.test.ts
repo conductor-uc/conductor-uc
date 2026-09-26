@@ -412,6 +412,20 @@ describe.skipIf(skipReason !== undefined)(
         expect(node.commands.some((c) => c.startsWith('uuid_record'))).toBe(false);
       });
 
+      it('never puts a malformed recording id on an ESL command line, whoever answered', async () => {
+        const tenantId = crypto.randomUUID();
+        const { a } = await liveCall(tenantId);
+        const supervisor = person(tenantId, ['recording.control']);
+        answer = {
+          status: 200,
+          body: { result: 'started', recordingId: 'x /etc/passwd', fileName: null },
+        };
+        const response = await press(supervisorUrl(tenantId, a), supervisor.headers, 'start');
+        expect(response.statusCode).toBe(503);
+        expect(response.json()).toMatchObject({ code: 'media_node_failed' });
+        expect(node.commands.filter((c) => !c.startsWith('uuid_getvar'))).toEqual([]);
+      });
+
       it('a node that is not connected, or that fails the command, is a 503', async () => {
         const tenantId = crypto.randomUUID();
         const { a } = await liveCall(tenantId);

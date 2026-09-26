@@ -235,6 +235,18 @@ export function createRecordingController(
         if (answer.result === 'refused' || answer.recordingId === null) {
           throw refusal(answer.reason);
         }
+        // The id goes on an ESL command line (the spool path, `uuid_setvar`): never anything but
+        // an id, whoever answered.
+        if (!CHANNEL_UUID.test(answer.recordingId)) {
+          logger.error(
+            { tenantId, callUuid: owner, action },
+            'recording control: recording-service answered with a malformed recording id; nothing done on the node',
+          );
+          throw unavailable(
+            'Recording could not be changed right now. Try again shortly.',
+            'media_node_failed',
+          );
+        }
 
         const verb = NODE_VERB[answer.result];
         const path = recordingSpoolPath(spoolDir, answer.recordingId);
