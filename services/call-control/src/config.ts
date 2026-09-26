@@ -48,8 +48,25 @@ export const configSchema = Type.Object({
   AFFINITY_LEASE_TTL_MS: Env.int({ minimum: 1_000, default: 30_000 }),
   AFFINITY_RENEW_INTERVAL_MS: Env.int({ minimum: 500, default: 10_000 }),
 
-  /** `/internal/v1/affinity/...` (S2-12) — same shared token every other service's own internal API checks (07 §1's precedent); must match those services' own `INTERNAL_SERVICE_TOKEN`. */
+  /** `/internal/v1/affinity/...` (S2-12) — same shared token every other service's own internal API checks (07 §1's precedent); must match those services' own `INTERNAL_SERVICE_TOKEN`. Also what this service presents to identity-service, recording-service and pbx-config-service (S5-15). */
   INTERNAL_SERVICE_TOKEN: Env.secret(),
+
+  /**
+   * S5-15: the recording buttons for live calls (`/v1/tenants/:t/calls/:uuid/recording` and the
+   * self-service `/me/live-calls/...`), the first routes here that people call through
+   * api-gateway. identity-service answers what the signed-in person holds (07 §3.1).
+   */
+  IDENTITY_SERVICE_URL: Env.url(),
+  /** S5-15: decides and audits every recording action (`/internal/v1/recordings/control`). */
+  RECORDING_SERVICE_URL: Env.url(),
+  /** S5-15: a person's own extension, for the self-service buttons. */
+  PBX_CONFIG_SERVICE_URL: Env.url(),
+  /**
+   * S5-15: the media nodes' recording spool directory. Must be the same as telephony-config's
+   * `RECORDING_SPOOL_DIR` (and the node uploader's `SPOOL_DIR`): FreeSWITCH finds a running
+   * recording to stop, mask or unmask by its exact path.
+   */
+  RECORDING_SPOOL_DIR: Env.string({ default: '/var/spool/cuc/rec' }),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

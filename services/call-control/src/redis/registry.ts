@@ -1,3 +1,4 @@
+import { parseRecordingControls, type RecordingControls } from '@cuc/api-contracts';
 import type { Redis } from 'ioredis';
 
 /**
@@ -62,6 +63,10 @@ export interface CallRecord {
   readonly startedAt: string;
   readonly from: string;
   readonly to: string;
+  /** S5-15: the extension this channel is the leg of, when the node vouches for it (`normalize.ts`). */
+  readonly extension: string | null;
+  /** S5-15: `cuc_rec_controls`, what the recording buttons may do on the call. */
+  readonly controls: RecordingControls;
 }
 
 /** HSET only when the hash exists, in one step (no read-then-write race with a hangup). */
@@ -87,8 +92,15 @@ export interface LiveCall {
   readonly from: string;
   readonly to: string;
   readonly bridgedTo: string | null;
-  /** Whether the channel is being recorded now (RECORD_START/RECORD_STOP). */
-  readonly recording: 'on' | 'off';
+  /**
+   * Whether the channel is being recorded now (RECORD_START/RECORD_STOP), and (S5-15) whether
+   * that recording is paused (`CUSTOM cuc::recording`).
+   */
+  readonly recording: 'on' | 'off' | 'paused';
+  /** S5-15: the extension this channel is the leg of, when the node vouches for it. */
+  readonly extension: string | null;
+  /** S5-15: what the recording buttons may do on the call (`none` when nothing). */
+  readonly controls: RecordingControls;
 }
 
 /**
@@ -107,6 +119,7 @@ export function toLiveCall(
     return Number.isFinite(parsed) ? parsed : null;
   };
   const state = hash['state'];
+  const recording = hash['recording'];
   return {
     callUuid,
     nodeId: hash['node'] ?? '',
@@ -119,7 +132,9 @@ export function toLiveCall(
     to: hash['to'] ?? '',
     bridgedTo:
       hash['bridgedTo'] === undefined || hash['bridgedTo'] === '' ? null : hash['bridgedTo'],
-    recording: hash['recording'] === 'on' ? 'on' : 'off',
+    recording: recording === 'on' || recording === 'paused' ? recording : 'off',
+    extension: hash['ext'] === undefined || hash['ext'] === '' ? null : hash['ext'],
+    controls: parseRecordingControls(hash['controls']),
   };
 }
 
@@ -149,6 +164,8 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
           startedAt: call.startedAt,
           from: call.from,
           to: call.to,
+          ext: call.extension ?? '',
+          controls: call.controls,
         })
         .pexpire(key, safetyTtlMs)
         .sadd(k(`node:${call.nodeId}:calls`), call.callUuid);

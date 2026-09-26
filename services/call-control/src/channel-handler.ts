@@ -1,3 +1,4 @@
+import type { RecordingControls } from '@cuc/api-contracts';
 import { enqueueEvent } from '@cuc/events';
 import type { Logger } from '@cuc/logger';
 import type { Kysely } from 'kysely';
@@ -26,7 +27,17 @@ const SIMPLE_TRANSITIONS = {
   unheld: { type: 'call.channel.unheld', fields: { state: 'answered' } },
   recordingStarted: { type: 'call.channel.recording_started', fields: { recording: 'on' } },
   recordingStopped: { type: 'call.channel.recording_stopped', fields: { recording: 'off' } },
+  // S5-15: from `CUSTOM cuc::recording` (`normalize.ts`), after `uuid_record mask`/`unmask`.
+  recordingPaused: { type: 'call.channel.recording_paused', fields: { recording: 'paused' } },
+  recordingResumed: { type: 'call.channel.recording_resumed', fields: { recording: 'on' } },
 } as const;
+
+/** S5-15: the channel's recording controls, as an event or registry field, when it said them. */
+function controlsOf(action: { readonly controls?: RecordingControls }): {
+  controls?: RecordingControls;
+} {
+  return action.controls === undefined ? {} : { controls: action.controls };
+}
 
 /** The envelope's tenant, when the channel said (S5-08: the realtime hub routes by it). */
 function orgContextOf(tenantId: string | null): { orgContext?: { tenantId: string } } {
@@ -78,6 +89,8 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
         answeredAt: call.answeredAt === null ? null : new Date(call.answeredAt).toISOString(),
         bridgedTo: call.bridgedTo,
         recording: call.recording,
+        extension: call.extension,
+        controls: call.controls,
       },
       orgContext: { tenantId },
     });
@@ -102,6 +115,8 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
               direction: action.call.direction,
               from: action.call.from,
               to: action.call.to,
+              extension: action.call.extension,
+              controls: action.call.controls,
             },
             ...(action.call.tenantId === null
               ? {}
@@ -114,12 +129,13 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
           const tenantId = await tenantFor(action.callUuid, action.tenantId);
           await enqueueEvent(db, callEvents, {
             type: 'call.channel.answered',
-            data: { callUuid: action.callUuid, nodeId: action.nodeId },
+            data: { callUuid: action.callUuid, nodeId: action.nodeId, ...controlsOf(action) },
             ...orgContextOf(tenantId),
           });
           await registry.updateCall(action.callUuid, {
             state: 'answered',
             answeredAt: action.answeredAt,
+            ...controlsOf(action),
           });
           return;
         }
@@ -132,17 +148,27 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
           if (tenantId !== null) await identify(action.bridgedTo, tenantId);
           await enqueueEvent(db, callEvents, {
             type: 'call.channel.bridged',
-            data: { callUuid: action.callUuid, nodeId: action.nodeId, bridgedTo: action.bridgedTo },
+            data: {
+              callUuid: action.callUuid,
+              nodeId: action.nodeId,
+              bridgedTo: action.bridgedTo,
+              ...controlsOf(action),
+            },
             ...orgContextOf(tenantId),
           });
-          await registry.updateCall(action.callUuid, { bridgedTo: action.bridgedTo });
+          await registry.updateCall(action.callUuid, {
+            bridgedTo: action.bridgedTo,
+            ...controlsOf(action),
+          });
           return;
         }
 
         case 'held':
         case 'unheld':
         case 'recordingStarted':
-        case 'recordingStopped': {
+        case 'recordingStopped':
+        case 'recordingPaused':
+        case 'recordingResumed': {
           const { type, fields } = SIMPLE_TRANSITIONS[action.kind];
           const tenantId = await tenantFor(action.callUuid, action.tenantId);
           await enqueueEvent(db, callEvents, {

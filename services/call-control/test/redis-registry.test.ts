@@ -56,6 +56,8 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
         startedAt: String(Date.now()),
         from: '+15550001111',
         to: '+15551234567',
+        extension: null,
+        controls: 'none',
       },
       6 * 60 * 60 * 1000,
     );
@@ -94,6 +96,8 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
             startedAt: String(Date.now()),
             from: '1000',
             to: '2000',
+            extension: null,
+            controls: 'none',
           },
           6 * 60 * 60 * 1000,
         ),
@@ -124,6 +128,8 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
           startedAt: String(fields.startedAt ?? Date.now()),
           from: fields.from ?? '101',
           to: fields.to ?? '102',
+          extension: null,
+          controls: 'none',
         },
         60_000,
       );
@@ -154,8 +160,34 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
         to: '102',
         bridgedTo: second,
         recording: 'on',
+        extension: null,
+        controls: 'none',
       });
       expect(calls[1]).toMatchObject({ state: 'ringing', answeredAt: null, recording: 'off' });
+    });
+
+    it('S5-15: keeps the vouched extension, the recording controls and a paused recording', async () => {
+      const tenantId = crypto.randomUUID();
+      const callUuid = crypto.randomUUID();
+      await h.registry.createCall(
+        {
+          callUuid,
+          nodeId: 'fs-1',
+          tenantId,
+          direction: 'outbound',
+          state: 'ringing',
+          startedAt: '1000',
+          from: '402',
+          to: '401',
+          extension: '401',
+          controls: 'on_demand',
+        },
+        60_000,
+      );
+      await h.registry.updateCall(callUuid, { recording: 'paused', controls: 'pause' });
+      const [call] = await h.registry.callsForTenant(tenantId);
+      expect(call).toMatchObject({ extension: '401', controls: 'pause', recording: 'paused' });
+      expect(await h.registry.getCall(callUuid)).toMatchObject({ ext: '401', controls: 'pause' });
     });
 
     it('drops index entries whose call has gone (safety TTL passed with no hangup seen)', async () => {

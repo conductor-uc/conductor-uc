@@ -46,13 +46,24 @@ export interface EslClient {
    * holds ESL/FS interactions to.
    */
   sendApi(command: string): Promise<EslApiResult>;
+  /**
+   * S5-15: fires an event on the node (`sendevent`), which FreeSWITCH then delivers to every
+   * subscriber, this connection included, like any event it raised itself. `name` is an event
+   * name (`CUSTOM`); `headers` its headers (a `CUSTOM` event needs `Event-Subclass`). Values
+   * must be single-line. Resolves with the reply (`ok` when FreeSWITCH answered `+OK`); rejects,
+   * like {@link sendApi}, when not connected.
+   */
+  sendEvent(name: string, headers: Readonly<Record<string, string>>): Promise<EslApiResult>;
 }
 
 // `CUSTOM callcenter::info` (S2-13): a custom event class must be named by
 // its own subclass to subscribe to it — `mod_event_socket`'s documented
 // convention, not something the other (stock) event names above need.
+// `cuc::recording` (S5-15): a recording paused or resumed, fired by
+// `recording_control.lua` and by this service (`sendEvent`), since
+// `uuid_record mask`/`unmask` raise no event of their own.
 const SUBSCRIBE_COMMAND =
-  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_UNHOLD RECORD_START RECORD_STOP CHANNEL_HANGUP_COMPLETE HEARTBEAT CUSTOM callcenter::info';
+  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_UNHOLD RECORD_START RECORD_STOP CHANNEL_HANGUP_COMPLETE HEARTBEAT CUSTOM callcenter::info cuc::recording';
 
 type ConnectionState = 'connecting' | 'authenticating' | 'subscribing' | 'ready';
 
@@ -89,7 +100,9 @@ export function createEslClient(options: EslClientOptions): EslClient {
   // `api` replies (`api/response` frames) arrive in the same order the
   // commands were sent, one per command — mod_event_socket's inbound-mode
   // connections are not pipelined the way `bgapi` is. A plain FIFO queue is
-  // therefore enough to match each response back to its caller.
+  // therefore enough to match each response back to its caller. A
+  // `sendevent` (S5-15) is answered in the same order, with a
+  // `command/reply` frame instead, so it shares the queue.
   let pendingApiCalls: {
     resolve: (result: EslApiResult) => void;
     reject: (error: Error) => void;
@@ -157,6 +170,15 @@ export function createEslClient(options: EslClientOptions): EslClient {
       return;
     }
 
+    if (state === 'ready' && contentType === 'command/reply') {
+      const call = pendingApiCalls.shift();
+      if (call !== undefined) {
+        const reply = frame.headers.get('Reply-Text') ?? '';
+        call.resolve({ ok: isOkReply(frame), body: reply });
+      }
+      return;
+    }
+
     if (contentType === 'text/event-json' && frame.body !== undefined) {
       let parsed: unknown;
       try {
@@ -171,10 +193,9 @@ export function createEslClient(options: EslClientOptions): EslClient {
       return;
     }
 
-    // command/reply frames for commands this client never sends (none yet)
-    // and anything else unrecognized are ignored rather than treated as an
-    // error — a strange or future FreeSWITCH event type must not take the
-    // connection down.
+    // Anything else unrecognized is ignored rather than treated as an error —
+    // a strange or future FreeSWITCH event type must not take the connection
+    // down.
   }
 
   function connectOnce(): void {
@@ -239,6 +260,23 @@ export function createEslClient(options: EslClientOptions): EslClient {
       return new Promise((resolve, reject) => {
         pendingApiCalls.push({ resolve, reject });
         sock.write(eslCommand(`api ${command}`));
+      });
+    },
+
+    sendEvent(name, headers) {
+      if (socket === undefined || state !== 'ready') {
+        return Promise.reject(
+          new Error(`ESL client for node '${node.id}' is not connected and subscribed`),
+        );
+      }
+      const lines = Object.entries(headers).map(([key, value]) => `${key}: ${value}`);
+      if ([name, ...lines].some((line) => /[\r\n]/.test(line))) {
+        return Promise.reject(new Error('An event header must be a single line.'));
+      }
+      const sock = socket;
+      return new Promise((resolve, reject) => {
+        pendingApiCalls.push({ resolve, reject });
+        sock.write(eslCommand([`sendevent ${name}`, ...lines].join('\n')));
       });
     },
   };

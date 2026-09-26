@@ -97,6 +97,8 @@ describe.skipIf(skipReason !== undefined)('affinity manager (S2-12; 04 §3.3)', 
           startedAt: String(Date.now()),
           from: '1000',
           to: '2000',
+          extension: null,
+          controls: 'none',
         },
         6 * 60 * 60 * 1000,
       );

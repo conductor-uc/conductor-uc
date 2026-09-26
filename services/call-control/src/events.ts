@@ -30,6 +30,16 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * each event to the tenant's live topics by it, and must not have to remember
  * which tenant a call belonged to.
  */
+/** S5-15: what the recording buttons may do on a call (`@cuc/api-contracts`' `RecordingControls`). */
+const ControlsSchema = Type.Union([
+  Type.Literal('none'),
+  Type.Literal('on_demand'),
+  Type.Literal('pause'),
+]);
+
+/** S5-15: the extension a leg belongs to, when the node vouches for it (`normalize.ts`). */
+const ExtensionSchema = Type.Union([Type.String({ minLength: 1 }), Type.Null()]);
+
 export const callEvents = defineEvents({
   'call.channel.created': {
     schemaVersion: 1,
@@ -41,6 +51,14 @@ export const callEvents = defineEvents({
       direction: Type.Union([Type.Literal('inbound'), Type.Literal('outbound')]),
       from: Type.String(),
       to: Type.String(),
+      /**
+       * S5-15, optional (added within schema version 1; a consumer must not require it): the
+       * extension this leg belongs to when the node can vouch for it, which is how a person's
+       * own live calls are found (never their caller ID alone).
+       */
+      extension: Type.Optional(ExtensionSchema),
+      /** S5-15, optional: what the recording buttons may do on the call, when already known. */
+      controls: Type.Optional(ControlsSchema),
     }),
   },
   /**
@@ -66,7 +84,11 @@ export const callEvents = defineEvents({
       startedAt: Type.String(),
       answeredAt: Type.Union([Type.String(), Type.Null()]),
       bridgedTo: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
-      recording: Type.Union([Type.Literal('on'), Type.Literal('off')]),
+      /** `paused` since S5-15. */
+      recording: Type.Union([Type.Literal('on'), Type.Literal('off'), Type.Literal('paused')]),
+      /** S5-15, optional: as on `call.channel.created`. */
+      extension: Type.Optional(ExtensionSchema),
+      controls: Type.Optional(ControlsSchema),
     }),
   },
   'call.channel.answered': {
@@ -75,6 +97,11 @@ export const callEvents = defineEvents({
     data: Type.Object({
       callUuid: Type.String({ minLength: 1 }),
       nodeId: Type.String({ minLength: 1 }),
+      /**
+       * S5-15, optional: what the recording buttons may do, when the channel says it by now
+       * (`cuc_rec_controls`, set by the dialplan before the call is answered or bridged).
+       */
+      controls: Type.Optional(ControlsSchema),
     }),
   },
   'call.channel.bridged': {
@@ -84,6 +111,8 @@ export const callEvents = defineEvents({
       callUuid: Type.String({ minLength: 1 }),
       nodeId: Type.String({ minLength: 1 }),
       bridgedTo: Type.String({ minLength: 1 }),
+      /** S5-15, optional: as on `call.channel.answered` (a flow's hand-off sets it before its bridge). */
+      controls: Type.Optional(ControlsSchema),
     }),
   },
   'call.channel.held': {
@@ -113,6 +142,28 @@ export const callEvents = defineEvents({
   'call.channel.recording_stopped': {
     schemaVersion: 1,
     description: 'A recording of the channel stopped (ESL RECORD_STOP).',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  /**
+   * S5-15: the channel's recording was paused (`uuid_record mask`: the paused stretch is silence
+   * in the file). FreeSWITCH raises nothing for a mask, so this comes from the `CUSTOM
+   * cuc::recording` event that `recording_control.lua` (a feature code) and call-control itself
+   * (the console's buttons) fire after masking. `recording_started` or `_resumed` ends it.
+   */
+  'call.channel.recording_paused': {
+    schemaVersion: 1,
+    description: "The channel's recording was paused (CUSTOM cuc::recording).",
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.channel.recording_resumed': {
+    schemaVersion: 1,
+    description: "The channel's paused recording was resumed (CUSTOM cuc::recording).",
     data: Type.Object({
       callUuid: Type.String({ minLength: 1 }),
       nodeId: Type.String({ minLength: 1 }),
