@@ -32,3 +32,13 @@ export {
   type ParsedSubject,
   type StreamName,
 } from './subjects.js';
+export {
+  decodeRecordingContext,
+  encodeRecordingContext,
+  parseRecordingControls,
+  RECORDING_CONTROLS,
+  recordingSpoolPath,
+  type RecordingCallContext,
+  type RecordingCallDirection,
+  type RecordingControls,
+} from './recording-context.js';

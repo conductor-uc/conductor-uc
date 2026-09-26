@@ -928,6 +928,7 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
       ]);
       const list = apps(xml);
       expect(list).toContainEqual({ app: 'export', data: 'cuc_rec_owner=${uuid}' });
+      expect(list).toContainEqual({ app: 'export', data: 'cuc_rec_controls=on_demand' });
       expect(list).toContainEqual({ app: 'set', data: 'RECORD_STEREO=true' });
       expect(xml).not.toContain('record_session');
       // Armed before the call is placed.
@@ -960,6 +961,8 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
         '2 b s lua::recording_control.lua pause',
       ]);
       expect(xml).toContain('execute_on_answer=record_session');
+      // S5-15: the rule records, so the buttons may pause and resume only.
+      expect(apps(xml)).toContainEqual({ app: 'export', data: 'cuc_rec_controls=pause' });
       expect(contextOf(xml)).toEqual({
         tenantId,
         direction: 'inbound',
@@ -1002,10 +1005,14 @@ describe.skipIf(skipReason !== undefined)('/fs/dialplan recording decision (S5-0
         headers: { authorization: BASIC_AUTH },
       });
       const body = response.json<{
-        recording: { action: string; featureCodes: { listen: string; context: string } };
+        recording: {
+          action: string;
+          featureCodes: { listen: string; context: string; controls: string };
+        };
       }>();
       expect(body.recording.action).toBe('none');
       expect(body.recording.featureCodes.listen).toBe('b');
+      expect(body.recording.featureCodes.controls).toBe('on_demand');
       expect(decodeRecordingContext(body.recording.featureCodes.context)).toEqual({
         tenantId,
         direction: 'inbound',

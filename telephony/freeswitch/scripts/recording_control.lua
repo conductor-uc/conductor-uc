@@ -31,6 +31,14 @@ transaction), and only then carries out the answer on the owner with
 Then it plays the neutral tone telephony-config chose back to whoever pressed:
 a short beep when something changed, a low double tone when nothing did.
 
+S5-15: after a pause or a resume it also fires a `CUSTOM cuc::recording` event
+(`Unique-ID` the owner, `Recording-Action` paused or resumed). `uuid_record
+mask`/`unmask` raise no event of their own (starting and stopping do:
+RECORD_START, RECORD_STOP), and call-control turns this one into
+`call.channel.recording_paused`/`_resumed`, so a live view shows the pause
+whether it came from the phone or from the console (which fires the same event
+over ESL with `sendevent`).
+
 The FreeSWITCH names used here (`bind_meta_app`'s argument order, `uuid_record`
 with `start|stop|mask|unmask`, `uuid_getvar`, `uuid_setvar`) are confirmed
 present in the 1.10.12 binaries' own usage text. Their behaviour on a live
@@ -138,6 +146,12 @@ if decoded.action == "start" then
 elseif decoded.action == "stop" then
   -- No value unsets it: the next *1 starts a new on-demand recording.
   api:executeString("uuid_setvar " .. owner .. " cuc_recording_id")
+else
+  -- S5-15: mask and unmask raise no event; say so, for the live views.
+  local event = freeswitch.Event("CUSTOM", "cuc::recording")
+  event:addHeader("Unique-ID", owner)
+  event:addHeader("Recording-Action", decoded.action == "mask" and "paused" or "resumed")
+  event:fire()
 end
 log("INFO", decoded.action .. " " .. tostring(decoded.recordingId))
 beep(decoded.tone)

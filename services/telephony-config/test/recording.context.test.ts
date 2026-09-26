@@ -66,14 +66,29 @@ describe('recording call context (S5-13)', () => {
     );
   });
 
-  it('arms *1 and *2 with the context, the owner and stereo', () => {
-    const actions = recordingFeatureCodeActions({ direction: 'inbound', contextToken: 'abc' });
+  it('arms *1 and *2 with the context, the owner, the controls and stereo', () => {
+    const actions = recordingFeatureCodeActions({
+      direction: 'inbound',
+      contextToken: 'abc',
+      recorded: false,
+    });
     expect(actions).toEqual([
       '<action application="set" data="cuc_rec_ctx=abc"/>',
       '<action application="export" data="cuc_rec_owner=${uuid}"/>',
+      '<action application="export" data="cuc_rec_controls=on_demand"/>',
       '<action application="set" data="RECORD_STEREO=true"/>',
       '<action application="bind_meta_app" data="1 b s lua::recording_control.lua record"/>',
       '<action application="bind_meta_app" data="2 b s lua::recording_control.lua pause"/>',
     ]);
+  });
+
+  it('S5-15: says pause only on a call its rule records (a rule recording is never stopped)', () => {
+    const actions = recordingFeatureCodeActions({
+      direction: 'internal',
+      contextToken: 'abc',
+      recorded: true,
+    });
+    expect(actions).toContain('<action application="export" data="cuc_rec_controls=pause"/>');
+    expect(actions.join('')).not.toContain('on_demand');
   });
 });
