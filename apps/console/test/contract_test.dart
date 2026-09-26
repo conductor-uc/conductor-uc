@@ -240,6 +240,7 @@ void main() {
           'action',
           'announce',
           'consentAssetId',
+          'allowOnDemand',
         ]),
       );
     });
@@ -287,6 +288,8 @@ void main() {
           'durationMs',
           'sizeBytes',
           'retentionDate',
+          'onDemand',
+          'pauses',
         ]),
       );
     });
@@ -302,22 +305,29 @@ void main() {
       expect(keys(url), containsAll(['url', 'expiresAt']));
     });
 
-    test('retention is a number of days the screen reads and saves', () {
-      const path = '/v1/tenants/{tenantId}/recording-settings';
-      expect(
-        keys(
-          _schema(
-            (paths[path] as Map)['get'] as Map<String, dynamic>,
-            response: '200',
-          ),
-        ),
-        {'retentionDays'},
-      );
-      expect(
-        keys(_schema((paths[path] as Map)['put'] as Map<String, dynamic>)),
-        {'retentionDays'},
-      );
-    });
+    test(
+      'the settings are retention and "recording required", read and saved',
+      () {
+        const path = '/v1/tenants/{tenantId}/recording-settings';
+        final read = _schema(
+          (paths[path] as Map)['get'] as Map<String, dynamic>,
+          response: '200',
+        );
+        expect(keys(read), {'retentionDays', 'failClosed'});
+        final settings = RecordingSettings.fromJson({
+          'retentionDays': 7,
+          'failClosed': true,
+        });
+        expect(settings.retentionDays, 7);
+        expect(settings.recordingRequired, isTrue);
+        final put = _schema(
+          (paths[path] as Map)['put'] as Map<String, dynamic>,
+        );
+        expect(keys(put), {'retentionDays', 'failClosed'});
+        // Either may be sent alone: neither is required.
+        expect(put['required'], isNull);
+      },
+    );
   });
 
   group('org forms', () {

@@ -4,7 +4,7 @@ via FS's own API layer. Invoked from the dialplan
 (`buildAgentStatusDialplanDocument`, `services/telephony-config/src/xml.ts`)
 as:
 
-    lua agent_status.lua <agentName> <available:0|1>
+    lua agent_status.lua <agentName> <available:0|1> [<opensips sip uri>]
 
 There is no dialplan application in this image's module set that runs an
 arbitrary FS API command directly — confirmed live: the original dialplan
@@ -48,8 +48,19 @@ provisioning concern, not this feature code's.
 local agentName = argv[1]
 local available = argv[2] == "1"
 local status = available and "Available" or "Logged Out"
+-- S5-14: OpenSIPs' SIP listener (e.g. `opensips:5060`), passed by
+-- `buildAgentStatusDialplanDocument`. Phones register with OpenSIPs, not with
+-- this node, and the directory has no dial-string, so `user/<agent>` could
+-- never reach the agent's phone: the agent is dialed through OpenSIPs like
+-- every other bridge (`xml.ts`'s `agentContact`, which callcenter.conf uses
+-- too). An older dialplan that does not pass it keeps the old contact.
+local opensipsUri = argv[3]
+local contact = "user/" .. agentName
+if opensipsUri ~= nil and opensipsUri ~= "" then
+  contact = "{sip_route_uri=sip:" .. opensipsUri .. "}sofia/internal/" .. agentName
+end
 
 local api = freeswitch.API()
 api:executeString("callcenter_config agent add '" .. agentName .. "' 'callback'")
-api:executeString("callcenter_config agent set contact '" .. agentName .. "' 'user/" .. agentName .. "'")
+api:executeString("callcenter_config agent set contact '" .. agentName .. "' '" .. contact .. "'")
 api:executeString("callcenter_config agent set status '" .. agentName .. "' '" .. status .. "'")

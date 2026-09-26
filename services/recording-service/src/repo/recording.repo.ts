@@ -1,13 +1,18 @@
 import { randomUUID } from 'node:crypto';
 
 import { recordAuditEvent, type AuditEventInput } from '@cuc/audit';
-import { requireTenant, type Database, type DbContext } from '@cuc/db';
+import { requireTenant, type Database, type DbContext, type ScopedDb } from '@cuc/db';
 import { enqueueEvent } from '@cuc/events';
 
 import type { CallDirection } from '../domain/policy.js';
 import {
+  closeOpenPause,
+  parsePauseIntervals,
   RECORDING_CONTENT_TYPE,
   recordingObjectKey,
+  serializePauseIntervals,
+  togglePauseIntervals,
+  type PauseInterval,
   type RecordingStatus,
 } from '../domain/recording.js';
 import { retentionDateFor } from '../domain/retention.js';
@@ -35,6 +40,12 @@ export interface Recording {
   readonly sha256: string | null;
   readonly failureReason: string | null;
   readonly retentionDate: Date | null;
+  /** S5-13: started by a feature code rather than by a rule. */
+  readonly onDemand: boolean;
+  /** S5-13: when an on-demand recording was stopped by feature code. */
+  readonly stoppedAt: Date | null;
+  /** S5-13: the pauses, oldest first; an open one (`to` null) means paused now. */
+  readonly pauses: readonly PauseInterval[];
 }
 
 export class RecordingNotFoundError extends Error {
@@ -55,6 +66,8 @@ export interface RegisterRecordingInput {
   readonly policyId?: string | null | undefined;
   readonly nodeId?: string | null | undefined;
   readonly announced: boolean;
+  /** S5-13: started by a feature code. */
+  readonly onDemand?: boolean | undefined;
 }
 
 export interface CompleteRecordingInput {
@@ -104,6 +117,9 @@ const COLUMNS = [
   'sha256',
   'failure_reason as failureReason',
   'retention_date as retentionDate',
+  'on_demand as onDemand',
+  'stopped_at as stoppedAt',
+  'pause_intervals as pauseIntervals',
 ] as const;
 
 type Row = {
@@ -127,16 +143,22 @@ type Row = {
   sha256: string | null;
   failureReason: string | null;
   retentionDate: Date | null;
+  onDemand: boolean | number;
+  stoppedAt: Date | null;
+  pauseIntervals: string | null;
 };
 
 function toRecording(row: Row): Recording {
+  const { pauseIntervals, ...rest } = row;
   return {
-    ...row,
+    ...rest,
     direction: row.direction as CallDirection,
     announced: Boolean(row.announced),
     status: row.status as RecordingStatus,
     // BIGINT arrives as a string or bigint from the driver.
     sizeBytes: row.sizeBytes === null ? null : Number(row.sizeBytes),
+    onDemand: Boolean(row.onDemand),
+    pauses: parsePauseIntervals(pauseIntervals),
   };
 }
 
@@ -163,6 +185,77 @@ function decodeCursor(cursor: string): { startedAt: Date; id: string } {
 }
 
 /**
+ * Inserts a `pending` row and returns it. The id is random and opaque: it becomes the spool file
+ * name and the object key, so it must name nothing. Shared by `register` and `startOnDemand`
+ * (inside its audit transaction).
+ */
+async function insertRecording(
+  scoped: ScopedDb<RecordingServiceDb>,
+  tenantId: string,
+  input: RegisterRecordingInput,
+): Promise<Recording> {
+  const id = randomUUID();
+  const now = new Date();
+  const objectKey = recordingObjectKey(id, now);
+  const onDemand = input.onDemand ?? false;
+  await scoped
+    .insertInto('recordings')
+    .values({
+      id,
+      call_uuid: input.callUuid,
+      extension_id: input.extensionId ?? null,
+      peer_extension_id: input.peerExtensionId ?? null,
+      queue_id: input.queueId ?? null,
+      did_id: input.didId ?? null,
+      direction: input.direction,
+      policy_id: input.policyId ?? null,
+      node_id: input.nodeId ?? null,
+      announced: input.announced,
+      status: 'pending',
+      object_key: objectKey,
+      content_type: RECORDING_CONTENT_TYPE,
+      started_at: now,
+      duration_ms: null,
+      size_bytes: null,
+      sha256: null,
+      failure_reason: null,
+      retention_date: null,
+      on_demand: onDemand,
+      stopped_at: null,
+      pause_intervals: null,
+      created_at: now,
+      updated_at: now,
+      version: 1,
+    })
+    .execute();
+  return {
+    id,
+    tenantId,
+    callUuid: input.callUuid,
+    extensionId: input.extensionId ?? null,
+    peerExtensionId: input.peerExtensionId ?? null,
+    queueId: input.queueId ?? null,
+    didId: input.didId ?? null,
+    direction: input.direction,
+    policyId: input.policyId ?? null,
+    nodeId: input.nodeId ?? null,
+    announced: input.announced,
+    status: 'pending',
+    objectKey,
+    contentType: RECORDING_CONTENT_TYPE,
+    startedAt: now,
+    durationMs: null,
+    sizeBytes: null,
+    sha256: null,
+    failureReason: null,
+    retentionDate: null,
+    onDemand,
+    stoppedAt: null,
+    pauses: [],
+  };
+}
+
+/**
  * Data access for recording metadata (S5-01, S5-04, S5-05). Every tenant query goes through
  * `scoped(ctx)` (CLAUDE.md rule 2). The two cross-tenant readers, `findByIdForUpload` (the node
  * uploader knows only an opaque recording id) and the retention sweep, use `unscoped(ctx,
@@ -175,60 +268,104 @@ export function createRecordingRepo(db: Database<RecordingServiceDb>) {
      * it becomes the spool file name and the object key, so it must name nothing.
      */
     async register(ctx: DbContext, input: RegisterRecordingInput): Promise<Recording> {
+      return insertRecording(db.scoped(ctx), requireTenant(ctx).tenantId, input);
+    },
+
+    /**
+     * S5-13: registers an on-demand recording and its audit record in one transaction, so the
+     * recording exists (and FreeSWITCH is told to start it) only if the action was audited.
+     */
+    async startOnDemand(
+      ctx: DbContext,
+      input: Omit<RegisterRecordingInput, 'onDemand'>,
+      audit: AuditEventInput,
+    ): Promise<Recording> {
       const { tenantId } = requireTenant(ctx);
-      const id = randomUUID();
-      const now = new Date();
-      const objectKey = recordingObjectKey(id, now);
-      await db
-        .scoped(ctx)
-        .insertInto('recordings')
-        .values({
-          id,
-          call_uuid: input.callUuid,
-          extension_id: input.extensionId ?? null,
-          peer_extension_id: input.peerExtensionId ?? null,
-          queue_id: input.queueId ?? null,
-          did_id: input.didId ?? null,
-          direction: input.direction,
-          policy_id: input.policyId ?? null,
-          node_id: input.nodeId ?? null,
-          announced: input.announced,
-          status: 'pending',
-          object_key: objectKey,
-          content_type: RECORDING_CONTENT_TYPE,
-          started_at: now,
-          duration_ms: null,
-          size_bytes: null,
-          sha256: null,
-          failure_reason: null,
-          retention_date: null,
-          created_at: now,
-          updated_at: now,
-          version: 1,
-        })
-        .execute();
-      return {
-        id,
-        tenantId,
-        callUuid: input.callUuid,
-        extensionId: input.extensionId ?? null,
-        peerExtensionId: input.peerExtensionId ?? null,
-        queueId: input.queueId ?? null,
-        didId: input.didId ?? null,
-        direction: input.direction,
-        policyId: input.policyId ?? null,
-        nodeId: input.nodeId ?? null,
-        announced: input.announced,
-        status: 'pending',
-        objectKey,
-        contentType: RECORDING_CONTENT_TYPE,
-        startedAt: now,
-        durationMs: null,
-        sizeBytes: null,
-        sha256: null,
-        failureReason: null,
-        retentionDate: null,
-      };
+      let started: Recording | undefined;
+      await db.scoped(ctx).transaction(async (trx, raw) => {
+        started = await insertRecording(trx, tenantId, { ...input, onDemand: true });
+        await recordAuditEvent(raw, { ...audit, resource: `recording:${started.id}` });
+      });
+      return started!;
+    },
+
+    /**
+     * S5-13: marks an on-demand recording stopped, with its audit record, in one transaction.
+     * Throws `RecordingStateError` for a recording a rule started, or one already stopped.
+     */
+    async stopOnDemand(ctx: DbContext, id: string, audit: AuditEventInput): Promise<Recording> {
+      let stopped: Recording | undefined;
+      await db.scoped(ctx).transaction(async (trx, raw) => {
+        const row = await trx
+          .selectFrom('recordings')
+          .select(COLUMNS)
+          .where('id', '=', id)
+          .forUpdate()
+          .executeTakeFirst();
+        if (row === undefined) throw new RecordingNotFoundError(`No recording with id '${id}'.`);
+        const current = toRecording(row);
+        if (!current.onDemand) {
+          throw new RecordingStateError(
+            'A recording a rule started cannot be stopped by feature code.',
+          );
+        }
+        if (current.stoppedAt !== null) {
+          throw new RecordingStateError('That on-demand recording is already stopped.');
+        }
+        const now = new Date();
+        const pauses = closeOpenPause(current.pauses, now);
+        await trx
+          .updateTable('recordings')
+          .set({
+            stopped_at: now,
+            pause_intervals: serializePauseIntervals(pauses),
+            updated_at: now,
+          })
+          .where('id', '=', id)
+          .execute();
+        await recordAuditEvent(raw, { ...audit, resource: `recording:${id}` });
+        stopped = { ...current, stoppedAt: now, pauses };
+      });
+      return stopped!;
+    },
+
+    /**
+     * S5-13: pauses a recording that is running, or resumes one that is paused, with its audit
+     * record, in one transaction. `audit(paused)` names the action for the direction taken.
+     * Throws `RecordingStateError` for a stopped on-demand recording.
+     */
+    async togglePause(
+      ctx: DbContext,
+      id: string,
+      audit: (paused: boolean) => AuditEventInput,
+    ): Promise<{ recording: Recording; paused: boolean }> {
+      let result: { recording: Recording; paused: boolean } | undefined;
+      await db.scoped(ctx).transaction(async (trx, raw) => {
+        const row = await trx
+          .selectFrom('recordings')
+          .select(COLUMNS)
+          .where('id', '=', id)
+          .forUpdate()
+          .executeTakeFirst();
+        if (row === undefined) throw new RecordingNotFoundError(`No recording with id '${id}'.`);
+        const current = toRecording(row);
+        if (current.stoppedAt !== null) {
+          throw new RecordingStateError('That on-demand recording is stopped.');
+        }
+        const now = new Date();
+        const toggled = togglePauseIntervals(current.pauses, now);
+        await trx
+          .updateTable('recordings')
+          .set({ pause_intervals: serializePauseIntervals(toggled.pauses), updated_at: now })
+          .where('id', '=', id)
+          .execute();
+        await recordAuditEvent(raw, { ...audit(toggled.paused), resource: `recording:${id}` });
+        result = {
+          recording: { ...current, pauses: toggled.pauses },
+          paused: toggled.paused,
+        };
+      });
+      return result!;
     },
 
     findById(ctx: DbContext, id: string): Promise<Recording | undefined> {

@@ -290,4 +290,13 @@ export interface TelephonyConfigDb extends EventTables {
     settings: unknown;
     updated_at: Date;
   };
+  /**
+   * S5-12: this service's copy of recording-service's per-tenant "recording required" flag
+   * (`012_add_recording_settings.ts`). No row means fail open.
+   */
+  recording_settings: {
+    tenant_id: string;
+    fail_closed: boolean;
+    updated_at: Date;
+  };
 }

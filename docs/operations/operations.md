@@ -48,6 +48,25 @@ docker run --rm --network voice_backplane curlimages/curl -sS \
 
 A `201` response means the person exists with the `master_admin` role. Sign in as them: as a master user they set up their own authenticator app at that first sign-in, which is what lets them confirm the reset. Then reset the first administrator's two-step verification, entering the new administrator's own current code when asked. The password is on the command line here, so clear your shell history afterwards.
 
+### 2.1 Feature codes
+
+Dialed as a number from a registered phone:
+
+| Code | What it does |
+|---|---|
+| `*97` | Your own voicemail: listen to messages (asks for the mailbox PIN) |
+| `*45` | Queue agent: log in (available for queue calls) |
+| `*46` | Queue agent: log out |
+
+Pressed during a call (the key `*`, then the digit), only on calls whose recording rule allows it (**Recordings**, **Rules**, "Allow recording on demand" or "Allow pausing"), and only by the tenant's own party on the call, never by an outside caller:
+
+| Code | What it does |
+|---|---|
+| `*1` | Start recording the call; `*1` again stops it. Only where the rule does not record the call already. A recording a rule started cannot be stopped. |
+| `*2` | Pause the call's recording (the paused part is silent); `*2` again resumes it. |
+
+A short beep confirms; a low double tone means nothing was done (not allowed here, or the recording system could not be reached). Every start, stop, pause and resume is in the tenant's audit trail. On a call where these codes are armed, that party's `*` key is used by them and is not sent on to the other end.
+
 ## 3. Upgrades
 
 ### 3.1 How schema changes work
@@ -182,6 +201,7 @@ Readiness checks:
 | Recording and voicemail spool | Uploader `/metrics`: `cuc_recording_spool_stuck_files`, `cuc_recording_spool_undeletable_files`, `cuc_recording_spool_bytes`, `cuc_recording_upload_failures_total` | stuck or undeletable above 0; spool bytes above half its size |
 | Recording or voicemail loss | Uploader, recording-service and voicemail-service logs | `recording_upload_stuck` or `recording_spool_delete_failed` alerts |
 | Unrecordable calls | telephony-config log: `recording_policy_unavailable` | Any, if recording matters to your tenants |
+| Calls refused for want of a recording | telephony-config log: `recording_required_refused` (tenants with "Recording required" on) | Any: those tenants' calls are failing while recording-service is unreachable |
 | Certificates | Console **Certificates** list; org-service log | A certificate failing, or active and expiring within 20 days (renewal starts at 30) |
 | Email | notification-service log | SMTP errors |
 | Outbox backlog | `/readyz` outbox detail (`N pending`) on each service | Growing steadily (NATS unreachable, or events failing) |
@@ -242,8 +262,11 @@ Logs may contain telephone numbers and tenant identifiers. Treat log storage as 
 | Carrier cannot reach you after registration | `OPENSIPS_SIP_URI` is a private address (it is the contact sent to carriers) | telephony-config environment; `reg_list` |
 | Calls to queues, parking or conferences fail intermittently | Several FreeSWITCH nodes (G-46, S4-05) | Run one media server |
 | No call records | FreeSWITCH cannot reach cdr-service; `FS_CDR_INGEST_TOKEN` mismatch | FreeSWITCH log (json_cdr); cdr-service log |
+| Calls to one tenant fail with a short tone, then fail (SIP 500 at the caller, `Reason: Q.850;cause=41`); other tenants' calls work | The tenant has **Recording required** on (Recordings, Rules) and recording-service is unreachable or slow from telephony-config, or cannot register the recording (its database). Calls no rule records are not affected | telephony-config log `recording_required_refused`; recording-service `/readyz`; `RECORDING_SERVICE_URL`. Restore recording-service; the tenant can also turn the option off |
 | Recordings never appear | No recording rule matches; recording-service unreachable at call setup (`recording_policy_unavailable`); uploader cannot reach recording-service or storage | telephony-config, uploader and recording-service logs; uploader metrics |
 | Voicemail messages never appear, or appear only much later | A message is listed only after the uploader has delivered its audio (about 30 s after the caller hangs up, `SETTLE_SECONDS`). Uploader not running on that node, or it cannot reach voicemail-service (`VOICEMAIL_SERVICE_URL`, 8106 in the distributed layout) or storage; the caller hung up before speaking (the uploader reports `empty_file`) | `ls /var/spool/cuc/rec` in the FreeSWITCH container (`vm-<id>.wav` files waiting); uploader log and metrics; voicemail-service log |
+| A queue agent's calls are not recorded although an agent rule names them | The call was already recorded from setup by a queue, DID or tenant rule (one recording only; it is the caller's); the agent's rule applies from their answer only, and only to queue calls; the FreeSWITCH image predates `agent_recording.lua`; recording-service unreachable when the agent answered (agent recordings fail open) | FreeSWITCH log (`agent_recording.lua`); telephony-config log; the recording list filtered by the queue |
+| `*1` or `*2` during a call gives a low double tone, or nothing | The call's deciding rule does not allow on demand (the narrowest rule decides); `*1` pressed during a recording a rule started (pause it with `*2` instead); recording-service unreachable (nothing is done when it cannot be audited); the FreeSWITCH image predates `recording_control.lua`; the phone sends DTMF in-band or by SIP INFO rather than RFC 4733 | telephony-config log (`feature code refused`, `could not reach recording-service`); recording-service log; FreeSWITCH log (`recording_control.lua`); the phone's DTMF setting |
 | Recordings upload but stay in the spool | Spool directory has the sticky bit (`1777`) | `ls -ld /var/spool/cuc/rec` in the FreeSWITCH container must show `drwxrwxrwx`, not `drwxrwxrwt` |
 | Certificates never issue | ACME settings not saved; DNS wrong; port 80 not reaching the gateway; gateway without `INTERNAL_SERVICE_TOKEN`; org-service cannot reach Let's Encrypt; Let's Encrypt rate limit | org-service log; `curl http://sip.<domain>/.well-known/acme-challenge/test` from outside must reach the gateway (404 is fine) |
 | SIP TLS handshake fails | No `sip.` certificate yet; telephony-config could not reach the MI to `tls_reload` | Console **Certificates**; telephony-config log |

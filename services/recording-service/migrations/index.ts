@@ -2,6 +2,8 @@ import type { Migration } from 'kysely/migration';
 
 import * as initial from './001_initial.js';
 import * as addRecordingTables from './002_add_recording_tables.js';
+import * as addFailClosed from './003_add_fail_closed.js';
+import * as addOnDemand from './004_add_on_demand.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -12,4 +14,6 @@ import * as addRecordingTables from './002_add_recording_tables.js';
 export const migrations: Record<string, Migration> = {
   '001_initial': initial,
   '002_add_recording_tables': addRecordingTables,
+  '003_add_fail_closed': addFailClosed,
+  '004_add_on_demand': addOnDemand,
 };

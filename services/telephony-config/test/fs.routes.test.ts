@@ -2457,7 +2457,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         expect(response.body).toContain(`<queue name="${leasedQueueId}@acme.platform.test">`);
         expect(response.body).toContain('<param name="strategy" value="round-robin"/>');
         expect(response.body).toContain(
-          `<agent name="101@acme.platform.test" type="callback" contact="user/101@acme.platform.test" status="Logged Out" max-no-answer="3" wrap-up-time="0" reject-delay-time="0"/>`,
+          `<agent name="101@acme.platform.test" type="callback" contact="{sip_route_uri=sip:opensips:5060}sofia/internal/101@acme.platform.test" status="Logged Out" max-no-answer="3" wrap-up-time="0" reject-delay-time="0"/>`,
         );
         expect(response.body).toContain(
           `<tier agent="101@acme.platform.test" queue="${leasedQueueId}@acme.platform.test" level="2" position="1"/>`,
@@ -2555,7 +2555,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
 
         expect(response.statusCode).toBe(200);
         expect(response.body).toContain(
-          `<action application="lua" data="agent_status.lua 101@acme.platform.test 1"/>`,
+          `<action application="lua" data="agent_status.lua 101@acme.platform.test 1 opensips:5060"/>`,
         );
       });
 
@@ -2579,7 +2579,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         });
 
         expect(response.body).toContain(
-          `<action application="lua" data="agent_status.lua 101@acme.platform.test 0"/>`,
+          `<action application="lua" data="agent_status.lua 101@acme.platform.test 0 opensips:5060"/>`,
         );
       });
 

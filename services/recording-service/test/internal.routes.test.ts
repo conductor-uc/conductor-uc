@@ -69,6 +69,57 @@ describe.skipIf(skipReason !== undefined)(
       }
     });
 
+    it('lists the tenants that require recording (S5-12), token required', async () => {
+      await h.settings.update({ tenantId: 'tenant-fc' }, { failClosed: true });
+      const get = (token: string | null) =>
+        r.app.inject({
+          method: 'GET',
+          url: '/internal/v1/recordings/fail-closed-tenants',
+          headers: token === null ? {} : { authorization: `Bearer ${token}` },
+        });
+      expect((await get(null)).statusCode).toBe(401);
+      expect((await get('wrong')).statusCode).toBe(401);
+      const response = await get(INTERNAL_TOKEN);
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ tenantIds: ['tenant-fc'] });
+    });
+
+    it('evaluate takes the answering agent (S5-14)', async () => {
+      await h.policies.create(
+        { tenantId },
+        {
+          scopeType: 'queue',
+          scopeId: 'Q1',
+          direction: 'any',
+          action: 'no_record',
+          announce: false,
+          consentAssetId: null,
+          allowOnDemand: false,
+        },
+      );
+      const agent = await h.policies.create(
+        { tenantId },
+        {
+          scopeType: 'agent',
+          scopeId: 'E7',
+          direction: 'any',
+          action: 'record',
+          announce: false,
+          consentAssetId: null,
+          allowOnDemand: false,
+        },
+      );
+      const atSetup = await post('evaluate', { tenantId, direction: 'inbound', queueId: 'Q1' });
+      expect(atSetup.json()).toMatchObject({ record: false });
+      const atAnswer = await post('evaluate', {
+        tenantId,
+        direction: 'inbound',
+        queueId: 'Q1',
+        agentId: 'E7',
+      });
+      expect(atAnswer.json()).toMatchObject({ record: true, policyId: agent.id });
+    });
+
     describe('evaluate', () => {
       it('answers with the winning policy for the call, and the default when none applies', async () => {
         await h.policies.create(
@@ -80,6 +131,7 @@ describe.skipIf(skipReason !== undefined)(
             action: 'record',
             announce: true,
             consentAssetId: 'asset-1',
+            allowOnDemand: false,
           },
         );
         await h.policies.create(
@@ -91,6 +143,7 @@ describe.skipIf(skipReason !== undefined)(
             action: 'no_record',
             announce: false,
             consentAssetId: null,
+            allowOnDemand: false,
           },
         );
 
@@ -119,6 +172,7 @@ describe.skipIf(skipReason !== undefined)(
           consentAssetId: null,
           policyId: null,
           reason: 'default',
+          allowOnDemand: false,
         });
       });
 

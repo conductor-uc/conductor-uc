@@ -20,6 +20,8 @@ const PolicyParamsSchema = Type.Object({
 const ScopeTypeSchema = Type.Union([
   Type.Literal('tenant'),
   Type.Literal('extension'),
+  /** S5-14: an extension acting as a queue agent; applies to queue calls it answers. */
+  Type.Literal('agent'),
   Type.Literal('queue'),
   Type.Literal('did'),
 ]);
@@ -39,6 +41,11 @@ const PolicySchema = Type.Object({
   action: ActionSchema,
   announce: Type.Boolean(),
   consentAssetId: Type.Union([Type.String(), Type.Null()]),
+  /**
+   * S5-13: the people on the calls it decides may use feature codes: start and stop a recording
+   * (when it does not record), or pause and resume one (when it does). Every use is audited.
+   */
+  allowOnDemand: Type.Boolean(),
 });
 const PolicyBodySchema = Type.Object({
   scopeType: ScopeTypeSchema,
@@ -48,10 +55,18 @@ const PolicyBodySchema = Type.Object({
   action: ActionSchema,
   announce: Type.Optional(Type.Boolean()),
   consentAssetId: Type.Optional(Type.Union([Type.String({ maxLength: 36 }), Type.Null()])),
+  /** S5-13: defaults to false. */
+  allowOnDemand: Type.Optional(Type.Boolean()),
 });
-const SettingsSchema = Type.Object({ retentionDays: Type.Number() });
+const SettingsSchema = Type.Object({
+  retentionDays: Type.Number(),
+  /** S5-12: refuse a call when the recording its rules may require cannot be set up. */
+  failClosed: Type.Boolean(),
+});
+/** Either or both; what is left out keeps its value. */
 const SettingsBodySchema = Type.Object({
-  retentionDays: Type.Integer({ minimum: 0, maximum: 3650 }),
+  retentionDays: Type.Optional(Type.Integer({ minimum: 0, maximum: 3650 })),
+  failClosed: Type.Optional(Type.Boolean()),
 });
 
 function ctxFor(request: {
@@ -235,7 +250,7 @@ export function registerPolicyRoutes(app: Server, deps: PolicyRoutesDeps): void 
     },
     async (request) => {
       await authorized(request, 'recording.policy.read');
-      return { retentionDays: await settings.retentionDays(ctxFor(request)) };
+      return settings.settings(ctxFor(request));
     },
   );
 
@@ -251,18 +266,33 @@ export function registerPolicyRoutes(app: Server, deps: PolicyRoutesDeps): void 
     },
     async (request) => {
       const caller = await authorized(request);
+      const { retentionDays, failClosed } = request.body;
+      if (retentionDays === undefined && failClosed === undefined) {
+        throw ProblemError.badRequest('Give retentionDays, failClosed, or both.');
+      }
       try {
-        const retentionDays = await settings.setRetentionDays(
+        const saved = await settings.update(
           ctxFor(request),
-          request.body.retentionDays,
+          { retentionDays, failClosed },
           auditFor(caller, {
-            action: 'recording.retention.updated',
+            // A retention-only change keeps the action it always had.
+            action:
+              failClosed === undefined
+                ? 'recording.retention.updated'
+                : 'recording.settings.updated',
             resource: 'recording-settings',
             dataClass: 'config',
           }),
         );
-        await applyLifecycleBackstop(storage, logger, request.params.tenantId, retentionDays);
-        return { retentionDays };
+        if (retentionDays !== undefined) {
+          await applyLifecycleBackstop(
+            storage,
+            logger,
+            request.params.tenantId,
+            saved.retentionDays,
+          );
+        }
+        return saved;
       } catch (error) {
         throw toProblem(error);
       }

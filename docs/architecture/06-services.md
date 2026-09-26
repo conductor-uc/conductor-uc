@@ -276,14 +276,17 @@ The **billing view** for resellers is pending decision D-013.
 
 **Public API:**
 
-- `/v1/tenants/{t}/recording-policies` (tenant default, plus overrides per extension, agent, queue, or DID, by direction)
+- `/v1/tenants/{t}/recording-policies` (tenant default, plus overrides per extension, agent, queue, or DID, by direction; an `agent` rule, S5-14, is decided when the agent answers a queue call; `allowOnDemand`, S5-13, arms the in-call feature codes)
 - `/v1/tenants/{t}/recordings` (search)
 - `GET /v1/tenants/{t}/recordings/{id}:url`, which returns a presigned URL after an authorization check and writes an audit entry
 - `DELETE` (requires permission; audited)
+- `/v1/tenants/{t}/recording-settings`: retention days and "recording required" (`failClosed`, S5-12). Each change emits `recording.settings.updated`, which telephony-config copies so it can refuse calls while this service is down.
 
 **Internal:**
 
 - `POST /internal/v1/recordings:evaluate`, with call context in and the decision (plus consent-announcement asset) out. telephony-config caches the result.
+- `GET /internal/v1/recordings/fail-closed-tenants`, the tenants that require recording, for telephony-config's reconciliation (S5-12)
+- `POST /internal/v1/recordings/control`, a feature code pressed during a call (`*1` on demand, `*2` pause), relayed by telephony-config from the node: decides with the call's rules, records the change and its audit event in one transaction, then answers (S5-13)
 - `POST /internal/v1/recordings:upload-url`, used by the node uploader
 - `POST /internal/v1/recordings/{id}:complete`
 

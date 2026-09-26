@@ -1574,6 +1574,18 @@ class DemoPbx {
       'retentionDate': ready
           ? start.add(const Duration(days: 90)).toIso8601String()
           : null,
+      'onDemand': i == 4,
+      'stoppedAt': null,
+      'pauses': i == 5
+          ? [
+              {
+                'from': start
+                    .add(const Duration(seconds: 30))
+                    .toIso8601String(),
+                'to': start.add(const Duration(seconds: 50)).toIso8601String(),
+              },
+            ]
+          : <Map<String, dynamic>>[],
     };
   }
 
@@ -1593,6 +1605,7 @@ class DemoPbx {
       'action': 'record',
       'announce': true,
       'consentAssetId': 'media-1',
+      'allowOnDemand': false,
     },
     {
       'id': 'pol-2',
@@ -1602,9 +1615,11 @@ class DemoPbx {
       'action': 'no_record',
       'announce': false,
       'consentAssetId': null,
+      'allowOnDemand': false,
     },
   ];
   var _retentionDays = 90;
+  var _recordingRequired = false;
 
   /// The recording API (`recording-service`): search, presigned play and
   /// download addresses, delete, the recording rules, and how long recordings
@@ -1614,14 +1629,27 @@ class DemoPbx {
     final path = options.path;
 
     if (RegExp(r'^/v1/tenants/[^/]+/recording-settings$').hasMatch(path)) {
-      if (method == 'GET') return _json({'retentionDays': _retentionDays});
+      Map<String, dynamic> settings() => {
+        'retentionDays': _retentionDays,
+        'failClosed': _recordingRequired,
+      };
+      if (method == 'GET') return _json(settings());
       if (method == 'PUT') {
-        final days = _body(options)['retentionDays'];
-        if (days is! int || days < 0 || days > 3650) {
+        final body = _body(options);
+        final days = body['retentionDays'];
+        final required = body['failClosed'];
+        if (days == null && required == null) {
+          return _problem(400, 'Give retentionDays, failClosed, or both.');
+        }
+        if (days != null && (days is! int || days < 0 || days > 3650)) {
           return _problem(400, 'Retention must be from 0 to 3650 days.');
         }
-        _retentionDays = days;
-        return _json({'retentionDays': _retentionDays});
+        if (required != null && required is! bool) {
+          return _problem(400, 'failClosed must be true or false.');
+        }
+        if (days is int) _retentionDays = days;
+        if (required is bool) _recordingRequired = required;
+        return _json(settings());
       }
       return _problem(405, 'Not supported.');
     }
@@ -1714,10 +1742,16 @@ class DemoPbx {
   /// checks the service makes).
   Object _policyFrom(Map<String, dynamic> body, String id, {String? except}) {
     final scope = '${body['scopeType']}';
-    if (!const ['tenant', 'extension', 'queue', 'did'].contains(scope)) {
+    if (!const [
+      'tenant',
+      'extension',
+      'agent',
+      'queue',
+      'did',
+    ].contains(scope)) {
       return _problem(
         400,
-        'scopeType is not one of tenant, extension, queue, did.',
+        'scopeType is not one of tenant, extension, agent, queue, did.',
       );
     }
     final direction = '${body['direction'] ?? 'any'}';
@@ -1748,6 +1782,16 @@ class DemoPbx {
         'A consent announcement asset needs announce to be on.',
       );
     }
+    final onDemand = body['allowOnDemand'] ?? false;
+    if (onDemand is! bool) {
+      return _problem(400, 'allowOnDemand must be true or false.');
+    }
+    if (scope == 'agent' && (action != 'record' || announce || onDemand)) {
+      return _problem(
+        400,
+        'An agent rule can only record, with no announcement or feature codes.',
+      );
+    }
     final taken = _policies.any(
       (p) =>
           p['id'] != except &&
@@ -1769,6 +1813,7 @@ class DemoPbx {
       'action': action,
       'announce': announce,
       'consentAssetId': consent,
+      'allowOnDemand': onDemand,
     };
   }
 

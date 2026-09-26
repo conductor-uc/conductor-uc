@@ -48,4 +48,15 @@ export const recordingEvents = defineEvents({
     description: "A tenant's recording retention period was changed.",
     data: Type.Object({ retentionDays: Type.Number({ minimum: 0 }) }),
   },
+  'recording.settings.updated': {
+    schemaVersion: 1,
+    description:
+      "A tenant's recording settings were changed. Carries the settings themselves (configuration, " +
+      'not call data): telephony-config keeps its own copy of `failClosed` so a call can be refused ' +
+      'while this service is unreachable (S5-12).',
+    data: Type.Object({
+      retentionDays: Type.Number({ minimum: 0 }),
+      failClosed: Type.Boolean(),
+    }),
+  },
 });

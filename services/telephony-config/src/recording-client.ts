@@ -13,7 +13,9 @@ import type { Logger } from '@cuc/logger';
  * out is worse than one that misses a recording), made visible three ways: an error log line
  * (`recording_policy_unavailable`), a channel variable on the call (`cuc_recording_status=
  * unavailable`, so it reaches the CDR), and the counters below. A tenant that must never miss a
- * recording would need a fail-closed option per tenant; that is not built (see docs/decisions.md).
+ * recording turns on "recording required" (S5-12, G-111): `/fs/dialplan` then refuses the call
+ * instead. That flag is read from this service's own copy (`recording_settings`, projected from
+ * `recording.settings.updated`), never from recording-service, so it holds while it is down.
  *
  * To keep an outage from adding a timeout to every call, and to keep recording through a short
  * one:
@@ -36,13 +38,21 @@ export interface RecordingCall {
   readonly extensionIds: readonly string[];
   readonly queueId?: string | undefined;
   readonly didId?: string | undefined;
+  /**
+   * S5-14: the extension that answered a queue call as its agent. Only known at that answer, so
+   * only `/fs/recording/:tenantId/agent-answer` sets it; the recording is then registered to it.
+   */
+  readonly agentId?: string | undefined;
   readonly callUuid: string;
   readonly nodeId?: string | undefined;
 }
 
 export type RecordingDirective =
-  /** No policy asks for a recording. */
-  | { readonly kind: 'none' }
+  /**
+   * No policy asks for a recording. `allowOnDemand` (S5-13, present only when true): the deciding
+   * rule lets the people on the call start one with a feature code.
+   */
+  | { readonly kind: 'none'; readonly allowOnDemand?: true }
   /** Record to `fileName` in the spool directory, first playing the announcement if `announce`. */
   | {
       readonly kind: 'record';
@@ -51,6 +61,8 @@ export type RecordingDirective =
       readonly announce: boolean;
       /** A media asset to play; null plays the neutral default tone. */
       readonly consentAssetId: string | null;
+      /** S5-13 (present only when true): the rule lets the people on the call pause and resume it. */
+      readonly allowOnDemand?: true;
     }
   /** The policy could not be determined or the recording could not be registered: no recording, flagged. */
   | { readonly kind: 'unavailable'; readonly reason: string };
@@ -59,6 +71,43 @@ export interface RecordingClient {
   decide(call: RecordingCall): Promise<RecordingDirective>;
   /** How many calls went unrecorded because recording-service was unavailable, since start. */
   unavailableCount(): number;
+  /**
+   * S5-12: every tenant that requires recording (fail closed), for the reconciliation pass that
+   * repairs this service's own copy of the flag. Throws when recording-service cannot answer:
+   * the caller then leaves its copy as it is.
+   */
+  listFailClosedTenants(): Promise<string[]>;
+  /**
+   * S5-13: relays a feature code pressed during a call (`*1` record, `*2` pause) to
+   * recording-service, which decides, records the change and audits it. Throws when
+   * recording-service cannot answer: the caller then does nothing (nothing unaudited happens).
+   */
+  control(request: RecordingControlRequest): Promise<RecordingControlResult>;
+}
+
+/** S5-13: one feature code, with the call it was pressed on. */
+export interface RecordingControlRequest {
+  readonly tenantId: string;
+  readonly code: 'record' | 'pause';
+  /** The channel that owns the call's recording (the A leg). */
+  readonly callUuid: string;
+  /** The recording running on the call now, if any. */
+  readonly recordingId?: string | undefined;
+  readonly nodeId?: string | undefined;
+  readonly context: {
+    readonly direction: RecordingDirection;
+    readonly extensionIds: readonly string[];
+    readonly queueId?: string | undefined;
+    readonly didId?: string | undefined;
+  };
+}
+
+/** S5-13: what recording-service decided (and has already recorded and audited). */
+export interface RecordingControlResult {
+  readonly result: 'started' | 'stopped' | 'paused' | 'resumed' | 'refused';
+  readonly recordingId: string | null;
+  readonly fileName: string | null;
+  readonly reason: string | null;
 }
 
 interface Decision {
@@ -66,6 +115,8 @@ interface Decision {
   readonly announce: boolean;
   readonly consentAssetId: string | null;
   readonly policyId: string | null;
+  /** S5-13. Absent from an older recording-service, which is read as false. */
+  readonly allowOnDemand?: boolean;
 }
 
 export interface RecordingClientOptions {
@@ -117,6 +168,7 @@ export function createRecordingClient(options: RecordingClientOptions): Recordin
       [...call.extensionIds].sort().join(','),
       call.queueId ?? '',
       call.didId ?? '',
+      call.agentId ?? '',
     ].join('|');
   }
 
@@ -147,6 +199,7 @@ export function createRecordingClient(options: RecordingClientOptions): Recordin
         extensionIds: call.extensionIds,
         ...(call.queueId === undefined ? {} : { queueId: call.queueId }),
         ...(call.didId === undefined ? {} : { didId: call.didId }),
+        ...(call.agentId === undefined ? {} : { agentId: call.agentId }),
       })) as Decision;
       cache.set(key, { decision, fetchedAt: current });
       breakerOpenUntil = 0;
@@ -182,18 +235,49 @@ export function createRecordingClient(options: RecordingClientOptions): Recordin
   return {
     unavailableCount: () => unavailable,
 
+    async control(request) {
+      const result = (await post('control', {
+        tenantId: request.tenantId,
+        code: request.code,
+        callUuid: request.callUuid,
+        recordingId: request.recordingId ?? null,
+        nodeId: request.nodeId ?? null,
+        context: {
+          direction: request.context.direction,
+          extensionIds: request.context.extensionIds,
+          queueId: request.context.queueId ?? null,
+          didId: request.context.didId ?? null,
+        },
+      })) as RecordingControlResult;
+      return result;
+    },
+
+    async listFailClosedTenants() {
+      const response = await fetchImpl(`${baseUrl}/internal/v1/recordings/fail-closed-tenants`, {
+        headers: { authorization: `Bearer ${options.internalServiceToken}` },
+        signal: AbortSignal.timeout(Math.max(timeoutMs, 5_000)),
+      });
+      if (!response.ok) throw new Error(`recording-service answered ${String(response.status)}`);
+      const body = (await response.json()) as { tenantIds?: unknown };
+      if (!Array.isArray(body.tenantIds)) {
+        throw new Error('recording-service answered without a tenant list');
+      }
+      return body.tenantIds.filter((id): id is string => typeof id === 'string');
+    },
+
     async decide(call) {
       const outcome = await evaluate(call);
       if ('failure' in outcome) return unavailableResult(call, outcome.failure);
       const { decision } = outcome;
-      if (!decision.record) return { kind: 'none' };
+      const onDemand = decision.allowOnDemand === true ? ({ allowOnDemand: true } as const) : {};
+      if (!decision.record) return { kind: 'none', ...onDemand };
 
       try {
         const registered = (await post('register', {
           tenantId: call.tenantId,
           callUuid: call.callUuid,
           direction: call.direction,
-          extensionId: call.extensionIds[0] ?? null,
+          extensionId: call.extensionIds[0] ?? call.agentId ?? null,
           peerExtensionId: call.extensionIds[1] ?? null,
           queueId: call.queueId ?? null,
           didId: call.didId ?? null,
@@ -207,6 +291,7 @@ export function createRecordingClient(options: RecordingClientOptions): Recordin
           fileName: registered.fileName,
           announce: decision.announce,
           consentAssetId: decision.consentAssetId,
+          ...onDemand,
         };
       } catch (error) {
         return unavailableResult(call, error instanceof Error ? error.message : String(error));

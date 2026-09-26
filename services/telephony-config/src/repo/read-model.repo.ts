@@ -1076,6 +1076,67 @@ export function createReadModelRepo(db: Database<TelephonyConfigDb>) {
       return { upserted, removed };
     },
 
+    /**
+     * S5-12: whether the tenant requires recording (fail closed). Read only when a recording
+     * decision is unavailable. No row means fail open.
+     */
+    async findRecordingFailClosed(tenantId: string): Promise<boolean> {
+      const row = await db.kysely
+        .selectFrom('recording_settings')
+        .select('fail_closed')
+        .where('tenant_id', '=', tenantId)
+        .executeTakeFirst();
+      return Boolean(row?.fail_closed ?? false);
+    },
+
+    /** S5-12: stores the tenant's fail-closed flag, from `recording.settings.updated`. */
+    async upsertRecordingFailClosed(
+      trx: Executor,
+      tenantId: string,
+      failClosed: boolean,
+    ): Promise<void> {
+      const now = new Date();
+      await trx
+        .insertInto('recording_settings')
+        .values({ tenant_id: tenantId, fail_closed: failClosed, updated_at: now })
+        .onDuplicateKeyUpdate({ fail_closed: failClosed, updated_at: now })
+        .execute();
+    },
+
+    /**
+     * S5-12 reconciliation: makes the stored flags match `failClosedTenantIds` (recording-service's
+     * own list): listed tenants on, every other stored tenant off. Returns how many it changed.
+     */
+    async syncRecordingFailClosed(failClosedTenantIds: readonly string[]): Promise<number> {
+      const wanted = new Set(failClosedTenantIds);
+      const rows = await db.kysely
+        .selectFrom('recording_settings')
+        .select(['tenant_id', 'fail_closed'])
+        .execute();
+      const current = new Map(rows.map((r) => [r.tenant_id, Boolean(r.fail_closed)] as const));
+      const now = new Date();
+      let changed = 0;
+      for (const tenantId of wanted) {
+        if (current.get(tenantId) === true) continue;
+        await db.kysely
+          .insertInto('recording_settings')
+          .values({ tenant_id: tenantId, fail_closed: true, updated_at: now })
+          .onDuplicateKeyUpdate({ fail_closed: true, updated_at: now })
+          .execute();
+        changed += 1;
+      }
+      for (const [tenantId, failClosed] of current) {
+        if (!failClosed || wanted.has(tenantId)) continue;
+        await db.kysely
+          .updateTable('recording_settings')
+          .set({ fail_closed: false, updated_at: now })
+          .where('tenant_id', '=', tenantId)
+          .execute();
+        changed += 1;
+      }
+      return changed;
+    },
+
     /** ISO 3166-1 alpha-2, or `undefined` if not yet known (`org-client.ts`'s own comment on when that happens). */
     async findTenantCountry(tenantId: string): Promise<string | undefined> {
       const row = await db.kysely

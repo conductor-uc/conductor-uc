@@ -3,16 +3,20 @@
  *
  * ## Precedence
  *
- * A policy names a scope (the tenant, one extension, one queue, or one DID), a
+ * A policy names a scope (the tenant, one extension, one queue agent, one queue, or one DID), a
  * direction (`inbound`, `outbound`, `internal`, or `any`), and an action
  * (`record` or `no_record`), optionally with a consent announcement. Given one
  * call, the policies that *match* it are those whose scope names something on the
  * call and whose direction is `any` or the call's own. Of those, exactly one
  * group decides:
  *
- * 1. **The narrowest scope wins.** `extension` beats `queue`, which beats `did`,
- *    which beats `tenant`. A person's own setting overrides the queue they answer,
- *    which overrides the number that was dialled, which overrides the tenant default.
+ * 1. **The narrowest scope wins.** `extension` beats `agent`, which beats `queue`, which
+ *    beats `did`, which beats `tenant`. A person's own setting overrides the queue they
+ *    answer, which overrides the number that was dialled, which overrides the tenant default.
+ *    `agent` (S5-14) is a person too, so it sits with `extension` above `queue`: "record
+ *    this agent's queue calls" is about the agent, and must win over a queue that does not
+ *    record. It sits below `extension` because the extension rule is the person's own rule
+ *    for every call, the agent rule only their queue calls.
  * 2. **Within a scope, a policy naming the call's direction beats `any`.**
  * 3. **Whatever still ties is resolved towards privacy:** if any tied policy says
  *    `no_record`, the call is not recorded. Ties happen only when a call carries
@@ -21,9 +25,32 @@
  * 4. **No matching policy means no recording**, and no announcement.
  *
  * A `no_record` policy never announces: nothing is being recorded to consent to.
+ *
+ * ## On demand (S5-13)
+ *
+ * A policy may also *allow on demand*: the people on its calls can use feature codes to start and
+ * stop a recording of their own (on a call the deciding group does not record) or to pause and
+ * resume one (on a call it records). Which group decides is exactly the precedence above, so the
+ * narrowest rule that applies also decides whether feature codes work. Within the deciding group:
+ * a refusal allows on-demand recording only if every tied policy does (starting a recording is the
+ * privacy-reducing act, so a tie leans away from it), while a recording decision allows pause and
+ * resume if any tied policy does (pausing only ever records less). No matching policy allows
+ * nothing.
+ *
+ * ## Agent scope (S5-14)
+ *
+ * An `agent` policy names an extension acting as a queue agent (its id is the extension's id).
+ * It applies only to queue calls that agent answers, and only from the moment they answer:
+ * which agent will answer is not known when the call is set up, so this is decided again when
+ * the agent answers (`CallContext.agentId`), and the recording is made on the agent's leg. An
+ * agent's extension-scope rules do not apply to their queue calls: the agent scope exists so a
+ * tenant can choose that separately. An agent policy can only record, without an announcement
+ * (the caller is already connected to the queue when the agent answers, so there is nothing to
+ * play it before; announce on the queue or DID rule instead) and without feature codes (those act
+ * on the caller's leg). A queue call already recorded from setup is not recorded a second time.
  */
 
-export const POLICY_SCOPE_TYPES = ['tenant', 'extension', 'queue', 'did'] as const;
+export const POLICY_SCOPE_TYPES = ['tenant', 'extension', 'agent', 'queue', 'did'] as const;
 export type PolicyScopeType = (typeof POLICY_SCOPE_TYPES)[number];
 
 export const POLICY_DIRECTIONS = ['any', 'inbound', 'outbound', 'internal'] as const;
@@ -40,7 +67,8 @@ const SCOPE_RANK: Readonly<Record<PolicyScopeType, number>> = {
   tenant: 0,
   did: 1,
   queue: 2,
-  extension: 3,
+  agent: 3,
+  extension: 4,
 };
 
 export interface Policy {
@@ -52,6 +80,8 @@ export interface Policy {
   readonly action: PolicyAction;
   readonly announce: boolean;
   readonly consentAssetId: string | null;
+  /** S5-13: feature codes may start/stop (no_record) or pause/resume (record) on its calls. */
+  readonly allowOnDemand: boolean;
 }
 
 /** What telephony-config knows about one call at setup time. */
@@ -61,6 +91,8 @@ export interface CallContext {
   readonly extensionIds: readonly string[];
   readonly queueId?: string | null | undefined;
   readonly didId?: string | null | undefined;
+  /** S5-14: the extension that answered a queue call as its agent; only known at that answer. */
+  readonly agentId?: string | null | undefined;
 }
 
 export interface Decision {
@@ -70,6 +102,11 @@ export interface Decision {
   readonly consentAssetId: string | null;
   readonly policyId: string | null;
   readonly reason: 'policy' | 'default';
+  /**
+   * S5-13: whether feature codes work on this call: start and stop an on-demand recording when
+   * `record` is false, pause and resume when it is true.
+   */
+  readonly allowOnDemand: boolean;
 }
 
 export const NO_RECORDING: Decision = {
@@ -78,6 +115,7 @@ export const NO_RECORDING: Decision = {
   consentAssetId: null,
   policyId: null,
   reason: 'default',
+  allowOnDemand: false,
 };
 
 export class InvalidPolicyError extends Error {
@@ -91,6 +129,8 @@ export function policyMatches(policy: Policy, call: CallContext): boolean {
       return true;
     case 'extension':
       return call.extensionIds.includes(policy.scopeId);
+    case 'agent':
+      return call.agentId !== undefined && call.agentId !== null && call.agentId === policy.scopeId;
     case 'queue':
       return call.queueId !== undefined && call.queueId !== null && call.queueId === policy.scopeId;
     case 'did':
@@ -117,6 +157,7 @@ export function evaluatePolicies(policies: readonly Policy[], call: CallContext)
       consentAssetId: null,
       policyId: refusal.id,
       reason: 'policy',
+      allowOnDemand: tied.every((policy) => policy.allowOnDemand),
     };
   }
 
@@ -128,6 +169,7 @@ export function evaluatePolicies(policies: readonly Policy[], call: CallContext)
       announcing.find((policy) => policy.consentAssetId !== null)?.consentAssetId ?? null,
     policyId: tied[0]!.id,
     reason: 'policy',
+    allowOnDemand: tied.some((policy) => policy.allowOnDemand),
   };
 }
 
@@ -142,6 +184,7 @@ export interface PolicyInput {
   readonly action: PolicyAction;
   readonly announce: boolean;
   readonly consentAssetId?: string | null | undefined;
+  readonly allowOnDemand?: boolean | undefined;
 }
 
 /** A policy ready to store: `scopeId` resolved and the combination checked. */
@@ -152,6 +195,7 @@ export interface ValidPolicy {
   readonly action: PolicyAction;
   readonly announce: boolean;
   readonly consentAssetId: string | null;
+  readonly allowOnDemand: boolean;
 }
 
 /** Checks a proposed policy. `tenantId` is the scope id of a tenant-wide one. */
@@ -172,6 +216,24 @@ export function validatePolicy(input: PolicyInput, tenantId: string): ValidPolic
     scopeId = named;
   }
 
+  if (input.scopeType === 'agent') {
+    if (input.action !== 'record') {
+      throw new InvalidPolicyError(
+        'An agent rule can only record: it applies when the agent answers a queue call.',
+      );
+    }
+    if (input.announce) {
+      throw new InvalidPolicyError(
+        'An agent rule cannot announce: the caller is already connected to the queue when the ' +
+          'agent answers. Announce on the queue or phone number rule instead.',
+      );
+    }
+    if (input.allowOnDemand === true) {
+      throw new InvalidPolicyError(
+        'An agent rule cannot allow feature codes: its recording is on the agent’s side of the call.',
+      );
+    }
+  }
   if (input.action === 'no_record' && input.announce) {
     throw new InvalidPolicyError('A policy that does not record has nothing to announce.');
   }
@@ -190,5 +252,6 @@ export function validatePolicy(input: PolicyInput, tenantId: string): ValidPolic
     action: input.action,
     announce: input.announce,
     consentAssetId,
+    allowOnDemand: input.allowOnDemand ?? false,
   };
 }

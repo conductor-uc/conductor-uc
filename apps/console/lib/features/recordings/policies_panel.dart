@@ -8,20 +8,23 @@ import '../pbx/resource.dart';
 import 'recordings_api.dart';
 
 /// Which resource a policy scope picks its target from.
+/// An agent rule names the agent's extension.
 const _scopeResource = {
   'extension': 'extensions',
+  'agent': 'extensions',
   'queue': 'queues',
   'did': 'dids',
 };
 
 const _scopeNoun = {
   'extension': 'extension',
+  'agent': 'agent',
   'queue': 'queue',
   'did': 'phone number',
 };
 
 String _titleFor(String scopeType, Json row) => switch (scopeType) {
-  'extension' => extensionsDef.titleOf(row),
+  'extension' || 'agent' => extensionsDef.titleOf(row),
   'queue' => queuesDef.titleOf(row),
   _ => didsDef.titleOf(row),
 };
@@ -99,14 +102,16 @@ class PoliciesPanel extends ConsumerWidget {
       children: [
         const RetentionCard(),
         const SizedBox(height: 16),
+        const RecordingRequiredCard(),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(
               child: Text(
                 'The narrowest rule that applies to a call decides: an '
-                'extension beats a queue, a queue beats a phone number, a phone '
-                'number beats the whole organization. With no rule, a call is '
-                'not recorded.',
+                'extension beats a queue agent, an agent beats a queue, a queue '
+                'beats a phone number, a phone number beats the whole '
+                'organization. With no rule, a call is not recorded.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
@@ -134,6 +139,7 @@ class PoliciesPanel extends ConsumerWidget {
                     DataColumn(label: Text('Calls')),
                     DataColumn(label: Text('Action')),
                     DataColumn(label: Text('Announcement')),
+                    DataColumn(label: Text('Feature codes')),
                     DataColumn(label: Text('')),
                   ],
                   rows: [
@@ -161,6 +167,15 @@ class PoliciesPanel extends ConsumerWidget {
                                   : p['consentAssetId'] == null
                                   ? 'Short tone'
                                   : 'Recording',
+                            ),
+                          ),
+                          DataCell(
+                            Text(
+                              p['allowOnDemand'] != true
+                                  ? 'Off'
+                                  : p['action'] == 'record'
+                                  ? '*2 pause'
+                                  : '*1 record',
                             ),
                           ),
                           DataCell(
@@ -234,7 +249,7 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
     });
     try {
       final saved = await api.saveRetentionDays(days);
-      ref.invalidate(recordingRetentionProvider);
+      ref.invalidate(recordingSettingsProvider);
       ref.invalidate(recordingListProvider);
       if (mounted) {
         setState(() {
@@ -311,6 +326,90 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
   }
 }
 
+/// Whether calls are refused when their recording cannot be set up
+/// ("recording required", fail closed). Off by default: a call then goes
+/// ahead unrecorded and is flagged.
+class RecordingRequiredCard extends ConsumerStatefulWidget {
+  const RecordingRequiredCard({super.key});
+
+  @override
+  ConsumerState<RecordingRequiredCard> createState() =>
+      _RecordingRequiredCardState();
+}
+
+class _RecordingRequiredCardState extends ConsumerState<RecordingRequiredCard> {
+  bool _busy = false;
+  String? _error;
+  String? _notice;
+
+  Future<void> _save(bool required) async {
+    final api = ref.read(recordingsApiProvider);
+    if (api == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _notice = null;
+    });
+    try {
+      final saved = await api.saveRecordingRequired(required);
+      ref.invalidate(recordingSettingsProvider);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _notice = saved
+              ? 'Calls that cannot be recorded are now refused.'
+              : 'Calls that cannot be recorded now go ahead unrecorded.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = problemMessage(e);
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = ref.watch(recordingSettingsProvider);
+    final canChange = ref.watch(canProvider('recording.policy.manage'));
+    final required = settings.asData?.value.recordingRequired ?? false;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SwitchListTile(
+              key: const ValueKey('recording-required'),
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Recording required'),
+              subtitle: const Text(
+                'When a call that your rules may record cannot have its '
+                'recording set up, for example because the recording system '
+                'cannot be reached, refuse the call instead of connecting it '
+                'unrecorded. The caller hears a short tone and the call ends. '
+                'Calls your rules do not record are never refused.',
+              ),
+              value: required,
+              onChanged: _busy || !canChange || !settings.hasValue
+                  ? null
+                  : _save,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              ErrorText(_error!),
+            ],
+            if (_notice != null) ...[const SizedBox(height: 8), Text(_notice!)],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Adds a rule, or changes [policy].
 class PolicyDialog extends ConsumerStatefulWidget {
   const PolicyDialog({super.key, this.policy});
@@ -340,6 +439,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
     String? action,
     bool? announce,
     String? Function()? consent,
+    bool? allowOnDemand,
   }) {
     setState(() {
       _form = PolicyForm(
@@ -349,6 +449,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
         action: action ?? _form.action,
         announce: announce ?? _form.announce,
         consentAssetId: consent != null ? consent() : _form.consentAssetId,
+        allowOnDemand: allowOnDemand ?? _form.allowOnDemand,
       );
     });
   }
@@ -400,6 +501,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
         if (a['status'] == 'ready' && a['kind'] == 'prompt') a,
     ];
     final recording = _form.action == 'record';
+    final agentRule = _form.scopeType == 'agent';
     return AlertDialog(
       title: Text(widget.policy == null ? 'Add rule' : 'Edit rule'),
       content: SizedBox(
@@ -420,8 +522,29 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                 ],
                 onChanged: _busy
                     ? null
-                    : (v) => _set(scopeType: v, scopeId: () => null),
+                    : (v) => v == 'agent'
+                          // An agent rule only records, with no announcement
+                          // and no feature codes: the service refuses others.
+                          ? _set(
+                              scopeType: v,
+                              scopeId: () => null,
+                              action: 'record',
+                              announce: false,
+                              consent: () => null,
+                              allowOnDemand: false,
+                            )
+                          : _set(scopeType: v, scopeId: () => null),
               ),
+              if (agentRule)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Records the queue calls this person answers as an agent, '
+                    'from the moment they answer. A call the queue or phone '
+                    'number rule already records is not recorded twice.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
               if (_form.scopeType != 'tenant')
                 DropdownButtonFormField<String>(
                   key: ValueKey('policy-target-${_form.scopeType}'),
@@ -457,7 +580,8 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                 decoration: const InputDecoration(labelText: 'Action'),
                 items: [
                   for (final e in policyActions.entries)
-                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                    if (!agentRule || e.key == 'record')
+                      DropdownMenuItem(value: e.key, child: Text(e.value)),
                 ],
                 onChanged: _busy
                     ? null
@@ -474,7 +598,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                   'Played to the caller before recording starts.',
                 ),
                 value: _form.announce && recording,
-                onChanged: _busy || !recording
+                onChanged: _busy || !recording || agentRule
                     ? null
                     : (v) => _set(announce: v, consent: () => null),
               ),
@@ -501,6 +625,28 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                       ),
                   ],
                   onChanged: _busy ? null : (v) => _set(consent: () => v),
+                ),
+              if (!agentRule)
+                SwitchListTile(
+                  key: const ValueKey('policy-on-demand'),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    recording
+                        ? 'Allow pausing with *2'
+                        : 'Allow recording on demand with *1',
+                  ),
+                  subtitle: Text(
+                    recording
+                        ? 'During a call this rule records, a person on it can '
+                              'press *2 to pause the recording (for card or '
+                              'medical details) and *2 again to resume. The '
+                              'paused part is silent. Every pause is logged.'
+                        : 'During a call this rule does not record, a person on '
+                              'it can press *1 to start recording and *1 again to '
+                              'stop. Every start and stop is logged.',
+                  ),
+                  value: _form.allowOnDemand,
+                  onChanged: _busy ? null : (v) => _set(allowOnDemand: v),
                 ),
               const SizedBox(height: 8),
               Text(

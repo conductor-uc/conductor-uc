@@ -13,6 +13,7 @@ import { configSchema, loadServiceConfig } from './config.js';
 import { createCertificateConsumer } from './consumers/certificate.consumer.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
 import { createPbxConsumer } from './consumers/pbx.consumer.js';
+import { createRecordingConsumer } from './consumers/recording.consumer.js';
 import { createTrunkConsumer } from './consumers/trunk.consumer.js';
 import { createOpenSipsMiClient } from './opensips-mi-client.js';
 import type { OpenSipsDb } from './opensips-schema.js';
@@ -179,6 +180,11 @@ const trunkConsumer = createTrunkConsumer(db, bus, logger, projection);
 await trunkConsumer.ensure();
 const trunkConsumerLoop = trunkConsumer.run();
 
+// S5-12: this service's own copy of each tenant's "recording required" flag.
+const recordingConsumer = createRecordingConsumer(db, bus, logger, readModel);
+await recordingConsumer.ensure();
+const recordingConsumerLoop = recordingConsumer.run();
+
 const reconciler = createReconciler(
   readModel,
   opensipsProjection,
@@ -186,6 +192,7 @@ const reconciler = createReconciler(
   logger,
   config.OPENSIPS_SIP_URI,
   pbxConfigClient,
+  recordingClient,
 );
 reconciler.start(config.RECONCILE_INTERVAL_MS);
 
@@ -251,6 +258,7 @@ async function shutdown(signal: string): Promise<void> {
   certificateSyncTimer.stop();
   pbxConsumer.stop();
   trunkConsumer.stop();
+  recordingConsumer.stop();
   relay.stop();
   await Promise.race([
     app.close(),
@@ -260,6 +268,7 @@ async function shutdown(signal: string): Promise<void> {
   await certificateConsumerLoop;
   await pbxConsumerLoop;
   await trunkConsumerLoop;
+  await recordingConsumerLoop;
   await relayLoop;
   await bus.close();
   await db.destroy();

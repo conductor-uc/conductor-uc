@@ -654,6 +654,7 @@ export async function resetSchema(db: Database<TelephonyConfigDb>): Promise<void
   await db.kysely.deleteFrom('parking_lots').execute();
   await db.kysely.deleteFrom('conference_rooms').execute();
   await db.kysely.deleteFrom('extension_call_handling').execute();
+  await db.kysely.deleteFrom('recording_settings').execute();
   await db.kysely.deleteFrom('dids').execute();
   await db.kysely.deleteFrom('outbound_routes').execute();
   await db.kysely.deleteFrom('emergency_routes').execute();

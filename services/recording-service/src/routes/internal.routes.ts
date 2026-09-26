@@ -4,7 +4,7 @@ import type { Logger } from '@cuc/logger';
 import type { Storage } from '@cuc/storage';
 
 import { evaluatePolicies } from '../domain/policy.js';
-import { isRecordingId } from '../domain/recording.js';
+import { isRecordingId, spoolFileName } from '../domain/recording.js';
 import type { PolicyRepo } from '../repo/policy.repo.js';
 import {
   RecordingNotFoundError,
@@ -31,6 +31,8 @@ const EvaluateBodySchema = Type.Object({
   ),
   queueId: OptionalId,
   didId: OptionalId,
+  /** S5-14: the extension that answered a queue call as its agent. */
+  agentId: OptionalId,
 });
 const DecisionSchema = Type.Object({
   record: Type.Boolean(),
@@ -38,6 +40,43 @@ const DecisionSchema = Type.Object({
   consentAssetId: Type.Union([Type.String(), Type.Null()]),
   policyId: Type.Union([Type.String(), Type.Null()]),
   reason: Type.Union([Type.Literal('policy'), Type.Literal('default')]),
+  /** S5-13: feature codes work on this call (start/stop when not recorded, pause/resume when recorded). */
+  allowOnDemand: Type.Boolean(),
+});
+
+/** S5-13: what telephony-config knows about the call a feature code was pressed on. */
+const CallContextSchema = Type.Object({
+  direction: DirectionSchema,
+  extensionIds: Type.Optional(
+    Type.Array(Type.String({ minLength: 1, maxLength: 36 }), { maxItems: 8 }),
+  ),
+  queueId: OptionalId,
+  didId: OptionalId,
+});
+const ControlBodySchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  /** `record` (`*1`): start or stop an on-demand recording. `pause` (`*2`): pause or resume. */
+  code: Type.Union([Type.Literal('record'), Type.Literal('pause')]),
+  /** The channel that owns the call's recording (the A leg). */
+  callUuid: Type.String({ minLength: 1, maxLength: 64 }),
+  /** The recording running on the call now, if any. */
+  recordingId: OptionalId,
+  nodeId: Type.Optional(Type.Union([Type.String({ minLength: 1, maxLength: 64 }), Type.Null()])),
+  context: CallContextSchema,
+});
+const ControlResponseSchema = Type.Object({
+  result: Type.Union([
+    Type.Literal('started'),
+    Type.Literal('stopped'),
+    Type.Literal('paused'),
+    Type.Literal('resumed'),
+    Type.Literal('refused'),
+  ]),
+  recordingId: Type.Union([Type.String(), Type.Null()]),
+  /** The spool file name of the recording acted on. */
+  fileName: Type.Union([Type.String(), Type.Null()]),
+  /** Why a request was refused: `not_allowed`, `rule_recording`, `not_recording`, `unknown_recording`, `stopped`. */
+  reason: Type.Union([Type.String(), Type.Null()]),
 });
 
 const RegisterBodySchema = Type.Object({
@@ -129,9 +168,152 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
     },
     async (request): Promise<Static<typeof DecisionSchema>> => {
       requireToken(request);
-      const { tenantId, direction, extensionIds, queueId, didId } = request.body;
+      const { tenantId, direction, extensionIds, queueId, didId, agentId } = request.body;
       const all = await policies.list({ tenantId });
-      return evaluatePolicies(all, { direction, extensionIds: extensionIds ?? [], queueId, didId });
+      return evaluatePolicies(all, {
+        direction,
+        extensionIds: extensionIds ?? [],
+        queueId,
+        didId,
+        agentId,
+      });
+    },
+  );
+
+  /**
+   * S5-13: a feature code pressed during a call (`*1` start/stop on demand, `*2` pause/resume),
+   * relayed by telephony-config for the node's Lua script (FreeSWITCH cannot publish audit events
+   * itself). Decides whether it is allowed, with the same policies and precedence as call setup,
+   * and records the change and its audit event in one transaction before answering, so
+   * FreeSWITCH only acts on something already audited. The node then starts, stops, masks or
+   * unmasks the recording.
+   *
+   * - `record` with no running recording: allowed when the deciding rule allows on demand;
+   *   registers an on-demand recording (`started`), which then goes through the same spool and
+   *   uploader pipeline as any other.
+   * - `record` with a running on-demand recording: stops it (`stopped`). A recording a rule started
+   *   is never stopped from the phone (`refused`, `rule_recording`): pause it instead.
+   * - `pause`: pauses a running recording or resumes a paused one; allowed for an on-demand
+   *   recording, or when the deciding rule allows on demand.
+   */
+  app.post(
+    '/internal/v1/recordings/control',
+    {
+      config: { public: true },
+      schema: { body: ControlBodySchema, response: { 200: ControlResponseSchema } },
+    },
+    async (request): Promise<Static<typeof ControlResponseSchema>> => {
+      requireToken(request);
+      const { tenantId, code, callUuid, recordingId, nodeId, context } = request.body;
+      const ctx = { tenantId };
+      const call = {
+        direction: context.direction,
+        extensionIds: context.extensionIds ?? [],
+        queueId: context.queueId,
+        didId: context.didId,
+      };
+      const refused = (reason: string): Static<typeof ControlResponseSchema> => {
+        logger.info({ tenantId, callUuid, code, reason }, 'recording: feature code refused');
+        return { result: 'refused', recordingId: recordingId ?? null, fileName: null, reason };
+      };
+      const audit = (action: string) => ({
+        actorType: 'node' as const,
+        actorId: nodeId ?? 'node',
+        actorOrgId: tenantId,
+        targetOrgId: tenantId,
+        action,
+        resource: 'recording',
+        dataClass: 'private' as const,
+        reason: `feature code on call ${callUuid}`,
+      });
+      const allowedByRule = async () =>
+        evaluatePolicies(await policies.list(ctx), call).allowOnDemand;
+
+      let running: Recording | undefined;
+      if (recordingId !== undefined && recordingId !== null) {
+        running = isRecordingId(recordingId)
+          ? await recordings.findById(ctx, recordingId)
+          : undefined;
+        if (running === undefined || running.callUuid !== callUuid) {
+          return refused('unknown_recording');
+        }
+      }
+
+      try {
+        if (code === 'record') {
+          if (running !== undefined && running.stoppedAt === null) {
+            if (!running.onDemand) return refused('rule_recording');
+            const stopped = await recordings.stopOnDemand(
+              ctx,
+              running.id,
+              audit('recording.on_demand.stopped'),
+            );
+            return {
+              result: 'stopped',
+              recordingId: stopped.id,
+              fileName: spoolFileName(stopped.id),
+              reason: null,
+            };
+          }
+          const decision = evaluatePolicies(await policies.list(ctx), call);
+          if (!decision.allowOnDemand) return refused('not_allowed');
+          const started = await recordings.startOnDemand(
+            ctx,
+            {
+              callUuid,
+              direction: call.direction,
+              extensionId: call.extensionIds[0] ?? null,
+              peerExtensionId: call.extensionIds[1] ?? null,
+              queueId: call.queueId ?? null,
+              didId: call.didId ?? null,
+              policyId: decision.policyId,
+              nodeId: nodeId ?? null,
+              announced: false,
+            },
+            audit('recording.on_demand.started'),
+          );
+          return {
+            result: 'started',
+            recordingId: started.id,
+            fileName: spoolFileName(started.id),
+            reason: null,
+          };
+        }
+
+        // code === 'pause'
+        if (running === undefined) return refused('not_recording');
+        if (running.stoppedAt !== null) return refused('stopped');
+        if (!running.onDemand && !(await allowedByRule())) return refused('not_allowed');
+        const toggled = await recordings.togglePause(ctx, running.id, (paused) =>
+          audit(paused ? 'recording.paused' : 'recording.resumed'),
+        );
+        return {
+          result: toggled.paused ? 'paused' : 'resumed',
+          recordingId: running.id,
+          fileName: spoolFileName(running.id),
+          reason: null,
+        };
+      } catch (error) {
+        if (error instanceof RecordingStateError) return refused('stopped');
+        if (error instanceof RecordingNotFoundError) return refused('unknown_recording');
+        throw error;
+      }
+    },
+  );
+
+  /**
+   * S5-12: every tenant that requires recording (fail closed). telephony-config's reconciliation
+   * makes its own copy of the flag match this, repairing a missed `recording.settings.updated`.
+   */
+  app.get(
+    '/internal/v1/recordings/fail-closed-tenants',
+    {
+      config: { public: true },
+      schema: { response: { 200: Type.Object({ tenantIds: Type.Array(Type.String()) }) } },
+    },
+    async (request) => {
+      requireToken(request);
+      return { tenantIds: await settings.listFailClosedTenantIds({}) };
     },
   );
 

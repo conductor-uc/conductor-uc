@@ -9,7 +9,7 @@ export interface RecordingServiceDb extends EventTables {
   recording_policies: {
     id: string;
     tenant_id: string;
-    /** `tenant`, `extension`, `queue` or `did`. */
+    /** `tenant`, `extension`, `agent` (S5-14: an extension as a queue agent), `queue` or `did`. */
     scope_type: string;
     /** The extension, queue or DID id; for scope `tenant`, the tenant's own id. */
     scope_id: string;
@@ -21,6 +21,8 @@ export interface RecordingServiceDb extends EventTables {
     announce: boolean;
     /** A media asset (pbx-config-service) to play; null plays the neutral default tone. */
     consent_asset_id: string | null;
+    /** S5-13: feature codes may start/stop (no_record) or pause/resume (record) on its calls. */
+    allow_on_demand: boolean;
     created_at: Date;
     updated_at: Date;
     version: number;
@@ -53,6 +55,12 @@ export interface RecordingServiceDb extends EventTables {
     failure_reason: string | null;
     /** After this the retention sweep deletes the object. Null keeps it indefinitely. */
     retention_date: Date | null;
+    /** S5-13: started by a feature code rather than by a rule. */
+    on_demand: boolean;
+    /** S5-13: when an on-demand recording was stopped by feature code. */
+    stopped_at: Date | null;
+    /** S5-13: JSON text, `[{ from, to }]`; an open interval (`to` null) means paused now. */
+    pause_intervals: string | null;
     created_at: Date;
     updated_at: Date;
     version: number;
@@ -61,6 +69,11 @@ export interface RecordingServiceDb extends EventTables {
     tenant_id: string;
     /** 0 keeps recordings until deleted. */
     retention_days: number;
+    /**
+     * S5-12: refuse a call when the recording its rules may require cannot be set up (this
+     * service unreachable, or the recording not registered). Off by default (fail open).
+     */
+    fail_closed: boolean;
     updated_at: Date;
     version: number;
   };

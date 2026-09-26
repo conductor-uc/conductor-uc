@@ -100,6 +100,7 @@ void main() {
           'action': 'record',
           'announce': true,
           'consentAssetId': 'media-1',
+          'allowOnDemand': true,
         });
         expect(form.toJson(), {
           'scopeType': 'queue',
@@ -108,7 +109,9 @@ void main() {
           'action': 'record',
           'announce': true,
           'consentAssetId': 'media-1',
+          'allowOnDemand': true,
         });
+        expect(const PolicyForm().toJson()['allowOnDemand'], isFalse);
         expect(
           PolicyForm(
             announce: false,
@@ -218,6 +221,14 @@ void main() {
         expect(find.byTooltip('Download'), findsNWidgets(23));
       },
     );
+
+    testWidgets('marks recordings started on demand, and paused ones (S5-13)', (
+      tester,
+    ) async {
+      await openRecordings(tester);
+      expect(find.text('Ready · on demand'), findsOneWidget);
+      expect(find.text('Ready · paused'), findsOneWidget);
+    });
 
     testWidgets('Load more adds the next page', (tester) async {
       await openRecordings(tester);
@@ -394,6 +405,73 @@ void main() {
       expect(find.text('Incoming calls'), findsOneWidget);
     });
 
+    testWidgets('adds a queue agent rule, which only records (S5-14)', (
+      tester,
+    ) async {
+      await openRecordings(tester);
+      await openRules(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Add rule'));
+      await tester.pumpAndSettle();
+      await pickIn(tester, 'Applies to', 'Queue agent');
+      expect(
+        find.textContaining('Records the queue calls this person answers'),
+        findsOneWidget,
+      );
+      // No feature codes, and no "do not record" choice, for an agent rule.
+      expect(find.byKey(const ValueKey('policy-on-demand')), findsNothing);
+      await tester.tap(
+        inDialog(
+          find.widgetWithText(DropdownButtonFormField<String>, 'Action'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Do not record'),
+        findsOneWidget,
+      ); // only the table's row
+      await tester.tap(find.text('Record').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('policy-target-agent')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('Alice Kim').last);
+      await tester.pumpAndSettle();
+      await tester.tap(inDialog(find.widgetWithText(FilledButton, 'Save')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.textContaining('Queue agent 101'), findsOneWidget);
+    });
+
+    testWidgets('a rule can allow the in-call feature codes (S5-13)', (
+      tester,
+    ) async {
+      await openRecordings(tester);
+      await openRules(tester);
+      expect(find.text('Feature codes'), findsOneWidget);
+      expect(find.text('Off'), findsNWidgets(2));
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Add rule'));
+      await tester.pumpAndSettle();
+      await pickIn(tester, 'Applies to', 'Queue');
+      await tester.tap(find.byKey(const ValueKey('policy-target-queue')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Support').last);
+      await tester.pumpAndSettle();
+      // A rule that records offers pausing.
+      expect(find.text('Allow pausing with *2'), findsOneWidget);
+      await pickIn(tester, 'Action', 'Do not record');
+      // A rule that does not record offers recording on demand.
+      expect(find.text('Allow recording on demand with *1'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('policy-on-demand')));
+      await tester.pumpAndSettle();
+      await tester.tap(inDialog(find.widgetWithText(FilledButton, 'Save')));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(find.text('*1 record'), findsOneWidget);
+    });
+
     testWidgets(
       'a second rule for the same scope and calls is refused with the service’s reason',
       (tester) async {
@@ -528,6 +606,41 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text('Recordings are now kept until they are deleted.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('turns "recording required" on and off (S5-12)', (
+      tester,
+    ) async {
+      await openRecordings(tester);
+      await openRules(tester);
+      SwitchListTile toggle() => tester.widget<SwitchListTile>(
+        find.byKey(const ValueKey('recording-required')),
+      );
+      expect(toggle().value, isFalse);
+
+      await tester.tap(find.byKey(const ValueKey('recording-required')));
+      await tester.pumpAndSettle();
+      expect(toggle().value, isTrue);
+      expect(
+        find.text('Calls that cannot be recorded are now refused.'),
+        findsOneWidget,
+      );
+      // Retention is untouched.
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('retention-days')))
+            .controller!
+            .text,
+        '90',
+      );
+
+      await tester.tap(find.byKey(const ValueKey('recording-required')));
+      await tester.pumpAndSettle();
+      expect(toggle().value, isFalse);
+      expect(
+        find.text('Calls that cannot be recorded now go ahead unrecorded.'),
         findsOneWidget,
       );
     });

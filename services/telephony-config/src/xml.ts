@@ -304,6 +304,121 @@ export const RECORDING_UNAVAILABLE_ACTION =
   '<action application="set" data="cuc_recording_status=unavailable"/>';
 
 /**
+ * S5-13 (G-111): the in-call recording feature codes. They are pressed *during* a call, as the
+ * meta key `*` then one digit (`bind_meta_app`), not dialed as a number, so they cannot collide
+ * with the dialed feature codes (`*97` voicemail, `*45`/`*46` agent login and logout): those are
+ * whole destination numbers matched in `/fs/dialplan`, these are DTMF on an established call.
+ *
+ * - `*1` starts an on-demand recording, or stops the on-demand recording running.
+ * - `*2` pauses the call's recording, or resumes it.
+ *
+ * Only armed on a call whose deciding rule allows on demand. On such a call the internal party's
+ * `*` is taken as the start of a feature code and is not passed on to the far end (a remote IVR
+ * that needs `*` will not get it from that party): `bind_meta_app` consumes the meta key and the
+ * digit after it.
+ */
+export const RECORDING_FEATURE_CODES = {
+  /** Start or stop an on-demand recording (`*1`). */
+  record: '1',
+  /** Pause or resume the recording (`*2`). */
+  pause: '2',
+} as const;
+
+/**
+ * Which legs listen for the feature codes (`bind_meta_app`'s LISTEN_TO): the internal party only.
+ * An inbound call's internal party is the bridged (B) leg, an outbound call's is the caller (A),
+ * and on an internal call both parties are the tenant's own people. A caller from outside the
+ * tenant can never start, stop or pause a recording.
+ */
+export function featureCodeListenLegs(direction: 'inbound' | 'outbound' | 'internal'): string {
+  if (direction === 'inbound') return 'b';
+  if (direction === 'outbound') return 'a';
+  return 'ab';
+}
+
+/**
+ * S5-13: the actions that arm the recording feature codes on a call. `contextToken` is the call's
+ * context (`recording-context.ts`), which `recording_control.lua` sends back with each code.
+ *
+ * `cuc_rec_owner` is exported so it reaches the bridged leg too: the Lua script may run on either
+ * leg (it runs on the leg that pressed the code, `bind_meta_app`'s `s`), and always acts on the
+ * owner (this, the A leg), where a rule recording runs and an on-demand one is started, through
+ * `uuid_record`. `RECORD_STEREO` is set here for an on-demand recording started later.
+ *
+ * Verified by unit tests on the strings only; `bind_meta_app`'s argument order is confirmed from
+ * the FreeSWITCH 1.10.12 binary's own usage text (`<key> [a|b|ab] [a|b|o|s|i|1] <app>`).
+ */
+export function recordingFeatureCodeActions(options: {
+  readonly direction: 'inbound' | 'outbound' | 'internal';
+  readonly contextToken: string;
+}): string[] {
+  const listen = featureCodeListenLegs(options.direction);
+  return [
+    `<action application="set" data="${escapeXml(`cuc_rec_ctx=${options.contextToken}`)}"/>`,
+    '<action application="export" data="cuc_rec_owner=${uuid}"/>',
+    '<action application="set" data="RECORD_STEREO=true"/>',
+    `<action application="bind_meta_app" data="${RECORDING_FEATURE_CODES.record} ${listen} s lua::recording_control.lua record"/>`,
+    `<action application="bind_meta_app" data="${RECORDING_FEATURE_CODES.pause} ${listen} s lua::recording_control.lua pause"/>`,
+  ];
+}
+
+/** S5-13: a short beep back to whoever pressed a feature code that took effect. No words. */
+export const FEATURE_CODE_DONE_TONE = 'tone_stream://%(120,60,1000);loops=1';
+/** S5-13: a low double tone for a feature code that did nothing (not allowed, or unavailable). */
+export const FEATURE_CODE_REFUSED_TONE = 'tone_stream://%(150,100,400);loops=2';
+
+/**
+ * S5-12: the neutral signal played before a call is refused because its tenant requires recording
+ * and the recording could not be set up. A reorder (fast busy) tone: no words, no name, nothing
+ * that can be branded, and a sound callers already read as "this call cannot go through now".
+ */
+export const RECORDING_REFUSAL_TONE = 'tone_stream://%(250,250,480,620);loops=4';
+
+/**
+ * S5-12: the hangup cause for that refusal, the same for every direction. FreeSWITCH answers
+ * OpenSIPs with SIP 503 (Q.850 cause 41, in the `Reason` header), and OpenSIPs, as RFC 3261 §16.7
+ * requires of a proxy, passes a 503 on to the caller as 500 ("Service Unavailable"). Either way it
+ * is a temporary server-side failure: the honest answer (a platform service is unavailable, and the
+ * call may succeed later), one a carrier may retry or route elsewhere, and one a phone shows as a
+ * temporary failure rather than a wrong number (404) or a busy line (486). It is never a 403:
+ * nothing about the caller is being refused. Not `SERVICE_UNAVAILABLE` (cause 63), despite the
+ * name: FreeSWITCH sends that as 480 "Temporarily Unavailable", which reads as the callee being
+ * away (both found by live test).
+ */
+export const RECORDING_REFUSAL_CAUSE = 'NORMAL_TEMPORARY_FAILURE';
+
+/**
+ * S5-12: the whole dialplan document for a refused call: flag the call for the CDR, give early
+ * media so the caller hears the tone without the call being answered (no billing on an inbound
+ * call, and no 200 OK that would look like a connected call), play the tone, and hang up with
+ * {@link RECORDING_REFUSAL_CAUSE}.
+ */
+export function buildRecordingRefusalDocument(
+  callerContext: string,
+  destinationNumber: string,
+  tenantId: string,
+): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="recording-required-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
+    '          <action application="set" data="cuc_recording_status=refused"/>\n' +
+    '          <action application="pre_answer"/>\n' +
+    `          <action application="playback" data="${escapeXml(RECORDING_REFUSAL_TONE)}"/>\n` +
+    `          <action application="hangup" data="${RECORDING_REFUSAL_CAUSE}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/**
  * Puts `actions` at the start of a dialplan document's first `<condition>`. Every builder that
  * places a call emits exactly one, so the actions run before its bridge or hand-off. Returns the
  * document unchanged when there is no condition to put them in.
@@ -639,6 +754,11 @@ export function buildFlowDialplanDocument(
   entryPoint: string,
   tenantDomain: string,
   opensipsSipUri: string,
+  /**
+   * S5-11: the DID the call came in on. The runner passes it back when it hands the call to an
+   * extension, ring group or queue, so the recording decision there still sees the DID's rules.
+   */
+  didId?: string,
 ): string {
   const vars: readonly (readonly [string, string])[] = [
     ['cuc_tenant_id', tenantId],
@@ -648,6 +768,7 @@ export function buildFlowDialplanDocument(
     // variable, not just the global one `vars.xml` already defines —
     // `tenantIdAction`'s own doc comment (this file) has the full story.
     ['cuc_node_id', '$${cuc_node_id}'],
+    ...(didId === undefined ? [] : [['cuc_did_id', didId] as const]),
   ];
 
   return (
@@ -986,6 +1107,8 @@ export interface CallcenterAgentEntry {
 export function buildCallcenterConfigurationDocument(
   queues: readonly CallcenterQueueEntry[],
   agents: readonly CallcenterAgentEntry[],
+  /** OpenSIPs' SIP listener: agents are reached through it, see {@link agentContact}. */
+  opensipsSipUri: string,
 ): string {
   const queueXml = queues
     .map(
@@ -1002,7 +1125,7 @@ export function buildCallcenterConfigurationDocument(
   const agentXml = agents
     .map(
       (agent) =>
-        `      <agent name="${escapeXml(agent.name)}" type="callback" contact="user/${escapeXml(agent.name)}" status="Logged Out" ` +
+        `      <agent name="${escapeXml(agent.name)}" type="callback" contact="${escapeXml(agentContact(agent.name, opensipsSipUri))}" status="Logged Out" ` +
         `max-no-answer="${String(agent.maxNoAnswer)}" wrap-up-time="${String(agent.wrapUpSeconds)}" reject-delay-time="${String(agent.rejectDelaySeconds)}"/>\n`,
     )
     .join('');
@@ -1037,6 +1160,61 @@ export function buildCallcenterConfigurationDocument(
 }
 
 /**
+ * How `mod_callcenter` dials an agent (S5-14, found while building agent-scoped recording):
+ * through OpenSIPs, like every other bridge this platform places (`buildDialplanDocument`'s doc
+ * comment has why both the route and the tenant-domain R-URI are needed). The contact used to be
+ * `user/<number>@<domain>`, but phones register with OpenSIPs, not with FreeSWITCH, and the
+ * directory this service serves has no `dial-string`, so FreeSWITCH had no way to reach the agent's
+ * phone at all: a likely reason queue distribution was never seen to reach an agent (G-47).
+ * `agentName` is `<extension number>@<tenant domain>` (`callcenterName`). Unverified live.
+ */
+export function agentContact(agentName: string, opensipsSipUri: string): string {
+  return `{sip_route_uri=sip:${opensipsSipUri}}sofia/internal/${agentName}`;
+}
+
+/**
+ * S5-14 (G-111): what a queue call carries so an agent-scoped recording rule can be applied when
+ * an agent answers. Which agent will answer is unknown at setup, so the decision is made then, on
+ * the agent's leg: `mod_callcenter` copies the variables named in `cc_export_vars` from the caller
+ * to the agent leg it originates, and `execute_on_answer_cuc_agent` (FreeSWITCH runs every
+ * `execute_on_answer*` variable when that leg answers) runs `agent_recording.lua` there. The
+ * script skips a caller already being recorded (a queue, DID or tenant rule from setup), and
+ * otherwise asks `/fs/recording/:tenantId/agent-answer`, which decides with the answering agent.
+ *
+ * Set after the caller's own `answer`, so the `execute_on_answer_cuc_agent` copy on the caller
+ * never runs there (its answer has already happened). `flow_runner.lua`'s `queue` node sets the
+ * same variables (keep the two in step).
+ *
+ * `cuc_rec_owner` is exported too (when set): the agent leg is originated by `mod_callcenter`,
+ * not bridged from the caller, so the caller's own `export` of it (S5-13's feature codes) does not
+ * reach the agent leg on its own. Whether `bind_meta_app`'s B-leg bindings apply across
+ * `mod_callcenter`'s bridge at all is not known: feature codes on queue calls are unverified.
+ *
+ * `cc_export_vars` and the agent leg variables (`cc_agent`) are confirmed present in the 1.10.12
+ * `mod_callcenter` binary; their behaviour on a live call is not yet seen.
+ */
+export const AGENT_ANSWER_EXPORTS = [
+  'cuc_tenant_id',
+  'cuc_queue_id',
+  'cuc_did_id',
+  'cuc_queue_member_uuid',
+  'execute_on_answer_cuc_agent',
+  'cuc_rec_owner',
+] as const;
+
+export function agentAnswerRecordingActions(queueId: string, didId: string | undefined): string[] {
+  return [
+    `<action application="set" data="${escapeXml(`cuc_queue_id=${queueId}`)}"/>`,
+    ...(didId === undefined
+      ? []
+      : [`<action application="set" data="${escapeXml(`cuc_did_id=${didId}`)}"/>`]),
+    '<action application="set" data="cuc_queue_member_uuid=${uuid}"/>',
+    '<action application="set" data="execute_on_answer_cuc_agent=lua agent_recording.lua"/>',
+    `<action application="set" data="cc_export_vars=${AGENT_ANSWER_EXPORTS.join(',')}"/>`,
+  ];
+}
+
+/**
  * `/fs/dialplan`'s from-trunk `queue` branch (S2-13; G-25's "each later
  * stage teaches `/fs/dialplan` to resolve its own destination type" — this
  * is that stage for `queue`). Reached only once the caller's handler has
@@ -1051,7 +1229,13 @@ export function buildQueueDialplanDocument(
   destinationNumber: string,
   queueName: string,
   tenantId: string,
+  /** S5-14: armed for agent-scoped recording rules (see {@link agentAnswerRecordingActions}). */
+  agentAnswer?: { readonly queueId: string; readonly didId?: string },
 ): string {
+  const agentActions =
+    agentAnswer === undefined
+      ? []
+      : agentAnswerRecordingActions(agentAnswer.queueId, agentAnswer.didId);
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
     '<document type="freeswitch/xml">\n' +
@@ -1061,6 +1245,7 @@ export function buildQueueDialplanDocument(
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
     `          ${tenantIdAction(tenantId)}\n` +
     '          <action application="answer"/>\n' +
+    agentActions.map((action) => `          ${action}\n`).join('') +
     `          <action application="callcenter" data="${escapeXml(queueName)}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +
@@ -1102,6 +1287,8 @@ export function buildAgentStatusDialplanDocument(
   agentName: string,
   status: 'Available' | 'Logged Out',
   tenantId: string,
+  /** S5-14: the agent's contact is set to reach its phone through OpenSIPs ({@link agentContact}). */
+  opensipsSipUri: string,
 ): string {
   return (
     '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
@@ -1112,7 +1299,7 @@ export function buildAgentStatusDialplanDocument(
     `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(featureCode)}$`)}">\n` +
     `          ${tenantIdAction(tenantId)}\n` +
     '          <action application="answer"/>\n' +
-    `          <action application="lua" data="agent_status.lua ${escapeXml(agentName)} ${status === 'Available' ? '1' : '0'}"/>\n` +
+    `          <action application="lua" data="agent_status.lua ${escapeXml(agentName)} ${status === 'Available' ? '1' : '0'} ${escapeXml(opensipsSipUri)}"/>\n` +
     '          <action application="hangup"/>\n' +
     '        </condition>\n' +
     '      </extension>\n' +

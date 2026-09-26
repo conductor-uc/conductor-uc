@@ -74,6 +74,14 @@ const RecordingSchema = Type.Object({
   durationMs: Type.Union([Type.Number(), Type.Null()]),
   sizeBytes: Type.Union([Type.Number(), Type.Null()]),
   retentionDate: Type.Union([Type.String(), Type.Null()]),
+  /** S5-13: started by a feature code rather than by a rule. */
+  onDemand: Type.Boolean(),
+  /** S5-13: when an on-demand recording was stopped by feature code; null while running, or when the call ended it. */
+  stoppedAt: Type.Union([Type.String(), Type.Null()]),
+  /** S5-13: where the recording was paused (silence in the file); `to` null while paused. */
+  pauses: Type.Array(
+    Type.Object({ from: Type.String(), to: Type.Union([Type.String(), Type.Null()]) }),
+  ),
 });
 const UrlSchema = Type.Object({ url: Type.String(), expiresAt: Type.String() });
 
@@ -99,6 +107,12 @@ function toResponse(recording: Recording): Static<typeof RecordingSchema> {
     durationMs: recording.durationMs,
     sizeBytes: recording.sizeBytes,
     retentionDate: recording.retentionDate === null ? null : recording.retentionDate.toISOString(),
+    onDemand: recording.onDemand,
+    stoppedAt: recording.stoppedAt === null ? null : recording.stoppedAt.toISOString(),
+    pauses: recording.pauses.map((pause) => ({
+      from: pause.from.toISOString(),
+      to: pause.to === null ? null : pause.to.toISOString(),
+    })),
   };
 }
 

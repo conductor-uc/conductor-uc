@@ -25,6 +25,7 @@ const recordingStatuses = {
 const policyScopes = {
   'tenant': 'Whole organization',
   'extension': 'Extension',
+  'agent': 'Queue agent',
   'queue': 'Queue',
   'did': 'Phone number',
 };
@@ -104,6 +105,7 @@ class PolicyForm {
     this.action = 'record',
     this.announce = false,
     this.consentAssetId,
+    this.allowOnDemand = false,
   });
 
   factory PolicyForm.fromPolicy(Json policy) => PolicyForm(
@@ -115,6 +117,7 @@ class PolicyForm {
     action: '${policy['action']}',
     announce: policy['announce'] == true,
     consentAssetId: policy['consentAssetId'] as String?,
+    allowOnDemand: policy['allowOnDemand'] == true,
   );
 
   final String scopeType;
@@ -124,6 +127,11 @@ class PolicyForm {
   final bool announce;
   final String? consentAssetId;
 
+  /// People on the calls it decides may use the in-call feature codes: `*1`
+  /// starts or stops a recording (when the rule does not record), `*2`
+  /// pauses or resumes one (when it does). Every use is audited.
+  final bool allowOnDemand;
+
   Json toJson() => {
     'scopeType': scopeType,
     'scopeId': ?scopeId,
@@ -131,6 +139,7 @@ class PolicyForm {
     'action': action,
     'announce': announce,
     'consentAssetId': announce ? consentAssetId : null,
+    'allowOnDemand': allowOnDemand,
   };
 }
 
@@ -221,14 +230,17 @@ class RecordingsApi {
     );
   }
 
-  /// How many days recordings are kept (0: until deleted).
-  Future<int> retentionDays() async {
+  /// How long recordings are kept, and whether recording is required.
+  Future<RecordingSettings> settings() async {
     final response = await _dio.get<Object?>(
       _path('recording-settings'),
       options: _options,
     );
-    return ((response.data as Map)['retentionDays'] as num).toInt();
+    return RecordingSettings.fromJson(response.data as Map);
   }
+
+  /// How many days recordings are kept (0: until deleted).
+  Future<int> retentionDays() async => (await settings()).retentionDays;
 
   Future<int> saveRetentionDays(int days) async {
     final response = await _dio.put<Object?>(
@@ -238,6 +250,37 @@ class RecordingsApi {
     );
     return ((response.data as Map)['retentionDays'] as num).toInt();
   }
+
+  /// Turns "recording required" on or off. Changes nothing else.
+  Future<bool> saveRecordingRequired(bool required) async {
+    final response = await _dio.put<Object?>(
+      _path('recording-settings'),
+      data: {'failClosed': required},
+      options: _options,
+    );
+    return (response.data as Map)['failClosed'] == true;
+  }
+}
+
+/// A tenant's recording settings (`GET .../recording-settings`).
+class RecordingSettings {
+  const RecordingSettings({
+    required this.retentionDays,
+    required this.recordingRequired,
+  });
+
+  factory RecordingSettings.fromJson(Map<dynamic, dynamic> json) =>
+      RecordingSettings(
+        retentionDays: (json['retentionDays'] as num).toInt(),
+        recordingRequired: json['failClosed'] == true,
+      );
+
+  /// 0 keeps recordings until someone deletes them.
+  final int retentionDays;
+
+  /// Calls whose recording cannot be set up are refused (the service's
+  /// `failClosed`).
+  final bool recordingRequired;
 }
 
 final recordingsApiProvider = Provider<RecordingsApi?>((ref) {
@@ -301,7 +344,16 @@ final recordingPoliciesProvider = FutureProvider<List<Json>>((ref) async {
   return api == null ? const [] : api.policies();
 });
 
-final recordingRetentionProvider = FutureProvider<int>((ref) async {
+final recordingSettingsProvider = FutureProvider<RecordingSettings>((
+  ref,
+) async {
   final api = ref.watch(recordingsApiProvider);
-  return api == null ? 90 : api.retentionDays();
+  return api == null
+      ? const RecordingSettings(retentionDays: 90, recordingRequired: false)
+      : api.settings();
 });
+
+final recordingRetentionProvider = FutureProvider<int>(
+  (ref) async =>
+      (await ref.watch(recordingSettingsProvider.future)).retentionDays,
+);

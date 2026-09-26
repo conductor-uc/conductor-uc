@@ -18030,7 +18030,10 @@
                           "startedAt",
                           "durationMs",
                           "sizeBytes",
-                          "retentionDate"
+                          "retentionDate",
+                          "onDemand",
+                          "stoppedAt",
+                          "pauses"
                         ],
                         "properties": {
                           "id": {
@@ -18092,6 +18095,36 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "onDemand": {
+                            "type": "boolean"
+                          },
+                          "stoppedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "pauses": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "from",
+                                "to"
+                              ],
+                              "properties": {
+                                "from": {
+                                  "type": "string"
+                                },
+                                "to": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              }
+                            }
                           }
                         }
                       }
@@ -18156,7 +18189,10 @@
                     "startedAt",
                     "durationMs",
                     "sizeBytes",
-                    "retentionDate"
+                    "retentionDate",
+                    "onDemand",
+                    "stoppedAt",
+                    "pauses"
                   ],
                   "properties": {
                     "id": {
@@ -18218,6 +18254,36 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "onDemand": {
+                      "type": "boolean"
+                    },
+                    "stoppedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "pauses": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "from",
+                          "to"
+                        ],
+                        "properties": {
+                          "from": {
+                            "type": "string"
+                          },
+                          "to": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
                     }
                   }
                 }
@@ -18401,7 +18467,8 @@
                           "direction",
                           "action",
                           "announce",
-                          "consentAssetId"
+                          "consentAssetId",
+                          "allowOnDemand"
                         ],
                         "properties": {
                           "id": {
@@ -18419,6 +18486,12 @@
                                 "type": "string",
                                 "enum": [
                                   "extension"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "agent"
                                 ]
                               },
                               {
@@ -18490,6 +18563,9 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "allowOnDemand": {
+                            "type": "boolean"
                           }
                         }
                       }
@@ -18534,6 +18610,12 @@
                       {
                         "type": "string",
                         "enum": [
+                          "agent"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
                           "queue"
                         ]
                       },
@@ -18602,6 +18684,9 @@
                       "null"
                     ],
                     "maxLength": 36
+                  },
+                  "allowOnDemand": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -18633,7 +18718,8 @@
                     "direction",
                     "action",
                     "announce",
-                    "consentAssetId"
+                    "consentAssetId",
+                    "allowOnDemand"
                   ],
                   "properties": {
                     "id": {
@@ -18651,6 +18737,12 @@
                           "type": "string",
                           "enum": [
                             "extension"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "agent"
                           ]
                         },
                         {
@@ -18722,6 +18814,9 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "allowOnDemand": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -18765,6 +18860,12 @@
                       {
                         "type": "string",
                         "enum": [
+                          "agent"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "enum": [
                           "queue"
                         ]
                       },
@@ -18833,6 +18934,9 @@
                       "null"
                     ],
                     "maxLength": 36
+                  },
+                  "allowOnDemand": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -18873,7 +18977,8 @@
                     "direction",
                     "action",
                     "announce",
-                    "consentAssetId"
+                    "consentAssetId",
+                    "allowOnDemand"
                   ],
                   "properties": {
                     "id": {
@@ -18891,6 +18996,12 @@
                           "type": "string",
                           "enum": [
                             "extension"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "agent"
                           ]
                         },
                         {
@@ -18962,6 +19073,9 @@
                         "string",
                         "null"
                       ]
+                    },
+                    "allowOnDemand": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -19027,11 +19141,15 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "retentionDays"
+                    "retentionDays",
+                    "failClosed"
                   ],
                   "properties": {
                     "retentionDays": {
                       "type": "number"
+                    },
+                    "failClosed": {
+                      "type": "boolean"
                     }
                   }
                 }
@@ -19051,14 +19169,14 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "retentionDays"
-                ],
                 "properties": {
                   "retentionDays": {
                     "type": "integer",
                     "minimum": 0,
                     "maximum": 3650
+                  },
+                  "failClosed": {
+                    "type": "boolean"
                   }
                 }
               }
@@ -19084,11 +19202,15 @@
                 "schema": {
                   "type": "object",
                   "required": [
-                    "retentionDays"
+                    "retentionDays",
+                    "failClosed"
                   ],
                   "properties": {
                     "retentionDays": {
                       "type": "number"
+                    },
+                    "failClosed": {
+                      "type": "boolean"
                     }
                   }
                 }

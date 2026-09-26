@@ -30,6 +30,7 @@ const COLUMNS = [
   'action',
   'announce',
   'consent_asset_id as consentAssetId',
+  'allow_on_demand as allowOnDemand',
 ] as const;
 
 function toPolicy(row: {
@@ -40,6 +41,7 @@ function toPolicy(row: {
   action: string;
   announce: boolean | number;
   consentAssetId: string | null;
+  allowOnDemand: boolean | number;
 }): Policy {
   return {
     id: row.id,
@@ -49,6 +51,7 @@ function toPolicy(row: {
     action: row.action as PolicyAction,
     announce: Boolean(row.announce),
     consentAssetId: row.consentAssetId,
+    allowOnDemand: Boolean(row.allowOnDemand),
   };
 }
 
@@ -96,6 +99,7 @@ export function createPolicyRepo(db: Database<RecordingServiceDb>) {
               action: input.action,
               announce: input.announce,
               consent_asset_id: input.consentAssetId,
+              allow_on_demand: input.allowOnDemand,
               created_at: now,
               updated_at: now,
               version: 1,
@@ -138,6 +142,7 @@ export function createPolicyRepo(db: Database<RecordingServiceDb>) {
               action: input.action,
               announce: input.announce,
               consent_asset_id: input.consentAssetId,
+              allow_on_demand: input.allowOnDemand,
               updated_at: new Date(),
             })
             .where('id', '=', id)
