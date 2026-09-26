@@ -4,6 +4,8 @@ import 'package:console/core/acting.dart';
 import 'package:console/core/session.dart';
 import 'package:console/dev/demo_backend.dart';
 import 'package:console/dev/demo_access.dart';
+import 'package:console/dev/demo_realtime.dart';
+import 'package:console/core/realtime.dart';
 import 'package:console/features/shell/sections.dart';
 import 'package:console/features/voicemail/voicemail_api.dart';
 import 'package:flutter/material.dart';
@@ -54,6 +56,56 @@ Future<void> open(WidgetTester tester, String section) async {
 }
 
 void main() {
+  group('my live calls (S5-15)', () {
+    testWidgets(
+      'a person on a call sees it on My phone, and records and pauses it themselves',
+      (tester) async {
+        resetDemoRecordings();
+        await pumpApp(
+          tester,
+          appWith(
+            api: demoApi(),
+            overrides: [
+              realtimeConnectorProvider.overrideWithValue(
+                demoRealtimeConnector,
+              ),
+            ],
+          ),
+        );
+        await submitSignIn(tester, user);
+        await tester.pumpAndSettle();
+        // Extension 101 is on a call with 102, which may be recorded on demand.
+        expect(find.text('On a call with 102'), findsOneWidget);
+        expect(find.text('Recording'), findsNothing);
+
+        await tester.tap(find.byKey(const ValueKey('recording-start-demo-a1')));
+        await tester.pump();
+        expect(find.text('Starting…'), findsOneWidget);
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        expect(find.text('Starting…'), findsNothing);
+        expect(find.text('Recording'), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('recording-pause-demo-a1')));
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+        expect(find.text('Recording paused'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('recording-resume-demo-a1')),
+          findsOneWidget,
+        );
+        resetDemoRecordings();
+      },
+    );
+
+    testWidgets('shows nothing when the person is on no call', (tester) async {
+      await signInTo(tester, user);
+      // No live connection in this test: the card is simply not there.
+      expect(find.textContaining('On a call'), findsNothing);
+      expect(find.byType(Card), findsNothing);
+    });
+  });
+
   group('who is offered the phone-only console', () {
     test('a person with only self-service permissions', () {
       expect(isSelfOnly({...demoSelfService}), isTrue);

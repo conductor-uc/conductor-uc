@@ -6,10 +6,11 @@ import '../../core/session.dart';
 import '../pbx/pbx_api.dart';
 import '../../widgets/page.dart';
 import 'live_calls.dart';
+import 'recording_controls.dart';
 
 /// Monitoring (08 §5). For now: the tenant's live calls, streamed from the
-/// gateway's realtime hub. The presence board and the listen, whisper and
-/// barge actions come with S5-09/S5-10.
+/// gateway's realtime hub, with the recording buttons (S5-15). The presence
+/// board and the listen, whisper and barge actions come with S5-09/S5-10.
 class MonitoringPage extends ConsumerWidget {
   const MonitoringPage({super.key});
 
@@ -54,7 +55,15 @@ class LiveCallsPanel extends ConsumerWidget {
     }
     if (stopped != null) return Text(_stoppedText(stopped));
     if (view.calls.isEmpty) return const Text('No calls right now.');
-    return _LiveCallsTable(rows: view.calls);
+    return _LiveCallsTable(
+      rows: view.calls,
+      tenantId: ref.watch(tenantIdProvider)!,
+      // The recording buttons (S5-15): `recording.control`, private, so never
+      // a reseller's. Hiding is a convenience; the service refuses regardless.
+      canControl:
+          session?.orgType != OrgType.reseller &&
+          ref.watch(canProvider('recording.control')),
+    );
   }
 }
 
@@ -83,38 +92,61 @@ String liveDuration(DateTime since, DateTime now) {
 }
 
 class _LiveCallsTable extends ConsumerWidget {
-  const _LiveCallsTable({required this.rows});
+  const _LiveCallsTable({
+    required this.rows,
+    required this.tenantId,
+    required this.canControl,
+  });
 
   final List<LiveCallRow> rows;
+  final String tenantId;
+
+  /// Whether the viewer may press the recording buttons (`recording.control`).
+  final bool canControl;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(clockProvider).value ?? DateTime.now();
     return SingleChildScrollView(
-      child: DataTable(
-        columns: const [
-          DataColumn(label: Text('From')),
-          DataColumn(label: Text('To')),
-          DataColumn(label: Text('State')),
-          DataColumn(label: Text('Duration')),
-          DataColumn(label: Text('Recording')),
-        ],
-        rows: [
-          for (final row in rows)
-            DataRow(
-              key: ValueKey(row.id),
-              cells: [
-                DataCell(Text(row.from.isEmpty ? '—' : row.from)),
-                DataCell(Text(row.to.isEmpty ? '—' : row.to)),
-                DataCell(Text(_stateLabels[row.state] ?? row.state)),
-                // Talking time once answered; until then, how long it has rung.
-                DataCell(
-                  Text(liveDuration(row.answeredAt ?? row.startedAt, now)),
-                ),
-                DataCell(Text(row.recording ? 'Recording' : '—')),
-              ],
-            ),
-        ],
+      child: SingleChildScrollView(
+        // The recording buttons make a row wider than a narrow window.
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columns: [
+            const DataColumn(label: Text('From')),
+            const DataColumn(label: Text('To')),
+            const DataColumn(label: Text('State')),
+            const DataColumn(label: Text('Duration')),
+            const DataColumn(label: Text('Recording')),
+            if (canControl) const DataColumn(label: Text('Actions')),
+          ],
+          rows: [
+            for (final row in rows)
+              DataRow(
+                key: ValueKey(row.id),
+                cells: [
+                  DataCell(Text(row.from.isEmpty ? '—' : row.from)),
+                  DataCell(Text(row.to.isEmpty ? '—' : row.to)),
+                  DataCell(Text(_stateLabels[row.state] ?? row.state)),
+                  // Talking time once answered; until then, how long it has rung.
+                  DataCell(
+                    Text(liveDuration(row.answeredAt ?? row.startedAt, now)),
+                  ),
+                  DataCell(Text(recordingLabel(row.recordingState))),
+                  if (canControl)
+                    DataCell(
+                      RecordingControls(
+                        tenantId: tenantId,
+                        callId: row.id,
+                        actOn: row.first.callUuid,
+                        recording: row.recordingState,
+                        controls: row.controls,
+                      ),
+                    ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }

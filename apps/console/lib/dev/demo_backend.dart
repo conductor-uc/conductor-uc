@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 
 import 'demo_access.dart';
 import 'demo_pbx.dart';
+import 'demo_realtime.dart';
 
 /// A stand-in for api-gateway so the console can be clicked through without a
 /// backend (`--dart-define=DEMO=true`). Development only: the real client is
@@ -38,6 +39,8 @@ class _DemoAdapter implements HttpClientAdapter {
   ) async {
     final access = _access(options);
     if (access != null) return access;
+    final recording = _recordingControl(options);
+    if (recording != null) return recording;
     final pbx = _pbx.handle(options, userId: demoUserId(_email));
     if (pbx != null) return pbx;
     switch (options.path) {
@@ -178,6 +181,23 @@ class _DemoAdapter implements HttpClientAdapter {
         }, 201);
     }
     return _json({}, 404);
+  }
+
+  /// The recording buttons on a live call (S5-15), a supervisor's and a
+  /// person's own: they change the demo hub's calls ([demoRecordingAction]).
+  ResponseBody? _recordingControl(RequestOptions options) {
+    final match = RegExp(
+      r'^/v1/tenants/[^/]+/(calls|me/live-calls)/([^/]+)/recording$',
+    ).firstMatch(options.path);
+    if (match == null || options.method != 'POST') return null;
+    final (status, body) = demoRecordingAction(
+      match.group(2)!,
+      '${_body(options)['action']}',
+      mine: match.group(1) != 'calls',
+    );
+    return status == 200
+        ? _json(body)
+        : _problem(status, '${body['code']}', '${body['detail']}');
   }
 
   /// What the service says when the hostname does not name the org (an email

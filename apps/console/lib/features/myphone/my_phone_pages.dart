@@ -14,6 +14,7 @@ import '../cdr/call_records_page.dart'
 import '../pbx/call_handling_dialog.dart';
 import '../pbx/pbx_api.dart';
 import '../voicemail/voicemail_page.dart' show MessagesView;
+import 'my_live_calls.dart';
 import 'my_phone_api.dart';
 
 /// The three "My phone" screens (a person's own call handling, voicemail and
@@ -23,6 +24,9 @@ import 'my_phone_api.dart';
 ///
 /// Every request here is to `/me/...`. Nothing on screen names an extension,
 /// mailbox or user, and none of it can be pointed at anyone else's.
+///
+/// Above each screen, a card for each call the person is on now, with its
+/// recording buttons ([MyLiveCalls], S5-15).
 class _MyPhoneFrame extends ConsumerWidget {
   const _MyPhoneFrame({
     required this.current,
@@ -66,6 +70,7 @@ class _MyPhoneFrame extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: 16),
+        const MyLiveCalls(),
         ...children,
       ],
     );
@@ -251,6 +256,10 @@ class MyVoicemailPage extends ConsumerWidget {
                 ),
               ),
             ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 12, 24, 0),
+            child: MyLiveCalls(),
+          ),
           Expanded(child: MessagesView(mailbox: box, mine: true)),
         ],
       ),

@@ -8,6 +8,7 @@ import 'package:console/dev/demo_backend.dart';
 import 'package:console/dev/demo_realtime.dart';
 import 'package:console/features/monitoring/live_calls.dart';
 import 'package:console/features/monitoring/monitoring_page.dart';
+import 'package:console/features/monitoring/recording_controls.dart';
 import 'package:console/features/pbx/pbx_api.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -70,6 +71,8 @@ Map<String, Object?> leg(
   String to = '102',
   String? bridgedTo,
   String recording = 'off',
+  String controls = 'none',
+  String? extension,
   int startedSecondsAgo = 65,
 }) => {
   'callUuid': id,
@@ -89,9 +92,25 @@ Map<String, Object?> leg(
             .toIso8601String(),
   'bridgedTo': bridgedTo,
   'recording': recording,
+  'controls': controls,
+  'extension': extension,
 };
 
 final fixedNow = DateTime.utc(2026, 9, 25, 12);
+
+/// Taps a recording button, scrolling the table to it first.
+Future<void> tapVisible(WidgetTester tester, String key) async {
+  final button = find.byKey(ValueKey(key));
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  await tester.tap(button);
+}
+
+/// The recording buttons on screen.
+Finder recordingButtons() => find.byWidgetPredicate((w) {
+  final key = w.key;
+  return key is ValueKey<String> && key.value.startsWith('recording-');
+});
 
 void main() {
   group('the realtime client', () {
@@ -340,6 +359,43 @@ void main() {
       expect(view.loaded, isFalse);
     });
 
+    test('S5-15: a paused recording, and the controls either leg says', () {
+      final book = LiveCallBook();
+      var view = book.apply(
+        TopicSnapshot({
+          'calls': [
+            leg('a', bridgedTo: 'b', controls: 'pause', recording: 'on'),
+            leg('b', direction: 'outbound'),
+          ],
+        }),
+      );
+      expect(view.calls.single.recordingState, 'on');
+      expect(view.calls.single.controls, 'pause');
+      view = book.apply(
+        const TopicEvent({
+          'type': 'call.updated',
+          'callUuid': 'a',
+          'changes': {'recording': 'paused'},
+        }),
+      );
+      expect(view.calls.single.recordingState, 'paused');
+      expect(view.calls.single.recording, isTrue);
+    });
+
+    test('S5-15: the buttons follow the feature codes rules', () {
+      List<String> labels(String controls, String recording) => [
+        for (final a in recordingActionsFor(controls, recording)) a.label,
+      ];
+      expect(labels('on_demand', 'off'), ['Record']);
+      expect(labels('on_demand', 'on'), ['Stop', 'Pause']);
+      expect(labels('on_demand', 'paused'), ['Stop', 'Resume']);
+      // A rule recording is never stopped.
+      expect(labels('pause', 'on'), ['Pause']);
+      expect(labels('pause', 'paused'), ['Resume']);
+      expect(labels('pause', 'off'), isEmpty);
+      expect(labels('none', 'on'), isEmpty);
+    });
+
     test('shows durations as minutes and seconds', () {
       expect(
         liveDuration(fixedNow.subtract(const Duration(seconds: 65)), fixedNow),
@@ -378,9 +434,14 @@ void main() {
       return hub;
     }
 
+    /// Each row's cells as text; a cell that is not text (the recording
+    /// buttons) reads as ''.
     List<List<String>> tableRows(WidgetTester tester) => [
       for (final row in tester.widget<DataTable>(find.byType(DataTable)).rows)
-        [for (final cell in row.cells) (cell.child as Text).data!],
+        [
+          for (final cell in row.cells)
+            cell.child is Text ? (cell.child as Text).data! : '',
+        ],
     ];
 
     testWidgets(
@@ -417,8 +478,8 @@ void main() {
           });
         await tester.pumpAndSettle();
         expect(tableRows(tester), [
-          ['101', '102', 'Talking', '1:00', '—'],
-          ['+15550142', '+15550100', 'Ringing', '0:08', '—'],
+          ['101', '102', 'Talking', '1:00', '—', ''],
+          ['+15550142', '+15550100', 'Ringing', '0:08', '—', ''],
         ]);
 
         socket
@@ -442,7 +503,7 @@ void main() {
           });
         await tester.pumpAndSettle();
         expect(tableRows(tester), [
-          ['101', '102', 'On hold', '1:00', 'Recording'],
+          ['101', '102', 'On hold', '1:00', 'Recording', ''],
         ]);
 
         socket.reply({
@@ -464,6 +525,182 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(MonitoringPage), findsNothing);
         expect(socket.sent.last, {'type': 'unsubscribe', 'topic': topic});
+      },
+    );
+
+    /// Opens Monitoring as the demo tenant administrator (who holds
+    /// `recording.control`) and hands it `calls` as the snapshot.
+    Future<FakeSocket> monitoringWith(
+      WidgetTester tester,
+      List<Map<String, Object?>> calls,
+    ) async {
+      resetDemoRecordings();
+      final hub = await openMonitoring(tester);
+      final socket = hub.last;
+      socket.reply({'type': 'authenticated'});
+      await tester.pumpAndSettle();
+      final topic = socket.sent.last['topic'] as String;
+      socket
+        ..reply({'type': 'subscribed', 'topic': topic})
+        ..reply({
+          'type': 'snapshot',
+          'topic': topic,
+          'data': {'calls': calls},
+        });
+      await tester.pumpAndSettle();
+      return socket;
+    }
+
+    testWidgets('S5-15: offers only the recording buttons each call allows', (
+      tester,
+    ) async {
+      await monitoringWith(tester, [
+        // Allows on demand, not recording: Record.
+        leg('demo-a1', bridgedTo: 'demo-a2', controls: 'on_demand'),
+        leg('demo-a2', direction: 'outbound', controls: 'on_demand'),
+        // Recorded by a rule that allows pausing: Pause only, never Stop.
+        leg(
+          'demo-c1',
+          from: '103',
+          to: '+15550199',
+          controls: 'pause',
+          recording: 'on',
+          startedSecondsAgo: 30,
+        ),
+        // Nothing allowed.
+        leg('demo-b1', from: '+15550142', startedSecondsAgo: 10),
+      ]);
+      expect(find.text('Actions'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('recording-start-demo-a1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('recording-pause-demo-c1')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('recording-stop-demo-c1')),
+        findsNothing,
+      );
+      expect(recordingButtons(), findsNWidgets(2));
+    });
+
+    testWidgets(
+      'S5-15: a press shows as pending, and the new state only once the live feed says so',
+      (tester) async {
+        final socket = await monitoringWith(tester, [
+          leg('demo-a1', bridgedTo: 'demo-a2', controls: 'on_demand'),
+          leg('demo-a2', direction: 'outbound', controls: 'on_demand'),
+        ]);
+        final topic = socket.sent.last['topic'] as String;
+        await tapVisible(tester, 'recording-start-demo-a1');
+        await tester.pump();
+        expect(find.text('Starting…'), findsOneWidget);
+        // The service has answered, but the feed has not shown it yet: still
+        // pending, and not claiming to record.
+        await tester.pump(const Duration(milliseconds: 500));
+        expect(find.text('Starting…'), findsOneWidget);
+        expect(tableRows(tester).single[4], '—');
+
+        socket.reply({
+          'type': 'event',
+          'topic': topic,
+          'event': {
+            'type': 'call.updated',
+            'callUuid': 'demo-a1',
+            'changes': {'recording': 'on'},
+          },
+        });
+        await tester.pumpAndSettle();
+        expect(find.text('Starting…'), findsNothing);
+        expect(tableRows(tester).single[4], 'Recording');
+        expect(
+          find.byKey(const ValueKey('recording-stop-demo-a1')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('recording-pause-demo-a1')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'S5-15: a refused press says why, in neutral words, and brings the buttons back',
+      (tester) async {
+        // The feed says on-demand, but the call's rule records it: the
+        // service refuses to stop a rule recording.
+        await monitoringWith(tester, [
+          leg(
+            'demo-c1',
+            from: '103',
+            to: '+15550199',
+            controls: 'on_demand',
+            recording: 'on',
+          ),
+        ]);
+        await tapVisible(tester, 'recording-stop-demo-c1');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(
+          find.text(
+            'A recording made by a rule cannot be stopped. It can be paused, if the rule allows.',
+          ),
+          findsOneWidget,
+        );
+        expect(find.text('Stopping…'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('recording-stop-demo-c1')),
+          findsOneWidget,
+        );
+        await tester.pumpAndSettle(const Duration(seconds: 5));
+      },
+    );
+
+    testWidgets(
+      'S5-15: no recording buttons without recording.control (monitor.calls only watches)',
+      (tester) async {
+        final hub = FakeHub();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              sessionProvider.overrideWith(
+                () => _FixedSession(
+                  const Session(
+                    accessToken: 'x',
+                    expiresIn: 600,
+                    orgId: 'tenant-1',
+                    orgType: OrgType.tenant,
+                    permissions: [],
+                  ),
+                ),
+              ),
+              knownPermissionsProvider.overrideWithValue({'monitor.calls'}),
+              realtimeConnectorProvider.overrideWithValue(hub.connect),
+              clockProvider.overrideWith((ref) => Stream.value(fixedNow)),
+            ],
+            child: const MaterialApp(home: Scaffold(body: LiveCallsPanel())),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final socket = hub.last;
+        socket.reply({'type': 'authenticated'});
+        await tester.pumpAndSettle();
+        final topic = socket.sent.last['topic'] as String;
+        socket
+          ..reply({'type': 'subscribed', 'topic': topic})
+          ..reply({
+            'type': 'snapshot',
+            'topic': topic,
+            'data': {
+              'calls': [leg('a', controls: 'on_demand')],
+            },
+          });
+        await tester.pumpAndSettle();
+        expect(find.text('Actions'), findsNothing);
+        expect(recordingButtons(), findsNothing);
+        expect(tableRows(tester).single, hasLength(5));
       },
     );
 
@@ -559,7 +796,21 @@ void main() {
         ['101', '102', 'Talking'],
         ['+15550142', '+15550100', 'Ringing'],
       ]);
-      expect(rows.first.last, 'Recording');
+      expect(rows.first[4], 'Recording');
+
+      // S5-15: Record on the internal call; the demo hub follows it.
+      resetDemoRecordings();
+      await tapVisible(tester, 'recording-start-demo-a1');
+      await tester.pump();
+      expect(find.text('Starting…'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(tableRows(tester)[1][4], 'Recording');
+      await tapVisible(tester, 'recording-pause-demo-a1');
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+      expect(tableRows(tester)[1][4], 'Paused');
+      resetDemoRecordings();
     });
   });
 }
