@@ -1,6 +1,6 @@
 # Implementation status
 
-Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `251ef45`, 2026-09-24; Stage 5 rows updated for call recording (G-111) on 2026-09-25; S1-15 (read permissions, G-10) added on 2026-09-25; S5-16 (voicemail audio) added on 2026-09-25; S5-08 (realtime hub) added on 2026-09-25; S5-11 to S5-15 (the recording follow-ups, G-111) added on 2026-09-25; S5-15 (live recording buttons, G-120) built on 2026-09-25.
+Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `8ef4209`, 2026-09-27, plus the `LICENSE` and manifest licence fields (O-6) committed alongside this refresh.
 
 **Done** = the task's scope exists and has tests; known caveats are named. **Partial** = some of the scope exists. **Not started** = no code.
 
@@ -10,17 +10,17 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 |---|---|---|---|
 | S0 Foundations (10) | 10 | 0 | 0 |
 | S1 Orgs, identity, single-node (16) | 14 | 1 | 1 |
-| S2 Core telephony (20) | 17 | 3 | 0 |
+| S2 Core telephony (21) | 17 | 3 | 1 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (11) | 0 | 4 | 7 |
 | S5 Recording, voicemail features, monitoring (16) | 13 | 1 | 2 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
-| Release readiness (7) | 1 | 1 | 5 |
-| **Total (109)** | **66** | **13** | **30** |
+| Release readiness (7) | 2 | 3 | 2 |
+| **Total (110)** | **67** | **15** | **28** |
 
-Milestones: M1 (S1) reached except API-key auth and organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below. M3, M4 not started.
+Milestones: M1 (S1) reached except API-key auth and organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below (and S2-21, retention, added later). M3 (S4 + S5) in progress: recording and voicemail-to-email are done, supervisor monitoring is partial (S5-09, S5-10), HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
 Services with an empty `src` (verified, no files): `analytics-service`, `chat-service`, `fax-service`, `provisioning-service`, `sms-service`. `example-service` is the S0-08 sample.
 
@@ -49,7 +49,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S1-04 | Done | `routes/brand.routes.ts` (brand, asset presign, `/v1/public/brand`, `/v1/session/brand`) |
 | S1-05 | Done | `services/identity-service`: login, TOTP MFA, refresh cookie, JWKS, reset, invitations, MFA reset |
 | S1-06 | Done | `packages/authz` (`hard-rules.ts`, `roles.ts`); identity `roles.routes.ts`, `grants.routes.ts` |
-| S1-07 | Done | `packages/audit`, identity `audit.consumer.ts`, `GET /v1/orgs/:orgId/audit-events`. Gaps: G-12 (partition upkeep), G-15 (not all writes audited) |
+| S1-07 | Done | `packages/audit`, identity `audit.consumer.ts`, `GET /v1/orgs/:orgId/audit-events`; a reseller's read leaves out `private` rows (G-13). Gaps: G-12 (partition upkeep, S2-21), G-15 (not all writes audited) |
 | S1-08 | Partial | `services/api-gateway`: JWT auth, signed context, rate limit, CORS, path routing. API-key auth returns `api_key_auth_not_implemented` (G-14). The WebSocket hub came with S5-08 |
 | S1-09 | Done | `pbx-config-service` extensions, SIP credentials, HA1/HA1B, reveal and reset-password routes |
 | S1-10 | Done | `telephony/freeswitch` (Dockerfile, conf), neutral identity, OpenSIPs-only ACL |
@@ -76,14 +76,15 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S2-10 | Done | `telephony/freeswitch/scripts` flow runner; `call_flow.test.ts`, `tests/lua`. Caveats G-43, G-46 |
 | S2-11 | Done | `services/call-control` (`esl/client.ts`, `normalize.ts`, `redis/registry.ts`) |
 | S2-12 | Done | `packages/affinity`; call-control `affinity/manager.ts` and `/internal/v1/affinity/...` |
-| S2-13 | Done | queue/agent/tier CRUD in pbx-config-service, callcenter projection; `queue.test.ts`. G-47: one related bug left open |
+| S2-13 | Done | queue/agent/tier CRUD in pbx-config-service, callcenter projection; `queue.test.ts`. G-47 (a) open: tier assignments are not loaded into `mod_callcenter` on a running node; `recording_agent.test.ts` sees distribution to an agent live only after adding the tier by hand |
 | S2-14 | Done | `parking-lot.routes.ts`, `parking.test.ts`. `valet_parking` return-on-timeout unimplemented (G-48) |
 | S2-15 | Done | `conference-room.routes.ts`, `conference.test.ts` (audio, PIN). Video fields absent (G-50) |
 | S2-16 | Partial | `services/voicemail-service` (mailboxes, messages, greeting, PIN), Lua app, `voicemail.test.ts`. MWI event has no consumer (G-42) |
 | S2-17 | Partial | SUBSCRIBE dialog-info handled in `opensips.cfg.template`; `presence.test.ts` proves handshake and one NOTIFY. State transitions unproven (G-38) |
 | S2-18 | Done | `services/cdr-service`: `/ingest/json-cdr`, CDR v1, `/cdrs`, `/cdr-exports`, `/billing-records` (D-013). Gaps: G-51 fields, G-52 partitions, G-53 master rollup |
 | S2-19 | Done | `freeswitch-2` in compose; dispatcher over two nodes; per-test cleanup covers both |
-| S2-20 | Done | 15 files in `tests/sip/test`; CI per-PR smoke plus nightly full suite |
+| S2-20 | Done | 25 files in `tests/sip/test`; CI `sip` job runs the full suite nightly and by hand (G-110) |
+| S2-21 | Not started | no partition job; `CDR_RETENTION_MONTHS` and `AUDIT_RETENTION_MONTHS` appear nowhere in `services/` or `packages/` (G-12, G-52) |
 
 ## Stage 3
 
@@ -105,7 +106,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 
 | ID | Status | Evidence |
 |---|---|---|
-| S4-01 | Partial | O-1 recommendation in decisions.md only; no ADR or topology doc; `infra/deploy` is empty |
+| S4-01 | Partial | O-1 accepted in decisions.md (2026-09-25: Compose per server now, Kubernetes for the application tier later); `docs/operations/deploy-distributed.md` describes the Compose roles, unverified on real servers and without HA; no ADR or HA topology doc; `infra/deploy` is empty |
 | S4-02 | Partial | dispatcher probing (`ds_ping_interval`) and round-robin over two nodes; no weights or draining |
 | S4-03 | Partial | leases live in Redis via call-control; compose runs one call-control replica; no multi-replica test |
 | S4-04 | Not started | `call-control/src/events.ts` only comments the `call.lost` sequence; no teardown, synthetic CDRs, or Redis rebuild |
@@ -121,16 +122,16 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 
 | ID | Status | Evidence |
 |---|---|---|
-| S5-01 | Done | `services/recording-service`: policies by tenant, extension, queue and DID and by direction (`domain/policy.ts`, narrowest scope wins, ties go to not recording), `/internal/v1/recordings/evaluate` and `/register`. No agent scope (G-111) |
-| S5-02 | Done | telephony-config `recording-client.ts` (cached, fails open and flags the call) and `recordingActions` in `xml.ts`: announcement as early media, then `record_session` armed with `execute_on_answer`, into the spool. Covers extension, outbound, and DID to extension, ring group or queue; not calls through an IVR flow (G-111) |
+| S5-01 | Done | `services/recording-service`: policies by tenant, extension, queue and DID and by direction (`domain/policy.ts`, narrowest scope wins, ties go to not recording), `/internal/v1/recordings/evaluate` and `/register`. Agent scope added by S5-14 (G-111) |
+| S5-02 | Done | telephony-config `recording-client.ts` (cached, fails open and flags the call) and `recordingActions` in `xml.ts`: announcement as early media, then `record_session` armed with `execute_on_answer`, into the spool. Covers extension, outbound, and DID to extension, ring group or queue; calls through an IVR flow by S5-11 (G-111) |
 | S5-03 | Done | `recording-service/src/uploader` (settle, presigned PUT, server-side size and MD5 check, delete, backoff, stuck-file alert and metrics); one sidecar per node in compose on a shared tmpfs spool; verified live by `tests/sip/test/recording.test.ts` (G-111) |
 | S5-04 | Done | search with filters and cursor paging, play and download URLs, delete; per-request grants scoped to extension, queue or DID (`authorize.ts`, identity `/access`); every URL issuance and delete audited |
 | S5-05 | Done | tenant retention days (`recording_settings`), `retention.ts` sweep (audio deleted, row marked expired, stale pending marked failed) and an S3 lifecycle rule as a backstop |
-| S5-06 | Not started | no transcription adapter (O-3 open) |
+| S5-06 | Not started | O-3 accepted 2026-09-25 (a hosted engine chosen by evaluation, plus self-hosted Whisper; off by default, opt-in per tenant or mailbox); no `TranscriptionProvider` or adapter in the code |
 | S5-07 | Done | voicemail-to-email: `voicemail.consumer.ts`, `voicemail.mjml`, mailbox email settings in voicemail-service (G-107). Not tried with a real call or SMTP server |
-| S5-08 | Done | `api-gateway/src/realtime/`: `GET /v1/ws` (auth by first message and renewal, origin check, per-address/person/connection limits, heartbeat), topics `tenant:{t}:calls` (`monitor.calls`, private, new in `@cuc/authz`), `:presence` (`monitor.presence`, derived from live calls), `:queues` (`queue.read`, nothing publishes yet), each authorized like a route (ancestry via org lineage, H1, identity permission lookup) and rechecked every 30 s; private subscriptions audited. Ordered NATS consumer per gateway process; snapshot from call-control's new `GET /internal/v1/tenants/:t/calls`, which also gained tenant on every channel event, trunk-call tenant attachment, unhold and recording events. Console `core/realtime.dart` and a Live calls panel on Monitoring. Tests: `api-gateway/test/realtime.test.ts` (real NATS, 25), `realtime-model.test.ts`, call-control `live-calls.route.test.ts`, console `monitoring_test.dart`. Registration/DND presence and queue events are G-119; not tried against a real FreeSWITCH (RECORD_START/STOP, CHANNEL_UNHOLD) |
+| S5-08 | Done | `api-gateway/src/realtime/`: `GET /v1/ws` (auth by first message and renewal, origin check, per-address/person/connection limits, heartbeat), topics `tenant:{t}:calls` (`monitor.calls`, private, new in `@cuc/authz`), `:presence` (`monitor.presence`, derived from live calls), `:queues` (`queue.read`, nothing publishes yet), each authorized like a route (ancestry via org lineage, H1, identity permission lookup) and rechecked every 30 s; private subscriptions audited. Ordered NATS consumer per gateway process; snapshot from call-control's new `GET /internal/v1/tenants/:t/calls`, which also gained tenant on every channel event, trunk-call tenant attachment, unhold and recording events. Console `core/realtime.dart` and a Live calls panel on Monitoring. Tests: `api-gateway/test/realtime.test.ts` (real NATS, 25), `realtime-model.test.ts`, call-control `live-calls.route.test.ts`, console `monitoring_test.dart`. Live test `tests/sip/test/realtime.test.ts` (a recorded carrier call: legs, answer, recording, presence, end; hold/unhold not tried live). Registration/DND presence and queue events are G-119 |
 | S5-09 | Not started | call-control has no listen/whisper/barge |
-| S5-10 | Partial | Voicemail (`features/voicemail`), Call records (`features/cdr`) and Recordings (`features/recordings`: list, filters, play, download, delete, rules, retention) screens exist; `/monitoring` shows live calls (S5-08) but no presence board or monitor actions; `/reports` is still a placeholder |
+| S5-10 | Partial | Voicemail (`features/voicemail`), Call records (`features/cdr`) and Recordings (`features/recordings`: list, filters, play, download, delete, rules, retention) screens exist; `/monitoring` shows live calls (S5-08) with record, stop, pause and resume buttons (S5-15) but no presence board or listen/whisper/barge (S5-09); `/reports` is still a placeholder |
 | S5-11 | Done | Calls through an IVR flow are recorded (G-111): the DID-to-flow branch of `/fs/dialplan` is recording-eligible (tenant and DID rules, from the flow's answer); `/fs/flow/.../{extension,ring-group,queue}` also return a recording decision for the target, which `flow_runner.lua` carries out (`api_on_answer` + `uuid_record` for extension and ring group, `record_session` for a queue), never twice. Unit tests in `telephony-config/test/recording.fs.test.ts`; live test `tests/sip/test/recording_flow.test.ts` passes (DID rule, extension rule, no rule) |
 | S5-12 | Done | "Recording required" per tenant (G-111): `recording_settings.fail_closed` in recording-service (`PUT .../recording-settings`, audited), emitted as `recording.settings.updated` and kept in telephony-config's own `recording_settings` (`recording.consumer.ts`, reconciled from `/internal/v1/recordings/fail-closed-tenants`). An unavailable decision for such a tenant gets a refusal document (neutral tone as early media, then SIP 500 at the caller: FreeSWITCH's 503, as OpenSIPs relays it) at call setup, flow entry and flow hand-off; "no recording needed" is never refused. Console Rules tab switch. Tests: `recording-service/test/policy.routes.test.ts`, `telephony-config/test/recording.fs.test.ts`, `recording.consumer.test.ts`, `recording.client.test.ts`, console `recordings_test.dart`; live test `tests/sip/test/recording_required.test.ts` passes (required and down: refused, 401 never rings; required and up, or not required: placed) |
 | S5-13 | Done | On-demand recording and pause/resume by feature code (G-111): per-rule `allowOnDemand` (migration 004, policy API, console rule editor); `*1` start/stop and `*2` pause/resume bound with `bind_meta_app` for the internal party on calls whose deciding rule allows it; `recording_control.lua` asks telephony-config `/fs/recording/:tenantId/control`, which relays to recording-service `/internal/v1/recordings/control` (decides, updates `on_demand`/`stopped_at`/`pause_intervals` and audits in one transaction), then runs `uuid_record start|stop|mask|unmask`. Tests: `recording-service/test/control.routes.test.ts`, `policy.domain.test.ts`, telephony-config `recording.fs.test.ts`, `recording.context.test.ts`, `recording.client.test.ts`, console `recordings_test.dart`; live test `tests/sip/test/recording_on_demand.test.ts` passes (`*1` twice, `*2` twice, `*1` with no rule allowing it) |
@@ -177,9 +178,9 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 |---|---|---|
 | Security review (auth, H1, secrets, SIP exposure) | Not started | no review record; `SECURITY.md` is a disclosure policy only |
 | External penetration test | Not started | none |
-| Backup and restore runbook | Not started | no runbook in the repo |
-| Operations runbooks | Not started | none |
-| License decision (O-6) | Not started | O-6 open; no `LICENSE` file |
+| Backup and restore runbook | Partial | `docs/operations/operations.md` §4: what to back up, logical dump and restore, binary logs for point-in-time recovery, object storage versioning or replication. Not tested |
+| Operations runbooks | Partial | `docs/operations/operations.md`: upgrades, monitoring, secret rotation, troubleshooting (incl. trunks); no node drain (not possible yet, S4-02) or failover drills |
+| License decision (O-6) | Done | O-6 accepted 2026-09-25: `LICENSE` (AGPL-3.0), `"license": "AGPL-3.0-only"` in every `package.json`, `THIRD_PARTY_NOTICES.md`. Still open under O-6: a contributor licence agreement before outside contributions, counsel's confirmation |
 | Emergency calling scope (G-1) | Partial | routes, locations, and dialplan built; notification hook and reseller documentation missing |
 | Billing data access (D-013) | Done | `billing.read` permission, `GET /v1/tenants/:tenantId/billing-records`; master rollup missing (G-53) |
 
@@ -201,22 +202,29 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | Platform health screen | Unplanned | `platform-health.ts`, `platform_health_page.dart` |
 | Extension SIP password reset; `password_reset.test.ts` | Near S1-09 | `POST .../extensions/:id/reset-password` |
 | Hostname-based org resolution at sign-in | Near S3-04 | G-61 |
-| Admin reset of a user's MFA | Near S3-04 | G-100 |
-| Nightly CI split, self-hosted runner, per-suite JetStream | Near S0-06 / S2-20 | `.github/workflows/ci.yml` |
+| Admin reset of a user's MFA, confirmed with the admin's own code (step-up) | Near S3-04 | G-100; identity `auth/step-up.ts` |
+| Services refuse requests without gateway identity or the internal service token; signed client address, `TRUSTED_PROXIES` | Near S0-02 / S1-08 | G-112, G-113; `@cuc/http` `authentication.ts`, `context.ts`; api-gateway `config.ts`, `routing/proxy.ts` |
+| Signing-key rotation, KEK re-wrap, secrets from `NAME_FILE` | Near S0-09 / S1-05 | G-116; identity `signing-key-rotation.ts`, `cli/rotate-signing-key-command.ts`; `packages/db` `rewrap.ts` and per-service `kek-rewrap.ts`; `@cuc/config` `load.ts` |
+| One-time links issued at send time; outbox and stream retention | Near S0-04 / S3-03 | G-55; `packages/events` `relay.ts` (`OUTBOX_RETENTION_DAYS`), `bus.ts` (`NATS_STREAM_MAX_AGE_DAYS`) |
+| Advertised media address (`FS_EXTERNAL_RTP_IP`); flood-protection exemption for media nodes and trunks | Near S1-10 / S1-11 | G-114, G-117; `telephony/freeswitch/conf/vars.xml`, `opensips.cfg.template`; `media_address.test.ts`, `flood_protection.test.ts` |
+| First-administrator bootstrap, dev-stack health checks | Near S0-05 / S1-02 | G-115; org-service `cli/bootstrap-master.ts`, `make seed` |
+| Media playback in the console; storage CORS | Near S3-08 | G-80; pbx-config `media-asset.routes.ts` (`download-url`), `packages/storage` `cors.ts` |
+| Operations and deployment guides | Near S4-01 / release readiness | `docs/operations/` (all-in-one, distributed, network, DNS and TLS, configuration reference, day-2 operations) |
+| Nightly CI split, self-hosted runner, per-suite JetStream | Near S0-06 / S2-20 | `.github/workflows/ci.yml`; the live SIP suite runs only in the `sip` job (`SKIP_SIP_TESTS` in `check`) |
 | `SECURITY.md`, `CODEOWNERS`, `CODE_OF_CONDUCT.md` | Near release readiness | repo root |
 
 ## Ten biggest gaps
 
-1. Recording (S5-01 to S5-05): no service, policy, upload, or retention.
-2. No HA (S4-03 to S4-08): no failover handling, OpenSIPs clustering, data-store HA, or chaos tests; only one dispatcher path over two nodes.
-3. No production deployment manifests or topology ADR (S4-01, S4-11).
-4. Console has no presence board, monitor actions, or reports screens (S5-10, S7-07); Monitoring shows live calls (S5-08). Voicemail, call records and outbound routes have screens now (G-106, G-107).
-5. Release readiness: no security review, pen test, backup/restore, runbooks, or license (O-6).
-6. Voicemail transcription and MWI wiring (S5-06, G-42, G-108). Voicemail-to-email is built (G-107).
-7. Realtime is partial: the gateway WebSocket hub and live calls exist (S5-08), but no monitor/whisper/barge (S5-09), no registration or DND presence and no queue events (G-119), and no wallboards (S7-06).
-8. Emergency calling incomplete: no emergency-call notification, carrier-specific location format unresolved (S2-06, G-1, G-33).
-9. Fax, SMS, chat, video, analytics all unbuilt (S6, S7); five services are empty.
-10. API-key auth missing (G-14); provisioning limited to Yealink with no BLF keys and no zero-touch redirection (S8-02, S8-03); audit covers only some writes (G-15).
+1. No HA (S4-02 to S4-08): every server but the media nodes is a single point of failure; no failover handling (`call.lost`), OpenSIPs clustering, data-store HA, or chaos tests; only one dispatcher path over two nodes.
+2. No tested production deployment: O-1 is accepted (Compose per server now), but there is no topology ADR and no manifests (S4-01, S4-11, `infra/deploy` empty); the `docs/operations` guides are unverified on real servers; the release workflow and image publishing (O-5) are not built.
+3. Release readiness: no security review or penetration test; backup/restore and operations are documented (`docs/operations/operations.md`) but untested, with no failover drills; O-6 still needs a contributor licence agreement and counsel's confirmation.
+4. Queues need a hand-added tier: tier assignments are not loaded into `mod_callcenter` on a running node, so distribution to agents depends on it (G-47 (a), S2-13).
+5. Emergency calling incomplete: no emergency-call notification, carrier-specific location format unresolved (S2-06, G-1, G-33).
+6. Supervisor monitoring, needed for M3, is partial: live calls and live recording buttons exist (S5-08, S5-15), but no listen/whisper/barge (S5-09), no presence board, registration or DND presence, or queue events (S5-10, G-119), and no reports or wallboards (S7-06, S7-07).
+7. Data lifecycle: no organisation deletion or export (S1-16, G-11) and no retention job for call-record and audit partitions (S2-21, G-12, G-52).
+8. Voicemail transcription (S5-06; O-3 now accepted) and MWI to phones (G-42, G-108).
+9. API-key auth missing (G-14); audit covers only some writes (G-15); per-tenant call rate limit not built (G-31); provisioning limited to Yealink with no BLF keys and no zero-touch redirection (S8-02, S8-03).
+10. Fax, SMS, chat, video, analytics all unbuilt (S6, S7); five services are empty.
 
 ## Built features catalog
 
@@ -237,6 +245,8 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | Groups | Parking lots; conference rooms (audio, PIN) | `/parking-lots`, `/conference-rooms`; console Parking lots, Conference rooms |
 | Call flows | Draft, validate, publish, rollback, versions; visual builder | callflow-service `/flows`; console Call flows |
 | Voicemail | Mailboxes, PIN reset, greeting upload, messages, play URL, email settings, voicemail to email | voicemail-service `/voicemail/mailboxes`; notification-service `voicemail.consumer.ts`; console Voicemail (no mailbox create or greeting upload) |
+| Recording | Rules by tenant, extension, agent, queue, DID and direction; required-recording option; on-demand and pause by feature code or console button; search, play, download, delete; retention | recording-service `/recording-policies`, `/recording-settings`, `/recordings`; call-control `.../calls/:uuid/recording`; console Recordings, Monitoring, My phone |
+| Monitoring | Live calls per tenant, and a person's own live calls, over WebSocket | api-gateway `/v1/ws`; console Monitoring, My phone |
 | Schedules | Business hours and holidays; used by `time_condition` | pbx-config-service `/schedules`; console Schedules |
 | Emergency | Emergency locations per extension | `/emergency-locations`; console Settings |
 | Media | Upload, transcode, playback via `http_cache` | pbx-config-service `/media-assets`, media-worker; console Media |
