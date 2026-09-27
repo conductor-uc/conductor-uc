@@ -224,6 +224,14 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
   registerProxy(app, {
     table,
     timeoutMs: config.PROXY_TIMEOUT_MS,
+    // S5-09: these return once the supervisor's own phone has answered.
+    slowRoutes: [
+      {
+        method: 'POST',
+        path: /^\/v1\/tenants\/[^/]+\/calls\/[^/]+\/(?:listen|whisper|barge)$/,
+        timeoutMs: config.PROXY_MONITOR_TIMEOUT_MS,
+      },
+    ],
     internalHeaderSigningSecret: config.INTERNAL_HEADER_SIGNING_SECRET,
   });
 
