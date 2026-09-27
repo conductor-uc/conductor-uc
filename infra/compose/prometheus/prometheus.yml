@@ -1,0 +1,43 @@
+# S4-13 (G-124): the operations console's history. Every service's /metrics
+# (@cuc/http: HTTP timings, outbox backlog, and each service's own gauges),
+# and each recording uploader's. The `service` label names the source; the
+# gateway's chart catalog groups by it.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 5s
+
+scrape_configs:
+  - job_name: services
+    static_configs:
+      - targets: ['api-gateway:8080']
+        labels: { service: api-gateway }
+      - targets: ['identity-service:8080']
+        labels: { service: identity-service }
+      - targets: ['org-service:8080']
+        labels: { service: org-service }
+      - targets: ['pbx-config-service:8080']
+        labels: { service: pbx-config-service }
+      - targets: ['callflow-service:8080']
+        labels: { service: callflow-service }
+      - targets: ['voicemail-service:8080']
+        labels: { service: voicemail-service }
+      - targets: ['cdr-service:8080']
+        labels: { service: cdr-service }
+      - targets: ['trunk-service:8080']
+        labels: { service: trunk-service }
+      - targets: ['recording-service:8080']
+        labels: { service: recording-service }
+      - targets: ['call-control:8080']
+        labels: { service: call-control }
+      - targets: ['telephony-config:8080']
+        labels: { service: telephony-config }
+      - targets: ['media-worker:8080']
+        labels: { service: media-worker }
+      - targets: ['notification-service:8080']
+        labels: { service: notification-service }
+  - job_name: uploaders
+    static_configs:
+      - targets: ['recording-uploader:9464']
+        labels: { service: recording-uploader }
+      - targets: ['recording-uploader-2:9464']
+        labels: { service: recording-uploader-2 }

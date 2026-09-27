@@ -1,7 +1,7 @@
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createRemotePermissionResolver, createServer } from '@cuc/http';
+import { createRemotePermissionResolver, createServer, observeOutbox } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
 import { configSchema, loadServiceConfig } from './config.js';
@@ -77,8 +77,8 @@ const app = await createServer({
   }),
 });
 
-// S4-12: the outbox backlog, for the operations console (`/statusz`).
-app.addStatusSection('outbox', () => relay.status());
+// S4-12/S4-13: the outbox backlog, for the operations console (`/statusz`, `/metrics`).
+observeOutbox(app, relay);
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('outbox', async () => {

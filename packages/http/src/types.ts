@@ -1,6 +1,7 @@
 import type { RegisteredRoute, RouteContract } from './contract.js';
 import type { RequestContext } from './context.js';
 import type { ReadinessCheck, StatusSection } from './health.js';
+import type { GaugeOptions, GaugeRead } from './metrics.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -15,6 +16,8 @@ declare module 'fastify' {
     addReadinessCheck: (name: string, check: ReadinessCheck) => void;
     /** S4-12: adds a named section to `GET /statusz` (e.g. `outbox`). */
     addStatusSection: (name: string, section: StatusSection) => void;
+    /** S4-13: adds a gauge to `GET /metrics`, read at each scrape. */
+    addGauge: (name: string, options: GaugeOptions, read: GaugeRead) => void;
   }
 
   /**

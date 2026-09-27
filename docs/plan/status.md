@@ -118,7 +118,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S4-10 | Partial | O-7 recorded as deferred in decisions.md; no RTPengine |
 | S4-11 | Not started | `infra/deploy` empty |
 | S4-12 | In progress | G-124: `platform.observe`/`platform.operate`; `/statusz` on every service; `GET /v1/platform/overview`; audited drain, return and weight routes; the console's Operations section |
-| S4-13 | Not started | no Prometheus or `/metrics` beyond the uploader's |
+| S4-13 | In progress | backend built: `/metrics` on every service (OpenTelemetry), node, OpenSIPs, dispatcher, consumer and store gauges, Prometheus in compose (15 days), `GET /v1/platform/metrics/{chart}` from a fixed catalog; the console's History tab not yet |
 
 ## Stage 5
 

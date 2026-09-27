@@ -3,7 +3,7 @@ import { redactConfig } from '@cuc/config';
 import { fileKekFromConfig } from '@cuc/crypto';
 import { createDatabase, migrateToLatest, REWRAP_INTERVAL_MS } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createServer } from '@cuc/http';
+import { createServer, observeOutbox } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 
 import { createAuthService } from './auth/auth-service.js';
@@ -117,8 +117,8 @@ const app = await createServer({
     (await permissionLookup.ofUser(actor.id, actor.orgId)).has(permission),
 });
 
-// S4-12: the outbox backlog, for the operations console (`/statusz`).
-app.addStatusSection('outbox', () => relay.status());
+// S4-12/S4-13: the outbox backlog, for the operations console (`/statusz`, `/metrics`).
+observeOutbox(app, relay);
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('outbox', async () => {

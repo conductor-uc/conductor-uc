@@ -288,6 +288,7 @@ networks:
 volumes:
   mariadb-data:
   nats-data:
+  prometheus-data:
   # FreeSWITCH writes recordings and voicemail messages here (as root); the
   # uploader (uid 65532) uploads and deletes them. tmpfs: nothing durable on the media server. 0777, NOT 1777.
   recording-spool:
@@ -347,6 +348,24 @@ services:
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8222/healthz']
       interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # The operations console's history (S4-13): scrapes every service's /metrics.
+  # Its configuration is ./prometheus.yml (section 7.7).
+  prometheus:
+    <<: *service
+    image: prom/prometheus:v3.5.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:9090/-/ready']
+      interval: 10s
       timeout: 5s
       retries: 10
 
@@ -611,6 +630,7 @@ services:
       # call-control uses.
       PLATFORM_STATUS_TARGETS: media-worker=http://media-worker:8080,notification-service=http://notification-service:8080
       NATS_MONITOR_URL: http://nats:8222
+      PROMETHEUS_URL: http://prometheus:9090   # the console's history (S4-13)
     # Liveness through the plain-HTTP listener: it answers 308 without TLS, so the
     # check needs no certificate for 127.0.0.1 and no disabled verification.
     healthcheck:
@@ -732,6 +752,38 @@ Only if you cannot use a hosted object store. Add this service, create DNS `s3.v
 ```
 
 Then set `STORAGE_ENDPOINT=https://s3.voice.example.net:9000`, `STORAGE_ORIGIN=https://s3.voice.example.net:9000`, `STORAGE_FORCE_PATH_STYLE=true`, and open TCP 9000 in the firewall (`sudo ufw allow 9000/tcp`; Docker-published anyway). Containers reach MinIO through the server's public address (hairpin). If that fails on your host, add `extra_hosts: ['s3.voice.example.net:host-gateway']` to every service that uses storage. Using the root credentials as the platform's keys is simplest; a dedicated MinIO user with bucket-management rights is better. Recordings and voicemail then live on this server's disk: add `/srv/minio` to your backups.
+
+### 7.7 Prometheus
+
+Save this as `/opt/voice/prometheus.yml`. It scrapes every service on the backplane every 15 seconds; the `service` label is what the console's history charts group by. The gateway serves HTTPS on 443 for the console's hostname, so it is scraped over HTTPS with that name.
+
+```yaml
+global:
+  scrape_interval: 15s
+  scrape_timeout: 5s
+scrape_configs:
+  - job_name: services
+    static_configs:
+      - { targets: ['identity-service:8080'], labels: { service: identity-service } }
+      - { targets: ['org-service:8080'], labels: { service: org-service } }
+      - { targets: ['pbx-config-service:8080'], labels: { service: pbx-config-service } }
+      - { targets: ['trunk-service:8080'], labels: { service: trunk-service } }
+      - { targets: ['callflow-service:8080'], labels: { service: callflow-service } }
+      - { targets: ['voicemail-service:8080'], labels: { service: voicemail-service } }
+      - { targets: ['recording-service:8080'], labels: { service: recording-service } }
+      - { targets: ['cdr-service:8080'], labels: { service: cdr-service } }
+      - { targets: ['telephony-config:8080'], labels: { service: telephony-config } }
+      - { targets: ['call-control:8080'], labels: { service: call-control } }
+      - { targets: ['media-worker:8080'], labels: { service: media-worker } }
+      - { targets: ['notification-service:8080'], labels: { service: notification-service } }
+  - job_name: gateway
+    scheme: https
+    tls_config: { server_name: console.example.com }   # your console hostname
+    static_configs:
+      - { targets: ['api-gateway:443'], labels: { service: api-gateway } }
+```
+
+The uploader runs on the host network; add `host.docker.internal:9464` (with `extra_hosts: ['host.docker.internal:host-gateway']` on the prometheus service) to include its spool figures. Prometheus is not published on the host: look at it with `docker compose exec prometheus wget -qO- 'http://127.0.0.1:9090/api/v1/targets'`, or through the console's history.
 
 ## 8. First start
 

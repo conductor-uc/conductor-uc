@@ -100,4 +100,30 @@ Charts use `fl_chart` (MIT).
 
 ## 3. History (S4-13)
 
-Services export metrics in Prometheus format through OpenTelemetry (09 §4) on `/metrics`: HTTP RED, outbox and consumer lag, and in call-control the media nodes' calls, sessions and CPU. OpenSIPs exports its statistics with its own `prometheus` module. A Prometheus server in the deployment scrapes them (15 days by default). The gateway answers `GET /v1/platform/metrics/{chart}?range=1h|6h|24h|7d` from a **fixed catalog** of charts (never a query from the browser), and the console's Overview shows those lines in place of its own rolling ones.
+As built (backend). Every service serves `GET /metrics` in Prometheus' text format, from an OpenTelemetry meter (`@cuc/http`, 09 §4). Like `/readyz` it is on the internal network only, and it carries counts and timings, never tenant data: a label is a route pattern, a node id, a stream or a consumer.
+
+| Metric | From | Labels |
+|---|---|---|
+| `http_server_request_duration_seconds` (histogram) | every service | `http_request_method`, `http_route` (the pattern, never the path), `http_response_status_code` |
+| `outbox_pending`, `outbox_oldest_pending_seconds`, `outbox_failed` | every relaying service (`observeOutbox`) | |
+| `fs_node_up`, `fs_node_draining`, `fs_node_calls`, `fs_node_sessions`, `fs_node_max_sessions`, `fs_node_cpu_idle_percent` | call-control (the registry and each HEARTBEAT) | `node` |
+| `opensips_up`, `opensips_registrations`, `opensips_active_dialogs`, `opensips_early_dialogs`, `opensips_transactions`, `opensips_shm_used_bytes`; `fs_dispatcher_weight`, `fs_dispatcher_active`; `mariadb_up`, `mariadb_connections` | telephony-config (MI and MariaDB) | `node` for the dispatcher |
+| `nats_consumer_pending`, `nats_consumer_ack_pending`, `nats_consumer_redelivered`, `nats_stream_messages`; `redis_used_memory_bytes`, `redis_connected_clients`, `redis_ops_per_second` | api-gateway (its NATS and Redis connections) | `stream`, `consumer` |
+| the uploader's spool metrics | each recording uploader (`METRICS_PORT`) | |
+
+OpenSIPs' own `prometheus` module is not in its image; telephony-config already reads the same statistics over MI and alone talks to OpenSIPs, so it exports them.
+
+A Prometheus server (`prom/prometheus`, Apache-2.0) scrapes every service every 15 s and keeps 15 days (`PROMETHEUS_RETENTION`). Each target carries a `service` label, which the charts group by. In compose it is `infra/compose/prometheus/prometheus.yml`.
+
+`GET /v1/platform/metrics/{chart}?range=1h|6h|24h|7d` (`platform.observe`, master only) answers one chart from a **fixed catalog** in the gateway (`platform-history.ts`); a browser names a chart and a range and never sends a query. About 120 points per range (a 30 s step over an hour, 84 minutes over a week).
+
+| Chart | What | Lines |
+|---|---|---|
+| `calls-by-node`, `sessions-by-node` | calls and sessions on each media node | node |
+| `node-cpu` | each node's busy CPU (100 − idle) | node |
+| `registrations`, `dialogs` | registered phones, calls at the edge | one |
+| `request-rate`, `error-rate` | requests and 5xx answers per second (5-minute rate) | service |
+| `latency-p95` | 95th percentile response time | service |
+| `outbox-pending`, `consumer-backlog` | events waiting to be published, and to be consumed | service, consumer |
+
+Answers `{chart, unit, range, stepSeconds, series: [{label, points: [[unixSeconds, value], ...]}]}`; 404 `unknown_chart`; 503 `history_unavailable` when the gateway has no `PROMETHEUS_URL` or Prometheus does not answer, and the console keeps drawing only what it has seen since it opened. The console's History tab is the next step.

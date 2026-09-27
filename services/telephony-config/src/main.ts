@@ -2,7 +2,7 @@ import { createAffinityRegistry } from '@cuc/affinity';
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createServer } from '@cuc/http';
+import { createServer, observeOutbox } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { storageFromConfig } from '@cuc/storage';
 import { Redis } from 'ioredis';
@@ -12,6 +12,7 @@ import { createCallControlClient } from './call-control-client.js';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createCertificateConsumer } from './consumers/certificate.consumer.js';
 import { createNodeConsumer } from './consumers/node.consumer.js';
+import { registerPlatformMetrics } from './platform-metrics.js';
 import { createPlatformStatus } from './platform-status.js';
 import { registerPlatformStatusRoutes } from './routes/platform-status.routes.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
@@ -216,8 +217,8 @@ const app = await createServer({
   logger,
 });
 
-// S4-12: the outbox backlog, for the operations console (`/statusz`).
-app.addStatusSection('outbox', () => relay.status());
+// S4-12/S4-13: the outbox backlog, for the operations console (`/statusz`, `/metrics`).
+observeOutbox(app, relay);
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('opensips_db', async () => ({
   status: (await opensipsDb.ping()) ? 'pass' : 'fail',
@@ -259,10 +260,13 @@ registerInternalRoutes(
 );
 registerPresenceRoutes(app, { presence, internalServiceToken: config.INTERNAL_SERVICE_TOKEN });
 // S4-12: the SIP edge, the FS pool and MariaDB, for the operations console.
+const platformStatus = createPlatformStatus({ mi: miClient, opensipsDb, db, logger });
 registerPlatformStatusRoutes(app, {
-  status: createPlatformStatus({ mi: miClient, opensipsDb, db, logger }),
+  status: platformStatus,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
+// S4-13: the same figures as gauges, for the console's history.
+registerPlatformMetrics(app, platformStatus);
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

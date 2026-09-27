@@ -104,6 +104,27 @@ services:
       timeout: 5s
       retries: 10
 
+  prometheus:
+    # S4-13 (G-124): keeps every service's metrics for the operations console's
+    # history charts (api-gateway's PROMETHEUS_URL). Reachable on the host at
+    # :9090 for looking around; nothing else depends on it being up.
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-15d}
+    ports:
+      - '${PROMETHEUS_PORT:-9090}:9090'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:9090/-/ready']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   minio:
     image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
     restart: unless-stopped
@@ -900,6 +921,8 @@ services:
       # NATS' monitoring port for its figures.
       PLATFORM_STATUS_TARGETS: media-worker=http://media-worker:8080,notification-service=http://notification-service:8080,recording-uploader=http://recording-uploader:9464,recording-uploader-2=http://recording-uploader-2:9464
       NATS_MONITOR_URL: http://nats:8222
+      # S4-13: the history charts.
+      PROMETHEUS_URL: http://prometheus:9090
     healthcheck: *node-healthcheck
 
   notification-service:
@@ -967,3 +990,4 @@ volumes:
   nats-data:
   minio-data:
   mailpit-data:
+  prometheus-data:
