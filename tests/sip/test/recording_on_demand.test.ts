@@ -50,6 +50,11 @@ interface AuditEvent {
  * - With a rule for 401 that records and allows on demand: `*2` pauses and `*2` resumes; the
  *   recording is uploaded with one closed pause, and both actions are audited.
  *
+ * Every test here is the same 402 -> 401 call under a different rule, and telephony-config reuses a
+ * recording decision for `RECORDING_POLICY_CACHE_TTL_MS` (30 s by default). A call placed within
+ * that time of the previous test's gets the previous rule's decision, so these tests need it
+ * shorter than the gap between them: CI's SIP job sets 1 s.
+ *
  * Needs the FreeSWITCH image rebuilt with this branch's `recording_control.lua`. Unverified live:
  * `bind_meta_app` running the script on the pressing leg, the beep during the bridge, `uuid_record
  * mask` on a recording started by `execute_on_answer=record_session`, and a second `*` press in

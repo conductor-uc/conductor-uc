@@ -269,6 +269,12 @@ jobs:
           # second margin, kept short here rather than removed.
           RECORDING_SETTLE_SECONDS: '5'
           RECORDING_SCAN_INTERVAL_MS: '1000'
+          # telephony-config reuses a recording decision for 30 s, so a rule
+          # a test just created or deleted can be ignored for that long. The
+          # S5-13 tests make the same 402 -> 401 call under a different rule
+          # each; with the short settle above they run within 30 s of each
+          # other and got the previous test's decision.
+          RECORDING_POLICY_CACHE_TTL_MS: '1000'
         run: |
           # Clean slate first. This compose project's name is fixed
           # (`name: conductor-uc`), so every SIP job on this
