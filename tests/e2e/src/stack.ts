@@ -383,6 +383,9 @@ export async function startStack(): Promise<Stack> {
       CDR_SERVICE_URL: url(ports.cdr),
       TRUNK_SERVICE_URL: url(ports.trunk),
       RECORDING_SERVICE_URL: url(ports.recording),
+      // No call-control in this stack: the gateway requires the URL (S5-15), and
+      // nothing here calls a live call's routes, so it points nowhere.
+      CALL_CONTROL_URL: 'http://127.0.0.1:1',
       REDIS_URL,
       INTERNAL_HEADER_SIGNING_SECRET: headerSecret,
       // No call-control in this stack, so no realtime hub (S5-08).
