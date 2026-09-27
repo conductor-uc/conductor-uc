@@ -2,6 +2,7 @@ import { secretEquals } from '@cuc/crypto';
 import { ProblemError, Type, type Server } from '@cuc/http';
 
 import type { AffinityManager } from '../affinity/manager.js';
+import type { NodeDrain } from '../node-drain.js';
 import type { CallRegistry } from '../redis/registry.js';
 
 const KindSchema = Type.Union([Type.Literal('queue'), Type.Literal('park'), Type.Literal('conf')]);
@@ -55,6 +56,23 @@ const LiveCallSchema = Type.Object({
 
 const LiveCallsResponseSchema = Type.Object({ calls: Type.Array(LiveCallSchema) });
 
+const NodeParamsSchema = Type.Object({
+  nodeId: Type.String({ minLength: 1, maxLength: 64 }),
+});
+
+const NodeViewSchema = Type.Object({
+  nodeId: Type.String(),
+  status: Type.Union([Type.Literal('up'), Type.Literal('draining'), Type.Literal('down')]),
+  draining: Type.Boolean(),
+  calls: Type.Integer({ minimum: 0 }),
+  leases: Type.Integer({ minimum: 0 }),
+});
+
+const DrainResponseSchema = Type.Object({
+  node: NodeViewSchema,
+  leasesHandedOver: Type.Integer({ minimum: 0 }),
+});
+
 function bearerToken(header: string | undefined): string | undefined {
   if (header === undefined) return undefined;
   const [scheme, token] = header.split(' ');
@@ -84,6 +102,7 @@ export function registerInternalRoutes(
   affinity: AffinityManager,
   internalServiceToken: string,
   registry: CallRegistry,
+  nodes?: NodeDrain,
 ): void {
   function authorized(header: string | undefined): boolean {
     const presented = bearerToken(header);
@@ -166,4 +185,61 @@ export function registerInternalRoutes(
       return { calls: await registry.callsForTenant(request.params.tenantId) };
     },
   );
+
+  if (nodes === undefined) return;
+
+  /**
+   * S4-02 (G-123; 04 §6): the FS nodes, and draining one for a rolling upgrade (`node-drain.ts`).
+   * An operator's tool, on the same service token: no tenant data, and nothing in the console yet.
+   */
+  app.get(
+    '/internal/v1/nodes',
+    {
+      config: { public: true },
+      schema: { response: { 200: Type.Object({ nodes: Type.Array(NodeViewSchema) }) } },
+    },
+    async (request) => {
+      if (!authorized(request.headers.authorization)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      return { nodes: await nodes.list() };
+    },
+  );
+
+  app.get(
+    '/internal/v1/nodes/:nodeId',
+    {
+      config: { public: true },
+      schema: { params: NodeParamsSchema, response: { 200: NodeViewSchema } },
+    },
+    async (request) => {
+      if (!authorized(request.headers.authorization)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const node = await nodes.get(request.params.nodeId);
+      if (node === undefined) throw ProblemError.notFound('No such node.');
+      return node;
+    },
+  );
+
+  for (const [action, draining] of [
+    ['drain', true],
+    ['undrain', false],
+  ] as const) {
+    app.post(
+      `/internal/v1/nodes/:nodeId/${action}`,
+      {
+        config: { public: true },
+        schema: { params: NodeParamsSchema, response: { 200: DrainResponseSchema } },
+      },
+      async (request) => {
+        if (!authorized(request.headers.authorization)) {
+          throw ProblemError.unauthorized('A valid internal service token is required.');
+        }
+        const result = await nodes.setDraining(request.params.nodeId, draining);
+        if (result === undefined) throw ProblemError.notFound('No such node.');
+        return result;
+      },
+    );
+  }
 }

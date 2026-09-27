@@ -109,11 +109,11 @@ What it does on each request:
 1. **Flood protection (`pike`):** more than 30 requests in 2 seconds from one source IP blocks that IP for 120 seconds. FreeSWITCH nodes and addresses listed on a trunk are exempt (G-117); phones and unknown sources are not.
 2. **Phones:** digest authentication against `subscriber`, registration into `location`, and presence subscriptions (BLF).
 3. **Carriers:** calls from a trunk's IP addresses are recognised through the `address` table. Registration-based trunks register out through `uac_registrant`.
-4. **To FreeSWITCH:** every call is sent round-robin to a FreeSWITCH node from dispatcher set 1, with the tenant (`X-Tenant-Id`), direction and trunk added as headers.
+4. **To FreeSWITCH:** every call is sent to a FreeSWITCH node from dispatcher set 1, in weighted round robin, skipping nodes that are drained or fail their OPTIONS probes (every 2 s), with the tenant (`X-Tenant-Id`), direction and trunk added as headers.
 5. **From FreeSWITCH:** OpenSIPs recognises a node by source IP and port, and either delivers the call to a registered phone or routes it out to a carrier (`drouting`, with failover on 5xx and 408).
 6. **Everywhere:** signalling topology is hidden. Media is not, because OpenSIPs never touches SDP.
 
-The FreeSWITCH pool is read from `OPENSIPS_FS_DESTINATION` **only when OpenSIPs starts**. Adding or removing a node means restarting OpenSIPs.
+The FreeSWITCH pool is read from `OPENSIPS_FS_DESTINATION` **only when OpenSIPs starts**. Adding or removing a node means restarting OpenSIPs. Draining one does not: call-control marks it and telephony-config tells OpenSIPs ([distributed deployment §7](deploy-distributed.md)).
 
 ## 3. Media servers
 

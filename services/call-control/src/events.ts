@@ -225,6 +225,20 @@ export const callEvents = defineEvents({
       queueId: Type.String({ minLength: 1 }),
     }),
   },
+  /**
+   * S4-02 (G-123): an operator drained an FS node (it takes no new calls or leases, for a rolling
+   * upgrade) or put it back in service. telephony-config, which owns OpenSIPs' tables, takes the
+   * node's dispatcher destination out of rotation or puts it back. Carries the whole state, so a
+   * redelivery or a repeated drain is harmless.
+   */
+  'call.node.drain_changed': {
+    schemaVersion: 1,
+    description: 'An FS node was drained or returned to service.',
+    data: Type.Object({
+      nodeId: Type.String({ minLength: 1 }),
+      draining: Type.Boolean(),
+    }),
+  },
   // `call.lost` (04 §4's failure sequence: a node's calls, abandoned on
   // heartbeat expiry) is deliberately NOT defined here — the plan's own
   // dependency table lists it as S4-04's deliverable ("Failover handling:

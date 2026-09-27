@@ -50,6 +50,12 @@ export interface AffinityRegistry {
   release(lease: AffinityLease, nodeId: string): Promise<boolean>;
   /** The current holder's node id, or `undefined` if the lease does not exist (idle, released, or never acquired). */
   getOwner(lease: AffinityLease): Promise<string | undefined>;
+  /**
+   * S4-02 (G-123): every lease a node holds now, so draining it can hand them over. A `SCAN`
+   * over the lease keys: cheap at this platform's scale (one key per active queue, parking lot
+   * or conference), and never used on a call's path.
+   */
+  leasesHeldBy(nodeId: string): Promise<AffinityLease[]>;
 }
 
 /**
@@ -99,6 +105,30 @@ export function createAffinityRegistry(redis: Redis, keyPrefix: string): Affinit
     async getOwner(lease) {
       const owner = await redis.get(leaseKey(keyPrefix, lease));
       return owner ?? undefined;
+    },
+
+    async leasesHeldBy(nodeId) {
+      const held: AffinityLease[] = [];
+      const prefix = `${keyPrefix}aff:`;
+      let cursor = '0';
+      do {
+        const [next, keys] = await redis.scan(cursor, 'MATCH', `${prefix}*`, 'COUNT', 500);
+        cursor = next;
+        if (keys.length === 0) continue;
+        const owners = await redis.mget(...keys);
+        keys.forEach((key, index) => {
+          if (owners[index] !== nodeId) return;
+          const [tenantId, kind, resourceId] = key.slice(prefix.length).split(':');
+          if (
+            tenantId !== undefined &&
+            resourceId !== undefined &&
+            (kind === 'queue' || kind === 'park' || kind === 'conf')
+          ) {
+            held.push({ tenantId, kind, resourceId });
+          }
+        });
+      } while (cursor !== '0');
+      return held;
     },
   };
 }

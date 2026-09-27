@@ -552,8 +552,56 @@ function mariadbContainer(): string {
   return envOr('SIP_TEST_MARIADB_CONTAINER', 'conductor-uc-mariadb-1');
 }
 
+/**
+ * S4-02: an MI command's JSON answer, e.g. `ds_list` for the dispatcher's destinations and
+ * their state.
+ */
+export async function opensipsMiJson(
+  command: string,
+  ...args: readonly string[]
+): Promise<unknown> {
+  const env = sipTestEnv();
+  const { stdout } = await execFileAsync('docker', [
+    'exec',
+    env.opensipsContainer,
+    'opensips-cli',
+    '-o',
+    'communication_type=http',
+    '-o',
+    'url=http://127.0.0.1:8888/mi',
+    '-x',
+    'mi',
+    command,
+    ...args,
+  ]);
+  return JSON.parse(stdout) as unknown;
+}
+
+export interface DispatcherDestination {
+  readonly uri: string;
+  /** `Active`, `Inactive` or `Probing`. */
+  readonly state: string;
+  /** The FS node id `seed-dispatcher.py` stored with it. */
+  readonly nodeId: string | null;
+}
+
+/** S4-02: the FS pool (dispatcher set 1) as OpenSIPs holds it in memory now (`ds_list`). */
+export async function dispatcherStates(): Promise<DispatcherDestination[]> {
+  const result = (await opensipsMiJson('ds_list')) as {
+    PARTITIONS?: {
+      SETS?: { id: number; Destinations?: { URI: string; state: string; attr?: string }[] }[];
+    }[];
+  };
+  const set = result.PARTITIONS?.[0]?.SETS?.find((candidate) => candidate.id === 1);
+  return (set?.Destinations ?? []).map((destination) => ({
+    uri: destination.URI,
+    state: destination.state,
+    nodeId: destination.attr ?? null,
+  }));
+}
+
 /** `docker exec`s the real `mariadb` client against the `opensips` schema, as the `opensips` DB user — same rationale as `opensipsMi`: a real CLI already inside an already-running container, not a new throwaway one. */
-async function opensipsSql(sql: string): Promise<void> {
+export async function opensipsSql(sql: string): Promise<void> {
   await execFileAsync('docker', [
     'exec',
     mariadbContainer(),
@@ -637,24 +685,22 @@ export async function waitForHttpReady(url: string, timeoutMs: number): Promise<
  * against the `dispatcher` table, then `ds_reload` — the same table
  * `telephony/opensips/seed-dispatcher.py` seeds, so this is exercising a
  * real, already-proven mechanism, not a new one) so every call in the test
- * lands on the same node, restoring the full pool afterward. This tests
+ * lands on the same node, restoring the full pool afterward. S4-02: the other destinations are
+ * set inactive with MI `ds_set_state` (as draining a node does) rather than deleted, so their
+ * node ids (`attrs`) and weights survive. This tests
  * "the resource itself works," which is what these scenarios exist to
  * prove — it does not test "and it survives round-robin," which is exactly
  * G-46's own open gap.
  */
 export async function withSingleFsNode<T>(fn: () => Promise<T>): Promise<T> {
-  await opensipsSql(
-    "DELETE FROM dispatcher WHERE setid = 1 AND destination != 'sip:freeswitch:5060'",
-  );
-  await opensipsMi('ds_reload');
+  const others = (await dispatcherStates())
+    .map((destination) => destination.uri)
+    .filter((uri) => uri !== 'sip:freeswitch:5060');
+  for (const uri of others) await opensipsMi('ds_set_state', 'i', '1', uri);
   try {
     return await fn();
   } finally {
-    await opensipsSql(
-      'INSERT IGNORE INTO dispatcher (setid, destination, state, weight, description) ' +
-        "VALUES (1, 'sip:freeswitch-2:5060', 0, '1', 'S2-20 withSingleFsNode: restored')",
-    );
-    await opensipsMi('ds_reload');
+    for (const uri of others) await opensipsMi('ds_set_state', 'a', '1', uri);
   }
 }
 

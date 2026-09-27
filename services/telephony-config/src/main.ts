@@ -11,6 +11,7 @@ import { createCallflowClient } from './callflow-client.js';
 import { createCallControlClient } from './call-control-client.js';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createCertificateConsumer } from './consumers/certificate.consumer.js';
+import { createNodeConsumer } from './consumers/node.consumer.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
 import { createPbxConsumer } from './consumers/pbx.consumer.js';
 import { createRecordingConsumer } from './consumers/recording.consumer.js';
@@ -187,6 +188,11 @@ const recordingConsumer = createRecordingConsumer(db, bus, logger, readModel);
 await recordingConsumer.ensure();
 const recordingConsumerLoop = recordingConsumer.run();
 
+// S4-02: an FS node drained or returned to service in call-control.
+const nodeConsumer = createNodeConsumer(db, bus, logger, opensipsProjection, miClient);
+await nodeConsumer.ensure();
+const nodeConsumerLoop = nodeConsumer.run();
+
 const reconciler = createReconciler(
   readModel,
   opensipsProjection,
@@ -267,6 +273,7 @@ async function shutdown(signal: string): Promise<void> {
   pbxConsumer.stop();
   trunkConsumer.stop();
   recordingConsumer.stop();
+  nodeConsumer.stop();
   relay.stop();
   await Promise.race([
     app.close(),
@@ -277,6 +284,7 @@ async function shutdown(signal: string): Promise<void> {
   await pbxConsumerLoop;
   await trunkConsumerLoop;
   await recordingConsumerLoop;
+  await nodeConsumerLoop;
   await relayLoop;
   await bus.close();
   await db.destroy();

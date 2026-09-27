@@ -85,10 +85,37 @@ const REGISTRANT_EXPIRY_SECONDS = 3600;
  * unconditional delete there) is safe — nothing else ever writes a
  * conflicting row.
  */
+/** The dispatcher set of FS nodes: `ds_select_dst(1, ...)` in `opensips.cfg.template`. */
+export const FS_DISPATCHER_SET = 1;
+
 export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
   const k: Kysely<OpenSipsDb> = db.kysely;
 
   return {
+    /**
+     * S4-02 (G-123): marks the FS node's destinations in the dispatcher's set 1 inactive (a
+     * drained node) or active, and returns them, for the MI call that tells OpenSIPs. The node is
+     * found by the id `seed-dispatcher.py` put in `attrs`; none are found for a node with no id
+     * in `OPENSIPS_FS_DESTINATION`.
+     */
+    async setDispatcherNodeState(nodeId: string, active: boolean): Promise<string[]> {
+      const rows = await k
+        .selectFrom('dispatcher')
+        .select('destination')
+        .where('setid', '=', FS_DISPATCHER_SET)
+        .where('attrs', '=', nodeId)
+        .execute();
+      if (rows.length > 0) {
+        await k
+          .updateTable('dispatcher')
+          .set({ state: active ? 0 : 1 })
+          .where('setid', '=', FS_DISPATCHER_SET)
+          .where('attrs', '=', nodeId)
+          .execute();
+      }
+      return rows.map((row) => row.destination);
+    },
+
     /**
      * `attrs` carries the owning tenant's id (S1-14) — the one piece of
      * per-domain data OpenSIPs' routing script actually needs back out.

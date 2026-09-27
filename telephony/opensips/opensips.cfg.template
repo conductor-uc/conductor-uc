@@ -197,7 +197,13 @@ modparam("drouting", "default_group", 0)
 loadmodule "dispatcher.so"
 modparam("dispatcher", "db_url", "${OPENSIPS_DB_URL}")
 modparam("dispatcher", "table_name", "dispatcher")
-modparam("dispatcher", "ds_ping_interval", 10)
+# S4-02 (04 §4): probe every node every 2 s and take one out of rotation after
+# 2 unanswered probes, so a dead node stops getting new calls within ~6 s. A
+# node that answers again comes back by itself. A node call-control drains is
+# set inactive by telephony-config (G-123) and stays out until undrained:
+# probing does not bring an administratively inactive destination back.
+modparam("dispatcher", "ds_ping_interval", 2)
+modparam("dispatcher", "ds_probing_threshold", 2)
 modparam("dispatcher", "ds_probing_mode", 1)
 
 #### Dialog tracking — needed by topology_hiding (below) to persist the
@@ -530,6 +536,12 @@ route{
     # (docs/decisions.md): nothing seeds that table yet, so this always
     # returns 503 today — a pre-existing S1-11 gap S1-13's own verification
     # surfaced, not one introduced here.
+    # S4-02: algorithm 4 is weighted round-robin in OpenSIPs 3.x: a node is
+    # chosen `weight` times in a row before the next (`OPENSIPS_FS_DESTINATION`'s
+    # `;weight=N`, 1 by default), so new calls split in proportion to the
+    # weights. (9 is not weight-based: without `pvar_algo_pattern` it always
+    # picks the first node.) Inactive nodes, drained or failing their probes,
+    # are skipped.
     if (!ds_select_dst(1, 4)) {
         send_reply(503, "Service Unavailable");
         exit;

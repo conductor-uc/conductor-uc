@@ -8,8 +8,20 @@ import type { Redis } from 'ioredis';
  * `REDIS_KEY_PREFIX`).
  */
 export interface CallRegistry {
-  /** Writes/refreshes `fsnode:{id}` (04 §3.1) and adds it to the `fsnodes` set. */
+  /**
+   * Writes/refreshes `fsnode:{id}` (04 §3.1) and adds it to the `fsnodes` set. The status is
+   * `draining` while the node is in `fsnodes:draining` (S4-02), otherwise `up`.
+   */
   heartbeat(nodeId: string, ttlMs: number): Promise<void>;
+  /**
+   * S4-02 (G-123): takes a node out of service for new calls and leases, or puts it back. Kept in
+   * the `fsnodes:draining` set with no TTL, so a drain outlives the node's heartbeat key (a node
+   * restarted for its upgrade comes back still draining) and this process; `fsnode:{id}`'s status
+   * follows at once when the node is up.
+   */
+  setDraining(nodeId: string, draining: boolean): Promise<void>;
+  /** S4-02: how each of these nodes stands, for the operator's node list. */
+  nodeStates(nodeIds: readonly string[]): Promise<NodeState[]>;
   /** `call:{callUuid}` on CHANNEL_CREATE, plus its node/tenant index entries. */
   createCall(call: CallRecord, safetyTtlMs: number): Promise<void>;
   /**
@@ -54,6 +66,16 @@ export interface CallRegistry {
   liveNodeIds(): Promise<string[]>;
 }
 
+export interface NodeState {
+  readonly nodeId: string;
+  /** `down` when `fsnode:{id}` is gone (no heartbeat within its TTL). */
+  readonly status: 'up' | 'draining' | 'down';
+  /** Whether the node is marked draining, which a `down` node can also be. */
+  readonly draining: boolean;
+  /** Calls the registry has on the node (`node:{id}:calls`). */
+  readonly calls: number;
+}
+
 export interface CallRecord {
   readonly callUuid: string;
   readonly nodeId: string;
@@ -78,6 +100,12 @@ const UPDATE_IF_EXISTS = `if redis.call('EXISTS', KEYS[1]) == 1 then return redi
  * false) or one that already has a tenant is left alone, and gives an empty list.
  */
 const ATTACH_TENANT = `if redis.call('HGET', KEYS[1], 'tenant') == '' then redis.call('HSET', KEYS[1], 'tenant', ARGV[1]) redis.call('SADD', KEYS[2], ARGV[2]) return redis.call('HGETALL', KEYS[1]) end return {}`;
+
+/** KEYS: fsnode:{id}, fsnodes:draining, fsnodes. ARGV: node id, TTL (ms). */
+const HEARTBEAT = `local status = 'up' if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then status = 'draining' end redis.call('HSET', KEYS[1], 'status', status) redis.call('PEXPIRE', KEYS[1], ARGV[2]) redis.call('SADD', KEYS[3], ARGV[1]) return status`;
+
+/** KEYS: fsnode:{id}, fsnodes:draining. ARGV: node id, '1' to drain or '0' to undrain. */
+const SET_DRAINING = `local status = 'up' if ARGV[2] == '1' then redis.call('SADD', KEYS[2], ARGV[1]) status = 'draining' else redis.call('SREM', KEYS[2], ARGV[1]) end if redis.call('EXISTS', KEYS[1]) == 1 then redis.call('HSET', KEYS[1], 'status', status) end return status`;
 
 /** One live call as the registry holds it, for readers outside this service. */
 export interface LiveCall {
@@ -146,13 +174,52 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
 
   return {
     async heartbeat(nodeId, ttlMs) {
-      const key = k(`fsnode:${nodeId}`);
-      await redis
-        .multi()
-        .hset(key, { status: 'up' })
-        .pexpire(key, ttlMs)
-        .sadd(k('fsnodes'), nodeId)
-        .exec();
+      await redis.eval(
+        HEARTBEAT,
+        3,
+        k(`fsnode:${nodeId}`),
+        k('fsnodes:draining'),
+        k('fsnodes'),
+        nodeId,
+        ttlMs,
+      );
+    },
+
+    async setDraining(nodeId, draining) {
+      await redis.eval(
+        SET_DRAINING,
+        2,
+        k(`fsnode:${nodeId}`),
+        k('fsnodes:draining'),
+        nodeId,
+        draining ? '1' : '0',
+      );
+    },
+
+    async nodeStates(nodeIds) {
+      if (nodeIds.length === 0) return [];
+      const pipeline = redis.pipeline();
+      for (const nodeId of nodeIds) {
+        pipeline.hget(k(`fsnode:${nodeId}`), 'status');
+        pipeline.sismember(k('fsnodes:draining'), nodeId);
+        pipeline.scard(k(`node:${nodeId}:calls`));
+      }
+      const results = (await pipeline.exec()) ?? [];
+      const value = (index: number): unknown => {
+        const entry = results[index];
+        if (entry === undefined || entry[0] !== null) throw entry?.[0] ?? new Error('no reply');
+        return entry[1];
+      };
+      return nodeIds.map((nodeId, i) => {
+        const status = value(i * 3);
+        const draining = value(i * 3 + 1) === 1;
+        return {
+          nodeId,
+          status: status === null ? 'down' : draining ? 'draining' : 'up',
+          draining,
+          calls: Number(value(i * 3 + 2)),
+        };
+      });
     },
 
     async createCall(call, safetyTtlMs) {

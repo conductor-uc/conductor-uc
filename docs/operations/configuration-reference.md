@@ -389,7 +389,7 @@ Directories: `/var/spool/cuc/rec` (recording and voicemail spool, shared with th
 | `OPENSIPS_MI_PORT` | `8888` | Management interface port (all interfaces, no authentication) |
 | `OPENSIPS_DB_URL` | `mysql://opensips:<password>@mariadb/opensips` | The `opensips` schema. Special characters in the password must be URL-encoded. |
 | `OPENSIPS_REDIS_URL` | `redis:cuc://redis:6379/0` | Format `redis:<group>://host:port/db`. Loaded but not used yet. |
-| `OPENSIPS_FS_DESTINATION` | `sip:freeswitch:5060,sip:freeswitch-2:5060` | Every FreeSWITCH node as a SIP URI, comma-separated. **Replaced in the database at every start** and read only then. Each entry must be the exact address and port the node sends from ([network](network-and-firewall.md#21-public-ports): OpenSIPs recognises a node by source IP and port). |
+| `OPENSIPS_FS_DESTINATION` | `freeswitch=sip:freeswitch:5060,freeswitch-2=sip:freeswitch-2:5060` | Every FreeSWITCH node, comma-separated, as `id=sip:host:port[;weight=N]`. `id` is the node's id in call-control's `FS_NODES`, which is how draining the node finds it (an entry without one works but cannot be drained). `weight` (1 to 999, default 1) is its share of new calls. **Synced into the database at every start** (a drained node stays drained) and read only then. Each entry must be the exact address and port the node sends from ([network](network-and-firewall.md#21-public-ports): OpenSIPs recognises a node by source IP and port). |
 | `OPENSIPS_IDENTITY` | `SIP Media Server` | SIP `Server` and `User-Agent`. Keep it neutral. |
 | `OPENSIPS_LOG_LEVEL` | `3` | 1 (errors) to 4 (debug) |
 | `OPENSIPS_REGISTRANT_TIMER_INTERVAL` | `10` (module default 100) | Seconds between checks of outbound trunk registrations |
@@ -440,7 +440,7 @@ The spool directory must be writable by FreeSWITCH (root) and deletable by the u
 | telephony-config `SELF_URL` | Every FreeSWITCH node's `TELEPHONY_CONFIG_URL` (and it must be reachable from them) |
 | telephony-config `RECORDING_SPOOL_DIR` | Every uploader's `SPOOL_DIR`, call-control's `RECORDING_SPOOL_DIR` (and FreeSWITCH's fixed `/var/spool/cuc/rec`) |
 | Each node's `FS_NODE_ID` | That node's `id` in call-control's `FS_NODES` |
-| Each node's SIP address and port | Its entry in OpenSIPs' `OPENSIPS_FS_DESTINATION` |
+| Each node's SIP address and port, and its `FS_NODE_ID` | Its entry in OpenSIPs' `OPENSIPS_FS_DESTINATION` (`id=sip:address:port`) |
 | OpenSIPs' source address toward a node | That node's `FS_OPENSIPS_CIDR` |
 | call-control's source address toward a node | That node's `FS_CLUSTER_CIDR` |
 | `STORAGE_*` | Every service that uses storage (one store, one key pair) |
