@@ -309,6 +309,9 @@ describe.skipIf(skipReason !== undefined)('signing key repo', () => {
     });
   });
 
+  // Creates and migrates its own empty schema in the test body, the work a
+  // `beforeAll` does elsewhere, so it gets the shared hookTimeout rather than
+  // testTimeout: under CI load that setup alone has run past 20s.
   it('current() throws a clear error rather than signing with nothing', async () => {
     const logger = silentLogger();
     const handle = await startTestDatabase();
@@ -331,5 +334,5 @@ describe.skipIf(skipReason !== undefined)('signing key repo', () => {
 
     await emptyDb.destroy();
     await handle.stop();
-  });
+  }, 30_000);
 });
