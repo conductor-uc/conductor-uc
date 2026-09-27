@@ -134,7 +134,9 @@ describe('route contract guard', () => {
 
     const exempt = app.registeredRoutes.filter((route) => route.public).map((route) => route.url);
 
-    expect(new Set(exempt)).toEqual(new Set(['/healthz', '/readyz', '/statusz', '/openapi.json']));
+    expect(new Set(exempt)).toEqual(
+      new Set(['/healthz', '/readyz', '/statusz', '/metrics', '/openapi.json']),
+    );
     for (const route of app.registeredRoutes) {
       expect(route.public || (route.permission !== null && route.dataClass !== null)).toBe(true);
     }

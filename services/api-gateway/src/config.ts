@@ -56,6 +56,12 @@ export const configSchema = Type.Object({
   PLATFORM_STATUS_TARGETS: Env.list({ default: [] }),
   /** S4-12: NATS' monitoring endpoint (`nats -m 8222`), for its figures in the operations console. */
   NATS_MONITOR_URL: Env.optional(Env.url()),
+  /**
+   * S4-13: the Prometheus server that scrapes every service, for the operations console's history
+   * charts (`GET /v1/platform/metrics/{chart}`). Without it the console draws only what it has seen
+   * since it was opened.
+   */
+  PROMETHEUS_URL: Env.optional(Env.url()),
 
   /**
    * The routing table (06, api-gateway): which downstream service owns which

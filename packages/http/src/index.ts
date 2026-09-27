@@ -39,6 +39,14 @@ export {
   type StatusSection,
 } from './health.js';
 export {
+  observeOutbox,
+  sharedReading,
+  type GaugeOptions,
+  type OutboxStatusSource,
+  type GaugeRead,
+  type GaugeReading,
+} from './metrics.js';
+export {
   createRemotePermissionResolver,
   registerPermissionGuard,
   selfActor,

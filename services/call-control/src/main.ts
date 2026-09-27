@@ -2,7 +2,12 @@ import { recordAuditEvent } from '@cuc/audit';
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createHttpAccessClient, createRemotePermissionResolver, createServer } from '@cuc/http';
+import {
+  createHttpAccessClient,
+  createRemotePermissionResolver,
+  createServer,
+  observeOutbox,
+} from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { Redis } from 'ioredis';
 
@@ -17,6 +22,7 @@ import {
 } from './clients.js';
 import { createMonitorController } from './monitor-control.js';
 import { createNodeDrain } from './node-drain.js';
+import { registerNodeMetrics } from './node-metrics.js';
 import { registerMonitorRoutes } from './routes/monitor.routes.js';
 import { createRecordingController } from './recording-control.js';
 import { registerRecordingControlRoutes } from './routes/recording.routes.js';
@@ -182,6 +188,8 @@ const nodeDrain = createNodeDrain({
 registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN, registry, nodeDrain);
 // S4-12: the operations console's drain, undrain and weight, through api-gateway.
 registerPlatformRoutes(app, nodeDrain);
+// S4-13: the nodes' state and load, for the console's history.
+registerNodeMetrics(app, () => registry.nodeStates(fsNodes.map((node) => node.id)));
 
 const userExtension = createUserExtensionLookup({
   baseUrl: config.PBX_CONFIG_SERVICE_URL,
@@ -235,8 +243,8 @@ registerMonitorRoutes(app, {
   }),
 });
 
-// S4-12: the outbox backlog, for the operations console (`/statusz`).
-app.addStatusSection('outbox', () => relay.status());
+// S4-12/S4-13: the outbox backlog, for the operations console (`/statusz`, `/metrics`).
+observeOutbox(app, relay);
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('redis', async () => {

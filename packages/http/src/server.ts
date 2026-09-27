@@ -15,6 +15,7 @@ import {
   type RequestContext,
 } from './context.js';
 import { registerHealthRoutes } from './health.js';
+import { registerMetrics } from './metrics.js';
 import { registerPermissionGuard, type PermissionResolver } from './permission-guard.js';
 import { registerProblemHandlers } from './problem.js';
 import { registerRouteContractGuard } from './route-guard.js';
@@ -180,6 +181,8 @@ export async function createServer(options: CreateServerOptions): Promise<Server
   });
 
   registerHealthRoutes(app, { serviceName, serviceVersion });
+  // S4-13: Prometheus metrics (HTTP RED, and gauges a service adds).
+  registerMetrics(app);
 
   app.route({
     method: 'GET',

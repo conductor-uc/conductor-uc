@@ -1,6 +1,34 @@
 import type { Bus } from '@cuc/events';
-import { ProblemError, type PermissionResolver, type Server } from '@cuc/http';
+import { ProblemError, sharedReading, type PermissionResolver, type Server } from '@cuc/http';
 import type { Redis } from 'ioredis';
+
+/**
+ * The operations console's access check (S4-12, G-124): a master actor holding
+ * `platform.observe` (identity-service, through the same resolver as the realtime hub). H3 keeps
+ * the permission from anyone outside the master anyway; the org check makes that explicit here.
+ */
+export async function requireObserver(
+  context: {
+    readonly actorId?: string;
+    readonly actorType?: string;
+    readonly orgId?: string;
+    readonly orgType?: string;
+  },
+  permissions: PermissionResolver,
+): Promise<void> {
+  const { actorId, actorType, orgId, orgType } = context;
+  if (orgType !== 'master' || actorId === undefined || orgId === undefined) {
+    throw ProblemError.forbidden('Only the master can see the platform.');
+  }
+  if (
+    actorType === 'user' &&
+    !(await permissions({ id: actorId, orgId, orgType }, 'platform.observe'))
+  ) {
+    throw ProblemError.forbidden('You do not have access to the operations console.', {
+      code: 'insufficient_permission',
+    });
+  }
+}
 
 /** One service the overview asks for its `/statusz` (S4-12). */
 export interface StatusTarget {
@@ -279,18 +307,7 @@ export function registerPlatformOverview(app: Server, options: PlatformOverviewO
     '/v1/platform/overview',
     { config: { permission: 'platform.observe', dataClass: 'config' } },
     async (request) => {
-      const { actorId, actorType, orgId, orgType } = request.context;
-      if (orgType !== 'master' || actorId === undefined || orgId === undefined) {
-        throw ProblemError.forbidden('Only the master can see the platform.');
-      }
-      if (
-        actorType === 'user' &&
-        !(await options.permissions({ id: actorId, orgId, orgType }, 'platform.observe'))
-      ) {
-        throw ProblemError.forbidden('You do not have access to the operations console.', {
-          code: 'insufficient_permission',
-        });
-      }
+      await requireObserver(request.context, options.permissions);
 
       const telephonyRead = telephonyStatus();
       const [services, nodeList, eventState, redis, nats, telephony] = await Promise.all([
@@ -323,5 +340,96 @@ export function registerPlatformOverview(app: Server, options: PlatformOverviewO
         dataStores: [...mariadb, redis, nats],
       };
     },
+  );
+}
+
+/**
+ * S4-13 (G-124): what only the gateway reads, as Prometheus gauges for the console's history:
+ * every durable consumer's backlog (09 §4's "consumer lag") and stream sizes, from its own NATS
+ * connection, and Redis. Read once per scrape; NATS not connected yet leaves the consumer gauges
+ * out.
+ */
+export function registerPlatformGauges(
+  app: Server,
+  options: { readonly bus: () => Bus | undefined; readonly redis: Redis },
+): void {
+  const jetstream = sharedReading(async () => {
+    const bus = options.bus();
+    if (bus === undefined) return { streams: [], consumers: [] };
+    const streams: { name: string; messages: number; bytes: number }[] = [];
+    const consumers: {
+      stream: string;
+      name: string;
+      pending: number;
+      ackPending: number;
+      redelivered: number;
+    }[] = [];
+    for await (const stream of bus.jsm.streams.list()) {
+      streams.push({
+        name: stream.config.name,
+        messages: stream.state.messages,
+        bytes: stream.state.bytes,
+      });
+      for await (const consumer of bus.jsm.consumers.list(stream.config.name)) {
+        if (consumer.config.durable_name === undefined) continue;
+        consumers.push({
+          stream: stream.config.name,
+          name: consumer.config.durable_name,
+          pending: consumer.num_pending,
+          ackPending: consumer.num_ack_pending,
+          redelivered: consumer.num_redelivered,
+        });
+      }
+    }
+    return { streams, consumers };
+  });
+  const consumerGauge = (
+    name: string,
+    description: string,
+    pick: (c: { pending: number; ackPending: number; redelivered: number }) => number,
+  ): void => {
+    app.addGauge(name, { description }, async () =>
+      (await jetstream()).consumers.map((c) => ({
+        value: pick(c),
+        attributes: { stream: c.stream, consumer: c.name },
+      })),
+    );
+  };
+  consumerGauge(
+    'nats_consumer_pending',
+    'Events a consumer has not been sent yet.',
+    (c) => c.pending,
+  );
+  consumerGauge(
+    'nats_consumer_ack_pending',
+    'Events a consumer was sent and has not acknowledged.',
+    (c) => c.ackPending,
+  );
+  consumerGauge(
+    'nats_consumer_redelivered',
+    'Events sent to a consumer more than once, now waiting.',
+    (c) => c.redelivered,
+  );
+  app.addGauge('nats_stream_messages', { description: 'Events kept in a stream.' }, async () =>
+    (await jetstream()).streams.map((s) => ({ value: s.messages, attributes: { stream: s.name } })),
+  );
+
+  const redisInfo = sharedReading(() => options.redis.info());
+  const redisField = (info: string, name: string): number =>
+    Number(new RegExp(`^${name}:(.*)$`, 'm').exec(info)?.[1]?.trim() ?? 0);
+  app.addGauge(
+    'redis_used_memory_bytes',
+    { description: 'Memory Redis uses.', unit: 'By' },
+    async () => redisField(await redisInfo(), 'used_memory'),
+  );
+  app.addGauge(
+    'redis_connected_clients',
+    { description: 'Clients connected to Redis.' },
+    async () => redisField(await redisInfo(), 'connected_clients'),
+  );
+  app.addGauge(
+    'redis_ops_per_second',
+    { description: 'Commands Redis ran per second, as it measures.' },
+    async () => redisField(await redisInfo(), 'instantaneous_ops_per_sec'),
   );
 }

@@ -10,7 +10,8 @@ import { createChallengeLookup, registerAcmeChallengeRoute } from './acme-challe
 import { registerConsoleHosting } from './console-hosting.js';
 import { registerCors } from './cors.js';
 import { registerPlatformHealth } from './platform-health.js';
-import { registerPlatformOverview } from './platform-overview.js';
+import { registerPlatformHistory } from './platform-history.js';
+import { registerPlatformGauges, registerPlatformOverview } from './platform-overview.js';
 import { registerProvisioningTransport } from './provisioning-transport.js';
 import { registerSecurityHeaders } from './security-headers.js';
 import { createOrgCertificateSource } from './certificate-source.js';
@@ -179,6 +180,13 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
   // requires; without one the console's overview is not served.
   if (config.INTERNAL_SERVICE_TOKEN !== undefined) {
     const internalServiceToken = config.INTERNAL_SERVICE_TOKEN;
+    const platformPermissions =
+      options.platform?.permissions ??
+      createRemotePermissionResolver({
+        baseUrl: config.IDENTITY_SERVICE_URL,
+        internalServiceToken,
+        ttlMs: config.REALTIME_PERMISSION_CACHE_TTL_MS,
+      });
     registerPlatformOverview(app, {
       timeoutMs: 2_000,
       targets: [
@@ -206,15 +214,21 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
       internalServiceToken,
       redis: options.redis,
       bus: options.platform?.bus ?? (() => undefined),
-      permissions:
-        options.platform?.permissions ??
-        createRemotePermissionResolver({
-          baseUrl: config.IDENTITY_SERVICE_URL,
-          internalServiceToken,
-          ttlMs: config.REALTIME_PERMISSION_CACHE_TTL_MS,
-        }),
+      permissions: platformPermissions,
+    });
+    // S4-13: the history charts, from Prometheus.
+    registerPlatformHistory(app, {
+      ...(config.PROMETHEUS_URL === undefined ? {} : { prometheusUrl: config.PROMETHEUS_URL }),
+      permissions: platformPermissions,
+      timeoutMs: 5_000,
     });
   }
+
+  // S4-13: consumer backlog and Redis, for the console's history.
+  registerPlatformGauges(app, {
+    bus: options.platform?.bus ?? (() => undefined),
+    redis: options.redis,
+  });
 
   // The realtime hub (S5-08). Registered before the proxy's `/v1/*`, though the
   // more specific route would win either way.
