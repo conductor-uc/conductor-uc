@@ -949,12 +949,14 @@ export function startUas(opts: StartUasOptions): UasHandle {
       localPort: opts.localPort ?? 6000,
       remoteHost: env.opensipsTarget,
       logPrefix: 'uas_reg',
+      traceErrors: true,
     });
     const answerCmd = buildSippCommand({
       scenarioPath: `/scenarios/${opts.answerScenario ?? 'answer_call.xml'}`,
       csvPath: '/data/fields.csv',
       localPort: opts.localPort ?? 6000,
       logPrefix: 'uas_ans',
+      traceErrors: true,
     });
     // A container from a prior run that exited naturally is never removed
     // by `docker run -d` alone (unlike `--rm` in the foreground case) —
@@ -986,7 +988,13 @@ export function startUas(opts: StartUasOptions): UasHandle {
       '-c',
       `${registerCmd} && ${answerCmd}`,
     ]);
-    await waitForLog(opts.containerName, 'Sipp Server Mode', CONTAINER_LOG_TIMEOUT_MS);
+    try {
+      await waitForLog(opts.containerName, 'Sipp Server Mode', CONTAINER_LOG_TIMEOUT_MS);
+    } catch (error) {
+      // As `startAgentUas`: the only record of why the phone never got ready.
+      await dumpSippDiagnostics(opts.containerName, hostCsvDir);
+      throw error;
+    }
   })();
 
   return {
