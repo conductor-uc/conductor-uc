@@ -15,6 +15,9 @@ import { defineConfig } from 'vitest/config';
  * - `testTimeout` is well above what any test needs on an idle machine, because
  *   the 5s default is a coin flip under that contention, and a flaky suite is
  *   worse than a slow one.
+ * - `hookTimeout` likewise, and higher: a suite's `beforeAll` creates a schema
+ *   and runs every migration against the shared CI database, and under load
+ *   that has taken past the 10s default where it takes about 1s idle.
  */
 export const sharedTestConfig = defineConfig({
   test: {
@@ -22,5 +25,6 @@ export const sharedTestConfig = defineConfig({
     include: ['test/**/*.test.ts'],
     isolate: false,
     testTimeout: 20_000,
+    hookTimeout: 30_000,
   },
 });
