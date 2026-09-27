@@ -184,6 +184,37 @@ describe.skipIf(skipReason !== undefined)('relay', () => {
     expect(await relay.lag()).toBe(0);
   });
 
+  it('S4-12: reports pending, the oldest pending age and parked rows', async () => {
+    const relay = createRelay({
+      db: harness.db.kysely,
+      bus: harness.bus,
+      logger: harness.logger,
+      maxAttempts: 3,
+    });
+    await relay.runOnce();
+    expect(await relay.status()).toEqual({ pending: 0, oldestPendingSeconds: null, failed: 0 });
+
+    const tenantId = randomUUID();
+    const waiting = await createExtension(harness, tenantId, '5101');
+    const parked = await createExtension(harness, tenantId, '5102');
+    await harness.db.kysely
+      .updateTable('outbox')
+      .set({ created_at: new Date(Date.now() - 90_000) })
+      .where('id', '=', waiting.eventId)
+      .execute();
+    await harness.db.kysely
+      .updateTable('outbox')
+      .set({ attempts: 3 })
+      .where('id', '=', parked.eventId)
+      .execute();
+
+    const status = await relay.status();
+    expect(status.pending).toBe(1);
+    expect(status.failed).toBe(1);
+    expect(status.oldestPendingSeconds).toBeGreaterThanOrEqual(89);
+    await harness.db.kysely.deleteFrom('outbox').where('id', '=', parked.eventId).execute();
+  });
+
   describe('retention of published rows (G-55)', () => {
     const DAY = 24 * 60 * 60_000;
 

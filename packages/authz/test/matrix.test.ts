@@ -145,11 +145,14 @@ function expectedResult(
   // H3 is unconditional: nobody but master may create, manage or read the
   // reseller records (`reseller.read`, G-10), whatever the resource
   // relationship. Checked first, matching how hardRulesPass itself checks
-  // every hard rule before anything else.
+  // every hard rule before anything else. S4-12 (G-124) reserves the
+  // operations console's two permissions the same way.
   if (
     (permission === 'reseller.create' ||
       permission === 'reseller.manage' ||
-      permission === 'reseller.read') &&
+      permission === 'reseller.read' ||
+      permission === 'platform.observe' ||
+      permission === 'platform.operate') &&
     actorType !== 'master'
   ) {
     return false;

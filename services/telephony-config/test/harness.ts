@@ -37,7 +37,7 @@ import type {
   QueueTierConfig,
   RingGroupConfig,
 } from '../src/pbx-config-client.js';
-import type { OpenSipsMiClient } from '../src/opensips-mi-client.js';
+import type { MiParams, OpenSipsMiClient } from '../src/opensips-mi-client.js';
 import type { OpenSipsDb } from '../src/opensips-schema.js';
 import { createProjection, type Projection } from '../src/projection.js';
 import {
@@ -87,7 +87,7 @@ export interface Harness {
 export interface FakeMiClient extends OpenSipsMiClient {
   readonly calls: string[];
   /** Every `query()` with its params (S4-02: `ds_set_state`). */
-  readonly queries: { method: string; params: readonly unknown[] | undefined }[];
+  readonly queries: { method: string; params: MiParams | undefined }[];
   /** `reg_list`'s canned answer, keyed by the `aor` positional param — set per test. */
   regListResults: Record<string, unknown>;
 }
@@ -103,11 +103,12 @@ function fakeMiClient(): FakeMiClient {
       calls.push(method);
       return Promise.resolve();
     },
-    query<T>(method: string, params?: readonly unknown[]) {
+    query<T>(method: string, params?: MiParams) {
       calls.push(method);
       state.queries.push({ method, params });
       if (method === 'reg_list') {
-        const aor = typeof params?.[0] === 'string' ? params[0] : '';
+        const first: unknown = Array.isArray(params) ? (params as unknown[])[0] : undefined;
+        const aor = typeof first === 'string' ? first : '';
         return Promise.resolve((state.regListResults[aor] ?? { Records: [] }) as T);
       }
       return Promise.resolve(undefined as T);

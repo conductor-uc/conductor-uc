@@ -41,6 +41,7 @@ describe.skipIf(skipReason !== undefined)('FS node drain in the dispatcher (S4-0
     await h.opensipsDb.kysely.deleteFrom('dispatcher').execute();
     await h.db.kysely.deleteFrom('consumed_events').execute();
     h.mi.queries.length = 0;
+    h.mi.calls.length = 0;
     await h.bus.jsm.streams.purge('CALL');
   });
 
@@ -128,6 +129,33 @@ describe.skipIf(skipReason !== undefined)('FS node drain in the dispatcher (S4-0
       ['i', 1, 'sip:fs1:5060'],
       ['a', 1, 'sip:fs1:5060'],
     ]);
+  });
+
+  it('S4-12: sets a node weight in the table and reloads the dispatcher', async () => {
+    await seed();
+    const data = { nodeId: 'fs2', weight: 3 };
+    telephonyEvents.assertPayload('call.node.weight_changed', data);
+    await h.bus.publish({
+      id: crypto.randomUUID(),
+      type: 'call.node.weight_changed',
+      schemaVersion: telephonyEvents.contract('call.node.weight_changed').schemaVersion,
+      occurredAt: new Date().toISOString(),
+      orgContext: {},
+      data,
+    });
+
+    expect((await runOnceUntilHandled(consumer)).handled).toBe(1);
+    const rows = await h.opensipsDb.kysely
+      .selectFrom('dispatcher')
+      .select(['destination', 'weight'])
+      .orderBy('id')
+      .execute();
+    expect(rows.map((row) => [row.destination, String(row.weight)])).toEqual([
+      ['sip:fs1:5060', '1'],
+      ['sip:fs2:5060', '3'],
+      ['sip:unnamed:5060', '1'],
+    ]);
+    expect(h.mi.calls.at(-1)).toBe('ds_reload');
   });
 
   it('changes nothing for a node no destination names', async () => {

@@ -97,6 +97,14 @@ describe('h3ResellerLifecycle', () => {
     expect(h3ResellerLifecycle(masterActor, 'reseller.read')).toBe(true);
   });
 
+  it('reserves the operations console to the master (S4-12, G-124), whatever a role says', () => {
+    for (const permission of ['platform.observe', 'platform.operate']) {
+      expect(h3ResellerLifecycle(resellerActor, permission)).toBe(false);
+      expect(h3ResellerLifecycle(tenantActor, permission)).toBe(false);
+      expect(h3ResellerLifecycle(masterActor, permission)).toBe(true);
+    }
+  });
+
   it('does not restrict an unrelated permission', () => {
     expect(h3ResellerLifecycle(resellerActor, 'tenant.create')).toBe(true);
     expect(h3ResellerLifecycle(resellerActor, 'tenant.read')).toBe(true);

@@ -1,6 +1,8 @@
 import { parseRecordingControls, type RecordingControls } from '@cuc/api-contracts';
 import type { Redis } from 'ioredis';
 
+import type { NodeStats } from '../normalize.js';
+
 /**
  * The Redis call/node registry (04 §3.1, §3.2) — the one piece of durable-ish
  * state this service owns. Every key is prefixed with `options.keyPrefix`
@@ -12,7 +14,7 @@ export interface CallRegistry {
    * Writes/refreshes `fsnode:{id}` (04 §3.1) and adds it to the `fsnodes` set. The status is
    * `draining` while the node is in `fsnodes:draining` (S4-02), otherwise `up`.
    */
-  heartbeat(nodeId: string, ttlMs: number): Promise<void>;
+  heartbeat(nodeId: string, ttlMs: number, stats?: NodeStats): Promise<void>;
   /**
    * S4-02 (G-123): takes a node out of service for new calls and leases, or puts it back. Kept in
    * the `fsnodes:draining` set with no TTL, so a drain outlives the node's heartbeat key (a node
@@ -74,7 +76,28 @@ export interface NodeState {
   readonly draining: boolean;
   /** Calls the registry has on the node (`node:{id}:calls`). */
   readonly calls: number;
+  /**
+   * S4-12: the load its last FreeSWITCH `HEARTBEAT` reported, null until one has (every 20 s by
+   * default) and when the node is down.
+   */
+  readonly sessions: number | null;
+  readonly maxSessions: number | null;
+  readonly cpuIdlePercent: number | null;
+  readonly sessionsPerSecond: number | null;
+  readonly uptimeSeconds: number | null;
+  /** When that heartbeat arrived (RFC 3339). */
+  readonly heartbeatAt: string | null;
 }
+
+/** `fsnode:{id}` fields a FreeSWITCH `HEARTBEAT` fills (S4-12). */
+const STAT_FIELDS = [
+  'sessions',
+  'maxSessions',
+  'cpuIdlePercent',
+  'sessionsPerSecond',
+  'uptimeSeconds',
+  'heartbeatAt',
+] as const;
 
 export interface CallRecord {
   readonly callUuid: string;
@@ -101,8 +124,11 @@ const UPDATE_IF_EXISTS = `if redis.call('EXISTS', KEYS[1]) == 1 then return redi
  */
 const ATTACH_TENANT = `if redis.call('HGET', KEYS[1], 'tenant') == '' then redis.call('HSET', KEYS[1], 'tenant', ARGV[1]) redis.call('SADD', KEYS[2], ARGV[2]) return redis.call('HGETALL', KEYS[1]) end return {}`;
 
-/** KEYS: fsnode:{id}, fsnodes:draining, fsnodes. ARGV: node id, TTL (ms). */
-const HEARTBEAT = `local status = 'up' if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then status = 'draining' end redis.call('HSET', KEYS[1], 'status', status) redis.call('PEXPIRE', KEYS[1], ARGV[2]) redis.call('SADD', KEYS[3], ARGV[1]) return status`;
+/**
+ * KEYS: fsnode:{id}, fsnodes:draining, fsnodes. ARGV: node id, TTL (ms), then field/value pairs
+ * (S4-12: a FreeSWITCH HEARTBEAT's figures) to set as well.
+ */
+const HEARTBEAT = `local status = 'up' if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then status = 'draining' end redis.call('HSET', KEYS[1], 'status', status) for i = 3, #ARGV, 2 do redis.call('HSET', KEYS[1], ARGV[i], ARGV[i + 1]) end redis.call('PEXPIRE', KEYS[1], ARGV[2]) redis.call('SADD', KEYS[3], ARGV[1]) return status`;
 
 /** KEYS: fsnode:{id}, fsnodes:draining. ARGV: node id, '1' to drain or '0' to undrain. */
 const SET_DRAINING = `local status = 'up' if ARGV[2] == '1' then redis.call('SADD', KEYS[2], ARGV[1]) status = 'draining' else redis.call('SREM', KEYS[2], ARGV[1]) end if redis.call('EXISTS', KEYS[1]) == 1 then redis.call('HSET', KEYS[1], 'status', status) end return status`;
@@ -173,7 +199,15 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
   const k = (key: string): string => `${keyPrefix}${key}`;
 
   return {
-    async heartbeat(nodeId, ttlMs) {
+    async heartbeat(nodeId, ttlMs, stats) {
+      const fields =
+        stats === undefined
+          ? []
+          : [
+              ...Object.entries(stats).flatMap(([field, value]) => [field, String(value)]),
+              'heartbeatAt',
+              new Date().toISOString(),
+            ];
       await redis.eval(
         HEARTBEAT,
         3,
@@ -182,6 +216,7 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
         k('fsnodes'),
         nodeId,
         ttlMs,
+        ...fields,
       );
     },
 
@@ -200,7 +235,7 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
       if (nodeIds.length === 0) return [];
       const pipeline = redis.pipeline();
       for (const nodeId of nodeIds) {
-        pipeline.hget(k(`fsnode:${nodeId}`), 'status');
+        pipeline.hmget(k(`fsnode:${nodeId}`), 'status', ...STAT_FIELDS);
         pipeline.sismember(k('fsnodes:draining'), nodeId);
         pipeline.scard(k(`node:${nodeId}:calls`));
       }
@@ -211,13 +246,27 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
         return entry[1];
       };
       return nodeIds.map((nodeId, i) => {
-        const status = value(i * 3);
+        const [status, ...stats] = value(i * 3) as (string | null)[];
         const draining = value(i * 3 + 1) === 1;
+        const up = status !== null && status !== undefined;
+        const stat = (index: number): number | null => {
+          const raw = up ? stats[index] : null;
+          if (raw === null || raw === undefined || raw === '') return null;
+          const parsed = Number(raw);
+          return Number.isFinite(parsed) ? parsed : null;
+        };
+        const heartbeatAt = up ? (stats[5] ?? null) : null;
         return {
           nodeId,
-          status: status === null ? 'down' : draining ? 'draining' : 'up',
+          status: up ? (draining ? 'draining' : 'up') : 'down',
           draining,
           calls: Number(value(i * 3 + 2)),
+          sessions: stat(0),
+          maxSessions: stat(1),
+          cpuIdlePercent: stat(2),
+          sessionsPerSecond: stat(3),
+          uptimeSeconds: stat(4),
+          heartbeatAt: heartbeatAt === '' ? null : heartbeatAt,
         };
       });
     },

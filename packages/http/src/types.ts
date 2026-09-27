@@ -1,6 +1,6 @@
 import type { RegisteredRoute, RouteContract } from './contract.js';
 import type { RequestContext } from './context.js';
-import type { ReadinessCheck } from './health.js';
+import type { ReadinessCheck, StatusSection } from './health.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -13,6 +13,8 @@ declare module 'fastify' {
     registeredRoutes: RegisteredRoute[];
     /** Adds a dependency check to `GET /readyz`. */
     addReadinessCheck: (name: string, check: ReadinessCheck) => void;
+    /** S4-12: adds a named section to `GET /statusz` (e.g. `outbox`). */
+    addStatusSection: (name: string, section: StatusSection) => void;
   }
 
   /**

@@ -29,17 +29,20 @@ const app = await buildApp({
       hub = created;
     },
   },
+  // S4-12: the operations console reads the event backlog through the same connection.
+  platform: { bus: () => bus },
 });
 
-// The realtime hub's NATS connection (S5-08) is made in the background and
-// retried: the gateway serves the API whether or not NATS is up, and until it
-// is, live subscriptions are refused as `unavailable`. The gateway only reads
-// events and publishes audit records; it creates no streams (call-control does).
+// The NATS connection (S5-08: the realtime hub; S4-12: the operations console's
+// event backlog) is made in the background and retried: the gateway serves the
+// API whether or not NATS is up, and until it is, live subscriptions are refused
+// as `unavailable`. The gateway only reads events and publishes audit records;
+// it creates no streams (call-control does).
 let bus: Bus | undefined;
 let stopping = false;
 async function connectRealtimeBus(): Promise<void> {
   let delayMs = 1_000;
-  while (hub !== undefined && !stopping) {
+  while (!stopping) {
     try {
       bus = await connectBus({
         servers: config.NATS_SERVERS,
@@ -48,8 +51,8 @@ async function connectRealtimeBus(): Promise<void> {
         ...(config.NATS_USER === undefined ? {} : { user: config.NATS_USER }),
         ...(config.NATS_PASSWORD === undefined ? {} : { password: config.NATS_PASSWORD }),
       });
-      hub.attachBus(bus);
-      logger.info('realtime hub connected to NATS');
+      hub?.attachBus(bus);
+      logger.info('connected to NATS');
       return;
     } catch (error) {
       logger.warn({ err: error, retryInMs: delayMs }, 'realtime hub cannot reach NATS yet');

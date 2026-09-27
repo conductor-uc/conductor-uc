@@ -124,7 +124,7 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
 
       switch (action.kind) {
         case 'heartbeat':
-          await registry.heartbeat(action.nodeId, heartbeatTtlMs);
+          await registry.heartbeat(action.nodeId, heartbeatTtlMs, action.stats);
           return;
 
         case 'created':

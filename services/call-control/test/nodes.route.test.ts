@@ -70,7 +70,7 @@ describe.skipIf(skipReason !== undefined)('FS node draining (S4-02, G-123)', () 
     const response = await app.inject({ method: 'GET', url: '/internal/v1/nodes', headers: auth });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(response.json()).toMatchObject({
       nodes: [
         { nodeId: 'drain-a', status: 'up', draining: false, calls: 0, leases: 1 },
         { nodeId: 'drain-b', status: 'up', draining: false, calls: 0, leases: 0 },
@@ -90,7 +90,7 @@ describe.skipIf(skipReason !== undefined)('FS node draining (S4-02, G-123)', () 
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
+    expect(response.json()).toMatchObject({
       node: { nodeId: 'drain-a', status: 'draining', draining: true, calls: 0, leases: 0 },
       leasesHandedOver: 2,
     });

@@ -40,6 +40,16 @@ export interface RelayPass {
   readonly failed: number;
 }
 
+/** S4-12: the outbox as the operations console shows it. */
+export interface OutboxStatus {
+  /** Unpublished rows the relay will still try. */
+  readonly pending: number;
+  /** Age of the oldest of those, or null when there are none. */
+  readonly oldestPendingSeconds: number | null;
+  /** Rows parked after `maxAttempts` failed publishes, waiting for an operator. */
+  readonly failed: number;
+}
+
 export interface Relay {
   /** One pass. Returns what it did, for tests and metrics. */
   runOnce(): Promise<RelayPass>;
@@ -48,6 +58,8 @@ export interface Relay {
   stop(): void;
   /** Unpublished rows still waiting, for the outbox-lag metric (09 §4). */
   lag(): Promise<number>;
+  /** S4-12: pending, oldest pending and parked rows, for the operations console. */
+  status(): Promise<OutboxStatus>;
   /**
    * Deletes published rows older than the retention period, in batches.
    * Returns how many went. `run()` calls it once at start and then every
@@ -272,6 +284,35 @@ export function createRelay<TDb extends EventTables>(options: RelayOptions<TDb>)
         .where('published_at', 'is', null)
         .executeTakeFirst();
       return Number(row?.waiting ?? 0);
+    },
+
+    async status() {
+      const [pending, failed] = await Promise.all([
+        db
+          .selectFrom('outbox')
+          .select((eb) => [
+            eb.fn.countAll<number>().as('count'),
+            eb.fn.min<Date | string | null>('created_at').as('oldest'),
+          ])
+          .where('published_at', 'is', null)
+          .where('attempts', '<', maxAttempts)
+          .executeTakeFirst(),
+        db
+          .selectFrom('outbox')
+          .select((eb) => eb.fn.countAll<number>().as('count'))
+          .where('published_at', 'is', null)
+          .where('attempts', '>=', maxAttempts)
+          .executeTakeFirst(),
+      ]);
+      const oldest = pending?.oldest ?? null;
+      return {
+        pending: Number(pending?.count ?? 0),
+        oldestPendingSeconds:
+          oldest === null
+            ? null
+            : Math.max(0, Math.round((Date.now() - new Date(oldest).getTime()) / 1000)),
+        failed: Number(failed?.count ?? 0),
+      };
     },
 
     purgePublished,

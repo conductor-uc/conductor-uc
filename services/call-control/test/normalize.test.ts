@@ -242,6 +242,31 @@ describe('normalizeEslEvent', () => {
     expect(normalizeEslEvent('fs-1', { 'Event-Name': 'HEARTBEAT' })).toEqual({
       kind: 'heartbeat',
       nodeId: 'fs-1',
+      stats: {},
+    });
+  });
+
+  it('S4-12: reads the load a HEARTBEAT reports, leaving out what is missing or not a number', () => {
+    expect(
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'HEARTBEAT',
+        'Session-Count': '6',
+        'Max-Sessions': '1000',
+        'Idle-CPU': '97.300000',
+        'Session-Per-Sec-Last': '2',
+        'Uptime-msec': '8200400',
+        'Session-Per-Sec': 'n/a',
+      }),
+    ).toEqual({
+      kind: 'heartbeat',
+      nodeId: 'fs-1',
+      stats: {
+        sessions: 6,
+        maxSessions: 1000,
+        cpuIdlePercent: 97.3,
+        sessionsPerSecond: 2,
+        uptimeSeconds: 8200,
+      },
     });
   });
 

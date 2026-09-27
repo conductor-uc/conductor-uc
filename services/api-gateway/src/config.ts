@@ -48,6 +48,14 @@ export const configSchema = Type.Object({
    * call, or idle), as before S5-10.
    */
   TELEPHONY_CONFIG_URL: Env.optional(Env.url()),
+  /**
+   * S4-12: more services for the operations console to ask for their `/statusz`, beyond the ones
+   * this gateway already calls, as `name=url` (media-worker, notification-service, each node's
+   * recording uploader: `uploader-fs1=http://10.10.0.21:8108`).
+   */
+  PLATFORM_STATUS_TARGETS: Env.list({ default: [] }),
+  /** S4-12: NATS' monitoring endpoint (`nats -m 8222`), for its figures in the operations console. */
+  NATS_MONITOR_URL: Env.optional(Env.url()),
 
   /**
    * The routing table (06, api-gateway): which downstream service owns which
@@ -119,6 +127,8 @@ export const configSchema = Type.Object({
       // recording, for a supervisor on any call and for a person on their own.
       '/v1/tenants/*/calls=call',
       '/v1/tenants/*/me/live-calls=call',
+      // call-control (S4-12): the operations console's drain, undrain and weight.
+      '/v1/platform/nodes=call',
     ],
   }),
 

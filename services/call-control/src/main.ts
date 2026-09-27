@@ -25,6 +25,7 @@ import { createEslClient, type EslClient } from './esl/client.js';
 import { createCallRegistry } from './redis/registry.js';
 import { createSerialQueue } from './serial.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
+import { registerPlatformRoutes } from './routes/platform.routes.js';
 import type { CallControlDb } from './schema.js';
 
 const config = loadServiceConfig();
@@ -179,6 +180,8 @@ const nodeDrain = createNodeDrain({
 });
 
 registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN, registry, nodeDrain);
+// S4-12: the operations console's drain, undrain and weight, through api-gateway.
+registerPlatformRoutes(app, nodeDrain);
 
 const userExtension = createUserExtensionLookup({
   baseUrl: config.PBX_CONFIG_SERVICE_URL,
@@ -232,6 +235,8 @@ registerMonitorRoutes(app, {
   }),
 });
 
+// S4-12: the outbox backlog, for the operations console (`/statusz`).
+app.addStatusSection('outbox', () => relay.status());
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('redis', async () => {

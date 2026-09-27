@@ -36,6 +36,7 @@ export {
   type HealthOptions,
   type ReadinessCheck,
   type ReadinessResult,
+  type StatusSection,
 } from './health.js';
 export {
   createRemotePermissionResolver,

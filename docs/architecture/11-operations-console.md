@@ -43,7 +43,8 @@ A source that does not answer within 2 s is shown as unreachable; the rest of th
     "latencyMs": 4, "version": "0.1.0", "uptimeSeconds": 8123,
     "checks": [{ "name": "redis", "status": "pass" }],
     "memory": { "rssBytes": 91234304, "heapUsedBytes": 40123000 },  // or null
-    "outbox": { "pending": 0, "oldestPendingSeconds": null, "failed": 0 }  // or null
+    "outbox": { "pending": 0, "oldestPendingSeconds": null, "failed": 0 },  // or null
+    "facts": []   // anything else it reports, as for data stores (an uploader: its spool)
   }],
   "nodes": [{
     "nodeId": "freeswitch-2", "status": "draining",  // up | draining | down

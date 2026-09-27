@@ -12,6 +12,8 @@ import { createCallControlClient } from './call-control-client.js';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createCertificateConsumer } from './consumers/certificate.consumer.js';
 import { createNodeConsumer } from './consumers/node.consumer.js';
+import { createPlatformStatus } from './platform-status.js';
+import { registerPlatformStatusRoutes } from './routes/platform-status.routes.js';
 import { createOrgConsumer } from './consumers/org.consumer.js';
 import { createPbxConsumer } from './consumers/pbx.consumer.js';
 import { createRecordingConsumer } from './consumers/recording.consumer.js';
@@ -214,6 +216,8 @@ const app = await createServer({
   logger,
 });
 
+// S4-12: the outbox backlog, for the operations console (`/statusz`).
+app.addStatusSection('outbox', () => relay.status());
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('opensips_db', async () => ({
   status: (await opensipsDb.ping()) ? 'pass' : 'fail',
@@ -254,6 +258,11 @@ registerInternalRoutes(
   logger,
 );
 registerPresenceRoutes(app, { presence, internalServiceToken: config.INTERNAL_SERVICE_TOKEN });
+// S4-12: the SIP edge, the FS pool and MariaDB, for the operations console.
+registerPlatformStatusRoutes(app, {
+  status: createPlatformStatus({ mi: miClient, opensipsDb, db, logger }),
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');

@@ -117,6 +117,29 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
     },
 
     /**
+     * S4-12 (G-124): the FS node's share of new calls, on its dispatcher rows in set 1. Returns
+     * how many rows name the node. The table is the only copy: `seed-dispatcher.py` leaves an
+     * existing row's weight alone.
+     */
+    async setDispatcherNodeWeight(nodeId: string, weight: number): Promise<number> {
+      const rows = await k
+        .selectFrom('dispatcher')
+        .select('id')
+        .where('setid', '=', FS_DISPATCHER_SET)
+        .where('attrs', '=', nodeId)
+        .execute();
+      if (rows.length > 0) {
+        await k
+          .updateTable('dispatcher')
+          .set({ weight: String(weight) })
+          .where('setid', '=', FS_DISPATCHER_SET)
+          .where('attrs', '=', nodeId)
+          .execute();
+      }
+      return rows.length;
+    },
+
+    /**
      * `attrs` carries the owning tenant's id (S1-14) — the one piece of
      * per-domain data OpenSIPs' routing script actually needs back out.
      * `is_from_local($var(attrs))` (03 §2.1's "request from a registered
