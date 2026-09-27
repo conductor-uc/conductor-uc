@@ -179,31 +179,50 @@ export const callEvents = defineEvents({
     }),
   },
   /**
-   * S2-13: an agent's live status changed in `mod_callcenter` (ESL `CUSTOM
-   * callcenter::info`, `CC-Action: agent-state-change`) — the only
-   * `call.queue.*` event this task wires up. `agentName` is the
-   * `mod_callcenter` identity (`extension_number@tenant_domain`,
-   * `callcenterName()` in telephony-config's `xml.ts`), not this
-   * platform's own agent id: this event has no tenant/agent-id context to
-   * carry (ESL reports FS's own config-time identity, nothing else), so a
-   * consumer that needs the platform id has to resolve it itself.
-   *
-   * UNVERIFIED LIVE (docs/decisions.md G-47, same discipline as this
-   * codebase's other FS-facing surfaces): `CC-Action`/`CC-Agent`/
-   * `CC-Agent-Status` are `mod_callcenter`'s own documented ESL event
-   * headers, not invented, but not run against a real FreeSWITCH process.
-   * `call.queue.caller_joined`/`call.queue.caller_left` (queue-member add/del) are not
-   * implemented — their own header names are less confidently known, and
-   * guessing wrong here would silently corrupt event data rather than
-   * fail loudly, worse than not emitting them at all.
+   * S2-13, corrected in G-119 (3): an agent's changes in `mod_callcenter` (ESL `CUSTOM
+   * callcenter::info`; header names confirmed live, `normalize.ts`). `agentName` is the
+   * `mod_callcenter` identity (`extension_number@tenant_domain`, `callcenterName()` in
+   * telephony-config's `xml.ts`); the tenant comes from that domain (org-service), since the event
+   * names nothing else. Queue callers joining and leaving are not separate events: a caller's leg
+   * becomes `call.channel.queued` and ends with its hangup.
    */
   'call.queue.agent_status_changed': {
     schemaVersion: 1,
-    description: "An agent's live mod_callcenter status changed.",
+    description:
+      "An agent's availability changed (mod_callcenter agent-status-change: Available, On " +
+      "Break, Logged Out, ...). G-119 (3): the tenant is in orgContext when the agent's domain " +
+      "belongs to one, and `extension` is the agent's extension number.",
     data: Type.Object({
       nodeId: Type.String({ minLength: 1 }),
       agentName: Type.String({ minLength: 1 }),
+      extension: Type.Optional(Type.String({ minLength: 1 })),
       status: Type.String({ minLength: 1 }),
+    }),
+  },
+  'call.queue.agent_state_changed': {
+    schemaVersion: 1,
+    description:
+      'What an agent is doing changed (mod_callcenter agent-state-change: Waiting, Receiving, ' +
+      'In a queue call, ...). Tenant and `extension` as for agent_status_changed.',
+    data: Type.Object({
+      nodeId: Type.String({ minLength: 1 }),
+      agentName: Type.String({ minLength: 1 }),
+      extension: Type.Optional(Type.String({ minLength: 1 })),
+      state: Type.String({ minLength: 1 }),
+    }),
+  },
+  /**
+   * G-119 (3): a leg of a queue call, and which queue: the caller joining it (mod_callcenter
+   * member-queue-start) or the agent answering (bridge-agent-start). The live views filter and
+   * group by it; the leg keeps it until it ends.
+   */
+  'call.channel.queued': {
+    schemaVersion: 1,
+    description: "A channel is a leg of a queue's call (mod_callcenter).",
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+      queueId: Type.String({ minLength: 1 }),
     }),
   },
   // `call.lost` (04 §4's failure sequence: a node's calls, abandoned on

@@ -210,3 +210,40 @@ export function createTenantDomainLookup(options: ClientOptions): TenantDomainLo
     return body.fqdn;
   };
 }
+
+/**
+ * G-119 (3): which tenant a domain belongs to (org-service's `GET /internal/v1/tenant-domains/:fqdn`),
+ * for a queue agent's events. Domains rarely change owner, so an answer is kept for `ttlMs`
+ * (default 5 minutes) and "nobody" for a minute; the cache is bounded. Throws
+ * {@link UpstreamError} when org-service cannot be asked.
+ */
+export function createTenantByDomainLookup(
+  options: ClientOptions & { readonly ttlMs?: number; readonly now?: () => number },
+): (fqdn: string) => Promise<string | undefined> {
+  const now = options.now ?? Date.now;
+  const ttlMs = options.ttlMs ?? 5 * 60_000;
+  const cache = new Map<string, { tenantId: string | undefined; until: number }>();
+  return async (fqdn) => {
+    const key = fqdn.toLowerCase();
+    const hit = cache.get(key);
+    if (hit !== undefined && hit.until > now()) return hit.tenantId;
+    const response = await call(options, `/internal/v1/tenant-domains/${encodeURIComponent(key)}`, {
+      method: 'GET',
+    });
+    let tenantId: string | undefined;
+    if (response.status === 404) {
+      tenantId = undefined;
+    } else if (response.ok) {
+      const body = (await response.json()) as { tenantId?: unknown };
+      if (typeof body.tenantId !== 'string') {
+        throw new UpstreamError('org-service gave an answer this service cannot read');
+      }
+      tenantId = body.tenantId;
+    } else {
+      throw new UpstreamError(`org-service answered ${String(response.status)}`);
+    }
+    if (cache.size > 10_000) cache.clear();
+    cache.set(key, { tenantId, until: now() + (tenantId === undefined ? 60_000 : ttlMs) });
+    return tenantId;
+  };
+}

@@ -19,6 +19,11 @@ export interface ChannelHandlerOptions {
   readonly logger: Logger;
   readonly callSafetyTtlMs: number;
   readonly heartbeatTtlMs: number;
+  /**
+   * G-119 (3): the tenant a domain belongs to (org-service), for a queue agent's events, which
+   * name the agent only as `extension@domain`. Without it they go out with no tenant.
+   */
+  readonly tenantByDomain?: (fqdn: string) => Promise<string | undefined>;
 }
 
 /** The state changes that carry nothing but the call: which event, and what the registry records. */
@@ -60,6 +65,23 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
    * When this event is the first to name the tenant, the call is attached to
    * it and announced first ({@link identify}).
    */
+  /** An agent's extension and tenant, from its `mod_callcenter` name (`extension@domain`). */
+  async function agentOf(
+    agentName: string,
+  ): Promise<{ tenantId: string | null; extension: { extension?: string } }> {
+    const at = agentName.indexOf('@');
+    const number = at > 0 ? agentName.slice(0, at) : '';
+    const domain = at > 0 ? agentName.slice(at + 1) : '';
+    const extension = /^[0-9]{2,6}$/.test(number) ? { extension: number } : {};
+    if (domain === '' || options.tenantByDomain === undefined) return { tenantId: null, extension };
+    try {
+      return { tenantId: (await options.tenantByDomain(domain)) ?? null, extension };
+    } catch (error) {
+      logger.warn({ err: error, agentName }, "queue agent event: the agent's tenant is unknown");
+      return { tenantId: null, extension };
+    }
+  }
+
   async function tenantFor(callUuid: string, said: string | null): Promise<string | null> {
     if (said === null) return registry.tenantOf(callUuid);
     await identify(callUuid, said);
@@ -195,16 +217,34 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
           return;
         }
 
-        case 'queueAgentStateChanged':
+        case 'queued': {
+          const tenantId = await tenantFor(action.callUuid, null);
           await enqueueEvent(db, callEvents, {
-            type: 'call.queue.agent_status_changed',
-            data: {
-              nodeId: action.nodeId,
-              agentName: action.agentName,
-              status: action.status,
-            },
+            type: 'call.channel.queued',
+            data: { callUuid: action.callUuid, nodeId: action.nodeId, queueId: action.queueId },
+            ...orgContextOf(tenantId),
           });
+          await registry.updateCall(action.callUuid, { queue: action.queueId });
           return;
+        }
+
+        case 'queueAgentStatusChanged':
+        case 'queueAgentStateChanged': {
+          const agent = await agentOf(action.agentName);
+          const base = { nodeId: action.nodeId, agentName: action.agentName, ...agent.extension };
+          await (action.kind === 'queueAgentStatusChanged'
+            ? enqueueEvent(db, callEvents, {
+                type: 'call.queue.agent_status_changed',
+                data: { ...base, status: action.status },
+                ...orgContextOf(agent.tenantId),
+              })
+            : enqueueEvent(db, callEvents, {
+                type: 'call.queue.agent_state_changed',
+                data: { ...base, state: action.state },
+                ...orgContextOf(agent.tenantId),
+              }));
+          return;
+        }
 
         case 'ignored':
           return;

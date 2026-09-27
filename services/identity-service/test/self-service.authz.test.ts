@@ -443,6 +443,77 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
       expect(await h.grants.listForOrg(org)).toEqual([]);
     });
 
+    it('G-121 (7): may give a user monitoring of one extension or queue, and nothing wider', async () => {
+      const org = crypto.randomUUID();
+      const admin = await person(org, 'tenant_admin');
+      const lead = await person(org, 'tenant_user');
+      const grant = (body: object) => call('POST', `/v1/orgs/${org}/grants`, admin.as, body);
+      const queueId = crypto.randomUUID();
+
+      for (const [permission, scope] of [
+        ['monitor.whisper', { type: 'queue', id: queueId }],
+        ['monitor.listen', { type: 'extension', id: crypto.randomUUID() }],
+      ] as const) {
+        const response = await grant({
+          principalType: 'user',
+          principalId: lead.id,
+          permission,
+          scope,
+        });
+        expect(response.statusCode, permission).toBe(201);
+      }
+      expect(await h.grants.listForOrg(org)).toHaveLength(2);
+
+      const refusals: [object, string][] = [
+        // Across the whole tenant: that is the supervisor role, which is assigned, not granted.
+        [
+          {
+            principalType: 'user',
+            principalId: lead.id,
+            permission: 'monitor.barge',
+            scope: { type: 'org', id: org },
+          },
+          'permission_escalation',
+        ],
+        // To a role, which could reach the administrator.
+        [
+          {
+            principalType: 'role',
+            principalId: 'tenant_admin',
+            permission: 'monitor.listen',
+            scope: { type: 'queue', id: queueId },
+          },
+          'permission_escalation',
+        ],
+        // To themselves.
+        [
+          {
+            principalType: 'user',
+            principalId: admin.id,
+            permission: 'monitor.listen',
+            scope: { type: 'queue', id: queueId },
+          },
+          'cannot_grant_self',
+        ],
+        // A permission they lack, scoped the same way.
+        [
+          {
+            principalType: 'user',
+            principalId: lead.id,
+            permission: 'billing.read',
+            scope: { type: 'queue', id: queueId },
+          },
+          'permission_escalation',
+        ],
+      ];
+      for (const [body, code] of refusals) {
+        const response = await grant(body);
+        expect(response.statusCode, JSON.stringify(body)).toBe(403);
+        expect(response.json(), JSON.stringify(body)).toMatchObject({ code });
+      }
+      expect(await h.grants.listForOrg(org)).toHaveLength(2);
+    });
+
     it("cannot list or change another org's grants or roles", async () => {
       const org = crypto.randomUUID();
       const victim = crypto.randomUUID();

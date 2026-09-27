@@ -710,6 +710,7 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
               recording: 'on',
               controls: 'none',
               extension: null,
+              queueId: null,
             },
           ],
         },

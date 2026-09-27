@@ -36,6 +36,7 @@ function call(overrides: Partial<LiveCall> = {}): LiveCall {
     recording: 'off',
     controls: 'none',
     extension: null,
+    queueId: null,
     ...overrides,
   };
 }
@@ -147,6 +148,7 @@ describe('live call events', () => {
           recording: 'off',
           controls: 'none',
           extension: null,
+          queueId: null,
         },
       },
     });
@@ -293,6 +295,12 @@ describe('live call events', () => {
         'call.channel.recording_stopped',
         base,
         { type: 'call.updated', callUuid: 'c1', changes: { recording: 'off' } },
+      ],
+      [
+        // G-119 (3): mod_callcenter put the leg in a queue.
+        'call.channel.queued',
+        { ...base, queueId: 'q1' },
+        { type: 'call.updated', callUuid: 'c1', changes: { queueId: 'q1' } },
       ],
       [
         'call.channel.hungup',

@@ -28,6 +28,35 @@ const GrantSchema = Type.Object({
   scope: Type.Object({ type: Type.String(), id: Type.String() }),
 });
 
+const MONITOR_ACTIONS: ReadonlySet<string> = new Set([
+  'monitor.listen',
+  'monitor.whisper',
+  'monitor.barge',
+]);
+
+/**
+ * G-121 (7), the owner's decision: a tenant's own administrator may give a person monitoring of
+ * one extension or one queue (a queue lead) without holding monitoring themselves, which by
+ * design they do not (07 §3.3). Only `monitor.listen`/`whisper`/`barge`; only scoped to an
+ * extension or a queue, never the whole org; only to a user, never a role (a role could reach the
+ * granter); and only inside the granter's own tenant. It is less than the `tenant_supervisor` role
+ * the administrator can already assign, and the granter still cannot grant it to themselves.
+ */
+function monitoringOnOneTarget(
+  body: { principalType: string; permission: string; scope: { type: string } },
+  actorOrgType: string | undefined,
+  actorOrgId: string,
+  orgId: string,
+): boolean {
+  return (
+    MONITOR_ACTIONS.has(body.permission) &&
+    (body.scope.type === 'extension' || body.scope.type === 'queue') &&
+    body.principalType === 'user' &&
+    actorOrgType === 'tenant' &&
+    actorOrgId === orgId
+  );
+}
+
 /**
  * `/v1/orgs/{orgId}/grants` (06). A grant is a permission on a specific scope
  * for one principal (07 §3.1) — narrower than a role, and the mechanism for
@@ -87,7 +116,10 @@ export function registerGrantRoutes(
           code: 'unknown_permission',
         });
       }
-      if (!(await lookup.ofUser(actorId, actorOrgId)).has(request.body.permission)) {
+      if (
+        !monitoringOnOneTarget(request.body, request.context.orgType, actorOrgId, orgId) &&
+        !(await lookup.ofUser(actorId, actorOrgId)).has(request.body.permission)
+      ) {
         throw ProblemError.forbidden('You cannot grant a permission you do not hold.', {
           code: 'permission_escalation',
         });

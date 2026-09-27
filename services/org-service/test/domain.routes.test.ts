@@ -313,6 +313,34 @@ describe.skipIf(skipReason !== undefined)('domain-service HTTP routes', () => {
     });
   });
 
+  describe('GET /internal/v1/tenant-domains/:fqdn (G-119 (3))', () => {
+    it('answers which tenant a domain belongs to, to a service only, whatever its case', async () => {
+      const reseller = await makeReseller();
+      const tenant = await orgs.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+      const url = '/internal/v1/tenant-domains/Widgets.Platform.Test';
+
+      expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+      const response = await app.inject({
+        method: 'GET',
+        url,
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ tenantId: tenant.id });
+
+      const unknown = await app.inject({
+        method: 'GET',
+        url: '/internal/v1/tenant-domains/nobody.platform.test',
+        headers: { authorization: `Bearer ${INTERNAL_TOKEN}` },
+      });
+      expect(unknown.statusCode).toBe(404);
+    });
+  });
+
   describe('GET /internal/v1/tenants/:id/reseller', () => {
     it('rejects a request with no bearer token', async () => {
       const reseller = await makeReseller();

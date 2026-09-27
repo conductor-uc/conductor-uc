@@ -57,35 +57,79 @@ export type ChannelAction =
     }
   | { readonly kind: 'heartbeat'; readonly nodeId: string }
   | {
-      readonly kind: 'queueAgentStateChanged';
+      /** An agent's availability (`CC-Agent-Status`: Available, On Break, Logged Out, ...). */
+      readonly kind: 'queueAgentStatusChanged';
       readonly nodeId: string;
       readonly agentName: string;
       readonly status: string;
     }
+  | {
+      /** What an agent is doing (`CC-Agent-State`: Waiting, Receiving, In a queue call, ...). */
+      readonly kind: 'queueAgentStateChanged';
+      readonly nodeId: string;
+      readonly agentName: string;
+      readonly state: string;
+    }
+  | {
+      /** G-119 (3): a leg of a queue call: the caller joining the queue, or the agent answering. */
+      readonly kind: 'queued';
+      readonly callUuid: string;
+      readonly nodeId: string;
+      readonly queueId: string;
+    }
   | { readonly kind: 'ignored' };
 
+/** A queue as `mod_callcenter` names it (`<queue id>@<tenant domain>`, telephony-config's `xml.ts`). */
+const QUEUE_NAME = /^([0-9A-Za-z][0-9A-Za-z-]{0,63})@/;
+/** A channel uuid, as FreeSWITCH makes them. */
+const CHANNEL_UUID = /^[0-9A-Za-z][0-9A-Za-z-]{0,63}$/;
+
 /**
- * `mod_callcenter`'s own ESL event (S2-13; `Event-Subclass: callcenter::
- * info`) — checked before the `Unique-ID` gate below, the same reason
- * `HEARTBEAT` is: an agent-state-change is not tied to any one channel, so
- * it may carry no `Unique-ID` at all, and gating on one first would drop
- * every callcenter event silently. Only `CC-Action: agent-state-change` is
- * handled (`events.ts`'s own doc comment on `call.queue.agent_status_changed`
- * for why queue-member add/del are not) — any other `CC-Action` value, or a
- * malformed one missing `CC-Agent`/`CC-Agent-Status`, normalizes to
- * `ignored` rather than guessed at.
+ * `mod_callcenter`'s own ESL event (S2-13; `Event-Subclass: callcenter::info`), checked before the
+ * `Unique-ID` gate below, the same reason `HEARTBEAT` is: an agent's change is not tied to any one
+ * channel, so it may carry no `Unique-ID` at all.
+ *
+ * Handled, with header names confirmed live on FreeSWITCH 1.10.12 (G-119 (3); before that this
+ * read `CC-Agent-Status` from `agent-state-change`, which never carries it, so nothing was ever
+ * emitted):
+ * - `agent-status-change`: `CC-Agent`, `CC-Agent-Status` (Available, On Break, Logged Out, ...).
+ * - `agent-state-change`: `CC-Agent`, `CC-Agent-State` (Waiting, Receiving, In a queue call, ...).
+ * - `member-queue-start`: the caller joined `CC-Queue`; `CC-Member-Session-UUID` is its channel.
+ * - `bridge-agent-start`: an agent answered; `CC-Agent-UUID` is the agent's channel.
+ * Anything else (`members-count`, `agent-offering`, `member-queue-end`, ...), or one missing what
+ * it needs, is ignored rather than guessed at.
  */
 function normalizeCallcenterEvent(
   nodeId: string,
   raw: Readonly<Record<string, string>>,
 ): ChannelAction {
-  if (raw['CC-Action'] !== 'agent-state-change') return { kind: 'ignored' };
-  const agentName = raw['CC-Agent'];
-  const status = raw['CC-Agent-Status'];
-  if (agentName === undefined || agentName === '' || status === undefined || status === '') {
-    return { kind: 'ignored' };
+  const agentName = raw['CC-Agent'] ?? '';
+  switch (raw['CC-Action']) {
+    case 'agent-status-change': {
+      const status = raw['CC-Agent-Status'] ?? '';
+      if (agentName === '' || status === '') return { kind: 'ignored' };
+      return { kind: 'queueAgentStatusChanged', nodeId, agentName, status };
+    }
+    case 'agent-state-change': {
+      const state = raw['CC-Agent-State'] ?? '';
+      if (agentName === '' || state === '') return { kind: 'ignored' };
+      return { kind: 'queueAgentStateChanged', nodeId, agentName, state };
+    }
+    case 'member-queue-start':
+    case 'bridge-agent-start': {
+      const callUuid =
+        raw['CC-Action'] === 'member-queue-start'
+          ? raw['CC-Member-Session-UUID']
+          : raw['CC-Agent-UUID'];
+      const queueId = QUEUE_NAME.exec(raw['CC-Queue'] ?? '')?.[1];
+      if (callUuid === undefined || !CHANNEL_UUID.test(callUuid) || queueId === undefined) {
+        return { kind: 'ignored' };
+      }
+      return { kind: 'queued', callUuid, nodeId, queueId };
+    }
+    default:
+      return { kind: 'ignored' };
   }
-  return { kind: 'queueAgentStateChanged', nodeId, agentName, status };
 }
 
 /**

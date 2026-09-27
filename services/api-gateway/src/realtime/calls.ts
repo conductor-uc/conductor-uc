@@ -40,10 +40,15 @@ export interface LiveCall {
    * own calls are found for the `user:{u}:calls` topic.
    */
   readonly extension: string | null;
+  /**
+   * G-119 (3): the queue this leg is in (a caller waiting or talking, or the agent who answered),
+   * from call-control's `call.channel.queued`; null for a call no queue handled.
+   */
+  readonly queueId: string | null;
 }
 
 export type LiveCallChanges = Partial<
-  Pick<LiveCall, 'state' | 'answeredAt' | 'bridgedTo' | 'recording' | 'controls'>
+  Pick<LiveCall, 'state' | 'answeredAt' | 'bridgedTo' | 'recording' | 'controls' | 'queueId'>
 >;
 
 /** One change on the `calls` topic (`event` in an `{type:"event"}` message). */
@@ -108,6 +113,7 @@ export function callEventFromEnvelope(
             recording: 'off',
             controls: controls ?? 'none',
             extension: extensionOf(data['extension']),
+            queueId: null,
           },
         },
       };
@@ -144,6 +150,11 @@ export function callEventFromEnvelope(
       return updated({ recording: 'paused' });
     case 'call.channel.recording_resumed':
       return updated({ recording: 'on' });
+    // G-119 (3): mod_callcenter put the leg in a queue.
+    case 'call.channel.queued': {
+      const queueId = stringField(data, 'queueId');
+      return queueId === undefined || queueId === '' ? undefined : updated({ queueId });
+    }
     case 'call.channel.hungup':
       return {
         tenantId,
@@ -168,8 +179,17 @@ export function liveCallFromSnapshot(entry: unknown): LiveCall | undefined {
   const callUuid = stringField(record, 'callUuid');
   const from = stringField(record, 'from');
   const to = stringField(record, 'to');
-  const { direction, state, startedAt, answeredAt, bridgedTo, recording, controls, extension } =
-    record;
+  const {
+    direction,
+    state,
+    startedAt,
+    answeredAt,
+    bridgedTo,
+    recording,
+    controls,
+    extension,
+    queueId,
+  } = record;
   if (callUuid === undefined || from === undefined || to === undefined) return undefined;
   if (direction !== 'inbound' && direction !== 'outbound') return undefined;
   if (state !== 'ringing' && state !== 'answered' && state !== 'held') return undefined;
@@ -186,6 +206,7 @@ export function liveCallFromSnapshot(entry: unknown): LiveCall | undefined {
     recording: recording === 'on' || recording === 'paused' ? recording : 'off',
     controls: controlsOf(controls) ?? 'none',
     extension: extensionOf(extension),
+    queueId: typeof queueId === 'string' && queueId !== '' ? queueId : null,
   };
 }
 

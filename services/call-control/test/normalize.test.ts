@@ -259,55 +259,79 @@ describe('normalizeEslEvent', () => {
     });
   });
 
-  it('maps a CUSTOM callcenter::info agent-state-change to queueAgentStateChanged (S2-13)', () => {
-    const action = normalizeEslEvent('fs-1', {
+  /** A `callcenter::info` event with the headers FreeSWITCH 1.10.12 was seen sending (G-119 (3)). */
+  const callcenter = (headers: Record<string, string>) =>
+    normalizeEslEvent('fs-1', {
       'Event-Name': 'CUSTOM',
       'Event-Subclass': 'callcenter::info',
-      'CC-Action': 'agent-state-change',
-      'CC-Agent': '101@acme.platform.test',
-      'CC-Agent-Status': 'Available',
+      ...headers,
     });
 
-    expect(action).toEqual({
-      kind: 'queueAgentStateChanged',
+  it('maps agent-status-change (CC-Agent-Status) and agent-state-change (CC-Agent-State), with no Unique-ID', () => {
+    expect(
+      callcenter({
+        'CC-Action': 'agent-status-change',
+        'CC-Agent': '301@queue.platform.test',
+        'CC-Agent-Status': 'Available',
+      }),
+    ).toEqual({
+      kind: 'queueAgentStatusChanged',
       nodeId: 'fs-1',
-      agentName: '101@acme.platform.test',
+      agentName: '301@queue.platform.test',
       status: 'Available',
     });
-  });
-
-  it('normalizes a callcenter event with no Unique-ID rather than dropping it (S2-13)', () => {
-    // The whole point: unlike every other event type, this must not be
-    // gated on Unique-ID being present.
-    const action = normalizeEslEvent('fs-1', {
-      'Event-Name': 'CUSTOM',
-      'Event-Subclass': 'callcenter::info',
-      'CC-Action': 'agent-state-change',
-      'CC-Agent': '101@acme.platform.test',
-      'CC-Agent-Status': 'Logged Out',
-    });
-
-    expect(action.kind).toBe('queueAgentStateChanged');
-  });
-
-  it('ignores a callcenter event with an unhandled CC-Action', () => {
     expect(
-      normalizeEslEvent('fs-1', {
-        'Event-Name': 'CUSTOM',
-        'Event-Subclass': 'callcenter::info',
-        'CC-Action': 'queue-member-add',
-      }),
-    ).toEqual({ kind: 'ignored' });
-  });
-
-  it('ignores a malformed agent-state-change missing CC-Agent/CC-Agent-Status', () => {
-    expect(
-      normalizeEslEvent('fs-1', {
-        'Event-Name': 'CUSTOM',
-        'Event-Subclass': 'callcenter::info',
+      callcenter({
         'CC-Action': 'agent-state-change',
+        'CC-Agent': '301@queue.platform.test',
+        'CC-Agent-State': 'In a queue call',
       }),
-    ).toEqual({ kind: 'ignored' });
+    ).toEqual({
+      kind: 'queueAgentStateChanged',
+      nodeId: 'fs-1',
+      agentName: '301@queue.platform.test',
+      state: 'In a queue call',
+    });
+  });
+
+  it('puts the caller (member-queue-start) and the answering agent (bridge-agent-start) in their queue', () => {
+    const queue = '9f70a995-7573-42de-bf4e-d4447611a91c@queue.platform.test';
+    expect(
+      callcenter({
+        'CC-Action': 'member-queue-start',
+        'CC-Queue': queue,
+        'CC-Member-Session-UUID': '65b20c1f-1fc9-416a-941a-17a6dba706c2',
+        'CC-Member-UUID': 'ff51a2be-5e3f-4826-89ba-f9a8d0bb7ce5',
+      }),
+    ).toEqual({
+      kind: 'queued',
+      nodeId: 'fs-1',
+      callUuid: '65b20c1f-1fc9-416a-941a-17a6dba706c2',
+      queueId: '9f70a995-7573-42de-bf4e-d4447611a91c',
+    });
+    expect(
+      callcenter({
+        'CC-Action': 'bridge-agent-start',
+        'CC-Queue': queue,
+        'CC-Agent': '301@queue.platform.test',
+        'CC-Agent-UUID': '93f37fbd-df79-47f2-875c-d5626fe3c74c',
+        'CC-Member-Session-UUID': '65b20c1f-1fc9-416a-941a-17a6dba706c2',
+      }),
+    ).toMatchObject({ kind: 'queued', callUuid: '93f37fbd-df79-47f2-875c-d5626fe3c74c' });
+  });
+
+  it('ignores callcenter events it does not handle, and ones missing what they need', () => {
+    for (const headers of [
+      { 'CC-Action': 'members-count', 'CC-Queue': 'q@d', 'CC-Count': '1' },
+      { 'CC-Action': 'agent-offering' },
+      // The pre-G-119 reading: agent-state-change never carries CC-Agent-Status.
+      { 'CC-Action': 'agent-state-change', 'CC-Agent': '301@d', 'CC-Agent-Status': 'Available' },
+      { 'CC-Action': 'agent-status-change', 'CC-Agent': '301@d' },
+      { 'CC-Action': 'member-queue-start', 'CC-Queue': 'no-domain' },
+      { 'CC-Action': 'member-queue-start', 'CC-Queue': 'q@d', 'CC-Member-Session-UUID': 'x;y' },
+    ]) {
+      expect(callcenter(headers), JSON.stringify(headers)).toEqual({ kind: 'ignored' });
+    }
   });
 
   it('ignores a CUSTOM event from an unrelated subclass', () => {

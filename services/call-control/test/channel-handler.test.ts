@@ -215,7 +215,84 @@ describe.skipIf(skipReason !== undefined)(
       expect(Number(outboxCount?.n)).toBe(0);
     });
 
-    it('a callcenter agent-state-change enqueues call.queue.agent_status_changed (S2-13)', async () => {
+    it("a queue agent's status and state go out with the agent's extension and tenant (G-119 (3))", async () => {
+      const asked: string[] = [];
+      const handler = createChannelHandler({
+        db: h.db.kysely,
+        registry: h.registry,
+        logger: h.logger,
+        callSafetyTtlMs: 6 * 60 * 60 * 1000,
+        heartbeatTtlMs: 10_000,
+        tenantByDomain: (fqdn) => {
+          asked.push(fqdn);
+          return Promise.resolve(fqdn === 'queue.platform.test' ? 'tenant-q' : undefined);
+        },
+      });
+      const event = (headers: Record<string, string>) =>
+        handler.handleEvent('fs-1', {
+          'Event-Name': 'CUSTOM',
+          'Event-Subclass': 'callcenter::info',
+          ...headers,
+        });
+
+      await event({
+        'CC-Action': 'agent-status-change',
+        'CC-Agent': '301@queue.platform.test',
+        'CC-Agent-Status': 'Available',
+      });
+      await event({
+        'CC-Action': 'agent-state-change',
+        'CC-Agent': '301@queue.platform.test',
+        'CC-Agent-State': 'Receiving',
+      });
+      await event({
+        'CC-Action': 'agent-status-change',
+        'CC-Agent': '302@elsewhere.test',
+        'CC-Agent-Status': 'On Break',
+      });
+
+      const rows = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['type', 'tenant_id as tenantId', 'payload'])
+        .where('type', 'like', 'call.queue.%')
+        .orderBy('id')
+        .execute();
+      expect(rows.map((row) => ({ ...row, payload: parsePayload(row.payload) }))).toEqual([
+        {
+          type: 'call.queue.agent_status_changed',
+          tenantId: 'tenant-q',
+          payload: {
+            nodeId: 'fs-1',
+            agentName: '301@queue.platform.test',
+            extension: '301',
+            status: 'Available',
+          },
+        },
+        {
+          type: 'call.queue.agent_state_changed',
+          tenantId: 'tenant-q',
+          payload: {
+            nodeId: 'fs-1',
+            agentName: '301@queue.platform.test',
+            extension: '301',
+            state: 'Receiving',
+          },
+        },
+        {
+          type: 'call.queue.agent_status_changed',
+          tenantId: null,
+          payload: {
+            nodeId: 'fs-1',
+            agentName: '302@elsewhere.test',
+            extension: '302',
+            status: 'On Break',
+          },
+        },
+      ]);
+      expect(asked).toEqual(['queue.platform.test', 'queue.platform.test', 'elsewhere.test']);
+    });
+
+    it("a queued leg records its queue, announced with the leg's tenant (G-119 (3))", async () => {
       const handler = createChannelHandler({
         db: h.db.kysely,
         registry: h.registry,
@@ -223,26 +300,41 @@ describe.skipIf(skipReason !== undefined)(
         callSafetyTtlMs: 6 * 60 * 60 * 1000,
         heartbeatTtlMs: 10_000,
       });
-
+      const callUuid = crypto.randomUUID();
+      await h.registry.createCall(
+        {
+          callUuid,
+          nodeId: 'fs-1',
+          tenantId: 'tenant-q',
+          direction: 'inbound',
+          state: 'answered',
+          startedAt: String(Date.now()),
+          from: '+15550100',
+          to: '+15550199',
+          extension: null,
+          controls: 'none',
+        },
+        60_000,
+      );
       await handler.handleEvent('fs-1', {
         'Event-Name': 'CUSTOM',
         'Event-Subclass': 'callcenter::info',
-        'CC-Action': 'agent-state-change',
-        'CC-Agent': '101@acme.platform.test',
-        'CC-Agent-Status': 'Available',
+        'CC-Action': 'member-queue-start',
+        'CC-Queue': 'queue-1@queue.platform.test',
+        'CC-Member-Session-UUID': callUuid,
       });
 
-      const outboxRow = await h.db.kysely
+      expect((await h.registry.getCall(callUuid))?.['queue']).toBe('queue-1');
+      expect(
+        (await h.registry.callsForTenant('tenant-q')).find((c) => c.callUuid === callUuid),
+      ).toMatchObject({ queueId: 'queue-1' });
+      const row = await h.db.kysely
         .selectFrom('outbox')
-        .selectAll()
-        .where('type', '=', 'call.queue.agent_status_changed')
+        .select(['tenant_id as tenantId', 'payload'])
+        .where('type', '=', 'call.channel.queued')
         .executeTakeFirst();
-      expect(outboxRow).toBeDefined();
-      expect(parsePayload(outboxRow?.payload)).toMatchObject({
-        nodeId: 'fs-1',
-        agentName: '101@acme.platform.test',
-        status: 'Available',
-      });
+      expect(row?.tenantId).toBe('tenant-q');
+      expect(parsePayload(row?.payload)).toEqual({ callUuid, nodeId: 'fs-1', queueId: 'queue-1' });
     });
 
     it('a call from a trunk (no tenant at CHANNEL_CREATE) joins its tenant live calls when a later event names it (S5-08)', async () => {

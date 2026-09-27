@@ -436,8 +436,6 @@ export async function createSignInAdmin(
   resellerId: string,
   /** S5-09: another built-in role, for a person who is not an administrator. */
   role: 'tenant_admin' | 'tenant_user' = 'tenant_admin',
-  /** S5-09: a grant for the person, written directly (see `seed.ts`). */
-  grant?: { readonly permission: string; readonly scopeType: string; readonly scopeId: string },
 ): Promise<{ userId: string; email: string; password: string }> {
   const env = sipTestEnv();
   const { stdout } = await execFileAsync(
@@ -468,7 +466,6 @@ export async function createSignInAdmin(
       tenantId,
       resellerId,
       role,
-      ...(grant === undefined ? [] : [grant.permission, grant.scopeType, grant.scopeId]),
     ],
     { maxBuffer: 16 * 1024 * 1024 },
   );

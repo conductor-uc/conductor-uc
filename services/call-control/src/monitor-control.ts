@@ -146,6 +146,8 @@ interface Leg {
   readonly node: string;
   readonly ext: string | undefined;
   readonly state: string;
+  /** G-119 (3): the queue the registry has for the leg (from mod_callcenter's events). */
+  readonly queue: string | undefined;
 }
 
 function legOf(uuid: string, hash: Record<string, string>): Leg {
@@ -155,6 +157,7 @@ function legOf(uuid: string, hash: Record<string, string>): Leg {
     node: hash['node'] ?? '',
     ext: ext !== undefined && EXTENSION_NUMBER.test(ext) ? ext : undefined,
     state: hash['state'] ?? '',
+    queue: hash['queue'] === undefined || hash['queue'] === '' ? undefined : hash['queue'],
   };
 }
 
@@ -283,6 +286,7 @@ export function createMonitorController(options: MonitorControllerOptions): Moni
       }
     }
     for (const leg of legs) {
+      if (leg.queue !== undefined) scopes.push({ type: 'queue', id: leg.queue });
       const queue = await variable(esl, leg.uuid, 'cc_queue');
       const queueId = queue === undefined ? undefined : QUEUE_NAME.exec(queue)?.[1];
       if (queueId !== undefined) scopes.push({ type: 'queue', id: queueId });
