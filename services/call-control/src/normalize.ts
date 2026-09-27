@@ -55,7 +55,7 @@ export type ChannelAction =
       readonly tenantId: string | null;
       readonly hangupCause: string;
     }
-  | { readonly kind: 'heartbeat'; readonly nodeId: string }
+  | { readonly kind: 'heartbeat'; readonly nodeId: string; readonly stats: NodeStats }
   | {
       /** An agent's availability (`CC-Agent-Status`: Available, On Break, Logged Out, ...). */
       readonly kind: 'queueAgentStatusChanged';
@@ -159,13 +159,43 @@ function normalizeRecordingEvent(
 /** The CUSTOM subclass of {@link normalizeRecordingEvent}. */
 export const RECORDING_EVENT_SUBCLASS = 'cuc::recording';
 
+/**
+ * S4-12: what a node's `HEARTBEAT` says about its load, for the operations console. A header
+ * that is missing or not a number is left out, so a partial event never blanks a figure.
+ */
+export interface NodeStats {
+  readonly sessions?: number;
+  readonly maxSessions?: number;
+  readonly cpuIdlePercent?: number;
+  readonly sessionsPerSecond?: number;
+  readonly uptimeSeconds?: number;
+}
+
+function heartbeatStats(raw: Readonly<Record<string, string>>): NodeStats {
+  const number = (header: string): number | undefined => {
+    const value = raw[header];
+    if (value === undefined || value.trim() === '') return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+  const uptimeMs = number('Uptime-msec');
+  const stats: Record<string, number | undefined> = {
+    sessions: number('Session-Count'),
+    maxSessions: number('Max-Sessions'),
+    cpuIdlePercent: number('Idle-CPU'),
+    sessionsPerSecond: number('Session-Per-Sec-Last') ?? number('Session-Per-Sec'),
+    uptimeSeconds: uptimeMs === undefined ? undefined : Math.round(uptimeMs / 1000),
+  };
+  return Object.fromEntries(Object.entries(stats).filter(([, value]) => value !== undefined));
+}
+
 export function normalizeEslEvent(
   nodeId: string,
   raw: Readonly<Record<string, string>>,
 ): ChannelAction {
   const eventName = raw['Event-Name'];
 
-  if (eventName === 'HEARTBEAT') return { kind: 'heartbeat', nodeId };
+  if (eventName === 'HEARTBEAT') return { kind: 'heartbeat', nodeId, stats: heartbeatStats(raw) };
   if (eventName === 'CUSTOM' && raw['Event-Subclass'] === 'callcenter::info') {
     return normalizeCallcenterEvent(nodeId, raw);
   }

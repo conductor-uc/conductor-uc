@@ -305,6 +305,19 @@ export const telephonyEvents = defineEvents({
       draining: Type.Boolean(),
     }),
   },
+  /**
+   * S4-12 (G-124): copied from call-control, which emits it when an operator sets an FS node's
+   * weight in the operations console. This service writes it to the node's dispatcher rows and
+   * reloads OpenSIPs' dispatcher (`consumers/node.consumer.ts`).
+   */
+  'call.node.weight_changed': {
+    schemaVersion: 1,
+    description: "An FS node's dispatcher weight was changed.",
+    data: Type.Object({
+      nodeId: Type.String({ minLength: 1 }),
+      weight: Type.Integer({ minimum: 1, maximum: 999 }),
+    }),
+  },
   'call.presence.changed': {
     schemaVersion: 1,
     description:

@@ -142,6 +142,8 @@ const app = await createServer({
   }),
 });
 
+// S4-12: the outbox backlog, for the operations console (`/statusz`).
+app.addStatusSection('outbox', () => relay.status());
 app.addReadinessCheck('db', async () => ({ status: (await db.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('bus', async () => ({ status: (await bus.ping()) ? 'pass' : 'fail' }));
 app.addReadinessCheck('outbox', async () => {

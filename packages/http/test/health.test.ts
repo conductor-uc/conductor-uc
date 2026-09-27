@@ -97,3 +97,35 @@ describe('GET /readyz', () => {
     expect(JSON.stringify(line)).toContain('the real cause');
   });
 });
+
+describe('GET /statusz (S4-12)', () => {
+  it('reports checks by name, uptime, memory and every section, without failing on one', async () => {
+    const app = await testServer();
+    app.addReadinessCheck('db', () => ({ status: 'pass', detail: 'not shown here' }));
+    app.addReadinessCheck('bus', () => ({ status: 'fail' }));
+    app.addStatusSection('outbox', () => Promise.resolve({ pending: 2 }));
+    app.addStatusSection('broken', () => {
+      throw new Error('mysql://user:secret@db');
+    });
+    await app.ready();
+
+    const response = await app.inject({ method: 'GET', url: '/statusz' });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json<Record<string, unknown>>();
+    expect(body).toMatchObject({
+      service: 'test-service',
+      version: '1.2.3',
+      ready: false,
+      checks: [
+        { name: 'db', status: 'pass' },
+        { name: 'bus', status: 'fail' },
+      ],
+      sections: { outbox: { pending: 2 }, broken: null },
+    });
+    expect(typeof body['uptimeSeconds']).toBe('number');
+    expect((body['memory'] as { rssBytes: number }).rssBytes).toBeGreaterThan(0);
+    expect(response.body).not.toContain('secret');
+    expect(response.body).not.toContain('not shown here');
+  });
+});

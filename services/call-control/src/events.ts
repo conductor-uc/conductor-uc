@@ -239,6 +239,20 @@ export const callEvents = defineEvents({
       draining: Type.Boolean(),
     }),
   },
+  /**
+   * S4-12 (G-124): an operator changed an FS node's share of new calls in the operations console.
+   * telephony-config writes it to the node's dispatcher row and reloads the dispatcher. The row is
+   * the only copy: a weight set here outlives OpenSIPs restarts, and `OPENSIPS_FS_DESTINATION`'s
+   * weight only starts a newly listed node.
+   */
+  'call.node.weight_changed': {
+    schemaVersion: 1,
+    description: "An FS node's dispatcher weight was changed.",
+    data: Type.Object({
+      nodeId: Type.String({ minLength: 1 }),
+      weight: Type.Integer({ minimum: 1, maximum: 999 }),
+    }),
+  },
   // `call.lost` (04 §4's failure sequence: a node's calls, abandoned on
   // heartbeat expiry) is deliberately NOT defined here — the plan's own
   // dependency table lists it as S4-04's deliverable ("Failover handling:

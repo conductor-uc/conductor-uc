@@ -186,7 +186,7 @@ Readiness checks:
 | call-control | db, bus, redis |
 | telephony-config | db, opensips_db, bus, redis, outbox |
 
-`GET /v1/platform/health` on the gateway (master administrators, or the console's **Platform health**) checks the eight services the gateway forwards to. It does **not** cover telephony-config, call-control, media-worker, notification-service, OpenSIPs, FreeSWITCH or the uploaders. Probe those directly.
+The console's **Operations** section (master administrators and master support; `GET /v1/platform/overview`) shows every service with its readiness, response time, version, uptime, memory and outbox backlog, each media node (in service or draining, calls, sessions, CPU, weight, dispatcher state), OpenSIPs (registrations, dialogs, transactions, memory), every event consumer's backlog, and MariaDB, Redis and NATS. It refreshes every 5 seconds. A master administrator can drain a media node, return it to service or change its weight there, and each action is audited. Services on other servers that the gateway does not otherwise call (media-worker, notification-service, each node's recording uploader) appear once they are listed in the gateway's `PLATFORM_STATUS_TARGETS`. `GET /v1/platform/health` (the eight services the gateway forwards to) remains for scripts.
 
 ### 5.2 What to watch
 

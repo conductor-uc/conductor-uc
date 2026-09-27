@@ -39,7 +39,7 @@ allowed(actor, permission, resource) =
 - **Hard rules** (checked first; code, not data):
   1. **H1 (reseller private-data wall):** an actor whose org is a reseller is DENIED any permission whose data class is `private` on a tenant resource, whatever roles or grants exist.
   2. **H2:** tenant actors cannot access resources outside their tenant.
-  3. **H3:** only master actors can create or modify resellers, or read the reseller records (`reseller.read`, G-10).
+  3. **H3:** only master actors can create or modify resellers, or read the reseller records (`reseller.read`, G-10). S4-12 reserves the operations console's `platform.observe` and `platform.operate` the same way.
   4. **H4:** API keys cannot manage users, roles, grants, or other API keys.
 - Every master access to a `private` data class resource is allowed (SAD §10) but is **audited with `data_class=private`**. The console asks for a free-text reason, which is stored in the audit event. Whether a reason is mandatory is configurable.
 
@@ -82,6 +82,8 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 | `analytics.view` | private | Tenant admin / supervisor |
 | `audit.read` | config/private | Org admins (private entries are visible only to the tenant and the master) |
 | `apikey.manage` | secret | Org admins |
+| `platform.observe` | config | Master admin, master support (H3: master only): the operations console (S4-12, G-124) |
+| `platform.operate` | config | Master admin (H3: master only): drain, return and weight a media node; implies `platform.observe` |
 
 **Read twins (G-10).** Every configuration management permission has a `.read` twin of the same class. List and view routes declare the twin and writes keep the management permission. Holding a management permission implies its twin wherever permissions are evaluated (`READ_TWINS` in `@cuc/authz`: `roleHas`, `grantMatches`, identity-service's permission lookup and `/me`, the `@cuc/http` permission guard, and the console), so admins and custom roles that name only `.manage` keep reading without being re-granted. Nothing else implies anything, and no permission implies a `private` one. The secret-class permissions (`secret.reveal`, `apikey.manage`) have no twin. The console shows a screen read-only to a person who holds its `.read` permission without its `.manage` permission.
 

@@ -1,6 +1,7 @@
 import { createServer } from '@cuc/http';
 import { createHttpAccessClient, createRemotePermissionResolver } from '@cuc/http';
 import type { CreateServerOptions, PermissionResolver, Server } from '@cuc/http';
+import type { Bus } from '@cuc/events';
 import type { Redis } from 'ioredis';
 
 import { createAccessTokenVerifier } from './auth/access-token-verifier.js';
@@ -9,6 +10,7 @@ import { createChallengeLookup, registerAcmeChallengeRoute } from './acme-challe
 import { registerConsoleHosting } from './console-hosting.js';
 import { registerCors } from './cors.js';
 import { registerPlatformHealth } from './platform-health.js';
+import { registerPlatformOverview } from './platform-overview.js';
 import { registerProvisioningTransport } from './provisioning-transport.js';
 import { registerSecurityHeaders } from './security-headers.js';
 import { createOrgCertificateSource } from './certificate-source.js';
@@ -51,6 +53,14 @@ export interface BuildAppOptions {
   readonly realtime?: {
     readonly permissions?: PermissionResolver;
     readonly onHub?: (hub: RealtimeHub) => void;
+  };
+  /**
+   * S4-12: the operations console's inputs. `bus` is the gateway's NATS connection once `main.ts`
+   * has one (the event backlog is read from it); tests swap in a fake permission resolver.
+   */
+  readonly platform?: {
+    readonly bus?: () => Bus | undefined;
+    readonly permissions?: PermissionResolver;
   };
 }
 
@@ -165,6 +175,47 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
     ],
   });
 
+  // S4-12: the operations console. Needs the service token, which every internal route it asks
+  // requires; without one the console's overview is not served.
+  if (config.INTERNAL_SERVICE_TOKEN !== undefined) {
+    const internalServiceToken = config.INTERNAL_SERVICE_TOKEN;
+    registerPlatformOverview(app, {
+      timeoutMs: 2_000,
+      targets: [
+        // Asked in-process: over HTTP it could be HTTPS with a certificate for another name.
+        { name: 'api-gateway', url: 'self' },
+        { name: 'identity-service', url: config.IDENTITY_SERVICE_URL },
+        { name: 'org-service', url: config.ORG_SERVICE_URL },
+        { name: 'pbx-config-service', url: config.PBX_CONFIG_SERVICE_URL },
+        { name: 'callflow-service', url: config.CALLFLOW_SERVICE_URL },
+        { name: 'voicemail-service', url: config.VOICEMAIL_SERVICE_URL },
+        { name: 'cdr-service', url: config.CDR_SERVICE_URL },
+        { name: 'trunk-service', url: config.TRUNK_SERVICE_URL },
+        { name: 'recording-service', url: config.RECORDING_SERVICE_URL },
+        { name: 'call-control', url: config.CALL_CONTROL_URL },
+        ...(config.TELEPHONY_CONFIG_URL === undefined
+          ? []
+          : [{ name: 'telephony-config', url: config.TELEPHONY_CONFIG_URL }]),
+        ...parseStatusTargets(config.PLATFORM_STATUS_TARGETS),
+      ],
+      callControlUrl: config.CALL_CONTROL_URL,
+      ...(config.TELEPHONY_CONFIG_URL === undefined
+        ? {}
+        : { telephonyConfigUrl: config.TELEPHONY_CONFIG_URL }),
+      ...(config.NATS_MONITOR_URL === undefined ? {} : { natsMonitorUrl: config.NATS_MONITOR_URL }),
+      internalServiceToken,
+      redis: options.redis,
+      bus: options.platform?.bus ?? (() => undefined),
+      permissions:
+        options.platform?.permissions ??
+        createRemotePermissionResolver({
+          baseUrl: config.IDENTITY_SERVICE_URL,
+          internalServiceToken,
+          ttlMs: config.REALTIME_PERMISSION_CACHE_TTL_MS,
+        }),
+    });
+  }
+
   // The realtime hub (S5-08). Registered before the proxy's `/v1/*`, though the
   // more specific route would win either way.
   if (config.REALTIME_ENABLED) {
@@ -266,4 +317,17 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
   }
 
   return app;
+}
+
+/** `PLATFORM_STATUS_TARGETS` entries (`name=url`); a malformed one stops the gateway at startup. */
+export function parseStatusTargets(entries: readonly string[]): { name: string; url: string }[] {
+  return entries.map((entry) => {
+    const at = entry.indexOf('=');
+    const name = entry.slice(0, at).trim();
+    const url = entry.slice(at + 1).trim();
+    if (at <= 0 || !/^https?:\/\/./.test(url)) {
+      throw new Error(`PLATFORM_STATUS_TARGETS: '${entry}' is not name=http(s)://host:port`);
+    }
+    return { name, url };
+  });
 }

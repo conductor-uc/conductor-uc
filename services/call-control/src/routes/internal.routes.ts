@@ -60,12 +60,21 @@ const NodeParamsSchema = Type.Object({
   nodeId: Type.String({ minLength: 1, maxLength: 64 }),
 });
 
-const NodeViewSchema = Type.Object({
+const NullableNumber = Type.Union([Type.Number(), Type.Null()]);
+
+/** One FS node (S4-02), with its last HEARTBEAT's load (S4-12). Shared with `platform.routes.ts`. */
+export const NodeViewSchema = Type.Object({
   nodeId: Type.String(),
   status: Type.Union([Type.Literal('up'), Type.Literal('draining'), Type.Literal('down')]),
   draining: Type.Boolean(),
   calls: Type.Integer({ minimum: 0 }),
   leases: Type.Integer({ minimum: 0 }),
+  sessions: NullableNumber,
+  maxSessions: NullableNumber,
+  cpuIdlePercent: NullableNumber,
+  sessionsPerSecond: NullableNumber,
+  uptimeSeconds: NullableNumber,
+  heartbeatAt: Type.Union([Type.String(), Type.Null()]),
 });
 
 const DrainResponseSchema = Type.Object({

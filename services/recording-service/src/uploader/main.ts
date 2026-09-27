@@ -47,6 +47,33 @@ const metricsServer = createHttpServer((request, response) => {
     response.end('{"status":"ok"}');
     return;
   }
+  if (request.url === '/statusz') {
+    // S4-12: the operations console's view of this node's spool (api-gateway asks it, when listed
+    // in its PLATFORM_STATUS_TARGETS), the same shape `@cuc/http` gives every service.
+    const metrics = uploader.metrics();
+    const memory = process.memoryUsage();
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        service: config.SERVICE_NAME,
+        version: config.SERVICE_VERSION,
+        uptimeSeconds: Math.round(process.uptime()),
+        ready: true,
+        checks: [],
+        memory: { rssBytes: memory.rss, heapUsedBytes: memory.heapUsed },
+        sections: {
+          facts: [
+            { label: 'Spool files', value: metrics.spoolFiles, unit: 'count' },
+            { label: 'Spool size', value: metrics.spoolBytes, unit: 'bytes' },
+            { label: 'Stuck files', value: metrics.stuckFiles, unit: 'count' },
+            { label: 'Oldest file', value: metrics.oldestFileAgeSeconds, unit: 'seconds' },
+            { label: 'Uploaded', value: metrics.uploadedTotal, unit: 'count' },
+          ],
+        },
+      }),
+    );
+    return;
+  }
   response.writeHead(404).end();
 });
 await new Promise<void>((resolve) => {

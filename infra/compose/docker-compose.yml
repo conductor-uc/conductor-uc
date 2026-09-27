@@ -896,6 +896,10 @@ services:
       CALL_CONTROL_URL: http://call-control:8080
       # S5-10: registration and do not disturb for the presence topic.
       TELEPHONY_CONFIG_URL: http://telephony-config:8080
+      # S4-12: the operations console also asks these for their status, and
+      # NATS' monitoring port for its figures.
+      PLATFORM_STATUS_TARGETS: media-worker=http://media-worker:8080,notification-service=http://notification-service:8080,recording-uploader=http://recording-uploader:9464,recording-uploader-2=http://recording-uploader-2:9464
+      NATS_MONITOR_URL: http://nats:8222
     healthcheck: *node-healthcheck
 
   notification-service:

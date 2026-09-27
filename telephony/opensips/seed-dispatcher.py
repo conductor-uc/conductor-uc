@@ -21,9 +21,12 @@ S4-02 (G-123): each entry is `[node-id=]sip:host:port[;weight=N]`, e.g.
   the next one, so `;weight=3` on one node and 1 on another splits calls
   3:1. 0 is refused: OpenSIPs treats it as 1, not as "none" (found live).
   A node that should get no new calls is drained instead.
+  S4-12 (G-124): it is only the *starting* weight of a newly listed node.
+  Once the row exists, the operations console owns its weight, and a restart
+  keeps whatever was set there.
 The table is synced rather than rewritten: rows for destinations still listed
-keep their `state`, so a drained node stays drained across an OpenSIPs
-restart; rows for destinations no longer listed are removed.
+keep their `state` and `weight`, so a drained or reweighted node stays that way
+across an OpenSIPs restart; rows for destinations no longer listed are removed.
 
 Uses `pymysql`, already present in the base image for `opensips-cli`'s own
 sake.
@@ -78,9 +81,8 @@ try:
         for uri, node, weight in entries:
             if uri in existing:
                 cur.execute(
-                    "UPDATE dispatcher SET weight = %s, attrs = %s "
-                    "WHERE setid = 1 AND destination = %s",
-                    (weight, node, uri),
+                    "UPDATE dispatcher SET attrs = %s WHERE setid = 1 AND destination = %s",
+                    (node, uri),
                 )
             else:
                 cur.execute(
@@ -89,11 +91,21 @@ try:
                     (uri, weight, node),
                 )
     conn.commit()
+    # What OpenSIPs will load, not what the environment asked for: an existing
+    # row's weight (set in the operations console) and state (a drain) win.
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT destination, attrs, weight, state FROM dispatcher WHERE setid = 1 ORDER BY id"
+        )
+        rows = cur.fetchall()
 finally:
     conn.close()
 
 sys.stdout.write(
     "dispatcher: set 1 -> "
-    + ", ".join(f"{node or '?'}={uri} (weight {weight})" for uri, node, weight in entries)
+    + ", ".join(
+        f"{node or '?'}={uri} (weight {weight}{', inactive' if state == 1 else ''})"
+        for uri, node, weight, state in rows
+    )
     + "\n"
 )

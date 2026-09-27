@@ -66,6 +66,35 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
     await h.registry.setDraining('fs-away', false);
   });
 
+  it('S4-12: keeps what a HEARTBEAT reported through the heartbeats that report nothing', async () => {
+    await h.registry.heartbeat('fs-load', 5_000, {
+      sessions: 6,
+      maxSessions: 1000,
+      cpuIdlePercent: 97.3,
+      sessionsPerSecond: 2,
+      uptimeSeconds: 8200,
+    });
+    await h.registry.heartbeat('fs-load', 5_000);
+
+    const [node] = await h.registry.nodeStates(['fs-load']);
+    expect(node).toMatchObject({
+      status: 'up',
+      sessions: 6,
+      maxSessions: 1000,
+      cpuIdlePercent: 97.3,
+      sessionsPerSecond: 2,
+      uptimeSeconds: 8200,
+    });
+    expect(Date.parse(node?.heartbeatAt ?? '')).toBeGreaterThan(Date.now() - 10_000);
+
+    await h.registry.heartbeat('fs-quiet', 5_000);
+    expect((await h.registry.nodeStates(['fs-quiet']))[0]).toMatchObject({
+      sessions: null,
+      cpuIdlePercent: null,
+      heartbeatAt: null,
+    });
+  });
+
   it('S4-02: reports each node as up, draining or down, with its call count', async () => {
     await h.registry.heartbeat('fs-a', 5_000);
     await h.registry.heartbeat('fs-b', 5_000);
@@ -87,10 +116,10 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
       60_000,
     );
 
-    expect(await h.registry.nodeStates(['fs-a', 'fs-b', 'fs-c'])).toEqual([
+    expect(await h.registry.nodeStates(['fs-a', 'fs-b', 'fs-c'])).toMatchObject([
       { nodeId: 'fs-a', status: 'up', draining: false, calls: 1 },
       { nodeId: 'fs-b', status: 'draining', draining: true, calls: 0 },
-      { nodeId: 'fs-c', status: 'down', draining: true, calls: 0 },
+      { nodeId: 'fs-c', status: 'down', draining: true, calls: 0, sessions: null },
     ]);
     await h.registry.endCall('node-state-call', 'fs-a', null);
     await h.registry.setDraining('fs-b', false);

@@ -21,6 +21,9 @@ const RESELLER_LIFECYCLE_PERMISSIONS: ReadonlySet<Permission> = new Set([
   'reseller.create',
   'reseller.manage',
   'reseller.read',
+  // S4-12 (G-124): the operations console sees and acts on the whole platform.
+  'platform.observe',
+  'platform.operate',
 ]);
 
 /**

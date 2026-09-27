@@ -42,8 +42,14 @@ export interface OpenSipsMiClient {
    * registration status) — `call()`'s `result` field, discarded there,
    * because every command it is used for (a reload) has none worth reading.
    */
-  query<T = unknown>(method: string, params?: readonly unknown[]): Promise<T>;
+  query<T = unknown>(method: string, params?: MiParams): Promise<T>;
 }
+
+/**
+ * Positional, or named where a command is ambiguous without names (S4-12: `ds_list` with `full`,
+ * `get_statistics` with `statistics`; OpenSIPs answers "Ambiguous call, use named parameters").
+ */
+export type MiParams = readonly unknown[] | Readonly<Record<string, unknown>>;
 
 interface JsonRpcResponse {
   readonly jsonrpc: '2.0';
@@ -55,7 +61,7 @@ interface JsonRpcResponse {
 export function createOpenSipsMiClient(options: OpenSipsMiClientOptions): OpenSipsMiClient {
   const fetchImpl = options.fetchImpl ?? fetch;
 
-  async function query<T>(method: string, params?: readonly unknown[]): Promise<T> {
+  async function query<T>(method: string, params?: MiParams): Promise<T> {
     let response: Response;
     try {
       response = await fetchImpl(options.url, {

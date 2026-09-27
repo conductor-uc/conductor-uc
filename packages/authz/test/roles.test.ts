@@ -99,6 +99,19 @@ describe('BUILT_IN_ROLES', () => {
     }
   });
 
+  it('S4-12: master_support observes the platform and only master_admin operates it', () => {
+    const has = (roleId: string, permission: string): boolean | undefined =>
+      BUILT_IN_ROLES.get(roleId as never)?.permissions.has(permission);
+    expect(has('master_admin', 'platform.operate')).toBe(true);
+    expect(has('master_admin', 'platform.observe')).toBe(true);
+    expect(has('master_support', 'platform.observe')).toBe(true);
+    expect(has('master_support', 'platform.operate')).toBe(false);
+    for (const roleId of ['reseller_admin', 'reseller_support', 'tenant_admin', 'tenant_user']) {
+      expect(has(roleId, 'platform.observe'), roleId).toBe(false);
+      expect(has(roleId, 'platform.operate'), roleId).toBe(false);
+    }
+  });
+
   it('recording.control (S5-15) belongs to tenant_admin and tenant_supervisor (and master_admin, which holds all), never to support, a reseller or a plain user', () => {
     for (const roleId of ['master_admin', 'tenant_admin', 'tenant_supervisor']) {
       expect(

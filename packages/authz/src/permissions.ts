@@ -114,7 +114,17 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'self.voicemail': 'private',
   'self.history': 'private',
   'self.recording': 'private',
+  'platform.observe': 'config',
+  'platform.operate': 'config',
 };
+
+/**
+ * `platform.observe` and `platform.operate` are not in 07 §3.3 either (S4-12, G-124): the master's
+ * operations console, reading every service's, media node's and data store's state, and draining,
+ * returning and weighting media nodes. They are `config` because none of it is a tenant's data
+ * (calls are counted, never listed). H3 reserves both to the master. `operate` implies `observe`,
+ * like a `.manage` its `.read`, which is how `master_support` holds `observe` and not `operate`.
+ */
 
 /**
  * `monitor.calls` is not in 07 §3.3's initial catalog either: S5-08's realtime
@@ -227,6 +237,7 @@ export const READ_TWINS: Readonly<Record<Permission, Permission>> = {
   'callflow.edit': 'callflow.read',
   'callflow.publish': 'callflow.read',
   'recording.policy.manage': 'recording.policy.read',
+  'platform.operate': 'platform.observe',
 };
 
 /** Every configuration read permission (the values of {@link READ_TWINS}), in catalog order. */

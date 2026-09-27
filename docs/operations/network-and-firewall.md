@@ -41,11 +41,11 @@ WebSocket SIP (WS/WSS), SIP over IPv6 and HEP capture are not configured.
 | FreeSWITCH SIP | 5060 (`FS_SIP_PORT`) | UDP and TCP | detected interface address only | OpenSIPs | ACL `FS_OPENSIPS_CIDR` (one CIDR) | OpenSIPs' address |
 | FreeSWITCH ESL | 8021 (fixed) | TCP | 0.0.0.0 (`FS_EVENT_SOCKET_BIND_IP`) | call-control | ACL `FS_CLUSTER_CIDR` (one CIDR) plus `FS_EVENT_SOCKET_PASSWORD` | call-control's address. ESL can run any FreeSWITCH command. |
 | Every application service | 8080 (`HTTP_PORT`) | TCP, HTTP | `HTTP_HOST` (0.0.0.0) | The gateway and other services ([§2.3](#23-who-calls-which-service)) | Signed identity headers from the gateway, or `INTERNAL_SERVICE_TOKEN`; public routes need none ([§6.1](#61-keep-backend-service-ports-private)) | Only the callers in §2.3 |
-| recording-uploader | 9464 (`METRICS_PORT`) | TCP, HTTP | `METRICS_HOST` (0.0.0.0) | Your monitoring system | None | Your monitoring system |
+| recording-uploader | 9464 (`METRICS_PORT`) | TCP, HTTP | `METRICS_HOST` (0.0.0.0) | Your monitoring system, and api-gateway for the operations console (S4-12) | None | Your monitoring system and the gateway only |
 | MariaDB | 3306 | TCP (no TLS) | container default | Every service except api-gateway; OpenSIPs; telephony-config (also the `opensips` schema) | Per-service user and password | Those hosts |
 | Redis | 6379 | TCP (no TLS) | container default | api-gateway, call-control, telephony-config, FreeSWITCH, OpenSIPs | **None** (FreeSWITCH's Redis module has no password option) | Those hosts |
 | NATS client | 4222 | TCP (no TLS) | container default | Every application service, and api-gateway (its realtime hub reads call events, S5-08) | None in the development stack; username and password supported (`NATS_USER`, `NATS_PASSWORD`) | Those hosts |
-| NATS monitoring | 8222 | TCP, HTTP | container default | Your monitoring system | None | Monitoring only, or do not publish it |
+| NATS monitoring | 8222 | TCP, HTTP | container default | Your monitoring system, and api-gateway for the operations console (S4-12) | None | Monitoring and the gateway only, or do not publish it |
 | MinIO console | 9001 | TCP, HTTP | container default | Administrators | MinIO root credentials | Do not publish it, or administrators' addresses only |
 | MinIO API (self-hosted object storage) | 9000 | TCP, HTTP (HTTPS if you give MinIO a certificate) | container default | Services, uploaders; browsers **via HTTPS** | S3 signatures | See [§1](#1-public-or-private-at-a-glance): browsers need it over HTTPS |
 
