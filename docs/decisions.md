@@ -25,6 +25,8 @@ Status values:
 | D-013 | **Reseller access to billing data.** See conflict C-1. | **Accepted** (2026-09-15, issue #95) | S2 | below |
 | D-014 | Five services added to the SAD §7 list: api-gateway, pbx-config-service, telephony-config, call-control, notification-service | **Accepted** (2026-09-25) | S1 | [06](architecture/06-services.md) |
 | D-015 | Voicemail storage core is pulled forward from Phase 5 to Stage 2 (email and transcription stay in Stage 5) | **Accepted** (2026-09-25) | S2 | [plan](plan/implementation-plan.md) |
+| D-016 | **MariaDB high availability: Galera, three members, one writer at a time** through the internal load balancer; a primary with a semi-synchronous replica is the fallback if Galera's cluster-wide schema changes or commit latency prove a problem. A managed MySQL-compatible multi-zone database replaces both where available. | **Proposed** (S4-01) | S4-07 | [10 §4.3](architecture/10-production-topology.md#43-mariadb-galera-or-primaryreplica-proposed-d-016) |
+| D-017 | **Stable endpoints without service discovery:** a floating public address for the edge pair (keepalived, or the cloud provider's floating IP or network load balancer), and a pair of HAProxy load balancers on the app servers behind a private floating address (or the provider's internal load balancer) for every service URL, the MariaDB writer and the Redis primary. NATS clients list every member. | **Proposed** (S4-01) | S4-06, S4-07, S4-11 | [10 §4.1](architecture/10-production-topology.md#41-stable-endpoints) |
 
 **Stage 0 sign-off (2026-09-12).** D-001, D-003, D-004, and D-005 were accepted together. Three of
 them were already implemented and merged when they were signed off — D-001 in S0-01, D-003 and
