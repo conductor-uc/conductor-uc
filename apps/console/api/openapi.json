@@ -19679,6 +19679,240 @@
         ]
       }
     },
+    "/v1/tenants/{tenantId}/calls/{callUuid}/listen": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z][0-9A-Za-z-]*$"
+            },
+            "in": "path",
+            "name": "callUuid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "mode",
+                    "callUuid",
+                    "monitorCallUuid"
+                  ],
+                  "properties": {
+                    "mode": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "listen"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "whisper"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "barge"
+                          ]
+                        }
+                      ]
+                    },
+                    "callUuid": {
+                      "type": "string"
+                    },
+                    "monitorCallUuid": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listenToCall",
+        "tags": [
+          "Calls"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/calls/{callUuid}/whisper": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z][0-9A-Za-z-]*$"
+            },
+            "in": "path",
+            "name": "callUuid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "mode",
+                    "callUuid",
+                    "monitorCallUuid"
+                  ],
+                  "properties": {
+                    "mode": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "listen"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "whisper"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "barge"
+                          ]
+                        }
+                      ]
+                    },
+                    "callUuid": {
+                      "type": "string"
+                    },
+                    "monitorCallUuid": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "whisperToCall",
+        "tags": [
+          "Calls"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/calls/{callUuid}/barge": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^[0-9A-Za-z][0-9A-Za-z-]*$"
+            },
+            "in": "path",
+            "name": "callUuid",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "mode",
+                    "callUuid",
+                    "monitorCallUuid"
+                  ],
+                  "properties": {
+                    "mode": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "listen"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "whisper"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "barge"
+                          ]
+                        }
+                      ]
+                    },
+                    "callUuid": {
+                      "type": "string"
+                    },
+                    "monitorCallUuid": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "bargeIntoCall",
+        "tags": [
+          "Calls"
+        ]
+      }
+    },
     "/v1/platform/health": {
       "get": {
         "responses": {
