@@ -515,6 +515,9 @@ services:
       # S5-02: asked at call setup whether to record; unreachable means the call
       # goes ahead unrecorded (fail open), so it is not a startup dependency.
       RECORDING_SERVICE_URL: http://recording-service:8080
+      # How long a recording decision is reused, so how long a rule edit takes to
+      # apply. Unset, the service default (30 s); CI's SIP job lowers it.
+      RECORDING_POLICY_CACHE_TTL_MS: ${RECORDING_POLICY_CACHE_TTL_MS:-30000}
       RECORDING_SPOOL_DIR: /var/spool/cuc/rec
       CALLFLOW_SERVICE_URL: http://callflow-service:8080
       # S2-13: `handleQueueDial`'s own synchronous affinity-acquire call.
