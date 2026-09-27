@@ -238,6 +238,11 @@ services:
       VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       SPOOL_DIR: /var/spool/cuc/rec
+      # How long a finished file sits before upload, and how often the spool is
+      # scanned. Unset, the service's own defaults (30 s, 5000 ms); CI's SIP job
+      # lowers both so each recording and voicemail test doesn't wait 30 s.
+      SETTLE_SECONDS: ${RECORDING_SETTLE_SECONDS:-30}
+      SCAN_INTERVAL_MS: ${RECORDING_SCAN_INTERVAL_MS:-5000}
       SERVICE_NAME: recording-uploader
     healthcheck: *uploader-healthcheck
 
@@ -259,6 +264,11 @@ services:
       VOICEMAIL_SERVICE_URL: http://voicemail-service:8080
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-dev-internal-service-token}
       SPOOL_DIR: /var/spool/cuc/rec
+      # How long a finished file sits before upload, and how often the spool is
+      # scanned. Unset, the service's own defaults (30 s, 5000 ms); CI's SIP job
+      # lowers both so each recording and voicemail test doesn't wait 30 s.
+      SETTLE_SECONDS: ${RECORDING_SETTLE_SECONDS:-30}
+      SCAN_INTERVAL_MS: ${RECORDING_SCAN_INTERVAL_MS:-5000}
       SERVICE_NAME: recording-uploader-2
     healthcheck: *uploader-healthcheck
 

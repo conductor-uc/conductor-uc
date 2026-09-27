@@ -139,7 +139,7 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
   /**
    * S5-16: a message is listed only once the node uploader has delivered its
    * audio and voicemail-service has verified it in storage. The uploader waits
-   * for the file to settle (30 s in compose) first, so this polls.
+   * for the file to settle (30 s in compose, 5 s in CI) first, so this polls.
    */
   async function waitForReadyMessage(tenantId: string, mailboxId: string): Promise<MessageRow> {
     const deadline = Date.now() + 90_000;

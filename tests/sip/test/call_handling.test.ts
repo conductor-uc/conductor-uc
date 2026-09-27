@@ -227,7 +227,7 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
 
   /**
    * A voicemail message is listed only once the node uploader has delivered
-   * its audio (S5-16), after the file settles (30 s in compose), so a call
+   * its audio (S5-16), after the file settles (30 s in compose, 5 s in CI), so a call
    * that reached voicemail shows up here with that delay.
    */
   async function waitForMessage(tenantId: string, mailboxId: string): Promise<unknown[]> {
