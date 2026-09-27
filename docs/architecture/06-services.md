@@ -9,7 +9,7 @@ This refines SAD §7. It adds five services the SAD implies but does not name: *
 Every service:
 
 - is a Node.js 22 LTS / TypeScript service on Fastify, bootstrapped with `@cuc/http`
-- exposes `GET /healthz` (liveness) and `GET /readyz` (dependencies), and (S4-12) `GET /statusz` for the operations console: its checks by name, uptime, memory, and sections it adds (its outbox backlog), internal network only, never a secret or tenant data
+- exposes `GET /healthz` (liveness) and `GET /readyz` (dependencies), (S4-13) `GET /metrics` in Prometheus' format (HTTP timings by route pattern, its outbox backlog, and its own gauges; [11 §3](11-operations-console.md)), and (S4-12) `GET /statusz` for the operations console: its checks by name, uptime, memory, and sections it adds (its outbox backlog), internal network only, never a secret or tenant data
 - exposes its OpenAPI document at `/openapi.json` (internal only)
 - serves public routes under `/v1/...` (reached through api-gateway) and internal routes under `/internal/v1/...` (service-to-service only, mTLS or a service JWT)
 - owns its own DB schema and migrations

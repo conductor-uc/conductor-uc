@@ -91,3 +91,4 @@ they are then obtained by the operator from upstream, not distributed by us.
 | `nats:2.10-alpine` | NATS Server | Apache-2.0 |
 | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` | MinIO (community build) | AGPL-3.0 |
 | `axllent/mailpit:latest` | Mailpit (development mail catcher) | MIT |
+| `prom/prometheus:v3.5.0` | Prometheus (the operations console's history, S4-13) | Apache-2.0 |
