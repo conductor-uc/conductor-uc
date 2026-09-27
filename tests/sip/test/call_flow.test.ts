@@ -207,7 +207,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
 
         // The message exists once the node's uploader has put the audio in
         // object storage (S5-16), which waits for the file to settle (30 s in
-        // compose) first, so this polls.
+        // compose, 5 s in CI) first, so this polls.
         const deadline = Date.now() + 90_000;
         let messages = { status: 0, json: undefined as unknown };
         for (;;) {

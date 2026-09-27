@@ -107,7 +107,7 @@ describe.skipIf(skipReason !== undefined)('call recording (live SIPp)', () => {
     return rows;
   }
 
-  /** The uploader waits for a file to settle (30 s in compose), then uploads it. */
+  /** The uploader waits for a file to settle (30 s in compose, 5 s in CI), then uploads it. */
   async function waitForReady(tenantId: string, didId: string): Promise<Recording> {
     const deadline = Date.now() + 120_000;
     let last: Recording[] = [];

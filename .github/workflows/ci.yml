@@ -256,6 +256,14 @@ jobs:
       # Dockerfiles — the same readiness signal `make up` relies on locally.
       - name: Build and start the compose stack
         working-directory: infra/compose
+        env:
+          # The uploaders otherwise wait 30 s for a finished recording or
+          # voicemail to settle, which about 25 SIP tests pay in full (~10 of
+          # the suite's ~27 min). A file FreeSWITCH still has open is refused
+          # by its WAV header check whatever this is; the settle time is a
+          # second margin, kept short here rather than removed.
+          RECORDING_SETTLE_SECONDS: '5'
+          RECORDING_SCAN_INTERVAL_MS: '1000'
         run: |
           # Clean slate first. This compose project's name is fixed
           # (`name: conductor-uc`), so every SIP job on this
