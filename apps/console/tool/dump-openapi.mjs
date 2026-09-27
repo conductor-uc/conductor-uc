@@ -57,6 +57,8 @@ const SOURCES = [
   ['cdr-service', 'me', 'registerMeRoutes', 2],
   // S5-15: the recording buttons on live calls.
   ['call-control', 'recording', 'registerRecordingControlRoutes', 1],
+  // S5-10: listen, whisper and barge on live calls (S5-09's routes).
+  ['call-control', 'monitor', 'registerMonitorRoutes', 1],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
   ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
@@ -140,6 +142,10 @@ const OVERRIDES = {
   // S5-15: record, stop, pause and resume a live call's recording.
   'post /v1/tenants/{tenantId}/calls/{callUuid}/recording': 'controlCallRecording',
   'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/recording': 'controlMyCallRecording',
+  // S5-10: join a live call from the supervisor's own phone.
+  'post /v1/tenants/{tenantId}/calls/{callUuid}/listen': 'listenToCall',
+  'post /v1/tenants/{tenantId}/calls/{callUuid}/whisper': 'whisperToCall',
+  'post /v1/tenants/{tenantId}/calls/{callUuid}/barge': 'bargeIntoCall',
 };
 const VERBS = { get: 'get', post: 'create', put: 'save', patch: 'update', delete: 'delete' };
 

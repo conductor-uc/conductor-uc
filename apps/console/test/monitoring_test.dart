@@ -1,15 +1,21 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:console/core/api_client.dart';
 import 'package:console/core/permissions.dart';
 import 'package:console/core/realtime.dart';
 import 'package:console/core/session.dart';
 import 'package:console/dev/demo_backend.dart';
 import 'package:console/dev/demo_realtime.dart';
 import 'package:console/features/monitoring/live_calls.dart';
+import 'package:console/features/monitoring/monitor_controls.dart';
 import 'package:console/features/monitoring/monitoring_page.dart';
+import 'package:console/features/monitoring/presence.dart';
+import 'package:console/features/monitoring/presence_board.dart';
 import 'package:console/features/monitoring/recording_controls.dart';
 import 'package:console/features/pbx/pbx_api.dart';
+import 'package:console_api/console_api.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -105,6 +111,57 @@ Future<void> tapVisible(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
   await tester.tap(button);
 }
+
+/// Signs in to the demo backend as [email] and opens Monitoring, with the
+/// test driving the realtime hub.
+Future<FakeHub> openMonitoring(
+  WidgetTester tester, {
+  String email = 'tenant@example.test',
+}) async {
+  final hub = FakeHub();
+  await pumpApp(
+    tester,
+    appWith(
+      api: demoApi(),
+      overrides: [
+        realtimeConnectorProvider.overrideWithValue(hub.connect),
+        clockProvider.overrideWith((ref) => Stream.value(fixedNow)),
+      ],
+    ),
+  );
+  await submitSignIn(tester, email);
+  await tester.ensureVisible(navItem('Monitoring'));
+  await tester.tap(navItem('Monitoring'));
+  await tester.pumpAndSettle();
+  return hub;
+}
+
+/// The topic ending in [kind] (`calls`, `presence`) that [socket] subscribed
+/// to: the Monitoring page watches both.
+String subscribedTopic(FakeSocket socket, String kind) => [
+  for (final m in socket.sent)
+    if (m['type'] == 'subscribe') m['topic'] as String,
+].firstWhere((t) => t.endsWith(':$kind'));
+
+/// The listen, whisper and barge buttons on screen.
+Finder monitorButtons() => find.byWidgetPredicate((w) {
+  final key = w.key;
+  return key is ValueKey<String> &&
+      key.value.startsWith('monitor-') &&
+      !key.value.startsWith('monitor-pending-');
+});
+
+/// The extensions on the presence board, in the order shown.
+List<String> boardOrder(WidgetTester tester) => [
+  for (final tile in tester.widgetList<PresenceTile>(find.byType(PresenceTile)))
+    tile.presence.extension,
+];
+
+/// Whether the board's tile for [extension] shows [text].
+Finder onTile(String extension, String text) => find.descendant(
+  of: find.byKey(ValueKey('presence-$extension')),
+  matching: find.text(text),
+);
 
 /// The recording buttons on screen.
 Finder recordingButtons() => find.byWidgetPredicate((w) {
@@ -412,28 +469,6 @@ void main() {
   });
 
   group('the live calls panel', () {
-    Future<FakeHub> openMonitoring(
-      WidgetTester tester, {
-      String email = 'tenant@example.test',
-    }) async {
-      final hub = FakeHub();
-      await pumpApp(
-        tester,
-        appWith(
-          api: demoApi(),
-          overrides: [
-            realtimeConnectorProvider.overrideWithValue(hub.connect),
-            clockProvider.overrideWith((ref) => Stream.value(fixedNow)),
-          ],
-        ),
-      );
-      await submitSignIn(tester, email);
-      await tester.ensureVisible(navItem('Monitoring'));
-      await tester.tap(navItem('Monitoring'));
-      await tester.pumpAndSettle();
-      return hub;
-    }
-
     /// Each row's cells as text; a cell that is not text (the recording
     /// buttons) reads as ''.
     List<List<String>> tableRows(WidgetTester tester) => [
@@ -453,9 +488,8 @@ void main() {
         expect(socket.sent.first['type'], 'auth');
         socket.reply({'type': 'authenticated'});
         await tester.pumpAndSettle();
-        final topic = socket.sent.last['topic'] as String;
-        expect(socket.sent.last['type'], 'subscribe');
-        expect(topic, endsWith(':calls'));
+        final topic = subscribedTopic(socket, 'calls');
+        expect(socket.sentTypes().skip(1), everyElement('subscribe'));
 
         socket
           ..reply({'type': 'subscribed', 'topic': topic})
@@ -524,22 +558,27 @@ void main() {
         await tester.tap(navItem('Dashboard'));
         await tester.pumpAndSettle();
         expect(find.byType(MonitoringPage), findsNothing);
-        expect(socket.sent.last, {'type': 'unsubscribe', 'topic': topic});
+        expect(
+          socket.sent,
+          contains(equals({'type': 'unsubscribe', 'topic': topic})),
+        );
       },
     );
 
     /// Opens Monitoring as the demo tenant administrator (who holds
-    /// `recording.control`) and hands it `calls` as the snapshot.
+    /// `recording.control`), or as [email], and hands it `calls` as the
+    /// snapshot.
     Future<FakeSocket> monitoringWith(
       WidgetTester tester,
-      List<Map<String, Object?>> calls,
-    ) async {
+      List<Map<String, Object?>> calls, {
+      String email = 'tenant@example.test',
+    }) async {
       resetDemoRecordings();
-      final hub = await openMonitoring(tester);
+      final hub = await openMonitoring(tester, email: email);
       final socket = hub.last;
       socket.reply({'type': 'authenticated'});
       await tester.pumpAndSettle();
-      final topic = socket.sent.last['topic'] as String;
+      final topic = subscribedTopic(socket, 'calls');
       socket
         ..reply({'type': 'subscribed', 'topic': topic})
         ..reply({
@@ -593,7 +632,7 @@ void main() {
           leg('demo-a1', bridgedTo: 'demo-a2', controls: 'on_demand'),
           leg('demo-a2', direction: 'outbound', controls: 'on_demand'),
         ]);
-        final topic = socket.sent.last['topic'] as String;
+        final topic = subscribedTopic(socket, 'calls');
         await tapVisible(tester, 'recording-start-demo-a1');
         await tester.pump();
         expect(find.text('Starting…'), findsOneWidget);
@@ -711,7 +750,7 @@ void main() {
       await tester.pumpAndSettle();
       socket.reply({
         'type': 'error',
-        'topic': socket.sent.last['topic'],
+        'topic': subscribedTopic(socket, 'calls'),
         'code': 'unavailable',
         'message': 'x',
       });
@@ -733,7 +772,16 @@ void main() {
         find.text("Your role doesn't include live calls."),
         findsOneWidget,
       );
-      expect(hub.sockets, isEmpty);
+      // The presence board is theirs (monitor.presence); the calls are not.
+      hub.last.reply({'type': 'authenticated'});
+      await tester.pumpAndSettle();
+      expect(
+        [
+          for (final m in hub.last.sent)
+            if (m['type'] == 'subscribe') m['topic'],
+        ],
+        [endsWith(':presence')],
+      );
     });
 
     testWidgets('is never offered to a reseller, whatever it holds (H1)', (
@@ -811,6 +859,616 @@ void main() {
       await tester.pumpAndSettle();
       expect(tableRows(tester)[1][4], 'Paused');
       resetDemoRecordings();
+    });
+
+    /// Pumps the live calls panel alone, as a tenant person holding [held]
+    /// (or a reseller inside a tenant), with [calls] as the snapshot. A press
+    /// is answered by [answer].
+    Future<void> panelWith(
+      WidgetTester tester,
+      Set<String> held,
+      List<Map<String, Object?>> calls, {
+      OrgType orgType = OrgType.tenant,
+      ResponseBody Function(RequestOptions options)? answer,
+    }) async {
+      final hub = FakeHub();
+      final dio = Dio()
+        ..httpClientAdapter = FakeAdapter(
+          answer ?? (_) => jsonBody(const {}, status: 500),
+        );
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionProvider.overrideWith(
+              () => _FixedSession(
+                Session(
+                  accessToken: 'x',
+                  expiresIn: 600,
+                  orgId: 'org-1',
+                  orgType: orgType,
+                  permissions: const [],
+                ),
+              ),
+            ),
+            tenantIdProvider.overrideWithValue('tenant-1'),
+            knownPermissionsProvider.overrideWithValue(held),
+            realtimeConnectorProvider.overrideWithValue(hub.connect),
+            clockProvider.overrideWith((ref) => Stream.value(fixedNow)),
+            monitorApiProvider.overrideWithValue(MonitorApi(dio, 'x')),
+          ],
+          child: const MaterialApp(home: Scaffold(body: LiveCallsPanel())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      if (hub.sockets.isEmpty) return;
+      final socket = hub.last;
+      socket.reply({'type': 'authenticated'});
+      await tester.pumpAndSettle();
+      final topic = subscribedTopic(socket, 'calls');
+      socket
+        ..reply({'type': 'subscribed', 'topic': topic})
+        ..reply({
+          'type': 'snapshot',
+          'topic': topic,
+          'data': {'calls': calls},
+        });
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+      'S5-10: offers each monitor button to its permission, on answered and held calls only',
+      (tester) async {
+        await panelWith(
+          tester,
+          {'monitor.calls', 'monitor.listen', 'monitor.barge'},
+          [
+            leg('a', bridgedTo: 'b'),
+            leg('b', direction: 'outbound', startedSecondsAgo: 64),
+            leg('h', state: 'held', from: '103', startedSecondsAgo: 30),
+            leg('r', state: 'ringing', from: '+15550142', startedSecondsAgo: 8),
+          ],
+        );
+        expect(find.text('Actions'), findsOneWidget);
+        for (final call in ['a', 'h']) {
+          expect(find.byKey(ValueKey('monitor-listen-$call')), findsOneWidget);
+          expect(find.byKey(ValueKey('monitor-barge-$call')), findsOneWidget);
+          // Not held: whisper.
+          expect(find.byKey(ValueKey('monitor-whisper-$call')), findsNothing);
+        }
+        // The service refuses a call still ringing.
+        expect(find.byKey(const ValueKey('monitor-listen-r')), findsNothing);
+        expect(monitorButtons(), findsNWidgets(4));
+        // No recording.control: no recording buttons.
+        expect(recordingButtons(), findsNothing);
+      },
+    );
+
+    testWidgets('S5-10: no monitor buttons with monitor.calls alone', (
+      tester,
+    ) async {
+      await panelWith(tester, {'monitor.calls'}, [leg('a')]);
+      expect(monitorButtons(), findsNothing);
+      expect(find.text('Actions'), findsNothing);
+    });
+
+    testWidgets('S5-10: never offered to a reseller, whatever it holds (H1)', (
+      tester,
+    ) async {
+      await panelWith(
+        tester,
+        {
+          'monitor.presence',
+          'monitor.calls',
+          'monitor.listen',
+          'monitor.whisper',
+          'monitor.barge',
+        },
+        [leg('a')],
+        orgType: OrgType.reseller,
+      );
+      expect(monitorButtons(), findsNothing);
+      expect(
+        find.text("Your role doesn't include live calls."),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      "S5-10: a refusal outside a scoped grant says why in the service's words",
+      (tester) async {
+        final asked = <String>[];
+        await panelWith(
+          tester,
+          {'monitor.calls', 'monitor.whisper'},
+          [leg('a')],
+          answer: (options) {
+            asked.add('${options.method} ${options.path}');
+            return jsonBody({
+              'title': 'Forbidden',
+              'status': 403,
+              'code': 'insufficient_permission',
+              'detail': 'You do not have permission to do that.',
+            }, status: 403);
+          },
+        );
+        await tapVisible(tester, 'monitor-whisper-a');
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        expect(asked, ['POST /v1/tenants/tenant-1/calls/a/whisper']);
+        expect(
+          find.text('You do not have permission to do that.'),
+          findsOneWidget,
+        );
+        expect(find.text('Ringing your phone…'), findsNothing);
+        expect(find.byKey(const ValueKey('monitor-whisper-a')), findsOneWidget);
+        await tester.pumpAndSettle(const Duration(seconds: 5));
+      },
+    );
+
+    testWidgets(
+      "S5-10: a press rings the supervisor's phone, shows as pending, then says what it is doing",
+      (tester) async {
+        await monitoringWith(tester, [
+          leg('demo-a1', bridgedTo: 'demo-a2'),
+          leg('demo-a2', direction: 'outbound'),
+          leg(
+            'demo-c1',
+            from: '103',
+            to: '+15550199',
+            state: 'held',
+            startedSecondsAgo: 30,
+          ),
+        ], email: 'supervisor@example.test');
+        expect(monitorButtons(), findsNWidgets(6));
+        await tapVisible(tester, 'monitor-listen-demo-a1');
+        await tester.pump();
+        expect(find.text('Ringing your phone…'), findsOneWidget);
+        // That call's buttons wait; the other call's do not.
+        for (final mode in MonitorMode.values) {
+          expect(
+            find.byKey(ValueKey('monitor-${mode.wire}-demo-a1')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(ValueKey('monitor-${mode.wire}-demo-c1')),
+            findsOneWidget,
+          );
+        }
+        // Still ringing a second later.
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('Ringing your phone…'), findsOneWidget);
+        expect(find.text('Listening on your phone'), findsNothing);
+
+        await tester.pump(const Duration(milliseconds: 600));
+        await tester.pump();
+        expect(find.text('Listening on your phone'), findsOneWidget);
+        expect(find.text('Ringing your phone…'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('monitor-listen-demo-a1')),
+          findsOneWidget,
+        );
+        await tester.pumpAndSettle(const Duration(seconds: 5));
+      },
+    );
+
+    testWidgets('S5-10: a refused press says why and brings the buttons back', (
+      tester,
+    ) async {
+      // The feed says answered, but the demo's call is still ringing: the
+      // service refuses.
+      await monitoringWith(tester, [
+        leg('demo-b1', from: '+15550142', to: '+15550100'),
+      ], email: 'supervisor@example.test');
+      await tapVisible(tester, 'monitor-barge-demo-b1');
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('This call has not been answered yet.'), findsOneWidget);
+      expect(find.text('Ringing your phone…'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('monitor-barge-demo-b1')),
+        findsOneWidget,
+      );
+      await tester.pumpAndSettle(const Duration(seconds: 5));
+    });
+
+    test(
+      'S5-10: asks call-control with no body, and waits for the phone',
+      () async {
+        RequestOptions? sent;
+        final dio = Dio()
+          ..httpClientAdapter = FakeAdapter((options) {
+            sent = options;
+            return jsonBody({
+              'mode': 'barge',
+              'callUuid': 'b',
+              'monitorCallUuid': 'm',
+            });
+          });
+        await MonitorApi(
+          dio,
+          'token-1',
+        ).monitor(tenantId: 't1', callUuid: 'b', mode: MonitorMode.barge);
+        expect(sent!.method, 'POST');
+        expect(sent!.path, '/v1/tenants/t1/calls/b/barge');
+        expect(sent!.data, isNull);
+        expect(sent!.headers['Authorization'], 'Bearer token-1');
+        // The phone rings for up to 30 s before the service answers.
+        expect(sent!.receiveTimeout, greaterThan(const Duration(seconds: 40)));
+      },
+    );
+
+    testWidgets('S5-10: the demo supervisor joins a call from their phone', (
+      tester,
+    ) async {
+      await pumpApp(
+        tester,
+        appWith(
+          api: demoApi(),
+          overrides: [
+            realtimeConnectorProvider.overrideWithValue(demoRealtimeConnector),
+            clockProvider.overrideWith((ref) => Stream.value(DateTime.now())),
+          ],
+        ),
+      );
+      await submitSignIn(tester, 'supervisor@example.test');
+      await tester.tap(navItem('Monitoring'));
+      await tester.pumpAndSettle();
+      // Answered and held calls; not the one still ringing.
+      expect(find.byKey(const ValueKey('monitor-whisper-demo-a1')), findsOne);
+      expect(find.byKey(const ValueKey('monitor-whisper-demo-c1')), findsOne);
+      expect(
+        find.byKey(const ValueKey('monitor-whisper-demo-b1')),
+        findsNothing,
+      );
+      await tapVisible(tester, 'monitor-whisper-demo-a1');
+      await tester.pump();
+      expect(find.text('Ringing your phone…'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 1500));
+      await tester.pump();
+      expect(find.text('Whispering on your phone'), findsOneWidget);
+      await tester.pumpAndSettle(const Duration(seconds: 5));
+    });
+  });
+
+  group('presence', () {
+    test('keeps every extension from the snapshot, in number order, and the changes after it', () {
+      final book = PresenceBook();
+      var view = book.apply(
+        const TopicSnapshot({
+          'extensions': [
+            {'extension': '110', 'state': 'idle'},
+            {'extension': '101', 'state': 'on_call'},
+            {'extension': '9', 'state': 'offline'},
+            {'extension': 'lobby', 'state': 'dnd'},
+            {'extension': '102', 'state': 'ringing'},
+          ],
+        }),
+      );
+      expect(view.loaded, isTrue);
+      expect(view.extensions.map((p) => p.extension), [
+        '9',
+        '101',
+        '102',
+        '110',
+        'lobby',
+      ]);
+
+      view = book.apply(
+        const TopicEvent({
+          'type': 'presence.changed',
+          'extension': '110',
+          'state': 'on_call',
+        }),
+      );
+      expect(view.extensions[3].state, 'on_call');
+      // An extension only a change names is added.
+      view = book.apply(
+        const TopicEvent({
+          'type': 'presence.changed',
+          'extension': '105',
+          'state': 'ringing',
+        }),
+      );
+      expect(view.extensions.map((p) => p.extension), [
+        '9',
+        '101',
+        '102',
+        '105',
+        '110',
+        'lobby',
+      ]);
+      // A state the console does not know is kept; other events are not
+      // presence.
+      view = book.apply(
+        const TopicEvent({
+          'type': 'presence.changed',
+          'extension': '9',
+          'state': 'on_break',
+        }),
+      );
+      view = book.apply(const TopicEvent({'type': 'something.else'}));
+      expect(view.extensions.first.state, 'on_break');
+      expect(view.extensions, hasLength(6));
+
+      // A new snapshot replaces everything.
+      view = book.apply(
+        const TopicSnapshot({
+          'extensions': [
+            {'extension': '101', 'state': 'idle'},
+          ],
+        }),
+      );
+      expect(view.extensions.map((p) => '${p.extension} ${p.state}'), [
+        '101 idle',
+      ]);
+
+      view = book.apply(const TopicStopped('offline'));
+      expect(view.stopped, 'offline');
+      expect(view.loaded, isFalse);
+    });
+
+    test(
+      'each state has its own word, icon and color; an unknown one is neutral',
+      () {
+        const known = ['idle', 'ringing', 'on_call', 'dnd', 'offline'];
+        final looks = [for (final s in known) presenceLook(s)];
+        expect(looks.map((l) => l.label), [
+          'Available',
+          'Ringing',
+          'On a call',
+          'Do not disturb',
+          'Offline',
+        ]);
+        expect(looks.map((l) => l.icon).toSet(), hasLength(5));
+        expect(looks.map((l) => l.color).toSet(), hasLength(5));
+        expect(looks.map((l) => l.color), everyElement(isNotNull));
+
+        expect(presenceLook('on_break').label, 'On break');
+        expect(presenceLook('on_break').color, isNull);
+        expect(presenceLook('').label, 'Unknown');
+      },
+    );
+  });
+
+  group('the presence board', () {
+    testWidgets(
+      'shows every extension with its name and state, and follows the changes',
+      (tester) async {
+        final hub = await openMonitoring(tester);
+        expect(find.text('Presence'), findsOneWidget);
+        final socket = hub.last;
+        socket.reply({'type': 'authenticated'});
+        await tester.pumpAndSettle();
+        final topic = subscribedTopic(socket, 'presence');
+        socket
+          ..reply({'type': 'subscribed', 'topic': topic})
+          ..reply({
+            'type': 'snapshot',
+            'topic': topic,
+            'data': {
+              'extensions': [
+                {'extension': '110', 'state': 'idle'},
+                {'extension': '101', 'state': 'on_call'},
+                {'extension': '102', 'state': 'ringing'},
+                {'extension': '103', 'state': 'dnd'},
+                {'extension': '104', 'state': 'offline'},
+                {'extension': '105', 'state': 'on_break'},
+                {'extension': '106'},
+              ],
+            },
+          });
+        await tester.pumpAndSettle();
+        expect(boardOrder(tester), [
+          '101',
+          '102',
+          '103',
+          '104',
+          '105',
+          '106',
+          '110',
+        ]);
+        // The administrator reads extensions: the demo's names.
+        expect(onTile('101', 'Alice Kim'), findsOneWidget);
+        expect(onTile('101', 'On a call'), findsOneWidget);
+        expect(onTile('102', 'Bob Osei'), findsOneWidget);
+        expect(onTile('102', 'Ringing'), findsOneWidget);
+        expect(onTile('103', 'Do not disturb'), findsOneWidget);
+        expect(onTile('104', 'Offline'), findsOneWidget);
+        expect(onTile('105', 'On break'), findsOneWidget);
+        expect(onTile('106', 'Unknown'), findsOneWidget);
+        expect(onTile('110', 'Available'), findsOneWidget);
+
+        socket
+          ..reply({
+            'type': 'event',
+            'topic': topic,
+            'event': {
+              'type': 'presence.changed',
+              'extension': '110',
+              'state': 'ringing',
+            },
+          })
+          ..reply({
+            'type': 'event',
+            'topic': topic,
+            'event': {
+              'type': 'presence.changed',
+              'extension': '107',
+              'state': 'idle',
+            },
+          });
+        await tester.pumpAndSettle();
+        expect(onTile('110', 'Ringing'), findsOneWidget);
+        expect(onTile('107', 'Available'), findsOneWidget);
+        expect(boardOrder(tester), [
+          '101',
+          '102',
+          '103',
+          '104',
+          '105',
+          '106',
+          '107',
+          '110',
+        ]);
+
+        // Leaving the page stops watching.
+        await tester.ensureVisible(navItem('Dashboard'));
+        await tester.tap(navItem('Dashboard'));
+        await tester.pumpAndSettle();
+        expect(
+          socket.sent,
+          contains(equals({'type': 'unsubscribe', 'topic': topic})),
+        );
+      },
+    );
+
+    /// Pumps the Monitoring page for someone holding [held], of [orgType],
+    /// inside tenant `tenant-1`; the extension list, when asked for, has 101.
+    Future<(FakeSocket, List<String>)> pageFor(
+      WidgetTester tester,
+      Set<String> held, {
+      OrgType orgType = OrgType.tenant,
+    }) async {
+      tester.view.physicalSize = const Size(1280, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final hub = FakeHub();
+      final asked = <String>[];
+      final dio = Dio()
+        ..httpClientAdapter = FakeAdapter((options) {
+          asked.add(options.path);
+          return jsonBody({
+            'rows': [
+              {'id': 'e1', 'number': '101', 'displayName': 'Front desk'},
+            ],
+          });
+        });
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            sessionProvider.overrideWith(
+              () => _FixedSession(
+                Session(
+                  accessToken: 'x',
+                  expiresIn: 600,
+                  orgId: 'org-1',
+                  orgType: orgType,
+                  permissions: const [],
+                ),
+              ),
+            ),
+            tenantIdProvider.overrideWithValue('tenant-1'),
+            knownPermissionsProvider.overrideWithValue(held),
+            realtimeConnectorProvider.overrideWithValue(hub.connect),
+            apiProvider.overrideWithValue(ConsoleApi(dio: dio)),
+          ],
+          child: const MaterialApp(home: Scaffold(body: MonitoringPage())),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final socket = hub.last;
+      socket.reply({'type': 'authenticated'});
+      await tester.pumpAndSettle();
+      final topic = subscribedTopic(socket, 'presence');
+      socket
+        ..reply({'type': 'subscribed', 'topic': topic})
+        ..reply({
+          'type': 'snapshot',
+          'topic': topic,
+          'data': {
+            'extensions': [
+              {'extension': '101', 'state': 'idle'},
+              {'extension': '102', 'state': 'dnd'},
+            ],
+          },
+        });
+      await tester.pumpAndSettle();
+      return (socket, asked);
+    }
+
+    testWidgets('numbers only, without extension.read', (tester) async {
+      final (socket, asked) = await pageFor(tester, {'monitor.presence'});
+      expect(boardOrder(tester), ['101', '102']);
+      expect(onTile('101', 'Available'), findsOneWidget);
+      expect(onTile('102', 'Do not disturb'), findsOneWidget);
+      expect(find.text('Front desk'), findsNothing);
+      expect(asked, isEmpty);
+      // Presence without monitor.calls: no calls are watched.
+      expect(
+        find.text("Your role doesn't include live calls."),
+        findsOneWidget,
+      );
+      expect(
+        [
+          for (final m in socket.sent)
+            if (m['type'] == 'subscribe') m['topic'],
+        ],
+        ['tenant:tenant-1:presence'],
+      );
+    });
+
+    testWidgets(
+      'shown to a reseller inside a tenant (config data), never the calls or their buttons (H1)',
+      (tester) async {
+        final (socket, _) = await pageFor(tester, {
+          'monitor.presence',
+          'monitor.calls',
+          'monitor.listen',
+          'monitor.whisper',
+          'monitor.barge',
+          'extension.read',
+        }, orgType: OrgType.reseller);
+        expect(onTile('101', 'Front desk'), findsOneWidget);
+        expect(onTile('101', 'Available'), findsOneWidget);
+        expect(
+          find.text("Your role doesn't include live calls."),
+          findsOneWidget,
+        );
+        expect(monitorButtons(), findsNothing);
+        expect(
+          [
+            for (final m in socket.sent)
+              if (m['type'] == 'subscribe') m['topic'],
+          ],
+          ['tenant:tenant-1:presence'],
+        );
+      },
+    );
+
+    testWidgets('shows the demo board in demo mode', (tester) async {
+      await pumpApp(
+        tester,
+        appWith(
+          api: demoApi(),
+          overrides: [
+            realtimeConnectorProvider.overrideWithValue(demoRealtimeConnector),
+            clockProvider.overrideWith((ref) => Stream.value(DateTime.now())),
+          ],
+        ),
+      );
+      await submitSignIn(tester, 'tenant@example.test');
+      await tester.tap(navItem('Monitoring'));
+      await tester.pumpAndSettle();
+      expect(boardOrder(tester), [
+        for (final e in demoPresence) e['extension'],
+      ]);
+      for (final label in [
+        'Available',
+        'Ringing',
+        'On a call',
+        'Do not disturb',
+        'Offline',
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byType(PresenceTile),
+            matching: find.text(label),
+          ),
+          findsWidgets,
+          reason: label,
+        );
+      }
+      expect(onTile('101', 'Alice Kim'), findsOneWidget);
     });
   });
 }

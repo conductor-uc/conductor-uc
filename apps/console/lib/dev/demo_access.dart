@@ -101,6 +101,22 @@ const _masterAdmin = [
   ..._tenantAdmin,
 ];
 
+/// What the built-in `tenant_supervisor` role holds (`@cuc/authz`): watching
+/// queues and calls, and joining calls from their own phone.
+const _tenantSupervisor = [
+  'org.view',
+  'queue.read',
+  'extension.read',
+  'monitor.presence',
+  'monitor.calls',
+  'monitor.listen',
+  'monitor.whisper',
+  'monitor.barge',
+  'recording.control',
+  'analytics.view',
+  ...demoSelfService,
+];
+
 /// Configuration reads (G-10) a tenant's own configuration screens need.
 const _tenantReads = [
   'user.read',
@@ -166,6 +182,8 @@ List<String> _support(String orgType) => switch (orgType) {
 /// - `user@...` is an ordinary person of a tenant (the `tenant_user` role):
 ///   only their own phone. They own extension 101.
 /// - `nophone@...` is the same, but nobody has linked an extension to them.
+/// - `supervisor@...` is a tenant supervisor (the `tenant_supervisor` role):
+///   they can listen to, whisper into and barge live calls.
 /// - `linked@...` is a tenant administrator who is also linked to extension
 ///   101, so is offered My phone as well.
 List<String>? demoPermissions(String orgType, String email) {
@@ -176,6 +194,7 @@ List<String>? demoPermissions(String orgType, String email) {
   if (email.startsWith('limited')) {
     return const ['org.view', 'extension.manage', 'monitor.presence'];
   }
+  if (email.startsWith('supervisor')) return _tenantSupervisor;
   if (email.startsWith('reader')) return const ['org.view', 'cdr.read'];
   if (email.startsWith('listener')) {
     return const ['org.view', 'recording.listen'];

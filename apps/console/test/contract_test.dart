@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:console/features/media/media_page.dart';
+import 'package:console/features/monitoring/monitor_controls.dart';
 import 'package:console/features/orgs/brand_page.dart';
 import 'package:console/features/orgs/org_defs.dart';
 import 'package:console/core/session.dart';
@@ -949,6 +950,33 @@ void main() {
       );
       expect(props(body), contains('userId'));
     });
+  });
+
+  group('live call monitoring (S5-10)', () {
+    const call = '/v1/tenants/{tenantId}/calls/{callUuid}';
+
+    test(
+      'listen, whisper and barge: a POST each, no body, and what they answer',
+      () {
+        for (final mode in MonitorMode.values) {
+          final path = '$call/${mode.wire}';
+          expect(paths, contains(path), reason: path);
+          final post = (paths[path] as Map)['post'] as Map<String, dynamic>;
+          // MonitorApi sends nothing: the phone rung is the person's own.
+          expect(post, isNot(contains('requestBody')), reason: path);
+          final params = [
+            for (final p in [...?(post['parameters'] as List?)].cast<Map>())
+              if (p['in'] == 'path') p['name'],
+          ];
+          expect(params, unorderedEquals(['tenantId', 'callUuid']));
+          final answer = _schema(post, response: '200');
+          expect(
+            (answer['properties'] as Map).keys,
+            containsAll(['mode', 'callUuid', 'monitorCallUuid']),
+          );
+        }
+      },
+    );
   });
 
   test('the trunk list carries what a phone number picker reads', () {
