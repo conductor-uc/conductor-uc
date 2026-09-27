@@ -210,7 +210,7 @@ services:
       OPENSIPS_FS_DESTINATION: sip:203.0.113.21:5060,sip:203.0.113.22:5060
 ```
 
-The gateway's `*_SERVICE_URL` values, and `CALL_CONTROL_URL` for the realtime hub (`http://${APP_IP}:8110`), come from `x-urls` (app-1's private addresses); `NATS_SERVERS` comes from `x-nats` (data-1). It still needs `./src/apps/console/build/web` and `./bootstrap-tls` on this server.
+The gateway's `*_SERVICE_URL` values, `CALL_CONTROL_URL` for the realtime hub (`http://${APP_IP}:8110`) and `TELEPHONY_CONFIG_URL` for its presence (registration and do not disturb, S5-10), come from `x-urls` (app-1's private addresses); `NATS_SERVERS` comes from `x-nats` (data-1). It still needs `./src/apps/console/build/web` and `./bootstrap-tls` on this server.
 
 ### 4.4 media-N
 

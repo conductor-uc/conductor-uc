@@ -41,6 +41,13 @@ export const configSchema = Type.Object({
    * someone subscribes to the realtime hub (S5-08).
    */
   CALL_CONTROL_URL: Env.url(),
+  /**
+   * S5-10 (G-122): telephony-config, e.g. http://telephony-config:8080, which the realtime hub
+   * asks for every extension's registration and do not disturb (`GET /internal/v1/tenants/{t}/
+   * presence`) for the presence topic. Optional: without it presence is calls only (ringing, on a
+   * call, or idle), as before S5-10.
+   */
+  TELEPHONY_CONFIG_URL: Env.optional(Env.url()),
 
   /**
    * The routing table (06, api-gateway): which downstream service owns which
@@ -140,6 +147,13 @@ export const configSchema = Type.Object({
 
   /** How long a proxied request waits for the downstream service. */
   PROXY_TIMEOUT_MS: Env.int({ minimum: 100, default: 15_000 }),
+  /**
+   * S5-09/S5-10: how long listen, whisper and barge (a `POST` to a call's `/listen`, `/whisper` or
+   * `/barge`) wait for call-control, which answers only once the supervisor's phone has: it must be
+   * more than call-control's `MONITOR_RING_TIMEOUT_SECONDS` (30 s) plus 10 s, or a phone answered
+   * late shows the caller a timeout although it was connected.
+   */
+  PROXY_MONITOR_TIMEOUT_MS: Env.int({ minimum: 1_000, default: 45_000 }),
 
   /** `redis://host:port` — backs rate limiting (05 §1). */
   REDIS_URL: Env.url(),

@@ -41,6 +41,8 @@ class _DemoAdapter implements HttpClientAdapter {
     if (access != null) return access;
     final recording = _recordingControl(options);
     if (recording != null) return recording;
+    final monitor = await _monitor(options);
+    if (monitor != null) return monitor;
     final pbx = _pbx.handle(options, userId: demoUserId(_email));
     if (pbx != null) return pbx;
     switch (options.path) {
@@ -195,6 +197,23 @@ class _DemoAdapter implements HttpClientAdapter {
       '${_body(options)['action']}',
       mine: match.group(1) != 'calls',
     );
+    return status == 200
+        ? _json(body)
+        : _problem(status, '${body['code']}', '${body['detail']}');
+  }
+
+  /// Listen, whisper and barge on a live call (S5-09): the demo's "phone"
+  /// answers after a moment, so the pending state can be seen
+  /// ([demoMonitorAction]).
+  Future<ResponseBody?> _monitor(RequestOptions options) async {
+    final match = RegExp(
+      r'^/v1/tenants/[^/]+/calls/([^/]+)/(listen|whisper|barge)$',
+    ).firstMatch(options.path);
+    if (match == null || options.method != 'POST') return null;
+    final (status, body) = demoMonitorAction(match.group(1)!, match.group(2)!);
+    if (status == 200) {
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+    }
     return status == 200
         ? _json(body)
         : _problem(status, '${body['code']}', '${body['detail']}');

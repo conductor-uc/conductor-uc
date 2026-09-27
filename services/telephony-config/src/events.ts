@@ -292,4 +292,19 @@ export const telephonyEvents = defineEvents({
       emergencyLocationId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     }),
   },
+  'call.presence.changed': {
+    schemaVersion: 1,
+    description:
+      "S5-10 (G-122): an extension's phone registered or went away, or its do not disturb " +
+      "changed. Emitted by this service, which reads OpenSIPs' registrations and keeps each " +
+      "extension's call handling; the tenant is in orgContext. Carries the whole state, not " +
+      "the difference. Call state (ringing, on a call) comes from call-control's call.channel.*.",
+    data: Type.Object({
+      extensionId: Type.String({ minLength: 1 }),
+      /** The extension's dialable number, which the live views show. */
+      extension: Type.String({ minLength: 1 }),
+      registered: Type.Boolean(),
+      dnd: Type.Boolean(),
+    }),
+  },
 });

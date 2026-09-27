@@ -299,4 +299,15 @@ export interface TelephonyConfigDb extends EventTables {
     fail_closed: boolean;
     updated_at: Date;
   };
+  /**
+   * S5-10 (G-122): the presence last announced per extension (`013_add_extension_presence.ts`):
+   * a phone registered for it, and do not disturb. `presence.ts` diffs each poll against it.
+   */
+  extension_presence: {
+    extension_id: string;
+    tenant_id: string;
+    registered: boolean;
+    dnd: boolean;
+    updated_at: Date;
+  };
 }

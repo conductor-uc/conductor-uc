@@ -5,9 +5,10 @@ import '../core/realtime_socket.dart';
 
 /// A stand-in for the gateway's realtime hub in demo mode
 /// (`--dart-define=DEMO=true`), answering the same protocol with canned data:
-/// any token is accepted, and each tenant has the same few live calls. Nothing
-/// changes on its own (no timers); only the recording buttons change a call
-/// ([demoRecordingAction]), so it is deterministic in tests.
+/// any token is accepted, and each tenant has the same few live calls and the
+/// same presence board. Nothing changes on its own (no timers); only the
+/// recording buttons change a call ([demoRecordingAction]), so it is
+/// deterministic in tests.
 Future<RealtimeSocket> demoRealtimeConnector(Uri url) async =>
     DemoRealtimeSocket();
 
@@ -174,6 +175,56 @@ const _myLegs = {'demo-a1', 'demo-a2'};
   );
 }
 
+/// The demo tenant's extensions on the presence board: every one of them, in
+/// each of the five states. The three on the demo's calls are on a call; the
+/// others have no name in the demo's extension list, so show as numbers.
+const demoPresence = [
+  {'extension': '101', 'state': 'on_call'},
+  {'extension': '102', 'state': 'on_call'},
+  {'extension': '103', 'state': 'on_call'},
+  {'extension': '104', 'state': 'ringing'},
+  {'extension': '105', 'state': 'idle'},
+  {'extension': '106', 'state': 'dnd'},
+  {'extension': '107', 'state': 'offline'},
+  {'extension': '110', 'state': 'idle'},
+];
+
+/// What a listen, whisper or barge button does in the demo: `(status, body)`
+/// for the demo backend to answer with, once the "phone" has "answered". A
+/// call in progress that is answered or held can be joined; a ringing one
+/// cannot, as the service says.
+(int, Map<String, Object?>) demoMonitorAction(String callUuid, String mode) {
+  final leg = demoLiveCalls(DateTime.now())
+      .where((l) => l['callUuid'] == callUuid)
+      .firstOrNull;
+  if (leg == null) {
+    return (
+      404,
+      {
+        'code': 'call_not_found',
+        'detail': 'There is no such call in progress.',
+      },
+    );
+  }
+  if (leg['state'] == 'ringing') {
+    return (
+      409,
+      {
+        'code': 'call_not_answered',
+        'detail': 'This call has not been answered yet.',
+      },
+    );
+  }
+  return (
+    200,
+    {
+      'mode': mode,
+      'callUuid': callUuid,
+      'monitorCallUuid': 'demo-monitor-$callUuid',
+    },
+  );
+}
+
 class DemoRealtimeSocket implements RealtimeSocket {
   DemoRealtimeSocket() {
     _sockets.add(this);
@@ -249,13 +300,7 @@ class DemoRealtimeSocket implements RealtimeSocket {
           _reply({
             'type': 'snapshot',
             'topic': topic,
-            'data': {
-              'extensions': [
-                {'extension': '101', 'state': 'on_call'},
-                {'extension': '102', 'state': 'on_call'},
-                {'extension': '103', 'state': 'on_call'},
-              ],
-            },
+            'data': {'extensions': demoPresence},
           });
         }
       case 'unsubscribe' when topic != null:

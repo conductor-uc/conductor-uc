@@ -353,6 +353,71 @@ describe('live call events', () => {
   });
 });
 
+describe('presence with registration and do not disturb (S5-10)', () => {
+  const statuses = [
+    { extension: '101', registered: true, dnd: false },
+    { extension: '1000', registered: false, dnd: false },
+    { extension: '102', registered: true, dnd: true },
+    { extension: '103', registered: false, dnd: true },
+  ];
+
+  it('lists every extension in number order: idle, dnd, offline (offline before dnd)', () => {
+    const presence = new TenantPresence();
+    presence.load([], statuses);
+    expect(presence.snapshot()).toEqual([
+      { extension: '101', state: 'idle' },
+      { extension: '102', state: 'dnd' },
+      { extension: '103', state: 'offline' },
+      { extension: '1000', state: 'offline' },
+    ]);
+  });
+
+  it('puts a call above everything, and drops a number that is no extension of the tenant', () => {
+    const presence = new TenantPresence();
+    presence.load([], statuses);
+    expect(
+      presence.apply({ type: 'call.started', call: call({ callUuid: 'a', from: '102' }) }),
+    ).toEqual([{ type: 'presence.changed', extension: '102', state: 'on_call' }]);
+    // An outside caller whose caller ID looks like an extension.
+    expect(
+      presence.apply({ type: 'call.started', call: call({ callUuid: 'b', from: '4455' }) }),
+    ).toEqual([]);
+    expect(presence.snapshot().map((entry) => entry.extension)).toEqual([
+      '101',
+      '102',
+      '103',
+      '1000',
+    ]);
+    expect(
+      presence.apply({ type: 'call.ended', callUuid: 'a', hangupCause: 'NORMAL_CLEARING' }),
+    ).toEqual([{ type: 'presence.changed', extension: '102', state: 'dnd' }]);
+  });
+
+  it('follows registration and do not disturb, adds a new extension, and says nothing when nothing shows', () => {
+    const presence = new TenantPresence();
+    presence.load([], statuses);
+    expect(presence.applyStatus({ extension: '101', registered: false, dnd: false })).toEqual([
+      { type: 'presence.changed', extension: '101', state: 'offline' },
+    ]);
+    // Do not disturb on an unregistered phone: still offline, nothing to say.
+    expect(presence.applyStatus({ extension: '101', registered: false, dnd: true })).toEqual([]);
+    expect(presence.applyStatus({ extension: '101', registered: true, dnd: true })).toEqual([
+      { type: 'presence.changed', extension: '101', state: 'dnd' },
+    ]);
+    expect(presence.applyStatus({ extension: '104', registered: true, dnd: false })).toEqual([
+      { type: 'presence.changed', extension: '104', state: 'idle' },
+    ]);
+    expect(presence.applyStatus({ extension: 'x', registered: true, dnd: false })).toEqual([]);
+  });
+
+  it('ignores registration and do not disturb when presence is calls only', () => {
+    const presence = new TenantPresence();
+    presence.load([]);
+    expect(presence.applyStatus({ extension: '101', registered: false, dnd: false })).toEqual([]);
+    expect(presence.snapshot()).toEqual([]);
+  });
+});
+
 describe('presence from live calls', () => {
   it('takes the extension from the party the channel connects to, and never an outside number', () => {
     expect(extensionOf({ direction: 'inbound', from: '101', to: '+15551234567' })).toBe('101');

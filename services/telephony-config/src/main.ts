@@ -24,9 +24,11 @@ import { createRecordingClient } from './recording-client.js';
 import { createOpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
 import { createReadModelRepo } from './repo/read-model.repo.js';
 import { createCertificateSync, startCertificateSync } from './certificate-sync.js';
+import { createPresenceWatcher } from './presence.js';
 import { createReconciler } from './reconcile.js';
 import { registerFsRoutes } from './routes/fs.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
+import { registerPresenceRoutes } from './routes/presence.routes.js';
 import type { TelephonyConfigDb } from './schema.js';
 import { createTrunkConfigClient } from './trunk-config-client.js';
 import { createVoicemailClient } from './voicemail-client.js';
@@ -196,6 +198,10 @@ const reconciler = createReconciler(
 );
 reconciler.start(config.RECONCILE_INTERVAL_MS);
 
+// S5-10 (G-122): registrations and do not disturb, for the presence board.
+const presence = createPresenceWatcher({ db, mi: miClient, logger });
+presence.start(config.PRESENCE_POLL_INTERVAL_MS);
+
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
   serviceVersion: config.SERVICE_VERSION,
@@ -241,6 +247,7 @@ registerInternalRoutes(
   config.INTERNAL_SERVICE_TOKEN,
   logger,
 );
+registerPresenceRoutes(app, { presence, internalServiceToken: config.INTERNAL_SERVICE_TOKEN });
 
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
@@ -253,6 +260,7 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   reconciler.stop();
+  presence.stop();
   orgConsumer.stop();
   certificateConsumer.stop();
   certificateSyncTimer.stop();

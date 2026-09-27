@@ -148,6 +148,8 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
 
   /** The live calls the fake call-control answers with, by tenant. */
   const liveCalls = new Map<string, object[]>();
+  /** S5-10: telephony-config's presence answer per tenant (registration and do not disturb). */
+  const presenceStatuses = new Map<string, object[]>();
   /** S5-15: each person's extension number, as the fake pbx-config-service answers, by user id. */
   const extensionNumbers = new Map<string, string>();
 
@@ -193,6 +195,10 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
           ? reply(404, {})
           : reply(200, { extensionId: `ext-${number}`, number });
       }
+      const statuses = /^\/internal\/v1\/tenants\/([^/]+)\/presence$/.exec(url);
+      if (statuses !== null) {
+        return reply(200, { extensions: presenceStatuses.get(statuses[1] ?? '') ?? [] });
+      }
       const calls = /^\/internal\/v1\/tenants\/([^/]+)\/calls$/.exec(url);
       if (calls !== null) {
         if (calls[1] === TENANT_DOWN) return reply(500, {});
@@ -211,6 +217,7 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
         ORG_SERVICE_URL: fakeUrl,
         CALL_CONTROL_URL: fakeUrl,
         PBX_CONFIG_SERVICE_URL: fakeUrl,
+        TELEPHONY_CONFIG_URL: fakeUrl,
         CONSOLE_HOSTNAMES: CONSOLE_HOST,
         REALTIME_AUTH_TIMEOUT_MS: '1000',
         REALTIME_PERMISSION_RECHECK_MS: '1000',
@@ -588,10 +595,81 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
     });
   });
 
+  describe('presence with registration and do not disturb (S5-10)', () => {
+    it('lists every extension, and follows call.presence.changed: offline, do not disturb, idle', async () => {
+      const tenantId = TENANT_B;
+      liveCalls.set(tenantId, []);
+      presenceStatuses.set(tenantId, [
+        { extensionId: 'e-201', extension: '201', registered: true, dnd: false },
+        { extensionId: 'e-1000', extension: '1000', registered: false, dnd: false },
+        { extensionId: 'e-202', extension: '202', registered: true, dnd: true },
+      ]);
+      const watcher = await connectAs(person(tenantId, 'tenant', ['monitor.presence']));
+      expect(await watcher.subscribe(topic(tenantId, 'presence'))).toMatchObject({
+        type: 'subscribed',
+      });
+      const snapshot = await watcher.next((m) => m.type === 'snapshot');
+      expect(snapshot['data']).toEqual({
+        extensions: [
+          { extension: '201', state: 'idle' },
+          { extension: '202', state: 'dnd' },
+          { extension: '1000', state: 'offline' },
+        ],
+      });
+
+      const status = (extension: string, registered: boolean, dnd: boolean) =>
+        publish('call.presence.changed', tenantId, {
+          extensionId: `e-${extension}`,
+          extension,
+          registered,
+          dnd,
+        });
+      const next = async () =>
+        ((await watcher.next((m) => m.type === 'event'))['event'] as object) ?? {};
+      const seen = () => watcher.messages.filter((m) => m.type === 'event').length;
+
+      await status('201', false, false);
+      expect(await next()).toEqual({
+        type: 'presence.changed',
+        extension: '201',
+        state: 'offline',
+      });
+      await status('1000', true, false);
+      await watcher.next((m) => m.type === 'event' && seen() >= 2);
+      await status('202', true, false);
+      await watcher.next((m) => m.type === 'event' && seen() >= 3);
+      const events = watcher.messages.filter((m) => m.type === 'event').map((m) => m['event']);
+      expect(events).toEqual([
+        { type: 'presence.changed', extension: '201', state: 'offline' },
+        { type: 'presence.changed', extension: '1000', state: 'idle' },
+        { type: 'presence.changed', extension: '202', state: 'idle' },
+      ]);
+
+      // A call on an offline-looking extension is still a call; the other tenant hears nothing.
+      await publish('call.channel.created', tenantId, {
+        callUuid: randomUUID(),
+        nodeId: 'fs-1',
+        tenantId,
+        direction: 'inbound',
+        from: '201',
+        to: '+15551234567',
+      });
+      await watcher.next((m) => m.type === 'event' && seen() >= 4);
+      expect(watcher.messages.filter((m) => m.type === 'event').at(-1)).toMatchObject({
+        event: { extension: '201', state: 'on_call' },
+      });
+      watcher.close();
+    });
+  });
+
   describe('live calls', () => {
     it('sends a snapshot on subscribe, then the changes, and only to subscribers of that tenant', async () => {
       const tenantId = TENANT_A;
       const existing = randomUUID();
+      presenceStatuses.set(TENANT_A, [
+        { extensionId: 'e-101', extension: '101', registered: true, dnd: false },
+        { extensionId: 'e-102', extension: '102', registered: true, dnd: false },
+      ]);
       liveCalls.set(tenantId, [
         {
           callUuid: existing,
@@ -643,8 +721,12 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
         type: 'subscribed',
       });
       const presenceSnapshot = await presenceOnly.next((m) => m.type === 'snapshot');
+      // S5-10: every extension, from telephony-config, with calls on top.
       expect(presenceSnapshot['data']).toEqual({
-        extensions: [{ extension: '101', state: 'on_call' }],
+        extensions: [
+          { extension: '101', state: 'on_call' },
+          { extension: '102', state: 'idle' },
+        ],
       });
 
       const callUuid = randomUUID();

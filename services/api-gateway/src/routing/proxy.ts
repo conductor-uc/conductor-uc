@@ -11,6 +11,16 @@ import { resolveRoute, type RouteEntry } from './route-table.js';
 export interface ProxyOptions {
   readonly table: readonly RouteEntry[];
   readonly timeoutMs: number;
+  /**
+   * Requests that wait longer than `timeoutMs` by design, each with its own limit. S5-09's
+   * listen, whisper and barge return only once the supervisor's phone has answered, which
+   * call-control lets ring for `MONITOR_RING_TIMEOUT_SECONDS`.
+   */
+  readonly slowRoutes?: readonly {
+    readonly method: string;
+    readonly path: RegExp;
+    readonly timeoutMs: number;
+  }[];
   /** Signs the forwarded `x-internal-*` headers — must match what services verify with. */
   readonly internalHeaderSigningSecret: string;
 }
@@ -86,7 +96,11 @@ export function registerProxy(app: Server, options: ProxyOptions): void {
           method: request.method,
           headers,
           ...(body === undefined ? {} : { body }),
-          signal: AbortSignal.timeout(options.timeoutMs),
+          signal: AbortSignal.timeout(
+            options.slowRoutes?.find(
+              (slow) => slow.method === request.method && slow.path.test(path),
+            )?.timeoutMs ?? options.timeoutMs,
+          ),
         });
       } catch (error) {
         request.log.warn(
