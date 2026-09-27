@@ -124,6 +124,13 @@ function sipTestsRequired(): boolean {
   return process.env[REQUIRE_SIP_ENV] === '1';
 }
 
+/** Set to `1` in the `check` CI job. The network test below is not enough
+ * there: the runner is one host, so when the SIP job's compose stack is up
+ * at the same moment, `check` found its network and ran this suite against
+ * that job's stack (CI run #286), where `setup.ts`'s `hupall` would hang up
+ * the SIP job's own calls. */
+export const SKIP_SIP_ENV = 'SKIP_SIP_TESTS';
+
 /**
  * The reason the SIP scenario suite cannot run here, or `undefined` when it
  * can — pass to `describe.skipIf` in `test/scenarios.test.ts`:
@@ -133,6 +140,12 @@ function sipTestsRequired(): boolean {
  * ```
  */
 export async function sipInfraOrSkipReason(): Promise<string | undefined> {
+  if (process.env[SKIP_SIP_ENV] === '1') {
+    if (sipTestsRequired()) {
+      throw new Error(`${REQUIRE_SIP_ENV} and ${SKIP_SIP_ENV} are both set.`);
+    }
+    return `${SKIP_SIP_ENV} is set (this job owns no compose stack)`;
+  }
   const env = sipTestEnv();
   try {
     await execFileAsync('docker', ['network', 'inspect', env.network], { timeout: 5_000 });

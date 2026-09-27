@@ -51,6 +51,11 @@ jobs:
     # starts by hand must be removed again (see the MinIO step).
     runs-on: self-hosted
     timeout-minutes: 20
+    env:
+      # The live SIP suite belongs to the `sip` job. Without this it runs
+      # here whenever that job's compose network happens to exist on this
+      # shared runner, against that job's stack (run #286).
+      SKIP_SIP_TESTS: '1'
 
     services:
       mariadb:
