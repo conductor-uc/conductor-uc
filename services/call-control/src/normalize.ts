@@ -186,9 +186,7 @@ function heartbeatStats(raw: Readonly<Record<string, string>>): NodeStats {
     sessionsPerSecond: number('Session-Per-Sec-Last') ?? number('Session-Per-Sec'),
     uptimeSeconds: uptimeMs === undefined ? undefined : Math.round(uptimeMs / 1000),
   };
-  return Object.fromEntries(
-    Object.entries(stats).filter(([, value]) => value !== undefined),
-  ) as NodeStats;
+  return Object.fromEntries(Object.entries(stats).filter(([, value]) => value !== undefined));
 }
 
 export function normalizeEslEvent(

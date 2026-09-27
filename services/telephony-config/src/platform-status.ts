@@ -1,6 +1,5 @@
-import type { Database } from '@cuc/db';
+import { readServerStatus, type Database } from '@cuc/db';
 import type { Logger } from '@cuc/logger';
-import { sql } from 'kysely';
 
 import type { OpenSipsMiClient } from './opensips-mi-client.js';
 import type { OpenSipsDb } from './opensips-schema.js';
@@ -160,17 +159,14 @@ export function createPlatformStatus(deps: {
 
   async function mariadb(): Promise<DataStoreStatus> {
     try {
-      const [version, status] = await Promise.all([
-        sql<{ version: string }>`SELECT VERSION() AS version`.execute(db.kysely),
-        sql<{
-          Variable_name: string;
-          Value: string;
-        }>`SHOW GLOBAL STATUS WHERE Variable_name IN ('Uptime', 'Threads_connected', 'Questions', 'Slow_queries', 'Max_used_connections')`.execute(
-          db.kysely,
-        ),
+      const status = await readServerStatus(db.kysely, [
+        'Uptime',
+        'Threads_connected',
+        'Questions',
+        'Slow_queries',
+        'Max_used_connections',
       ]);
-      const value = (name: string): number =>
-        Number(status.rows.find((row) => row.Variable_name === name)?.Value ?? 0);
+      const value = (name: string): number => status.variables[name] ?? 0;
       const now = Date.now();
       const questions = value('Questions');
       const facts: Fact[] = [
@@ -193,7 +189,7 @@ export function createPlatformStatus(deps: {
       return {
         name: 'mariadb',
         status: 'up',
-        version: (version.rows[0]?.version ?? '').split('-')[0] || null,
+        version: status.version.split('-')[0] || null,
         uptimeSeconds: value('Uptime'),
         facts,
       };

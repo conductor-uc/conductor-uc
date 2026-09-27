@@ -163,8 +163,8 @@ describe.skipIf(skipReason !== undefined)('api-gateway: GET /v1/platform/overvie
 
     expect(response.statusCode, response.body).toBe(200);
     const body = response.json<Json>();
-    const services = Object.fromEntries(
-      (body['services'] as Json[]).map((service) => [service['name'], service]),
+    const services: Record<string, Json> = Object.fromEntries(
+      (body['services'] as Json[]).map((service) => [String(service['name']), service]),
     );
     expect(Object.keys(services)).toEqual([
       'api-gateway',
@@ -200,8 +200,8 @@ describe.skipIf(skipReason !== undefined)('api-gateway: GET /v1/platform/overvie
     // No NATS connection in this test.
     expect(body['events']).toBeNull();
 
-    const stores = Object.fromEntries(
-      (body['dataStores'] as Json[]).map((store) => [store['name'], store]),
+    const stores: Record<string, Json> = Object.fromEntries(
+      (body['dataStores'] as Json[]).map((store) => [String(store['name']), store]),
     );
     expect(stores['mariadb']).toMatchObject({ status: 'up', version: '11.4.8' });
     expect(stores['redis']).toMatchObject({ status: 'up' });
