@@ -78,6 +78,8 @@ const readTwins = {
   'callflow.edit': 'callflow.read',
   'callflow.publish': 'callflow.read',
   'recording.policy.manage': 'recording.policy.read',
+  // S4-12 (G-124): the operations console; `@cuc/authz` has the same implication.
+  'platform.operate': 'platform.observe',
 };
 
 /// Whether [held] gives [permission]: it is held, or a management permission
