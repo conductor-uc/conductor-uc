@@ -1,5 +1,5 @@
-/// Demo answers for what a signed-in user can do, and for the audit and
-/// platform health screens. In step with the built-in roles in `@cuc/authz`
+/// Demo answers for what a signed-in user can do, and for the audit screen
+/// (the Operations console's are in `demo_operations.dart`). In step with the built-in roles in `@cuc/authz`
 /// closely enough to exercise the console; the real values come from the
 /// service.
 library;
@@ -98,6 +98,9 @@ const _masterAdmin = [
   'analytics.view',
   'audit.read',
   'cdr.read',
+  // S4-12: the Operations console, and acting on the media nodes.
+  'platform.observe',
+  'platform.operate',
   ..._tenantAdmin,
 ];
 
@@ -144,6 +147,8 @@ List<String> _support(String orgType) => switch (orgType) {
     'org.view',
     'cdr.read',
     'analytics.view',
+    // S4-12: master support sees the Operations console and cannot act.
+    'platform.observe',
     'audit.read',
     'monitor.presence',
     'monitor.calls',
@@ -257,27 +262,3 @@ List<Map<String, Object?>> demoAuditEvents(String orgId, String orgType) => [
       'requestId': null,
     },
 ];
-
-/// One reading of the services' readiness: everything up but one service that
-/// answers and says one of its checks is failing.
-Map<String, Object?> demoPlatformHealth() => {
-  'checkedAt': DateTime.now().toUtc().toIso8601String(),
-  'services': [
-    for (final (name, ms) in const [
-      ('identity-service', 12),
-      ('org-service', 9),
-      ('pbx-config-service', 15),
-      ('callflow-service', 11),
-      ('voicemail-service', 41),
-      ('cdr-service', 14),
-      ('trunk-service', 10),
-    ])
-      {
-        'name': name,
-        'status': name == 'voicemail-service' ? 'degraded' : 'up',
-        'latencyMs': ms,
-        'version': '0.1.0',
-        'failing': name == 'voicemail-service' ? ['storage'] : <String>[],
-      },
-  ],
-};

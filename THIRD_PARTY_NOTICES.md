@@ -62,6 +62,15 @@ BSD, BlueOak-1.0.0, 0BSD, CC0-1.0, Unlicense, Python-2.0, CC-BY-4.0 for
 data files, and `node-forge` under BSD-3-Clause OR GPL-2.0, used under
 BSD-3-Clause). List them with `pnpm licenses list --prod`.
 
+### Console web build (`apps/console`)
+
+The console is compiled to JavaScript with Flutter (BSD-3-Clause) and served
+by api-gateway. Its Dart packages are installed from
+`apps/console/pubspec.lock` and are under permissive licences: `dio`,
+`flutter_riverpod`, `fl_chart` (the Operations page's charts) and its
+dependency `equatable` are MIT; `go_router`, `qr_flutter`, `url_launcher` and
+`web` are BSD-3-Clause. List them with `flutter pub deps` in `apps/console`.
+
 ## Vendored in this repository
 
 - `telephony/opensips/db-schema/*.sql`: table definitions copied verbatim from

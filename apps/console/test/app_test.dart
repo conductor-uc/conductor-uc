@@ -66,7 +66,7 @@ void main() {
     await pumpApp(tester, appWith(api: apiReturningLogin('master')));
     await signIn(tester);
     expect(find.text('Resellers'), findsWidgets);
-    expect(find.text('Platform health'), findsOneWidget);
+    expect(find.text('Operations'), findsOneWidget);
     expect(find.text('Extensions'), findsNothing);
     final bar = tester.widget<AppBar>(find.byType(AppBar));
     expect((bar.title as dynamic).brand.isNeutral, isTrue);

@@ -27,7 +27,7 @@ import '../features/pbx/resource.dart';
 import '../features/pbx/resource_page.dart';
 import '../features/dashboard/dashboard_page.dart';
 import '../features/audit/audit_page.dart';
-import '../features/platform/platform_health_page.dart';
+import '../features/platform/operations_page.dart';
 import '../features/shell/notice_pages.dart';
 import '../features/shell/sections.dart';
 import '../features/certificates/certificates_page.dart';
@@ -68,6 +68,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         }
         return _signedOutPaths.contains(path) ? null : '/login';
       }
+      // S4-12 replaced Platform health with Operations; old links still work.
+      if (path == '/platform-health') return '/operations';
       final permissions = ref.read(knownPermissionsProvider);
       final acting = ref.read(actingProvider);
       final sections = visibleSections(
@@ -173,7 +175,7 @@ Widget _pageFor(Section section) {
   if (section.path == '/my-phone/history') return const MyCallHistoryPage();
   if (section.path == '/dashboard') return const DashboardPage();
   if (section.path == '/audit') return const AuditPage();
-  if (section.path == '/platform-health') return const PlatformHealthPage();
+  if (section.path == '/operations') return const OperationsPage();
   if (section.path == '/trunks') return const TrunksPage();
   if (section.path == '/outbound-routes') return const OutboundRoutesPage();
   if (section.path == '/call-records') return const CallRecordsPage();

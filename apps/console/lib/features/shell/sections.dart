@@ -94,11 +94,12 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       Icons.storefront_outlined,
       requires: ['reseller.read'],
     ),
+    // S4-12: the services, media nodes, SIP edge, event bus and data stores.
     Section(
-      '/platform-health',
-      'Platform health',
+      '/operations',
+      'Operations',
       Icons.monitor_heart_outlined,
-      requires: ['analytics.view'],
+      requires: ['platform.observe'],
     ),
     Section(
       '/certificates',
