@@ -1,4 +1,9 @@
-import { createAffinityRegistry, type AffinityKind, type AffinityRegistry } from '@cuc/affinity';
+import {
+  createAffinityRegistry,
+  type AffinityKind,
+  type AffinityLease,
+  type AffinityRegistry,
+} from '@cuc/affinity';
 import type { Logger } from '@cuc/logger';
 import type { Redis } from 'ioredis';
 
@@ -66,6 +71,17 @@ export interface AffinityManager {
    */
   release(tenantId: string, kind: AffinityKind, resourceId: string): Promise<void>;
   getOwner(tenantId: string, kind: AffinityKind, resourceId: string): Promise<string | undefined>;
+  /**
+   * S4-02 (G-123): releases every lease the node holds, so the next call to each of those queues,
+   * parking lots and conferences acquires it again on a node in service. Called when the node is
+   * drained, after it has stopped counting as live. The calls already there stay where they are;
+   * a busy conference can briefly run on two nodes (revisited in S4-05). A lease another replica
+   * renews is released all the same: its renewal fails and that replica stops. Returns how many
+   * were released.
+   */
+  handOver(nodeId: string): Promise<number>;
+  /** S4-02: the leases a node holds now, whichever replica renews them. */
+  leasesHeldBy(nodeId: string): Promise<AffinityLease[]>;
   /** Clears every renewal timer without releasing the underlying leases — process shutdown, not resource teardown (a lease this replica was renewing simply lapses on its own 30 s TTL if nothing else renews it). */
   stop(): void;
 }
@@ -215,6 +231,25 @@ export function createAffinityManager(options: AffinityManagerOptions): Affinity
 
     async getOwner(tenantId, kind, resourceId) {
       return registry.getOwner({ tenantId, kind, resourceId });
+    },
+
+    async leasesHeldBy(nodeId) {
+      return registry.leasesHeldBy(nodeId);
+    },
+
+    async handOver(nodeId) {
+      let released = 0;
+      for (const lease of await registry.leasesHeldBy(nodeId)) {
+        const trackingKey = leaseTrackingKey(lease.tenantId, lease.kind, lease.resourceId);
+        const tracked = renewals.get(trackingKey);
+        if (tracked !== undefined && tracked.nodeId === nodeId) {
+          clearInterval(tracked.timer);
+          renewals.delete(trackingKey);
+        }
+        if (await registry.release(lease, nodeId)) released++;
+      }
+      if (released > 0) logger.info({ nodeId, released }, "affinity: handed over a node's leases");
+      return released;
     },
 
     stop() {

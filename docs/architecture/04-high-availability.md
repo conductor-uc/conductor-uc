@@ -99,9 +99,9 @@ This rebuild MUST be idempotent and MUST complete within 30 s for 10 nodes at 1,
 
 ## 6. Rolling upgrades
 
-To upgrade a node:
+To upgrade a node (as built in S4-02, [G-123](../decisions.md)):
 
-1. Set `fsnode:{id}.status=draining`, then call `ds_set_state` to mark the node probing-only in OpenSIPs.
-2. Stop renewing its leases so pinned resources migrate as they go idle. Active conferences stay until empty.
-3. Wait for sessions to reach 0 or for a maximum drain time, then stop the node.
-4. Upgrade, then start it. It rejoins automatically.
+1. `POST /internal/v1/nodes/{id}/drain` on call-control. It marks the node draining (`fsnodes:draining`, so `fsnode:{id}.status` stays `draining` through its heartbeats) and commits `call.node.drain_changed`. telephony-config sets the node's dispatcher rows inactive and calls `ds_set_state i` over MI, so OpenSIPs sends it no new calls. It is *inactive*, not *probing*: a probing node that answers its OPTIONS would rejoin by itself.
+2. The same call releases the node's leases at once, so the next caller to each of its queues, parking lots and conferences re-pins it on a node in service. Calls already on the node stay. A busy conference can briefly run on two nodes until the old one empties (revisited in S4-05).
+3. Wait for its `calls` (`GET /internal/v1/nodes/{id}`) to reach 0, then stop the node.
+4. Upgrade and start it, then `POST /internal/v1/nodes/{id}/undrain`. A drain outlives the node's restart, so it never rejoins by accident.

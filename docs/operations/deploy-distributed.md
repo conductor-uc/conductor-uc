@@ -207,7 +207,7 @@ services:
       # ... as in the all-in-one file, but:
       OPENSIPS_DB_URL: mysql://opensips:${OPENSIPS_DB_PASSWORD}@${DATA_IP}:3306/opensips
       OPENSIPS_REDIS_URL: redis:cuc://${DATA_IP}:6379/0
-      OPENSIPS_FS_DESTINATION: sip:203.0.113.21:5060,sip:203.0.113.22:5060
+      OPENSIPS_FS_DESTINATION: fs1=sip:203.0.113.21:5060,fs2=sip:203.0.113.22:5060
 ```
 
 The gateway's `*_SERVICE_URL` values, `CALL_CONTROL_URL` for the realtime hub (`http://${APP_IP}:8110`) and `TELEPHONY_CONFIG_URL` for its presence (registration and do not disturb, S5-10), come from `x-urls` (app-1's private addresses); `NATS_SERVERS` comes from `x-nats` (data-1). It still needs `./src/apps/console/build/web` and `./bootstrap-tls` on this server.
@@ -384,10 +384,23 @@ To add media server N:
 1. Prepare the server as in §4.4 with a new `NODE_ID` (`fs3`), its public and private address, and firewall rules (§5).
 2. Start `freeswitch` and `recording-uploader` on it.
 3. On app-1, add `fs3:<private ip>:8021` to call-control's `FS_NODES` and restart call-control (the list is read only at startup; live-call tracking restarts too).
-4. On edge-1, add `sip:<public ip>:5060` to `OPENSIPS_FS_DESTINATION` and restart OpenSIPs. OpenSIPs reads the list only at start, and replaces its dispatcher table with it. **Restarting OpenSIPs drops calls being set up and loses its dialog state.** Do it in a quiet period. Registrations are stored in MariaDB (`db_mode` 2) and survive.
+4. On edge-1, add `fs3=sip:<public ip>:5060` to `OPENSIPS_FS_DESTINATION` (the id before `=` is the node's `NODE_ID`) and restart OpenSIPs. OpenSIPs reads the list only at start and syncs its dispatcher table to it, keeping a drained node drained. **Restarting OpenSIPs drops calls being set up and loses its dialog state.** Do it in a quiet period. Registrations are stored in MariaDB (`db_mode` 2) and survive.
 5. Allow the new server's addresses in the firewalls of app-1 (8107, 8108, 8109) and data-1 (6379).
 
-To remove one: take it out of `OPENSIPS_FS_DESTINATION` and restart OpenSIPs, wait for its calls to end (`fs_cli -x 'show calls count'`), let its uploader empty the spool (`ls /var/spool/cuc/rec`), then remove it from `FS_NODES` and restart call-control. There is no draining mode: every node has weight 1 (plan task S4-02).
+**Weights.** OpenSIPs hands new calls out in weighted round robin. Add `;weight=N` (1 to 999, default 1) to an entry to give a larger server a larger share: `fs1=sip:203.0.113.21:5060;weight=2,fs2=sip:203.0.113.22:5060` sends fs1 two calls for every one to fs2. There is no weight 0; drain a server instead.
+
+**Draining a media server** (to upgrade or remove it). From app-1, with the internal service token:
+
+```sh
+TOKEN=...   # INTERNAL_SERVICE_TOKEN
+curl -s -H "authorization: Bearer $TOKEN" http://127.0.0.1:8110/internal/v1/nodes
+curl -s -X POST -H "authorization: Bearer $TOKEN" http://127.0.0.1:8110/internal/v1/nodes/fs2/drain
+```
+
+The node takes no new calls within a second or two, and its queues, parking lots and conference rooms move to other nodes as soon as they are next used. Calls already on it carry on. A conference that is in progress keeps its participants there, and anyone joining it now starts a new room on another node. Watch `calls` for the node in `GET /internal/v1/nodes/fs2` and wait for 0.
+
+- **To upgrade it:** stop it, upgrade, start it, then `POST /internal/v1/nodes/fs2/undrain`. A drain survives the node's restart, so it takes calls again only when you undrain it.
+- **To remove it:** once `calls` is 0, let its uploader empty the spool (`ls /var/spool/cuc/rec`). Take it out of `OPENSIPS_FS_DESTINATION` and restart OpenSIPs in a quiet period. Then remove it from `FS_NODES` and restart call-control.
 
 ## 8. What happens when a server fails
 

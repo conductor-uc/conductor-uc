@@ -95,4 +95,20 @@ describe.skipIf(skipReason !== undefined)('affinity lease registry (04 §3.3)', 
     expect(await registry.getOwner(queueLease)).toBe('fs-1');
     expect(await registry.getOwner(confLease)).toBe('fs-2');
   });
+
+  it('lists every lease one node holds, and only that node (S4-02)', async () => {
+    const node = `fs-${randomUUID()}`;
+    const mine: AffinityLease[] = [
+      newLease(),
+      { tenantId: randomUUID(), kind: 'conf', resourceId: randomUUID() },
+      { tenantId: randomUUID(), kind: 'park', resourceId: 'lot-1' },
+    ];
+    for (const lease of mine) await registry.acquire(lease, node, 30_000);
+    await registry.acquire(newLease(), `fs-other-${randomUUID()}`, 30_000);
+
+    const held = await registry.leasesHeldBy(node);
+    expect(held).toHaveLength(3);
+    expect(held).toEqual(expect.arrayContaining(mine));
+    expect(await registry.leasesHeldBy(`fs-none-${randomUUID()}`)).toEqual([]);
+  });
 });

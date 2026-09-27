@@ -34,6 +34,23 @@ import type { Generated } from 'kysely';
  */
 export interface OpenSipsDb {
   /**
+   * `dispatcher`'s table (S4-02, G-123): the FS node pool, set 1. `seed-dispatcher.py` writes the
+   * rows from `OPENSIPS_FS_DESTINATION`, with the node's id in `attrs`; this service only ever
+   * changes `state` (0 active, 1 inactive), when call-control drains or undrains a node.
+   */
+  dispatcher: {
+    id: Generated<number>;
+    setid: number;
+    destination: string;
+    socket: string | null;
+    state: number;
+    probe_mode: number;
+    weight: string;
+    priority: number;
+    attrs: string | null;
+    description: string | null;
+  };
+  /**
    * OpenSIPs' `tls_mgm` table (G-105): the TLS certificates it presents, one row per
    * SIP proxy hostname, chosen by the name a client asks for (SNI). `type` is 2 for a
    * *server* domain (1 is a client domain: the opposite of what one would guess, found

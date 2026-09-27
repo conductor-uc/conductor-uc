@@ -110,7 +110,7 @@ What a restart costs:
 | call-control | Live-call tracking and resource leases restart. Calls continue. |
 | api-gateway | Console and API unavailable for a few seconds. Signed-in users stay signed in. Open live views (Monitoring) are closed with 1001 and reconnect by themselves. |
 | **OpenSIPs** | **Calls being set up fail, and in-dialog requests for existing calls may fail** (dialog state is reloaded from the database). Registrations survive (stored in MariaDB). |
-| **FreeSWITCH** | **Every call on that node drops.** Recordings in progress are lost; finished ones still in the spool are uploaded after restart if the spool volume survived. The spool is tmpfs, so on a server reboot they are lost too. |
+| **FreeSWITCH** | **Every call on that node drops.** Recordings in progress are lost; finished ones still in the spool are uploaded after restart if the spool volume survived. The spool is tmpfs, so on a server reboot they are lost too. With more than one media server, drain the node first and wait for its calls to end ([distributed deployment §7](deploy-distributed.md)). |
 
 ## 4. Backups and restore
 
@@ -196,7 +196,7 @@ Readiness checks:
 | Container restarts | `docker compose ps`, or your container monitoring | A service restarts repeatedly (usually configuration or a dependency) |
 | Console reachable | External HTTPS probe of `https://console.<domain>/healthz` | Down, or certificate expires within 14 days |
 | SIP edge reachable | SIP OPTIONS probe to `sip.<domain>:5060` (for example with `sipsak`) | No answer |
-| FreeSWITCH nodes | `ds_list` shows each node active; `fs_cli -x status` on each | Any node inactive |
+| FreeSWITCH nodes | `ds_list` shows each node active; `fs_cli -x status` on each; call-control's `GET /internal/v1/nodes` | Any node inactive that you have not drained (a drained one shows `draining: true` there) |
 | Registrations | `ul_dump` count, trended | Sudden drop |
 | Trunk registrations | `reg_list` | A trunk not registered |
 | Flood blocks | OpenSIPs log: `pike: blocking flood from` | Any from an address you expected to be exempt (a carrier or media server): it is missing from its trunk or from `OPENSIPS_FS_DESTINATION` |
@@ -288,7 +288,7 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Availability | No HA for OpenSIPs, MariaDB, Redis, NATS; call-control single copy; no FreeSWITCH failure cleanup or synthetic CDRs | S4-03 to S4-07 |
 | Telephony | No media relay: media servers need public addresses; no SRTP | O-7 |
 | Telephony | Queues, parking and conferences unreliable with more than one media server | G-46, S4-05 |
-| Telephony | Media server list fixed at OpenSIPs start; no weights or draining | S4-02 |
+| Telephony | Media server list fixed at OpenSIPs start (weights and draining work without a restart); node draining has no console page, only call-control's internal API | S4-02, G-123 |
 | Telephony | Per-tenant call rate fixed at 10 per second; repeated SIP authentication failures not blocked | G-31, G-118 |
 | Telephony | Phones behind NAT not verified | network §6.5 |
 | Telephony | Only Yealink auto-provisioning, not verified on hardware | G-103 |

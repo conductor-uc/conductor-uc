@@ -86,6 +86,8 @@ export interface Harness {
 
 export interface FakeMiClient extends OpenSipsMiClient {
   readonly calls: string[];
+  /** Every `query()` with its params (S4-02: `ds_set_state`). */
+  readonly queries: { method: string; params: readonly unknown[] | undefined }[];
   /** `reg_list`'s canned answer, keyed by the `aor` positional param — set per test. */
   regListResults: Record<string, unknown>;
 }
@@ -95,6 +97,7 @@ function fakeMiClient(): FakeMiClient {
   const calls: string[] = [];
   const state: FakeMiClient = {
     calls,
+    queries: [],
     regListResults: {},
     call(method: string) {
       calls.push(method);
@@ -102,6 +105,7 @@ function fakeMiClient(): FakeMiClient {
     },
     query<T>(method: string, params?: readonly unknown[]) {
       calls.push(method);
+      state.queries.push({ method, params });
       if (method === 'reg_list') {
         const aor = typeof params?.[0] === 'string' ? params[0] : '';
         return Promise.resolve((state.regListResults[aor] ?? { Records: [] }) as T);
@@ -399,14 +403,28 @@ function fakeVoicemailClient(storage: Storage): FakeVoicemailClient {
 }
 
 /**
- * Creates `domain`, `subscriber`, `registrant`, `address`, `dr_gateways`,
- * and `dr_rules` exactly as OpenSIPs' own vendored schema does
+ * Creates `dispatcher` (S4-02), `tls_mgm`, `domain`, `subscriber`, `registrant`, `address`,
+ * `dr_gateways`, and `dr_rules` exactly as OpenSIPs' own vendored schema does
  * (`telephony/opensips/db-schema/{domain,auth_db,registrant,permissions,
  * drouting}-create.sql`), minus bookkeeping columns/tables this service
  * never reads or writes — only column shapes matter here, and a real
  * MariaDB, not a mock, verifies this service's actual SQL against them.
  */
 async function createOpenSipsTables(db: Database<OpenSipsDb>): Promise<void> {
+  await db.kysely.schema
+    .createTable('dispatcher')
+    .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())
+    .addColumn('setid', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('destination', 'char(192)', (col) => col.notNull().defaultTo(''))
+    .addColumn('socket', 'char(128)')
+    .addColumn('state', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('probe_mode', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('weight', 'char(64)', (col) => col.notNull().defaultTo('1'))
+    .addColumn('priority', 'integer', (col) => col.notNull().defaultTo(0))
+    .addColumn('attrs', 'char(128)')
+    .addColumn('description', 'char(64)')
+    .execute();
+
   await db.kysely.schema
     .createTable('tls_mgm')
     .addColumn('id', 'integer', (col) => col.primaryKey().autoIncrement())

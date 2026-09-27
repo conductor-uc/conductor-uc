@@ -292,6 +292,19 @@ export const telephonyEvents = defineEvents({
       emergencyLocationId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
     }),
   },
+  /**
+   * S4-02 (G-123): copied from call-control, which emits it when an operator drains an FS node or
+   * returns it to service. This service takes the node's dispatcher destination out of rotation
+   * or puts it back (`consumers/node.consumer.ts`).
+   */
+  'call.node.drain_changed': {
+    schemaVersion: 1,
+    description: 'An FS node was drained or returned to service.',
+    data: Type.Object({
+      nodeId: Type.String({ minLength: 1 }),
+      draining: Type.Boolean(),
+    }),
+  },
   'call.presence.changed': {
     schemaVersion: 1,
     description:

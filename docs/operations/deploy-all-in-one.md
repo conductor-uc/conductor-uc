@@ -627,7 +627,7 @@ services:
       OPENSIPS_MI_PORT: '8888'
       OPENSIPS_DB_URL: mysql://opensips:${OPENSIPS_DB_PASSWORD}@127.0.0.1:3306/opensips
       OPENSIPS_REDIS_URL: redis:cuc://127.0.0.1:6379/0
-      OPENSIPS_FS_DESTINATION: sip:${PUBLIC_IP}:5080
+      OPENSIPS_FS_DESTINATION: fs1=sip:${PUBLIC_IP}:5080
       OPENSIPS_REGISTRANT_TIMER_INTERVAL: '60'
       OPENSIPS_TLS_ENABLED: 'true'
       OPENSIPS_TLS_DEV_SELF_SIGNED: 'false'
@@ -688,7 +688,7 @@ services:
 
 ### 7.3 FreeSWITCH
 
-- `FS_OPENSIPS_CIDR` is the public address because OpenSIPs, sending to FreeSWITCH's public address, uses the public address as its source. `OPENSIPS_FS_DESTINATION` is `sip:<public ip>:5080` because FreeSWITCH sends from exactly that address and port, and OpenSIPs recognises a node by both.
+- `FS_OPENSIPS_CIDR` is the public address because OpenSIPs, sending to FreeSWITCH's public address, uses the public address as its source. `OPENSIPS_FS_DESTINATION` is `fs1=sip:<public ip>:5080` because FreeSWITCH sends from exactly that address and port, and OpenSIPs recognises a node by both; `fs1` is its id in call-control's `FS_NODES`.
 - FreeSWITCH reaches telephony-config and cdr-service on 127.0.0.1 through Docker's published ports. This relies on Docker's default userland proxy (`"userland-proxy": true`, the default). If you have turned it off in `/etc/docker/daemon.json`, host processes may not reach ports published on 127.0.0.1.
 - call-control reaches the event socket through `host.docker.internal`, arriving from its address in `172.30.0.0/24`, which is why that subnet is `FS_CLUSTER_CIDR` and is allowed in the firewall.
 - *Not verified:* this exact host-networked layout. The development and test stack runs both processes on a Docker bridge.

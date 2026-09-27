@@ -16,6 +16,7 @@ import {
   createUserExtensionLookup,
 } from './clients.js';
 import { createMonitorController } from './monitor-control.js';
+import { createNodeDrain } from './node-drain.js';
 import { registerMonitorRoutes } from './routes/monitor.routes.js';
 import { createRecordingController } from './recording-control.js';
 import { registerRecordingControlRoutes } from './routes/recording.routes.js';
@@ -168,7 +169,16 @@ const app = await createServer({
   }),
 });
 
-registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN, registry);
+// S4-02: draining a node for a rolling upgrade.
+const nodeDrain = createNodeDrain({
+  db: db.kysely,
+  registry,
+  affinity,
+  nodeIds: fsNodes.map((node) => node.id),
+  logger,
+});
+
+registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN, registry, nodeDrain);
 
 const userExtension = createUserExtensionLookup({
   baseUrl: config.PBX_CONFIG_SERVICE_URL,

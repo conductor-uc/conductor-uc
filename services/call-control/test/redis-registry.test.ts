@@ -42,6 +42,61 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
     expect(live).not.toContain('fs-draining');
   });
 
+  it('S4-02: a drained node stays draining through its heartbeats until undrained', async () => {
+    await h.registry.heartbeat('fs-drain', 5_000);
+    await h.registry.setDraining('fs-drain', true);
+    expect(await h.redis.hget(`${h.keyPrefix}fsnode:fs-drain`, 'status')).toBe('draining');
+
+    await h.registry.heartbeat('fs-drain', 5_000);
+    expect(await h.redis.hget(`${h.keyPrefix}fsnode:fs-drain`, 'status')).toBe('draining');
+    expect(await h.registry.liveNodeIds()).not.toContain('fs-drain');
+
+    await h.registry.setDraining('fs-drain', false);
+    expect(await h.redis.hget(`${h.keyPrefix}fsnode:fs-drain`, 'status')).toBe('up');
+    await h.registry.heartbeat('fs-drain', 5_000);
+    expect(await h.registry.liveNodeIds()).toContain('fs-drain');
+  });
+
+  it('S4-02: draining a node that is down marks it, and it comes back draining', async () => {
+    await h.registry.setDraining('fs-away', true);
+    expect(await h.redis.exists(`${h.keyPrefix}fsnode:fs-away`)).toBe(0);
+
+    await h.registry.heartbeat('fs-away', 5_000);
+    expect(await h.redis.hget(`${h.keyPrefix}fsnode:fs-away`, 'status')).toBe('draining');
+    await h.registry.setDraining('fs-away', false);
+  });
+
+  it('S4-02: reports each node as up, draining or down, with its call count', async () => {
+    await h.registry.heartbeat('fs-a', 5_000);
+    await h.registry.heartbeat('fs-b', 5_000);
+    await h.registry.setDraining('fs-b', true);
+    await h.registry.setDraining('fs-c', true);
+    await h.registry.createCall(
+      {
+        callUuid: 'node-state-call',
+        nodeId: 'fs-a',
+        tenantId: null,
+        direction: 'inbound',
+        state: 'ringing',
+        startedAt: String(Date.now()),
+        from: '1000',
+        to: '1001',
+        extension: null,
+        controls: 'none',
+      },
+      60_000,
+    );
+
+    expect(await h.registry.nodeStates(['fs-a', 'fs-b', 'fs-c'])).toEqual([
+      { nodeId: 'fs-a', status: 'up', draining: false, calls: 1 },
+      { nodeId: 'fs-b', status: 'draining', draining: true, calls: 0 },
+      { nodeId: 'fs-c', status: 'down', draining: true, calls: 0 },
+    ]);
+    await h.registry.endCall('node-state-call', 'fs-a', null);
+    await h.registry.setDraining('fs-b', false);
+    await h.registry.setDraining('fs-c', false);
+  });
+
   it('creates a call, indexes it by node and tenant, and removes it on end', async () => {
     const callUuid = crypto.randomUUID();
     const tenantId = crypto.randomUUID();

@@ -1,6 +1,6 @@
 # Implementation status
 
-Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `8ef4209`, 2026-09-27, plus the `LICENSE` and manifest licence fields (O-6) committed alongside this refresh. S5-09 (G-121) and S5-10 (G-122) updated on 2026-09-27.
+Evidence-based status of [implementation-plan.md](implementation-plan.md), judged from the code (`services/*`, `packages/*`, `apps/console/lib`, `telephony/*`, `infra/*`, `tests/*`) and `git log`, not from the docs. "G-xx" refers to [decisions.md](../decisions.md). Snapshot: branch `main` at `8ef4209`, 2026-09-27, plus the `LICENSE` and manifest licence fields (O-6) committed alongside this refresh. S5-09 (G-121), S5-10 (G-122) and S4-02 (G-123) updated on 2026-09-27.
 
 **Done** = the task's scope exists and has tests; known caveats are named. **Partial** = some of the scope exists. **Not started** = no code.
 
@@ -107,7 +107,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | ID | Status | Evidence |
 |---|---|---|
 | S4-01 | Done | [ADR 0001](../architecture/adr/0001-orchestrator.md) (O-1: Compose per server now, Kubernetes for the application tier later) and [10-production-topology.md](../architecture/10-production-topology.md) (roles, zones, per-component HA and stable endpoints, the S4 task that builds each). Two choices in it are Proposed for the owner: D-016 (MariaDB Galera, single writer) and D-017 (floating addresses and internal load balancers). `infra/deploy` stays empty until S4-11 |
-| S4-02 | Partial | dispatcher probing (`ds_ping_interval`) and round-robin over two nodes; no weights or draining |
+| S4-02 | Done | G-123: `OPENSIPS_FS_DESTINATION` entries carry the node id and a weight (`seed-dispatcher.py` syncs set 1, keeping a drained node's state); weighted round robin (`ds_select_dst(1, 4)`); OPTIONS probing every 2 s, down after 2 failures. call-control `GET /internal/v1/nodes`, `POST .../nodes/{id}/drain\|undrain`: draining set in Redis, leases handed over at once, `call.node.drain_changed`; telephony-config sets the dispatcher rows inactive and calls MI `ds_set_state`. Live tests `tests/sip/test/dispatcher.test.ts` (3:1 weights, drain and undrain). No console page; one OpenSIPs edge (S4-06) |
 | S4-03 | Partial | leases live in Redis via call-control; compose runs one call-control replica; no multi-replica test |
 | S4-04 | Not started | `call-control/src/events.ts` only comments the `call.lost` sequence; no teardown, synthetic CDRs, or Redis rebuild |
 | S4-05 | Not started | `cachedb_redis` is loaded but no affinity lookup in `route{}` |
@@ -179,7 +179,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | Security review (auth, H1, secrets, SIP exposure) | Not started | no review record; `SECURITY.md` is a disclosure policy only |
 | External penetration test | Not started | none |
 | Backup and restore runbook | Partial | `docs/operations/operations.md` §4: what to back up, logical dump and restore, binary logs for point-in-time recovery, object storage versioning or replication. Not tested |
-| Operations runbooks | Partial | `docs/operations/operations.md`: upgrades, monitoring, secret rotation, troubleshooting (incl. trunks); no node drain (not possible yet, S4-02) or failover drills |
+| Operations runbooks | Partial | `docs/operations/operations.md`: upgrades, monitoring, secret rotation, troubleshooting (incl. trunks); node drain in `deploy-distributed.md` §7 (S4-02); no failover drills |
 | License decision (O-6) | Done | O-6 accepted 2026-09-25: `LICENSE` (AGPL-3.0), `"license": "AGPL-3.0-only"` in every `package.json`, `THIRD_PARTY_NOTICES.md`. Still open under O-6: a contributor licence agreement before outside contributions, counsel's confirmation |
 | Emergency calling scope (G-1) | Partial | routes, locations, and dialplan built; notification hook and reseller documentation missing |
 | Billing data access (D-013) | Done | `billing.read` permission, `GET /v1/tenants/:tenantId/billing-records`; master rollup missing (G-53) |

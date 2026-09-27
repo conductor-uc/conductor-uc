@@ -299,9 +299,11 @@ services:
       # request FS sent back to us (ext→ext, 03 §2.1) apart from a
       # registered phone dialing out — a CIDR check was tried first and
       # confirmed wrong on this flat compose network (opensips.cfg.template's
-      # own comment). `ds_select_dst(1, 4)`'s algorithm 4 is round robin, so
-      # this is also what actually spreads calls across both nodes.
-      OPENSIPS_FS_DESTINATION: ${OPENSIPS_FS_DESTINATION:-sip:freeswitch:5060,sip:freeswitch-2:5060}
+      # own comment). S4-02 (G-123): each entry is `[node-id=]sip:host:port
+      # [;weight=N]`; `ds_select_dst(1, 4)` (weighted round-robin) splits new
+      # calls by weight, and the node id (call-control's `FS_NODES` id) is how
+      # a drain finds the row.
+      OPENSIPS_FS_DESTINATION: ${OPENSIPS_FS_DESTINATION:-freeswitch=sip:freeswitch:5060,freeswitch-2=sip:freeswitch-2:5060}
       # S2-02: fast in dev/test so a newly created trunk registers within
       # seconds rather than the module's ~100-200s default worst case.
       OPENSIPS_REGISTRANT_TIMER_INTERVAL: ${OPENSIPS_REGISTRANT_TIMER_INTERVAL:-10}
