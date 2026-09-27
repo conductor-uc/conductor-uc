@@ -41,7 +41,7 @@ All design-system widgets take colors and logos from the theme and never embed a
 
 | Org type | Sections |
 |---|---|
-| Master | Resellers · Platform health (nodes, calls, queues backlog) · Audit · Users |
+| Master | Resellers · Operations (services, media nodes, SIP edge, events, data stores; [11](11-operations-console.md)) · Audit · Users |
 | Reseller | Tenants · Trunks (per tenant) · Domains · Brand · Users · Audit |
 | Tenant | Dashboard · Users · Extensions · Phone numbers · Call flows · Ring groups · Queues · Schedules · Media · Monitoring · Recordings · Voicemail · Reports · Settings |
 

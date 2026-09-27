@@ -605,6 +605,12 @@ services:
       REQUIRE_HTTPS_FOR_PROVISIONING: 'true'
       CONSOLE_DIR: /console
       CONSOLE_CONNECT_SOURCES: ${STORAGE_ORIGIN}
+      # The operations console (S4-12): services it does not otherwise call, and
+      # NATS' figures. The host-networked uploader can be added as
+      # uploader=http://host.docker.internal:9464 with the extra_hosts entry
+      # call-control uses.
+      PLATFORM_STATUS_TARGETS: media-worker=http://media-worker:8080,notification-service=http://notification-service:8080
+      NATS_MONITOR_URL: http://nats:8222
     # Liveness through the plain-HTTP listener: it answers 308 without TLS, so the
     # check needs no certificate for 127.0.0.1 and no disabled verification.
     healthcheck:
@@ -796,7 +802,7 @@ Work through this list on a new installation, and after every upgrade.
 | # | Check | How | Expect |
 |---|---|---|---|
 | 1 | All containers up | `docker compose ps` | Every service `running`; Node services `healthy` |
-| 2 | Platform health | In the console as master, **Platform health** (or `GET /v1/platform/health`) | All eight services ready |
+| 2 | Operations | In the console as master, **Operations** | Every service ready; the media node in service |
 | 3 | Internal readiness | `docker run --rm --network voice_backplane curlimages/curl -s http://telephony-config:8080/readyz` | `"status":"pass"`, including `opensips_db` and `redis` |
 | 4 | OpenSIPs up | `docker compose logs opensips | tail` and `ss -lunp | grep 5060` | Listening; no DB errors |
 | 5 | FreeSWITCH up, SDP address right | `docker compose exec freeswitch fs_cli -p "$FS_EVENT_SOCKET_PASSWORD" -x 'sofia status profile internal'` | `RUNNING`; `SIP-IP` and `Ext-RTP-IP` are the public address |

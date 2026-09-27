@@ -343,6 +343,8 @@ Stage 3's non-telephony screens can start as soon as Stage 1 lands, in parallel 
 | S4-09 | Capacity benchmarks per node + sizing guide | S4-02 |
 | S4-10 | Media anchoring decision (O-7), and RTPengine integration if accepted | S4-06 |
 | S4-11 | Production deployment manifests | S4-01, S4-07 |
+| S4-12 | Operations console, live state: every service, media node, the SIP edge, event bus and data stores; drain, return and weight a node (G-124) | S4-02 |
+| S4-13 | Operations console history: Prometheus via OpenTelemetry, a fixed chart catalog through the gateway (G-124) | S4-12 |
 
 Key acceptance criteria:
 

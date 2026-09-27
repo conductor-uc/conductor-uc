@@ -117,6 +117,8 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S4-09 | Not started | no capacity benchmarks or sizing guide (`telephony-config/src/bench.ts` is unrelated) |
 | S4-10 | Partial | O-7 recorded as deferred in decisions.md; no RTPengine |
 | S4-11 | Not started | `infra/deploy` empty |
+| S4-12 | In progress | G-124: `platform.observe`/`platform.operate`; `/statusz` on every service; `GET /v1/platform/overview`; audited drain, return and weight routes; the console's Operations section |
+| S4-13 | Not started | no Prometheus or `/metrics` beyond the uploader's |
 
 ## Stage 5
 
@@ -199,7 +201,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | Reseller console hostnames and DNS verification | Near S1-03 | `console-hostnames` routes, `dns-resolver.ts` |
 | Per-extension call handling: DND, forwarding, simultaneous ring (G-109) | Unplanned (parity 1a) | `pbx-config-service` `call-handling.routes.ts`; `telephony-config` `buildCallHandlingDialplanDocument`; console `call_handling_dialog.dart`. Not tried on a real call |
 | Platform public address and reseller DNS records | Unplanned | `org-service` `network.routes.ts`, migration 005; console Certificates and the reseller Certificates tab |
-| Platform health screen | Unplanned | `platform-health.ts`, `platform_health_page.dart` |
+| Platform health screen | Replaced | by S4-12's Operations section; `GET /v1/platform/health` kept for scripts |
 | Extension SIP password reset; `password_reset.test.ts` | Near S1-09 | `POST .../extensions/:id/reset-password` |
 | Hostname-based org resolution at sign-in | Near S3-04 | G-61 |
 | Admin reset of a user's MFA, confirmed with the admin's own code (step-up) | Near S3-04 | G-100; identity `auth/step-up.ts` |
