@@ -65,4 +65,51 @@ export function registerMonitorScopeInternalRoutes(
       };
     },
   );
+
+  /**
+   * `POST /internal/v1/tenants/:tenantId/monitor-scope` (G-119 (1)): the extension numbers a
+   * person's monitoring grants reach, for api-gateway's "calls you supervise" topic. The body names
+   * the extensions and queues they are granted on; the answer is those extensions' numbers plus
+   * the numbers of every agent of those queues (a grant on a queue covers calls its agents take,
+   * 07 §3.3). Ids that are not this tenant's reach nothing.
+   */
+  app.post(
+    '/internal/v1/tenants/:tenantId/monitor-scope',
+    {
+      config: { public: true },
+      schema: {
+        params: Type.Object({ tenantId: Type.String({ minLength: 1 }) }),
+        body: Type.Object({
+          extensionIds: Type.Array(Type.String({ minLength: 1 }), { maxItems: 500 }),
+          queueIds: Type.Array(Type.String({ minLength: 1 }), { maxItems: 500 }),
+        }),
+        response: { 200: Type.Object({ extensions: Type.Array(Type.String()) }) },
+      },
+    },
+    async (request) => {
+      const header = request.headers.authorization;
+      const [scheme, presented] = header?.split(' ') ?? [];
+      if (
+        scheme !== 'Bearer' ||
+        presented === undefined ||
+        !secretEquals(internalServiceToken, presented)
+      ) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const ctx = { tenantId: request.params.tenantId };
+      const extensionIds = new Set(request.body.extensionIds);
+      for (const queueId of new Set(request.body.queueIds)) {
+        for (const tier of await queueTiers.listForQueue(ctx, queueId)) {
+          const agent = await agents.findById(ctx, tier.agentId);
+          if (agent !== undefined) extensionIds.add(agent.extensionId);
+        }
+      }
+      const numbers = new Set<string>();
+      for (const id of extensionIds) {
+        const extension = await extensions.findById(ctx, id);
+        if (extension !== undefined) numbers.add(extension.number);
+      }
+      return { extensions: [...numbers].sort() };
+    },
+  );
 }

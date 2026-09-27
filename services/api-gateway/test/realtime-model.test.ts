@@ -9,7 +9,7 @@ import { extensionOf, TenantPresence } from '../src/realtime/presence.js';
 import { parseClientMessage } from '../src/realtime/protocol.js';
 import { originAllowed } from '../src/realtime/route.js';
 import { parseTopic, TOPICS } from '../src/realtime/topics.js';
-import { UserCalls } from '../src/realtime/user-calls.js';
+import { CallsView, sameScope, UserCalls } from '../src/realtime/user-calls.js';
 
 const TENANT = '0199a1b2-0000-7000-8000-000000000001';
 
@@ -573,5 +573,67 @@ describe('a person own live calls (S5-15)', () => {
     expect(view.apply(all, { type: 'call.started', call: theirs })).toEqual([
       { type: 'call.started', call: theirs },
     ]);
+  });
+});
+
+describe('the calls a person may monitor (G-119 (1))', () => {
+  it("parses the supervised topic, the person's own, and never the bare kind", () => {
+    expect(parseTopic(`tenant:${TENANT}:user:u1:supervised`)).toEqual({
+      name: `tenant:${TENANT}:user:u1:supervised`,
+      tenantId: TENANT,
+      kind: 'supervised',
+      userId: 'u1',
+    });
+    expect(parseTopic(`tenant:${TENANT}:supervised`)).toBeUndefined();
+    expect(TOPICS.supervised).toMatchObject({ dataClass: 'private', scoped: true });
+  });
+
+  it('shows the legs in its extensions and queues, and the other half of their calls', () => {
+    const legs = new Map(
+      [
+        call({ callUuid: 'q-caller', queueId: 'q1', bridgedTo: 'q-agent' }),
+        call({ callUuid: 'q-agent', direction: 'outbound', extension: '301' }),
+        call({ callUuid: 'e-a', from: '401', extension: '401', bridgedTo: 'e-b' }),
+        call({ callUuid: 'e-b', direction: 'outbound', to: '402', extension: '402' }),
+        call({ callUuid: 'x-a', from: '501', extension: '501' }),
+      ].map((leg) => [leg.callUuid, leg]),
+    );
+    const view = new CallsView({ extensions: new Set(['402']), queues: new Set(['q1']) });
+    expect(
+      view
+        .load(legs)
+        .map((leg) => leg.callUuid)
+        .sort(),
+    ).toEqual(['e-a', 'e-b', 'q-agent', 'q-caller']);
+    expect(new CallsView({ extensions: 'all', queues: new Set() }).load(legs)).toHaveLength(5);
+  });
+
+  it('shows a leg, and the leg bridged to it, once it is learnt to be in a queue in scope', () => {
+    const view = new CallsView({ extensions: new Set(), queues: new Set(['q1']) });
+    const caller = call({ callUuid: 'c', bridgedTo: null });
+    const agent = call({ callUuid: 'a', direction: 'outbound', bridgedTo: 'c', extension: '301' });
+    const legs = new Map([
+      ['c', caller],
+      ['a', agent],
+    ]);
+    expect(view.load(legs)).toEqual([]);
+    legs.set('c', { ...caller, queueId: 'q1' });
+    expect(
+      view.apply(legs, { type: 'call.updated', callUuid: 'c', changes: { queueId: 'q1' } }),
+    ).toEqual([
+      { type: 'call.started', call: { ...caller, queueId: 'q1' } },
+      { type: 'call.started', call: agent },
+    ]);
+    legs.set('c', { ...caller, queueId: 'q2' });
+    expect(
+      view.apply(legs, { type: 'call.updated', callUuid: 'c', changes: { queueId: 'q2' } }),
+    ).toEqual([{ type: 'call.updated', callUuid: 'c', changes: { queueId: 'q2' } }]);
+  });
+
+  it('tells scopes apart regardless of order', () => {
+    const a = { extensions: new Set(['1', '2']), queues: new Set(['q']) };
+    expect(sameScope(a, { extensions: new Set(['2', '1']), queues: new Set(['q']) })).toBe(true);
+    expect(sameScope(a, { extensions: 'all', queues: new Set(['q']) })).toBe(false);
+    expect(sameScope(a, { extensions: new Set(['1']), queues: new Set(['q']) })).toBe(false);
   });
 });

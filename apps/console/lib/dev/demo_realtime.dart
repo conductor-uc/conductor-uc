@@ -290,7 +290,8 @@ class DemoRealtimeSocket implements RealtimeSocket {
               ],
             },
           });
-        } else if (topic.endsWith(':calls')) {
+        } else if (topic.endsWith(':calls') || topic.endsWith(':supervised')) {
+          // G-119 (1): the calls a person may monitor; in demo mode, all of them.
           _reply({
             'type': 'snapshot',
             'topic': topic,

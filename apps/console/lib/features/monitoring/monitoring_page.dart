@@ -20,6 +20,7 @@ class MonitoringPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final title = Theme.of(context).textTheme.titleMedium;
     final showsCalls = ref.watch(showsLiveCallsProvider);
+    final supervised = ref.watch(supervisesOnlyProvider);
     return PageFrame(
       children: [
         const PageHeader(
@@ -33,7 +34,7 @@ class MonitoringPage extends ConsumerWidget {
         // calls table is below it, and scrolls beyond that.
         const Flexible(child: PresencePanel()),
         const SizedBox(height: 24),
-        Text('Live calls', style: title),
+        Text(supervised ? 'Calls you can monitor' : 'Live calls', style: title),
         const SizedBox(height: 8),
         if (showsCalls)
           const Expanded(flex: 2, child: LiveCallsPanel())
@@ -45,17 +46,22 @@ class MonitoringPage extends ConsumerWidget {
 }
 
 /// Whether the viewer is shown live calls: `private` tenant data, so never a
-/// reseller (rule H1), and anyone else needs `monitor.calls`.
+/// reseller (rule H1). A holder of `monitor.calls` sees all of the tenant's;
+/// someone who may listen, whisper or barge (perhaps only on some extensions or
+/// queues, G-119 (1)) sees the calls they may monitor.
 final showsLiveCallsProvider = Provider<bool>(
   (ref) =>
       ref.watch(sessionProvider)?.orgType != OrgType.reseller &&
-      ref.watch(canProvider('monitor.calls')),
+      (ref.watch(canProvider('monitor.calls')) ||
+          MonitorMode.values.any(
+            (mode) => ref.watch(canProvider(mode.permission)),
+          )),
 );
 
-/// The tenant's calls in progress, updated as they change. Live calls are
-/// `private` tenant data: a reseller never sees them (rule H1), and anyone else
-/// needs `monitor.calls`. Hiding is a convenience; the gateway refuses the
-/// subscription regardless.
+/// The tenant's calls in progress (or, without `monitor.calls`, the ones the
+/// viewer may monitor), updated as they change. Live calls are `private` tenant
+/// data: a reseller never sees them (rule H1). Hiding is a convenience; the
+/// gateway refuses the subscription regardless.
 class LiveCallsPanel extends ConsumerWidget {
   const LiveCallsPanel({super.key});
 

@@ -1,5 +1,5 @@
 import { createServer } from '@cuc/http';
-import { createRemotePermissionResolver } from '@cuc/http';
+import { createHttpAccessClient, createRemotePermissionResolver } from '@cuc/http';
 import type { CreateServerOptions, PermissionResolver, Server } from '@cuc/http';
 import type { Redis } from 'ioredis';
 
@@ -23,6 +23,7 @@ import {
   createLineageLookup,
   createLiveCallsSource,
   createPresenceStatusSource,
+  createSupervisionScopeSource,
   createUserExtensionSource,
 } from './realtime/sources.js';
 import { buildRouteTable } from './routing/route-table.js';
@@ -196,6 +197,16 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
               internalServiceToken,
             }),
           }),
+      // G-119 (1): what a person may monitor, for the calls they supervise.
+      supervision: createSupervisionScopeSource({
+        baseUrl: config.PBX_CONFIG_SERVICE_URL,
+        internalServiceToken,
+        access: createHttpAccessClient({
+          baseUrl: config.IDENTITY_SERVICE_URL,
+          internalServiceToken,
+          ttlMs: config.REALTIME_PERMISSION_CACHE_TTL_MS,
+        }),
+      }),
       // S5-15: a person's own extension, for their own calls' topic.
       userExtensions: createUserExtensionSource({
         baseUrl: config.PBX_CONFIG_SERVICE_URL,

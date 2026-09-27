@@ -1,3 +1,6 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -31,6 +34,52 @@ const AGENT_CONTAINER = 'sip-test-monitor-agent';
 const CALLER_CONTAINER = 'sip-test-monitor-caller';
 const SUPERVISOR_PHONE = 'sip-test-monitor-302';
 const AGENT_LOGIN_FEATURE_CODE = '*45';
+const GATEWAY_CONTAINER = process.env['SIP_TEST_GATEWAY_CONTAINER'] ?? 'conductor-uc-api-gateway-1';
+const execFileAsync = promisify(execFile);
+
+/**
+ * G-119 (1): the call uuids in the snapshot of a person's `user:{u}:supervised` topic, the live
+ * calls they may monitor, read through api-gateway's realtime hub as the console does.
+ */
+async function supervisedSnapshot(tenantId: string, userId: string, token: string) {
+  const { stdout } = await execFileAsync('docker', [
+    'inspect',
+    GATEWAY_CONTAINER,
+    '--format',
+    '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}',
+  ]);
+  const socket = new WebSocket(`ws://${stdout.trim().split(' ')[0] ?? ''}:8080/v1/ws`);
+  const messages: Record<string, unknown>[] = [];
+  socket.addEventListener('message', (event) => {
+    messages.push(JSON.parse(String(event.data)) as Record<string, unknown>);
+  });
+  await new Promise((resolve, reject) => {
+    socket.addEventListener('open', resolve, { once: true });
+    socket.addEventListener('error', reject, { once: true });
+  });
+  const next = async (match: (m: Record<string, unknown>) => boolean) => {
+    const deadline = Date.now() + 10_000;
+    for (;;) {
+      const found = messages.find(match);
+      if (found !== undefined) return found;
+      if (Date.now() > deadline) throw new Error(`timed out; got ${JSON.stringify(messages)}`);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  };
+  try {
+    socket.send(JSON.stringify({ type: 'auth', token }));
+    await next((m) => m['type'] === 'authenticated');
+    const topic = `tenant:${tenantId}:user:${userId}:supervised`;
+    socket.send(JSON.stringify({ type: 'subscribe', topic }));
+    const snapshot = await next((m) => m['type'] === 'snapshot' || m['type'] === 'error');
+    expect(snapshot, JSON.stringify(snapshot)).toMatchObject({ type: 'snapshot', topic });
+    return ((snapshot['data'] as { calls: { callUuid: string }[] }).calls ?? []).map(
+      (call) => call.callUuid,
+    );
+  } finally {
+    socket.close();
+  }
+}
 
 interface LiveLeg {
   readonly callUuid: string;
@@ -327,6 +376,12 @@ describe.skipIf(skipReason !== undefined)('S5-09 listen, whisper and barge (live
             undefined,
             { authorization: `Bearer ${token}` },
           );
+
+        // G-119 (1): the Q1 lead's live calls show the queue call; the Q2 lead's do not.
+        expect(await supervisedSnapshot(tenantId, q1Lead.userId, q1Lead.token)).toEqual(
+          expect.arrayContaining([leg, callerSide!.callUuid]),
+        );
+        expect(await supervisedSnapshot(tenantId, q2Lead.userId, q2Lead.token)).toEqual([]);
 
         const refused = await whisper(q2Lead.token);
         expect(refused.status, JSON.stringify(refused.json)).toBe(403);

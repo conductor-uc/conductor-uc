@@ -1,11 +1,23 @@
 import type { CallTopicEvent, LiveCall } from './calls.js';
 
 /**
- * One person's own live calls, for their `user:{u}:calls` topic (S5-15): what of the tenant's
- * legs they are shown, and how each change to those legs reads to them.
+ * Which legs a view shows (G-119 (1)): those on these extension numbers (every leg with `'all'`),
+ * and those in these queues.
+ */
+export interface CallScope {
+  readonly extensions: ReadonlySet<string> | 'all';
+  readonly queues: ReadonlySet<string>;
+}
+
+/**
+ * A person's view of the tenant's live legs, for their `user:{u}:calls` topic (S5-15: their own
+ * extension) and their `user:{u}:supervised` topic (G-119 (1): the extensions and queues they may
+ * monitor): what of the tenant's legs they are shown, and how each change to those legs reads to
+ * them.
  *
  * A leg is theirs when its `extension` (the extension call-control vouches the leg belongs to:
- * a registered phone that called in, or the extension a leg rang) is their extension's number.
+ * a registered phone that called in, or the extension a leg rang) is in the scope, or its
+ * `queueId` is.
  * They are also shown the legs bridged to theirs, since those carry the other half of the same
  * call, including the recording state: the recording runs on the call's owner channel, which on
  * a call they receive is the caller's leg, not theirs. Nothing else of the tenant's calls, and
@@ -15,10 +27,10 @@ import type { CallTopicEvent, LiveCall } from './calls.js';
  * A leg that becomes theirs (or bridged to theirs) after it started is announced then, as a
  * `call.started` with its state at that moment.
  */
-export class UserCalls {
+export class CallsView {
   private readonly shown = new Set<string>();
 
-  constructor(readonly number: string) {}
+  constructor(readonly scope: CallScope) {}
 
   /** Their legs among `legs` now, for the snapshot. Replaces whatever was shown. */
   load(legs: ReadonlyMap<string, LiveCall>): LiveCall[] {
@@ -64,6 +76,16 @@ export class UserCalls {
       }
       case 'call.updated': {
         if (this.shown.has(event.callUuid)) out.push(event);
+        // G-119 (1): a leg that is now in a queue in scope, and the other half of its call.
+        if (event.changes.queueId !== undefined) {
+          const leg = legs.get(event.callUuid);
+          if (leg !== undefined && this.owns(leg)) {
+            show(leg);
+            for (const other of legs.values()) {
+              if (other.callUuid === leg.bridgedTo || other.bridgedTo === leg.callUuid) show(other);
+            }
+          }
+        }
         const bridgedTo = event.changes.bridgedTo;
         if (bridgedTo !== undefined && bridgedTo !== null) {
           const leg = legs.get(event.callUuid);
@@ -83,6 +105,25 @@ export class UserCalls {
   }
 
   private owns(leg: LiveCall): boolean {
-    return leg.extension === this.number;
+    if (this.scope.extensions === 'all') return true;
+    if (leg.extension !== null && this.scope.extensions.has(leg.extension)) return true;
+    return leg.queueId !== null && this.scope.queues.has(leg.queueId);
   }
+}
+
+/** S5-15: one person's own live calls: the legs on their extension. */
+export class UserCalls extends CallsView {
+  constructor(readonly number: string) {
+    super({ extensions: new Set([number]), queues: new Set() });
+  }
+}
+
+/** Two scopes are the same (for the periodic recheck: a changed scope restarts the view). */
+export function sameScope(a: CallScope, b: CallScope): boolean {
+  const key = (scope: CallScope) =>
+    JSON.stringify([
+      scope.extensions === 'all' ? 'all' : [...scope.extensions].sort(),
+      [...scope.queues].sort(),
+    ]);
+  return key(a) === key(b);
 }
