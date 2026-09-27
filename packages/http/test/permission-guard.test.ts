@@ -27,6 +27,11 @@ async function server(resolve: PermissionResolver) {
       ok: true,
     }),
   );
+  app.post(
+    '/v1/tenants/:tenantId/calls/:callUuid/listen',
+    { config: { permission: 'monitor.listen', dataClass: 'private', scopedPermission: true } },
+    () => ({ handlerDecides: true }),
+  );
   app.get(
     '/v1/tenants/:tenantId/me/extension',
     { config: { permission: 'self.settings', dataClass: 'config' } },
@@ -115,6 +120,38 @@ describe('permission guard', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it('S5-09: leaves a scoped-permission route to its handler, without asking the resolver', async () => {
+    const resolve = vi.fn(holds());
+    const app = await server(resolve);
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/tenants/t1/calls/c1/listen',
+      headers: signedHeaders(tenantUser),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ handlerDecides: true });
+    expect(resolve).not.toHaveBeenCalled();
+  });
+
+  it('S5-09: still applies the tenant boundary and H1 to a scoped-permission route', async () => {
+    const app = await server(holds('monitor.listen'));
+    const otherTenant = await app.inject({
+      method: 'POST',
+      url: '/v1/tenants/t2/calls/c1/listen',
+      headers: signedHeaders(tenantUser),
+    });
+    expect(otherTenant.statusCode).toBe(403);
+    expect(otherTenant.json()).toMatchObject({ code: 'tenant_boundary' });
+
+    const reseller = await app.inject({
+      method: 'POST',
+      url: '/v1/tenants/t1/calls/c1/listen',
+      headers: signedHeaders({ actorId: 'r1', actorType: 'user', orgId: 'r', orgType: 'reseller' }),
+    });
+    expect(reseller.statusCode).toBe(403);
+    expect(reseller.json()).toMatchObject({ code: 'reseller_private_data_denied' });
   });
 
   it('a resolver that cannot tell fails the request rather than allowing it', async () => {

@@ -82,6 +82,37 @@ describe('route contract guard', () => {
     ).toThrow(/marked public but also declares a permission/);
   });
 
+  it('S5-09: rejects a public route that claims a scoped permission', async () => {
+    const app = await testServer();
+
+    expect(() =>
+      app.get('/v1/x', { config: { public: true, scopedPermission: true } }, () => ({})),
+    ).toThrow(/marked public but also declares/);
+  });
+
+  it('S5-09: records a scoped-permission route as such, and no other', async () => {
+    const app = await testServer();
+    app.post(
+      '/v1/tenants/:tenantId/calls/:callUuid/listen',
+      { config: { permission: 'monitor.listen', dataClass: 'private', scopedPermission: true } },
+      () => ({}),
+    );
+    app.get('/v1/cdrs', { config: { permission: 'cdr.read', dataClass: 'private' } }, () => ({}));
+    await app.ready();
+
+    expect(app.registeredRoutes).toContainEqual({
+      method: 'POST',
+      url: '/v1/tenants/:tenantId/calls/:callUuid/listen',
+      permission: 'monitor.listen',
+      dataClass: 'private',
+      public: false,
+      scopedPermission: true,
+    });
+    expect(app.registeredRoutes.find((route) => route.url === '/v1/cdrs')).not.toHaveProperty(
+      'scopedPermission',
+    );
+  });
+
   it('records every route so CI can assert over the whole surface', async () => {
     const app = await testServer();
     app.get('/v1/cdrs', { config: { permission: 'cdr.read', dataClass: 'private' } }, () => ({}));

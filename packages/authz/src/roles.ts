@@ -157,13 +157,12 @@ const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
  * Built-in roles (07 §3.3), as permission bundles.
  *
  * `monitor.listen`/`monitor.whisper`/`monitor.barge` are bundled into
- * `tenant_supervisor` at the role level, which — per the ancestry rule — grants
- * them anywhere in the supervisor's own org. The doc's "scoped to target
- * extensions or queues" is a *finer* restriction than org-level ancestry
- * expresses: `call-control` is explicitly named as evaluating that finer
- * check "against the live call record in Redis" (07 §3.3), so the role gates
- * whether a supervisor can attempt a barge at all, and call-control gates
- * whether *this* barge, on *this* call, is one they supervise.
+ * `tenant_supervisor` at the role level, which (per the ancestry rule) lets a
+ * supervisor monitor every call of their own tenant. The doc's "scoped to
+ * target extensions or queues" is what a *grant* adds for someone without the
+ * role: a grant on `queue:Q1` covers only calls in Q1 or answered by its
+ * agents, which `call-control` checks against the live call (G-121, the same
+ * rule as `recording.listen`).
  */
 export const BUILT_IN_ROLES: ReadonlyMap<BuiltInRoleId, Role> = new Map([
   ['master_admin', role('master_admin', allPermissions())],

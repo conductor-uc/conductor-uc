@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { connect as netConnect } from 'node:net';
 import type { Socket } from 'node:net';
 
@@ -54,6 +55,14 @@ export interface EslClient {
    * like {@link sendApi}, when not connected.
    */
   sendEvent(name: string, headers: Readonly<Record<string, string>>): Promise<EslApiResult>;
+  /**
+   * S5-09: runs `bgapi <command>` and resolves with the job's result, which FreeSWITCH delivers
+   * later as a `BACKGROUND_JOB` event (`ok` false when it starts with `-ERR`). For a command that
+   * takes a while, like an `originate` that rings a phone: a plain `api` holds the connection until
+   * it returns, and every other command on it waits behind it. Rejects when not connected, when
+   * FreeSWITCH refuses the job, when the connection closes first, or after `timeoutMs`.
+   */
+  sendBgApi(command: string, timeoutMs: number): Promise<EslApiResult>;
 }
 
 // `CUSTOM callcenter::info` (S2-13): a custom event class must be named by
@@ -62,8 +71,9 @@ export interface EslClient {
 // `cuc::recording` (S5-15): a recording paused or resumed, fired by
 // `recording_control.lua` and by this service (`sendEvent`), since
 // `uuid_record mask`/`unmask` raise no event of their own.
+// `BACKGROUND_JOB` (S5-09): the result of a `bgapi`, kept here and never passed on.
 const SUBSCRIBE_COMMAND =
-  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_UNHOLD RECORD_START RECORD_STOP CHANNEL_HANGUP_COMPLETE HEARTBEAT CUSTOM callcenter::info cuc::recording';
+  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_UNHOLD RECORD_START RECORD_STOP CHANNEL_HANGUP_COMPLETE HEARTBEAT BACKGROUND_JOB CUSTOM callcenter::info cuc::recording';
 
 type ConnectionState = 'connecting' | 'authenticating' | 'subscribing' | 'ready';
 
@@ -108,10 +118,19 @@ export function createEslClient(options: EslClientOptions): EslClient {
     reject: (error: Error) => void;
   }[] = [];
 
+  // `bgapi` jobs waiting for their `BACKGROUND_JOB` event, by Job-UUID.
+  const pendingJobs = new Map<
+    string,
+    { resolve: (result: EslApiResult) => void; reject: (error: Error) => void }
+  >();
+
   function failPendingApiCalls(error: Error): void {
     const pending = pendingApiCalls;
     pendingApiCalls = [];
     for (const call of pending) call.reject(error);
+    const jobs = [...pendingJobs.values()];
+    pendingJobs.clear();
+    for (const job of jobs) job.reject(error);
   }
 
   function scheduleReconnect(): void {
@@ -188,7 +207,17 @@ export function createEslClient(options: EslClientOptions): EslClient {
         return;
       }
       if (typeof parsed === 'object' && parsed !== null) {
-        onEvent(node.id, parsed as Record<string, string>);
+        const event = parsed as Record<string, string>;
+        if (event['Event-Name'] === 'BACKGROUND_JOB') {
+          const job = pendingJobs.get(event['Job-UUID'] ?? '');
+          if (job !== undefined) {
+            pendingJobs.delete(event['Job-UUID'] ?? '');
+            const body = event['_body'] ?? '';
+            job.resolve({ ok: !body.startsWith('-ERR'), body });
+          }
+          return;
+        }
+        onEvent(node.id, event);
       }
       return;
     }
@@ -277,6 +306,51 @@ export function createEslClient(options: EslClientOptions): EslClient {
       return new Promise((resolve, reject) => {
         pendingApiCalls.push({ resolve, reject });
         sock.write(eslCommand([`sendevent ${name}`, ...lines].join('\n')));
+      });
+    },
+
+    sendBgApi(command, timeoutMs) {
+      if (socket === undefined || state !== 'ready') {
+        return Promise.reject(
+          new Error(`ESL client for node '${node.id}' is not connected and subscribed`),
+        );
+      }
+      if (/[\r\n]/.test(command)) {
+        return Promise.reject(new Error('A bgapi command must be a single line.'));
+      }
+      const sock = socket;
+      const jobUuid = randomUUID();
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          if (pendingJobs.delete(jobUuid)) {
+            reject(
+              new Error(`bgapi job on node '${node.id}' gave no result in ${String(timeoutMs)} ms`),
+            );
+          }
+        }, timeoutMs);
+        const settle = {
+          resolve: (result: EslApiResult) => {
+            clearTimeout(timer);
+            resolve(result);
+          },
+          reject: (error: Error) => {
+            clearTimeout(timer);
+            reject(error);
+          },
+        };
+        pendingJobs.set(jobUuid, settle);
+        // The immediate `command/reply` only says whether the job was accepted.
+        pendingApiCalls.push({
+          resolve: (reply) => {
+            if (!reply.ok && pendingJobs.delete(jobUuid)) {
+              settle.reject(new Error(`bgapi refused on node '${node.id}': ${reply.body}`));
+            }
+          },
+          reject: (error) => {
+            if (pendingJobs.delete(jobUuid)) settle.reject(error);
+          },
+        });
+        sock.write(eslCommand(`bgapi ${command}\nJob-UUID: ${jobUuid}`));
       });
     },
   };

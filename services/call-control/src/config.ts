@@ -67,6 +67,22 @@ export const configSchema = Type.Object({
    * recording to stop, mask or unmask by its exact path.
    */
   RECORDING_SPOOL_DIR: Env.string({ default: '/var/spool/cuc/rec' }),
+
+  /**
+   * S5-09: listen, whisper and barge. org-service answers a tenant's SIP domain, which the
+   * supervisor's phone is registered under.
+   */
+  ORG_SERVICE_URL: Env.url(),
+  /**
+   * S5-09: OpenSIPs' SIP address as the media nodes reach it (e.g. `opensips:5060`), the same
+   * value as telephony-config's `OPENSIPS_SIP_URI`: the call to a supervisor's phone goes through
+   * it, like every call to a phone.
+   */
+  OPENSIPS_SIP_URI: Env.string({ pattern: '^[A-Za-z0-9.-]+(:[0-9]{1,5})?$' }),
+  /** S5-09: how long the supervisor's phone rings before a listen, whisper or barge is given up. */
+  MONITOR_RING_TIMEOUT_SECONDS: Env.int({ minimum: 5, maximum: 120, default: 30 }),
+  /** S5-09: how long a person's roles and grants are reused; a revoked grant bites within this. */
+  ACCESS_CACHE_TTL_MS: Env.int({ minimum: 0, default: 5_000 }),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

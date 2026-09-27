@@ -641,6 +641,11 @@ services:
       # Must match telephony-config's RECORDING_SPOOL_DIR: FreeSWITCH stops,
       # masks and unmasks a recording by its exact path.
       RECORDING_SPOOL_DIR: /var/spool/cuc/rec
+      # S5-09: listen, whisper and barge ring the supervisor's own phone, through
+      # OpenSIPs like any call to a phone (the same address as telephony-config's
+      # OPENSIPS_SIP_URI), under the tenant's SIP domain from org-service.
+      ORG_SERVICE_URL: http://org-service:8080
+      OPENSIPS_SIP_URI: opensips:${OPENSIPS_SIP_PORT:-5060}
     healthcheck: *node-healthcheck
 
   callflow-service:

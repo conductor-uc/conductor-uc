@@ -316,8 +316,12 @@ Groups: base, database (`call_control`), events. Run **exactly one copy**.
 | `RECORDING_SERVICE_URL` | — | **yes** (S5-15) | Decides and audits every recording button press (`/internal/v1/recordings/control`) |
 | `PBX_CONFIG_SERVICE_URL` | — | **yes** (S5-15) | A person's own extension, for the self-service buttons |
 | `RECORDING_SPOOL_DIR` | `/var/spool/cuc/rec` | no | **Must equal telephony-config's `RECORDING_SPOOL_DIR`**: FreeSWITCH stops, pauses and resumes a recording by its exact path |
+| `ORG_SERVICE_URL` | — | **yes** (S5-09) | The tenant's SIP domain, which a supervisor's phone is registered under, for listen, whisper and barge |
+| `OPENSIPS_SIP_URI` | — | **yes** (S5-09) | `host:port` of OpenSIPs as the media nodes reach it, without `sip:`. **Must equal telephony-config's**: the call to a supervisor's phone goes through it like every call to a phone |
+| `MONITOR_RING_TIMEOUT_SECONDS` | `30` | no | How long the supervisor's phone rings before a listen, whisper or barge is given up |
+| `ACCESS_CACHE_TTL_MS` | `5000` | no | How long a person's roles and grants are reused for the monitoring check; a revoked grant bites within this |
 
-api-gateway calls call-control's `GET /internal/v1/tenants/{t}/calls` (with `INTERNAL_SERVICE_TOKEN`) for the live-calls snapshot, and forwards the recording buttons (`/v1/tenants/*/calls/{uuid}/recording`, `/v1/tenants/*/me/live-calls/{uuid}/recording`, S5-15) to it, so the gateway must reach call-control's `HTTP_PORT` ([network §2.3](network-and-firewall.md#23-who-calls-which-service)). call-control in turn calls identity-service, recording-service and pbx-config-service.
+api-gateway calls call-control's `GET /internal/v1/tenants/{t}/calls` (with `INTERNAL_SERVICE_TOKEN`) for the live-calls snapshot, and forwards the recording buttons (`/v1/tenants/*/calls/{uuid}/recording`, `/v1/tenants/*/me/live-calls/{uuid}/recording`, S5-15) and listen, whisper and barge (`/v1/tenants/*/calls/{uuid}/listen|whisper|barge`, S5-09) to it, so the gateway must reach call-control's `HTTP_PORT` ([network §2.3](network-and-firewall.md#23-who-calls-which-service)). call-control in turn calls identity-service, recording-service, pbx-config-service and (S5-09) org-service.
 
 ### 4.12 media-worker
 
@@ -428,6 +432,7 @@ The spool directory must be writable by FreeSWITCH (root) and deletable by the u
 | `FS_CDR_INGEST_TOKEN` | cdr-service, every FreeSWITCH node |
 | `FS_EVENT_SOCKET_PASSWORD` | call-control, every FreeSWITCH node |
 | `REDIS_KEY_PREFIX` | telephony-config, call-control |
+| `OPENSIPS_SIP_URI` | telephony-config, call-control |
 | `PLATFORM_BASE_DOMAIN` | org-service, notification-service |
 | telephony-config `SELF_URL` | Every FreeSWITCH node's `TELEPHONY_CONFIG_URL` (and it must be reachable from them) |
 | telephony-config `RECORDING_SPOOL_DIR` | Every uploader's `SPOOL_DIR`, call-control's `RECORDING_SPOOL_DIR` (and FreeSWITCH's fixed `/var/spool/cuc/rec`) |

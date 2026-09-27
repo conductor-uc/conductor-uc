@@ -190,6 +190,79 @@ describe('createEslClient', () => {
     expect(server.receivedEvents).toEqual([]);
   });
 
+  /** A client connected to `server`, collecting the events it passes on. */
+  async function connectedClient(events: Record<string, string>[] = []): Promise<EslClient> {
+    const connected: string[] = [];
+    const started = createEslClient({
+      node: { id: 'fs-1', host: '127.0.0.1', port: server!.port },
+      password: PASSWORD,
+      logger: silentLogger(),
+      reconnectMinDelayMs: 10_000,
+      reconnectMaxDelayMs: 10_000,
+      onEvent: (_nodeId, event) => events.push(event),
+      onConnect: (nodeId) => connected.push(nodeId),
+      connect: (port, host) => netConnect(port, host),
+    });
+    started.start();
+    await waitFor(() => connected.includes('fs-1'));
+    return started;
+  }
+
+  it('S5-09: runs a bgapi job, resolves with its BACKGROUND_JOB result, and keeps the event to itself', async () => {
+    server = await startFakeEslServer(PASSWORD);
+    const events: Record<string, string>[] = [];
+    client = await connectedClient(events);
+
+    server.bgApiResponder = () => '+OK 1234-supervisor-leg\n';
+    const result = await client.sendBgApi(
+      'originate {a=b}sofia/internal/201@t.example &eavesdrop(x)',
+      5_000,
+    );
+
+    expect(result).toEqual({ ok: true, body: '+OK 1234-supervisor-leg\n' });
+    expect(server.receivedBgApiCommands).toEqual([
+      'originate {a=b}sofia/internal/201@t.example &eavesdrop(x)',
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(events.filter((event) => event['Event-Name'] === 'BACKGROUND_JOB')).toEqual([]);
+  });
+
+  it('S5-09: other commands on the connection are answered while a bgapi job is still running', async () => {
+    server = await startFakeEslServer(PASSWORD);
+    client = await connectedClient();
+
+    server.bgApiResponder = () => undefined; // the phone is still ringing
+    const job = client.sendBgApi('originate x &eavesdrop(y)', 5_000);
+    server.nextApiResponse = '+OK meanwhile';
+    await expect(client.sendApi('uuid_getvar a b')).resolves.toEqual({
+      ok: true,
+      body: '+OK meanwhile',
+    });
+
+    server.releaseBgApiJobs('-ERR NO_ANSWER\n');
+    await expect(job).resolves.toEqual({ ok: false, body: '-ERR NO_ANSWER\n' });
+  });
+
+  it('S5-09: rejects a bgapi job FreeSWITCH refuses, one that times out, and one whose connection drops', async () => {
+    server = await startFakeEslServer(PASSWORD);
+    client = await connectedClient();
+
+    server.refuseNextBgApi = '-ERR command not found';
+    await expect(client.sendBgApi('nonsense', 5_000)).rejects.toThrow('bgapi refused');
+
+    server.bgApiResponder = () => undefined;
+    await expect(client.sendBgApi('originate x &eavesdrop(y)', 100)).rejects.toThrow(
+      'gave no result in 100 ms',
+    );
+
+    const dropped = client.sendBgApi('originate x &eavesdrop(y)', 5_000);
+    await waitFor(() => server!.receivedBgApiCommands.length === 3);
+    server.dropAllConnections();
+    await expect(dropped).rejects.toThrow('closed');
+
+    await expect(client.sendBgApi('originate\nx', 5_000)).rejects.toThrow();
+  });
+
   it('rejects sendApi when not connected', async () => {
     client = createEslClient({
       node: { id: 'fs-1', host: '127.0.0.1', port: 1 },

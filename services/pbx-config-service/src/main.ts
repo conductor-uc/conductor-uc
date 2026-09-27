@@ -33,6 +33,7 @@ import { parseSipTransports, registerSipEndpointRoutes } from './routes/sip-endp
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerCallHandlingInternalRoutes } from './routes/call-handling-internal.routes.js';
 import { registerMeRoutes } from './routes/me.routes.js';
+import { registerMonitorScopeInternalRoutes } from './routes/monitor-scope-internal.routes.js';
 import { registerUserExtensionInternalRoutes } from './routes/user-extension-internal.routes.js';
 import { registerCallHandlingRoutes } from './routes/call-handling.routes.js';
 import { registerScheduleInternalRoutes } from './routes/schedule-internal.routes.js';
@@ -198,6 +199,12 @@ registerInternalRoutes(
 registerScheduleInternalRoutes(app, scheduleRepo, config.INTERNAL_SERVICE_TOKEN);
 registerCallHandlingInternalRoutes(app, callHandlingRepo, config.INTERNAL_SERVICE_TOKEN);
 registerUserExtensionInternalRoutes(app, extensionRepo, config.INTERNAL_SERVICE_TOKEN);
+registerMonitorScopeInternalRoutes(app, {
+  extensions: extensionRepo,
+  agents: agentRepo,
+  queueTiers: queueTierRepo,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
 
 // G-116: values still under an older KEK version are moved to the current one
 // in the background, and `/readyz` says how many remain, so an old version

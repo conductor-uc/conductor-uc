@@ -28,6 +28,15 @@ export interface RouteContract {
    * awkward: a route that serves tenant data must never set it.
    */
   readonly public?: boolean;
+  /**
+   * S5-09: `permission` may be held on a scope inside the organization (a grant on one extension
+   * or queue), not only across all of it. The permission guard still applies H1 and the tenant
+   * boundary, but not its own check of `permission`, which only a holding across the organization
+   * passes; the handler must check `permission` against the resource it acts on (`@cuc/authz`'s
+   * `allowed()`) and refuse anyone who holds it on nothing there. Never set it on a route whose
+   * handler does not.
+   */
+  readonly scopedPermission?: boolean;
 }
 
 /** A route contract after validation, as recorded in the registry. */
@@ -37,4 +46,6 @@ export interface RegisteredRoute {
   readonly permission: Permission | null;
   readonly dataClass: DataClass | null;
   readonly public: boolean;
+  /** Present, and true, only on a route that checks its permission itself (`scopedPermission`). */
+  readonly scopedPermission?: true;
 }

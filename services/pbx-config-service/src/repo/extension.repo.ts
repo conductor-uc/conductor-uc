@@ -199,6 +199,19 @@ export function createExtensionRepo(
         .then((row) => (row === undefined ? undefined : toExtension(row))),
 
     /**
+     * The extension with this number in this tenant, if any (S5-09: call-control learns which
+     * extension a live leg is from the number the node vouched for).
+     */
+    findByNumber: (ctx: DbContext, number: string): Promise<Extension | undefined> =>
+      db
+        .scoped(ctx)
+        .selectFrom('extensions')
+        .selectAll()
+        .where('number', '=', number)
+        .executeTakeFirst()
+        .then((row) => (row === undefined ? undefined : toExtension(row))),
+
+    /**
      * The one extension linked to `userId` in this tenant, if any. This is how
      * self-service finds "my extension": the caller passes the signed actor id,
      * never a client-supplied one.

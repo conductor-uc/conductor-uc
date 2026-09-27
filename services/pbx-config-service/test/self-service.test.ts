@@ -13,6 +13,7 @@ import { ExtensionUserTakenError } from '../src/repo/extension.repo.js';
 import { registerCallHandlingRoutes } from '../src/routes/call-handling.routes.js';
 import { registerExtensionRoutes } from '../src/routes/extension.routes.js';
 import { registerMeRoutes } from '../src/routes/me.routes.js';
+import { registerMonitorScopeInternalRoutes } from '../src/routes/monitor-scope-internal.routes.js';
 import { registerUserExtensionInternalRoutes } from '../src/routes/user-extension-internal.routes.js';
 import { resetSchema, startHarness, type Harness } from './harness.js';
 
@@ -86,6 +87,12 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in pbx-config-s
     registerCallHandlingRoutes(app, h.callHandling, bus);
     registerMeRoutes(app, h.extensions, h.callHandling, bus);
     registerUserExtensionInternalRoutes(app, h.extensions, SERVICE_TOKEN);
+    registerMonitorScopeInternalRoutes(app, {
+      extensions: h.extensions,
+      agents: h.agents,
+      queueTiers: h.queueTiers,
+      internalServiceToken: SERVICE_TOKEN,
+    });
     await app.ready();
   });
   afterAll(async () => {
@@ -684,6 +691,60 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in pbx-config-s
       expect(
         (await app.inject({ method: 'GET', url: url(t2, 'user-a'), headers: auth })).statusCode,
       ).toBe(404);
+    });
+  });
+
+  describe('GET /internal/v1/tenants/:tenantId/extensions/by-number/:number (S5-09)', () => {
+    const url = (tenantId: string, number: string) =>
+      `/internal/v1/tenants/${tenantId}/extensions/by-number/${number}`;
+    const auth = { authorization: `Bearer ${SERVICE_TOKEN}` };
+
+    it('needs the internal service token', async () => {
+      const tenantId = crypto.randomUUID();
+      await makeExtension(tenantId, '101');
+      expect((await app.inject({ method: 'GET', url: url(tenantId, '101') })).statusCode).toBe(401);
+    });
+
+    it('answers with the extension and the queues it answers as an agent', async () => {
+      const tenantId = crypto.randomUUID();
+      const agentExt = await makeExtension(tenantId, '301');
+      const plain = await makeExtension(tenantId, '302');
+      const agent = await h.agents.create({ tenantId }, { extensionId: agentExt.id });
+      const queue = (label: string) =>
+        h.queues.create(
+          { tenantId },
+          { label, strategy: 'ring-all', maxWaitSeconds: 0, announcePosition: false },
+        );
+      const q1 = await queue('Q1');
+      const q2 = await queue('Q2');
+      await queue('Q3');
+      await h.queueTiers.add({ tenantId }, { queueId: q1.id, agentId: agent.id });
+      await h.queueTiers.add({ tenantId }, { queueId: q2.id, agentId: agent.id });
+
+      const asAgent = await app.inject({ method: 'GET', url: url(tenantId, '301'), headers: auth });
+      expect(asAgent.statusCode).toBe(200);
+      expect(asAgent.json()).toMatchObject({ extensionId: agentExt.id, number: '301' });
+      expect([...asAgent.json<{ agentQueueIds: string[] }>().agentQueueIds].sort()).toEqual(
+        [q1.id, q2.id].sort(),
+      );
+      expect(
+        (await app.inject({ method: 'GET', url: url(tenantId, '302'), headers: auth })).json(),
+      ).toEqual({ extensionId: plain.id, number: '302', agentQueueIds: [] });
+    });
+
+    it('is 404 for a number the tenant does not have, or another tenant’s', async () => {
+      const t1 = crypto.randomUUID();
+      const t2 = crypto.randomUUID();
+      await makeExtension(t1, '101');
+      expect(
+        (await app.inject({ method: 'GET', url: url(t1, '999'), headers: auth })).statusCode,
+      ).toBe(404);
+      expect(
+        (await app.inject({ method: 'GET', url: url(t2, '101'), headers: auth })).statusCode,
+      ).toBe(404);
+      expect(
+        (await app.inject({ method: 'GET', url: url(t1, 'abc'), headers: auth })).statusCode,
+      ).toBe(400);
     });
   });
 });

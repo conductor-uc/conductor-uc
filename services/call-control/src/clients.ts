@@ -1,9 +1,11 @@
 import type { RecordingCallDirection } from '@cuc/api-contracts';
 
 /**
- * The two services call-control asks when someone presses a recording button on a live call
- * (S5-15): recording-service, which decides and audits, and pbx-config-service, which says which
- * extension is a person's own. Same shared bearer token as every internal call (07 §1).
+ * The services call-control asks when someone acts on a live call. For a recording button (S5-15):
+ * recording-service, which decides and audits, and pbx-config-service, which says which extension
+ * is a person's own. For listening, whispering or barging (S5-09) also: pbx-config-service again,
+ * for the extensions and queues a call touches, and org-service, for the tenant's SIP domain.
+ * Same shared bearer token as every internal call (07 §1).
  */
 
 export class UpstreamError extends Error {
@@ -136,5 +138,75 @@ export function createUserExtensionLookup(options: ClientOptions): UserExtension
       throw new UpstreamError('pbx-config-service gave an answer this service cannot read');
     }
     return { extensionId: body.extensionId, number: body.number };
+  };
+}
+
+export interface ExtensionScope {
+  readonly extensionId: string;
+  readonly number: string;
+  /** The queues the extension answers as an agent. */
+  readonly agentQueueIds: readonly string[];
+}
+
+/**
+ * S5-09: which extension a live leg's number is, and which queues it answers as an agent
+ * (pbx-config-service's `GET /internal/v1/tenants/:tenantId/extensions/by-number/:number`), to
+ * match a monitoring grant scoped to an extension or a queue. `undefined` when the tenant has no
+ * such extension; throws {@link UpstreamError} when it cannot be asked.
+ */
+export type ExtensionScopeLookup = (
+  tenantId: string,
+  number: string,
+) => Promise<ExtensionScope | undefined>;
+
+export function createExtensionScopeLookup(options: ClientOptions): ExtensionScopeLookup {
+  return async (tenantId, number) => {
+    const response = await call(
+      options,
+      `/internal/v1/tenants/${encodeURIComponent(tenantId)}/extensions/by-number/${encodeURIComponent(number)}`,
+      { method: 'GET' },
+    );
+    if (response.status === 404) return undefined;
+    if (!response.ok) {
+      throw new UpstreamError(`pbx-config-service answered ${String(response.status)}`);
+    }
+    const body = (await response.json()) as Partial<ExtensionScope>;
+    if (
+      typeof body.extensionId !== 'string' ||
+      typeof body.number !== 'string' ||
+      !Array.isArray(body.agentQueueIds) ||
+      !body.agentQueueIds.every((id) => typeof id === 'string')
+    ) {
+      throw new UpstreamError('pbx-config-service gave an answer this service cannot read');
+    }
+    return {
+      extensionId: body.extensionId,
+      number: body.number,
+      agentQueueIds: body.agentQueueIds,
+    };
+  };
+}
+
+/**
+ * S5-09: a tenant's SIP domain (org-service's `GET /internal/v1/tenants/:id/domain`), which a
+ * supervisor's phone is registered under, so the call to it can be routed through OpenSIPs.
+ * `undefined` when the tenant has none; throws {@link UpstreamError} when it cannot be asked.
+ */
+export type TenantDomainLookup = (tenantId: string) => Promise<string | undefined>;
+
+export function createTenantDomainLookup(options: ClientOptions): TenantDomainLookup {
+  return async (tenantId) => {
+    const response = await call(
+      options,
+      `/internal/v1/tenants/${encodeURIComponent(tenantId)}/domain`,
+      { method: 'GET' },
+    );
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new UpstreamError(`org-service answered ${String(response.status)}`);
+    const body = (await response.json()) as { fqdn?: unknown };
+    if (typeof body.fqdn !== 'string') {
+      throw new UpstreamError('org-service gave an answer this service cannot read');
+    }
+    return body.fqdn;
   };
 }
