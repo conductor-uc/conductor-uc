@@ -1,15 +1,17 @@
 <?xml version="1.0" encoding="ISO-8859-1"?>
 <!DOCTYPE scenario SYSTEM "sipp.dtd">
 <!--
-  S5-15: `uac_call_hold.xml` verbatim, except the call is held for 45 s
-  before BYE: long enough for a test to find the call on the realtime hub and
-  press the console's recording buttons on it (start, stop, pause, resume)
-  through api-gateway while it is up. Run with `startDelayedCaller` (detached),
+  S5-15: `uac_call_hold.xml`, except the call stays up until the far end hangs
+  up, for up to 45 s: long enough for a test to find the call on the realtime
+  hub and press the console's recording buttons on it (start, stop, pause,
+  resume) through api-gateway while it is up. The test then ends the call
+  from FreeSWITCH (`uuid_kill`) instead of waiting out a fixed hold, which
+  used to cost about 35 s per test. Run with `startDelayedCaller` (detached),
   since the test acts during the call.
 
   `[field0]`=username, `[field1]`=domain, `[field2]`=destination number.
 -->
-<scenario name="Register, call, hold for 45 s, then hang up">
+<scenario name="Register, call, hold until the far end hangs up (45 s at most)">
   <send retrans="500">
     <![CDATA[
       REGISTER sip:[field1] SIP/2.0
@@ -97,22 +99,19 @@
     ]]>
   </send>
 
-  <pause milliseconds="45000"/>
+  <recv request="BYE" crlf="true" timeout="45000">
+  </recv>
 
-  <send retrans="500">
+  <send>
     <![CDATA[
-      BYE [$1] SIP/2.0
-      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
-      From: <sip:[field0]@[field1]>;tag=[call_number]
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
       [last_To:]
-      Call-ID: [call_id]
-      CSeq: 2 BYE
-      Max-Forwards: 70
+      [last_Call-ID:]
+      [last_CSeq:]
       Content-Length: 0
     ]]>
   </send>
-
-  <recv response="200" crlf="true">
-  </recv>
 
 </scenario>

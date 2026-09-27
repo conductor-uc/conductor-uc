@@ -9,16 +9,14 @@
   500, so the carrier sees 500. The call is never answered: a 200 here fails
   the scenario.
 
-  Same leading pause as `trunk_invite.xml` (the trunk and DID are provisioned
-  with this container's IP during it), and the same optional 100 as
+  Started on a signal like `trunk_invite.xml` (once the trunk and DID for
+  this container's IP are projected), and the same optional 100 as
   `trunk_invite_expect_404.xml` for the same reason. Unlike that scenario this
   one ACKs the final response, as a UAC should.
 
   `[field0]`=caller user, `[field1]`=R-URI/To domain, `[field2]`=dialed DID.
 -->
 <scenario name="Trunk INVITE to a DID refused with 500 after a tone">
-  <pause milliseconds="6000"/>
-
   <send retrans="4000">
     <![CDATA[
       INVITE sip:[field2]@[field1] SIP/2.0

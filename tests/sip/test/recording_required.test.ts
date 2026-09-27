@@ -15,6 +15,7 @@ import {
   waitForHttpReady,
   withContainerStopped,
   withSingleFsNode,
+  waitForTrunkRemoved,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -177,15 +178,17 @@ describe.skipIf(skipReason !== undefined)('S5-12 recording required (live SIPp)'
 
       // Provisioning the trunk and DID does not involve recording-service, so the whole call,
       // provisioning included, runs inside `during`: recording-service is already stopped before
-      // the caller starts its 6 s pause, whatever `docker stop` takes. The checks run after
+      // the caller starts, whatever `docker stop` takes. The checks run after
       // `during` returns, when it is running again.
       const result = await options.during(async () => {
         const caller = await startDelayedCaller({
           scenario: options.scenario,
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         await trunkAndDid(caller.ip);
+        await caller.startWhenRouted({ trunkId: trunkId!, didId: didId! });
         return caller.result();
       });
       await options.check({ tenantId, didId: didId!, result });
@@ -196,7 +199,8 @@ describe.skipIf(skipReason !== undefined)('S5-12 recording required (live SIPp)'
       }
       if (trunkId !== undefined) {
         await call('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`);
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        // The next test's container may be given this IP.
+        await waitForTrunkRemoved(trunkId);
       }
     }
   }

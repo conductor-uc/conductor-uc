@@ -14,6 +14,7 @@ import {
   stopContainer,
   tenantAdminHeaders,
   withSingleFsNode,
+  waitForTrunkRemoved,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -115,7 +116,7 @@ describe.skipIf(skipReason !== undefined)('call recording (live SIPp)', () => {
       last = await recordingsForDid(tenantId, didId);
       const ready = last.find((r) => r.status === 'ready');
       if (ready !== undefined) return ready;
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
     throw new Error(`no ready recording for the DID; last seen: ${JSON.stringify(last)}`);
   }
@@ -174,6 +175,7 @@ describe.skipIf(skipReason !== undefined)('call recording (live SIPp)', () => {
           scenario: options.caller ?? 'trunk_invite_hold.xml',
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         const trunk = await ok(
           'POST',
@@ -202,6 +204,7 @@ describe.skipIf(skipReason !== undefined)('call recording (live SIPp)', () => {
           201,
         );
         didId = did.id;
+        await caller.startWhenRouted({ trunkId, didId });
 
         const result = await caller.result();
         expect(result.successfulCalls, result.stdout).toBe(1);
@@ -215,7 +218,8 @@ describe.skipIf(skipReason !== undefined)('call recording (live SIPp)', () => {
         }
         if (trunkId !== undefined) {
           await call('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`);
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+          // The next test's container may be given this IP.
+          await waitForTrunkRemoved(trunkId);
         }
         if (policyId !== undefined) {
           await call(

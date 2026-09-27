@@ -9,6 +9,7 @@ import {
   startDelayedCaller,
   stopContainer,
   withSingleFsNode,
+  waitForProjected,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -87,9 +88,7 @@ describe.skipIf(skipReason !== undefined)('S2-15 conference rooms (live SIPp, G-
 
       const room = await createRoom(tenantId);
       try {
-        // Real-time settling window for pbx.conference_room.created's own
-        // event-driven projection into telephony-config's local mirror.
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await waitForProjected('conference_rooms', 'id', room.id);
 
         const p1 = await startDelayedCaller({
           scenario: 'uac_call_hold.xml',
@@ -149,7 +148,7 @@ describe.skipIf(skipReason !== undefined)('S2-15 conference rooms (live SIPp, G-
 
       const room = await createRoom(tenantId, { number: '901', pin: '1234' });
       try {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await waitForProjected('conference_rooms', 'id', room.id);
 
         const result = await runForeground({
           scenario: 'uac_call_wrong_pin.xml',
@@ -196,7 +195,7 @@ describe.skipIf(skipReason !== undefined)('S2-15 conference rooms (live SIPp, G-
 
       const room = await createRoom(tenantId, { number: '902', pin: '1234' });
       try {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await waitForProjected('conference_rooms', 'id', room.id);
 
         const result = await runForeground({
           scenario: 'uac_call_correct_pin.xml',

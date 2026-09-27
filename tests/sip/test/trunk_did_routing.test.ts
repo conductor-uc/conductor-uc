@@ -9,6 +9,7 @@ import {
   startDelayedCaller,
   startUas,
   stopContainer,
+  waitForTrunkRemoved,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -96,12 +97,8 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
       'DELETE',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`,
     );
-    // `trunk.trunk.deleted` removes the `address` projection asynchronously
-    // (event-driven, S2-02) — this gives that a real window to land before
-    // the next test's own caller container might recycle this exact IP
-    // (this file's own top comment on why deletion is per-test, not
-    // deferred). Typically sub-second in practice; generous on purpose.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // The next test's container may be given this IP.
+    await waitForTrunkRemoved(trunkId);
   }
 
   async function deleteDid(tenantId: string, didId: string): Promise<void> {
@@ -165,6 +162,7 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
       scenario: 'trunk_invite.xml',
       csvLine: `carrier;${CARRIER_TARGET_DOMAIN};+15559990001`,
       containerName: 'sip-test-did-caller',
+      startOnSignal: true,
     });
     activeContainers.add(caller.containerName);
 
@@ -173,6 +171,7 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
     try {
       const extensionId = await findExtensionId(seed.tenantA.id, '101');
       didId = await createDid(seed.tenantA.id, '+15559990001', trunk.id, extensionId);
+      await caller.startWhenRouted({ trunkId: trunk.id, didId });
 
       const result = await caller.result();
       expect(result.successfulCalls, result.stdout).toBe(1);
@@ -203,6 +202,7 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
       scenario: 'trunk_invite_expect_404.xml',
       csvLine: `carrier;${CARRIER_TARGET_DOMAIN};+15559990003`,
       containerName: 'sip-test-did-cross-tenant',
+      startOnSignal: true,
     });
     activeContainers.add(caller.containerName);
 
@@ -220,6 +220,8 @@ describe.skipIf(skipReason !== undefined)('S2-03 DID inbound routing', () => {
     try {
       didId = await createDid(seed.tenantB.id, '+15559990003', trunkB.id, b102Id);
       trunkA = await createIpTrunk(seed.tenantA.id, caller.ip, 'S2-03 cross-tenant trunk A');
+      // Tenant B's DID must be projected too, or the 404 proves nothing.
+      await caller.startWhenRouted({ trunkId: trunkA.id, didId });
 
       const result = await caller.result();
       expect(result.successfulCalls, result.stdout).toBe(1);

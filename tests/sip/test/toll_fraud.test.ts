@@ -10,6 +10,7 @@ import {
   startBackgroundUas,
   startDelayedCaller,
   stopContainer,
+  waitForProjected,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -114,9 +115,7 @@ describe.skipIf(skipReason !== undefined)('S2-05 toll-fraud controls', () => {
     try {
       trunk = await createIpTrunk(tenantId, CARRIER_CONTAINER, 5093);
       route = await createOutboundRoute(tenantId, [trunk.id], '+1');
-      // Same event-driven-projection settling window S2-04's own outbound
-      // test uses.
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await waitForProjected('outbound_routes', 'id', route.id);
       await setTenantLimits(tenantId, { maxConcurrentChannels: 1 });
 
       // Held open for 4s (`uac_call_hold.xml`) — long enough for the
@@ -173,7 +172,7 @@ describe.skipIf(skipReason !== undefined)('S2-05 toll-fraud controls', () => {
       // Catch-all: a GB number must reach the fraud check, not 404 for
       // "no route matches" instead.
       route = await createOutboundRoute(tenantId, [trunk.id], '');
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await waitForProjected('outbound_routes', 'id', route.id);
       // No limits set at all — international-off is this tenant's default,
       // not something a test has to opt into.
       await setTenantLimits(tenantId, {});

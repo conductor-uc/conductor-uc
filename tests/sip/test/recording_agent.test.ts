@@ -11,6 +11,8 @@ import {
   stopContainer,
   tenantAdminHeaders,
   withSingleFsNode,
+  waitForTrunkRemoved,
+  waitForProjected,
   type SeedResult,
   type UasHandle,
 } from '../src/run-scenario.js';
@@ -138,8 +140,8 @@ describe.skipIf(skipReason !== undefined)('S5-14 agent-scoped recording (live SI
   ): Promise<void> {
     await call('DELETE', `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/dids/${ids.didId}`);
     await call('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${ids.trunkId}`);
-    // As `queue.test.ts`: let a freed IP settle before the next container can reuse it.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // The next test's container may be given this IP.
+    await waitForTrunkRemoved(ids.trunkId);
   }
 
   async function recordingsForQueue(tenantId: string, queueId: string): Promise<Recording[]> {
@@ -158,7 +160,7 @@ describe.skipIf(skipReason !== undefined)('S5-14 agent-scoped recording (live SI
     while (Date.now() < deadline) {
       last = await recordingsForQueue(tenantId, queueId);
       if (last.length > 0 && last.every((r) => r.status === 'ready')) return last;
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
     throw new Error(`no ready recording for the queue; last seen: ${JSON.stringify(last)}`);
   }
@@ -204,7 +206,8 @@ describe.skipIf(skipReason !== undefined)('S5-14 agent-scoped recording (live SI
           { agentId },
           201,
         );
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await waitForProjected('queues', 'id', queue.id);
+        await waitForProjected('queue_tiers', 'agent_id', agentId);
 
         // Prime mod_callcenter's load of the new queue with a throwaway call, then remove its
         // trunk before the agent registers: `queue.test.ts` explains both steps.
@@ -213,8 +216,10 @@ describe.skipIf(skipReason !== undefined)('S5-14 agent-scoped recording (live SI
           scenario: 'trunk_invite.xml',
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         trunk = await trunkAndDid(tenantId, priming.ip, e164, queue.id);
+        await priming.startWhenRouted(trunk);
         await priming.result();
         await removeTrunkAndDid(tenantId, trunk);
         trunk = undefined;
@@ -253,8 +258,10 @@ describe.skipIf(skipReason !== undefined)('S5-14 agent-scoped recording (live SI
           scenario: 'trunk_invite_hold_long.xml',
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         trunk = await trunkAndDid(tenantId, caller.ip, e164, queue.id);
+        await caller.startWhenRouted(trunk);
 
         const callerResult = await caller.result();
         expect(callerResult.successfulCalls, callerResult.stdout).toBe(1);

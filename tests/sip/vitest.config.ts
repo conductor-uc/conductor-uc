@@ -51,6 +51,7 @@ export default mergeConfig(
       // behind, which is why the first cut of this `retry` alone did not
       // help (all three attempts failed identically — see that file).
       retry: 2,
+      globalSetup: ['./src/global-setup.ts'],
       setupFiles: ['./src/setup.ts'],
     },
   }),

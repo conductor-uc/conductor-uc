@@ -7,6 +7,7 @@ import {
   startDelayedCaller,
   stopContainer,
   tenantAdminCurlJson,
+  waitForTrunkRemoved,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -41,6 +42,10 @@ describe.skipIf(skipReason !== undefined)('SIP flood protection (live SIPp)', ()
         'DELETE',
         `${TRUNK_SERVICE_URL}/v1/tenants/${seed.tenantA.id}/trunks/${trunkId}`,
       );
+      // The stranger's container is likely to be given the carrier's IP, and
+      // must not find it still listed. `options_burst.xml`'s old 8 s leading
+      // pause used to cover this.
+      await waitForTrunkRemoved(trunkId);
       trunkId = undefined;
     }
   });
@@ -51,6 +56,7 @@ describe.skipIf(skipReason !== undefined)('SIP flood protection (live SIPp)', ()
       scenario: 'options_burst.xml',
       csvLine: 'carrier;opensips',
       containerName: CARRIER_CONTAINER,
+      startOnSignal: true,
     });
 
     const trunk = await tenantAdminCurlJson(
@@ -75,6 +81,7 @@ describe.skipIf(skipReason !== undefined)('SIP flood protection (live SIPp)', ()
       { cidr: `${carrier.ip}/32` },
     );
     expect(ip.status, JSON.stringify(ip.json)).toBe(201);
+    await carrier.startWhenRouted({ trunkId });
 
     const result = await carrier.result();
     expect(result.successfulCalls, result.stdout).toBe(1);

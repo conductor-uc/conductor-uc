@@ -10,8 +10,6 @@
   dialed DID in E.164.
 -->
 <scenario name="Trunk INVITE to a DID, held 15 s before hangup">
-  <pause milliseconds="6000"/>
-
   <send retrans="4000">
     <![CDATA[
       INVITE sip:[field2]@[field1] SIP/2.0

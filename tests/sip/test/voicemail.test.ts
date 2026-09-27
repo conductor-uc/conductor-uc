@@ -14,6 +14,7 @@ import {
   startDelayedCaller,
   stopContainer,
   withSingleFsNode,
+  waitForTrunkRemoved,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -148,7 +149,7 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
       last = await listMessages(tenantId, mailboxId);
       const ready = last.find((message) => message.status === 'ready');
       if (ready !== undefined) return ready;
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
     throw new Error(
       `no ready message after 90 s; listed: ${JSON.stringify(last)}; spool: ${JSON.stringify(await spoolListing())}`,
@@ -198,7 +199,8 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
       'DELETE',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`,
     );
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // The next test's container may be given this IP.
+    await waitForTrunkRemoved(trunkId);
   }
 
   async function createVoicemailDid(
@@ -244,9 +246,11 @@ describe.skipIf(skipReason !== undefined)('S2-16 voicemail (live SIPp, G-41)', (
           scenario: 'trunk_invite_wait_for_bye.xml',
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         trunk = await createIpTrunk(tenantId, caller.ip);
         didId = await createVoicemailDid(tenantId, e164, trunk.id, mailbox.id);
+        await caller.startWhenRouted({ trunkId: trunk.id, didId });
 
         // `trunk_invite_wait_for_bye.xml`'s own doc comment has the full
         // detail on why this scenario waits for FS's own BYE rather than

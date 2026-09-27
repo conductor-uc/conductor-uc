@@ -21,8 +21,6 @@
   in E.164 — same as `trunk_invite.xml`.
 -->
 <scenario name="Trunk INVITE to a DID, wait for the far end's own BYE">
-  <pause milliseconds="6000"/>
-
   <send retrans="4000">
     <![CDATA[
       INVITE sip:[field2]@[field1] SIP/2.0

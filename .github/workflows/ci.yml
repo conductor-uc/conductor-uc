@@ -285,6 +285,7 @@ jobs:
           # `down -v` here is idempotent (a no-op when nothing is left) and
           # synchronous, so `up` below always starts from a settled state
           # rather than racing whatever the previous job left mid-removal.
+          docker rm -f sip-test-curl >/dev/null 2>&1 || true
           docker compose down -v --remove-orphans
           docker compose build
           docker compose up -d --wait --wait-timeout 180
@@ -296,7 +297,9 @@ jobs:
           # green run full of skipped tests — same pattern as the `check`
           # job's own REQUIRE_DB_TESTS etc. above.
           REQUIRE_SIP_TESTS: '1'
-        run: pnpm vitest run
+        # `verbose` prints every test with its duration, so a slow test (or a
+        # retried one) shows in the log without a local rerun.
+        run: pnpm vitest run --reporter=verbose
 
       # The recurring flake this suite keeps hitting (docs/decisions.md
       # G-39) is a call whose BYE never reaches the UAS, with FreeSWITCH's
@@ -334,7 +337,12 @@ jobs:
       - name: Tear down the compose stack
         if: always()
         working-directory: infra/compose
-        run: docker compose down -v
+        # The suite's curl container (`tests/sip/src/global-setup.ts`) is
+        # removed by the suite itself, but not if the run was killed, and
+        # while it is attached `down` cannot remove the network.
+        run: |
+          docker rm -f sip-test-curl >/dev/null 2>&1 || true
+          docker compose down -v
 
   # The Flutter console (D-001): not a pnpm workspace member, so it has its own
   # job. brand-leak runs here, after `flutter build web`, because that is the

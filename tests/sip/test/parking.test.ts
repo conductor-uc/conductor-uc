@@ -9,6 +9,7 @@ import {
   startDelayedCaller,
   stopContainer,
   withSingleFsNode,
+  waitForProjected,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -83,10 +84,7 @@ describe.skipIf(skipReason !== undefined)('S2-14 parking lots (live SIPp, G-48)'
 
       const lot = await createParkingLot(tenantId);
       try {
-        // Real-time settling window for pbx.parking_lot.created's own
-        // event-driven projection into telephony-config's local mirror —
-        // same reasoning S2-04/S2-05's own outbound tests already use.
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await waitForProjected('parking_lots', 'id', lot.id);
 
         const parker = await startDelayedCaller({
           scenario: 'uac_call_hold.xml',

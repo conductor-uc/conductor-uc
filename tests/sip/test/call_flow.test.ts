@@ -11,6 +11,7 @@ import {
   startDelayedCaller,
   stopContainer,
   withSingleFsNode,
+  waitForTrunkRemoved,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -173,6 +174,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
           scenario,
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         const trunk = await ok(
           'POST',
@@ -201,6 +203,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
           201,
         );
         didId = did.id;
+        await caller.startWhenRouted({ trunkId, didId });
 
         const result = await caller.result();
         expect(result.successfulCalls, result.stdout).toBe(1);
@@ -219,7 +222,7 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
           expect(messages.status, JSON.stringify(messages.json)).toBe(200);
           const rows = (messages.json as { rows: unknown[] }).rows;
           if (rows.length >= 1 || Date.now() > deadline) break;
-          await new Promise((resolve) => setTimeout(resolve, 3000));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
         expect((messages.json as { rows: unknown[] }).rows.length).toBeGreaterThanOrEqual(1);
 
@@ -287,7 +290,8 @@ describe.skipIf(skipReason !== undefined)('S3-11 published call flow (live SIPp)
             'DELETE',
             `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`,
           );
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+          // The next test's container may be given this IP.
+          await waitForTrunkRemoved(trunkId);
         }
         await tenantAdminCurlJson(
           seed.resellerId,
