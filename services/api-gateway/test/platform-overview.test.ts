@@ -205,9 +205,9 @@ describe.skipIf(skipReason !== undefined)('api-gateway: GET /v1/platform/overvie
     );
     expect(stores['mariadb']).toMatchObject({ status: 'up', version: '11.4.8' });
     expect(stores['redis']).toMatchObject({ status: 'up' });
-    expect(
-      (stores['redis']?.['facts'] as { label: string }[]).map((fact) => fact.label),
-    ).toContain('Memory used');
+    expect((stores['redis']?.['facts'] as { label: string }[]).map((fact) => fact.label)).toContain(
+      'Memory used',
+    );
     expect(stores['nats']).toMatchObject({ status: 'down' });
   });
 

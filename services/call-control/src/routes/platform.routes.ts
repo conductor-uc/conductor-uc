@@ -74,11 +74,7 @@ export function registerPlatformRoutes(app: Server, nodes: NodeDrain): void {
         schema: { params: ParamsSchema, response: { 200: DrainResultSchema } },
       },
       async (request) => {
-        const result = await nodes.setDraining(
-          request.params.nodeId,
-          draining,
-          actorOf(request),
-        );
+        const result = await nodes.setDraining(request.params.nodeId, draining, actorOf(request));
         if (result === undefined) throw notFound();
         return { ...result.node, leasesHandedOver: result.leasesHandedOver };
       },
@@ -89,7 +85,11 @@ export function registerPlatformRoutes(app: Server, nodes: NodeDrain): void {
     '/v1/platform/nodes/:nodeId/weight',
     {
       config: { permission: 'platform.operate', dataClass: 'config' },
-      schema: { params: ParamsSchema, body: WeightBodySchema, response: { 200: WeightResultSchema } },
+      schema: {
+        params: ParamsSchema,
+        body: WeightBodySchema,
+        response: { 200: WeightResultSchema },
+      },
     },
     async (request) => {
       const node = await nodes.setWeight(

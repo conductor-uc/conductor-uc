@@ -162,7 +162,10 @@ export function createPlatformStatus(deps: {
     try {
       const [version, status] = await Promise.all([
         sql<{ version: string }>`SELECT VERSION() AS version`.execute(db.kysely),
-        sql<{ Variable_name: string; Value: string }>`SHOW GLOBAL STATUS WHERE Variable_name IN ('Uptime', 'Threads_connected', 'Questions', 'Slow_queries', 'Max_used_connections')`.execute(
+        sql<{
+          Variable_name: string;
+          Value: string;
+        }>`SHOW GLOBAL STATUS WHERE Variable_name IN ('Uptime', 'Threads_connected', 'Questions', 'Slow_queries', 'Max_used_connections')`.execute(
           db.kysely,
         ),
       ]);

@@ -46,81 +46,84 @@ function fakeMi(down: () => boolean): OpenSipsMiClient {
   };
 }
 
-describe.skipIf(skipReason !== undefined)('platform status for the operations console (S4-12)', () => {
-  let h: Harness;
-  let opensipsDown = false;
+describe.skipIf(skipReason !== undefined)(
+  'platform status for the operations console (S4-12)',
+  () => {
+    let h: Harness;
+    let opensipsDown = false;
 
-  beforeAll(async () => {
-    h = await startHarness();
-  });
-
-  afterAll(async () => {
-    await h?.close();
-  });
-
-  beforeEach(async () => {
-    opensipsDown = false;
-    await h.opensipsDb.kysely.deleteFrom('dispatcher').execute();
-  });
-
-  function status() {
-    return createPlatformStatus({
-      mi: fakeMi(() => opensipsDown),
-      opensipsDb: h.opensipsDb,
-      db: h.db,
-      logger: h.logger,
+    beforeAll(async () => {
+      h = await startHarness();
     });
-  }
 
-  it('reads the SIP edge, the pool with weights, and MariaDB', async () => {
-    const reader = status();
-    const first = await reader.read();
-
-    expect(first.signalling).toEqual({
-      status: 'up',
-      version: '3.6.9',
-      uptimeSeconds: 2078,
-      registrations: 42,
-      activeDialogs: 5,
-      earlyDialogs: 1,
-      transactions: 6,
-      shmUsedBytes: 7198664,
-      shmTotalBytes: 33554432,
+    afterAll(async () => {
+      await h?.close();
     });
-    expect(first.dispatcher).toEqual([
-      { uri: 'sip:fs1:5060', nodeId: 'fs1', state: 'active', weight: 3 },
-      { uri: 'sip:fs2:5060', nodeId: 'fs2', state: 'inactive', weight: 1 },
-    ]);
-    expect(first.mariadb).toMatchObject({ name: 'mariadb', status: 'up' });
-    expect(first.mariadb.version).toMatch(/^\d+\.\d+/);
-    expect(first.mariadb.facts.map((fact) => fact.label)).toContain('Connections');
 
-    // A rate needs two readings.
-    const second = await reader.read();
-    expect(second.mariadb.facts[0]?.label).toBe('Queries per second');
-  });
+    beforeEach(async () => {
+      opensipsDown = false;
+      await h.opensipsDb.kysely.deleteFrom('dispatcher').execute();
+    });
 
-  it('with OpenSIPs down, says so and lists the pool from the table', async () => {
-    await h.opensipsDb.kysely
-      .insertInto('dispatcher')
-      .values({
-        setid: 1,
-        destination: 'sip:fs1:5060',
-        state: 1,
-        probe_mode: 0,
-        weight: '2',
-        priority: 0,
-        attrs: 'fs1',
-      })
-      .execute();
-    opensipsDown = true;
+    function status() {
+      return createPlatformStatus({
+        mi: fakeMi(() => opensipsDown),
+        opensipsDb: h.opensipsDb,
+        db: h.db,
+        logger: h.logger,
+      });
+    }
 
-    const read = await status().read();
+    it('reads the SIP edge, the pool with weights, and MariaDB', async () => {
+      const reader = status();
+      const first = await reader.read();
 
-    expect(read.signalling).toMatchObject({ status: 'down', registrations: null });
-    expect(read.dispatcher).toEqual([
-      { uri: 'sip:fs1:5060', nodeId: 'fs1', state: 'inactive', weight: 2 },
-    ]);
-    expect(read.mariadb.status).toBe('up');
-  });
-});
+      expect(first.signalling).toEqual({
+        status: 'up',
+        version: '3.6.9',
+        uptimeSeconds: 2078,
+        registrations: 42,
+        activeDialogs: 5,
+        earlyDialogs: 1,
+        transactions: 6,
+        shmUsedBytes: 7198664,
+        shmTotalBytes: 33554432,
+      });
+      expect(first.dispatcher).toEqual([
+        { uri: 'sip:fs1:5060', nodeId: 'fs1', state: 'active', weight: 3 },
+        { uri: 'sip:fs2:5060', nodeId: 'fs2', state: 'inactive', weight: 1 },
+      ]);
+      expect(first.mariadb).toMatchObject({ name: 'mariadb', status: 'up' });
+      expect(first.mariadb.version).toMatch(/^\d+\.\d+/);
+      expect(first.mariadb.facts.map((fact) => fact.label)).toContain('Connections');
+
+      // A rate needs two readings.
+      const second = await reader.read();
+      expect(second.mariadb.facts[0]?.label).toBe('Queries per second');
+    });
+
+    it('with OpenSIPs down, says so and lists the pool from the table', async () => {
+      await h.opensipsDb.kysely
+        .insertInto('dispatcher')
+        .values({
+          setid: 1,
+          destination: 'sip:fs1:5060',
+          state: 1,
+          probe_mode: 0,
+          weight: '2',
+          priority: 0,
+          attrs: 'fs1',
+        })
+        .execute();
+      opensipsDown = true;
+
+      const read = await status().read();
+
+      expect(read.signalling).toMatchObject({ status: 'down', registrations: null });
+      expect(read.dispatcher).toEqual([
+        { uri: 'sip:fs1:5060', nodeId: 'fs1', state: 'inactive', weight: 2 },
+      ]);
+      expect(read.mariadb.status).toBe('up');
+    });
+  },
+);
