@@ -219,7 +219,6 @@ Resellers configure trunks for their tenants. Tenant admins can view trunks and,
 
 **Internal API:**
 
-- `POST /internal/v1/calls/{uuid}:eavesdrop` with `{mode: listen|whisper|barge, supervisorExtensionId}`
 - `:hangup`, `:transfer`
 - `POST /internal/v1/originate`
 - `GET /internal/v1/tenants/{t}/calls` (live calls from Redis, one entry per leg; built in S5-08 for api-gateway's realtime hub; S5-15 adds `recording: paused`, `controls` and `extension`)
@@ -238,7 +237,17 @@ Answers: 200 `{result: started|stopped|paused|resumed, recordingId, recording: o
 
 **Emits:** `call.channel.created|identified|answered|bridged|held|unheld|recording_started|recording_stopped|recording_paused|recording_resumed|hungup`, with the tenant in `orgContext` whenever it is known. S5-15: `recording_paused`/`_resumed` come from `CUSTOM cuc::recording` (`Recording-Call-UUID` the owner channel, `Recording-Action` `paused` or `resumed`; not `Unique-ID`, since `sendevent` queues an event naming a live channel there to that channel instead of firing it), which `recording_control.lua` fires after a feature code's mask or unmask and call-control fires with `sendevent` after a button's (FreeSWITCH raises nothing for a mask); if the node will not take the `sendevent`, call-control handles the event itself in the node's order. `created` and `identified` carry `extension` (an inbound leg from a registered phone, as OpenSIPs' `X-Tenant-Id` vouches, is its SIP From user; an outbound leg is the extension it rang; a trunk caller never is) and `controls`; `answered` and `bridged` carry `controls` when the channel has `cuc_rec_controls` (all optional fields within schema version 1). A call from a trunk has no tenant at `created` and learns it from `cuc_tenant_id` (which the dialplan exports to every leg it bridges to) on its later events; a leg that never names its tenant takes the tenant of the leg bridged to it. The first time a channel's tenant becomes known after `created`, `call.channel.identified` carries the whole call as it stands, before the event that named the tenant, so a live view that routes by tenant sees the call start before it changes. Each node's ESL events are handled one at a time in the order FreeSWITCH raised them, and outbox ids are UUIDv7 increasing within a process, so the bus carries a call's events in order. Also `call.lost`, `call.queue.*` (from `mod_callcenter` events), `call.conference.*`, `call.park.*`. Events are rate-shaped per tenant.
 
-**Monitoring:** `mode=listen` originates a call to the supervisor's own SIP device on the node that owns the target call, then runs `eavesdrop(targetUuid)`. `whisper` sets `eavesdrop_whisper_aleg` or `_bleg`. `barge` uses `three_way`. Browser-based listening would need WebRTC, which is out of scope (O-14).
+**Monitoring (S5-09, G-121):** listen, whisper and barge, from the supervisor's own phone. Browser-based listening would need WebRTC, which is out of scope (O-14).
+
+| Route | Permission | Class | Who |
+|---|---|---|---|
+| `POST /v1/tenants/{t}/calls/{callUuid}/listen` | `monitor.listen` | private | held across the tenant (`tenant_supervisor`, or a grant on the org): any call; a grant on `extension:X`: calls X is on; on `queue:Q1`: calls in Q1 and calls whose target is an agent of Q1 |
+| `POST /v1/tenants/{t}/calls/{callUuid}/whisper` | `monitor.whisper` | private | the same |
+| `POST /v1/tenants/{t}/calls/{callUuid}/barge` | `monitor.barge` | private | the same |
+
+The routes declare `scopedPermission` (`@cuc/http`): the permission guard applies H1 and the tenant boundary, and call-control checks the permission against the call. `callUuid` is either leg. call-control finds it and its bridged partner in the registry (tenant must match), and joins the supervisor to the tenant's own party (the leg with an extension: for a queue call, the agent). For a holder of scoped grants only, it asks pbx-config-service (`GET /internal/v1/tenants/{t}/extensions/by-number/{number}`) which extension each leg is and which queues the target answers as an agent, and reads `cc_queue` on both legs over ESL. It rings the person's own extension (pbx-config-service, from the signed actor), after writing `call.monitor.{mode}` to the audit outbox: `bgapi originate {sip_route_uri=sip:<OPENSIPS_SIP_URI>,origination_caller_id_name=Listen|Whisper|Barge,eavesdrop_enable_dtmf=false,...}sofia/internal/<ext>@<tenant domain>` on the node that holds the call, into `&eavesdrop(<target>)` (whisper adds `eavesdrop_whisper_aleg=true`, so only the target hears the supervisor) or `&three_way(<target>)` for barge. The tenant domain comes from org-service. `eavesdrop_enable_dtmf=false` stops a listener switching to whisper or barge with a digit.
+
+Answers: 200 `{mode, callUuid, monitorCallUuid}` once the phone has answered and joined; 404 `call_not_found`, `no_linked_extension`; 403 `insufficient_permission` (not for this call), `people_only`, `tenant_boundary`, `reseller_private_data_denied` (H1); 409 `call_not_answered`, `own_call`, `phone_unreachable`, `phone_not_answered`; 503 `permissions_unavailable`, `monitor_unavailable`, `media_unavailable` (nothing was done) and `media_node_failed`.
 
 ## cdr-service
 

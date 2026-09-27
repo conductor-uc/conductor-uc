@@ -1,3 +1,10 @@
+export {
+  AccessUnavailableError,
+  createHttpAccessClient,
+  type AccessClient,
+  type ActorAccess,
+  type HttpAccessClientOptions,
+} from './access.js';
 export { registerAuthenticationRequirement } from './authentication.js';
 export { registerHardRules } from './authz.js';
 export {

@@ -44,7 +44,9 @@ const ALWAYS_ALLOWED: ReadonlySet<string> = new Set(['org.view']);
  * 1. **H2, tenant boundary.** A person whose org is a tenant may only name
  *    their own tenant in a `/v1/tenants/{tenantId}/…` path.
  * 2. **The route's declared `permission`.** The resolver must say the person
- *    holds it (through a role, or an org-wide grant).
+ *    holds it (through a role, or an org-wide grant). Except on a route that
+ *    declares `scopedPermission` (S5-09): a grant on one extension or queue is
+ *    enough there, which only the handler can judge, so it checks instead.
  *
  * Until this existed the route contract's `permission` was documented but not
  * evaluated by any service (only H1 and H3 were), so any signed-in person
@@ -80,6 +82,7 @@ export function registerPermissionGuard(app: Server, resolve: PermissionResolver
       }
 
       if (ALWAYS_ALLOWED.has(contract.permission)) return;
+      if (contract.scopedPermission === true) return;
       if (!(await resolve({ id: actorId, orgId, orgType }, contract.permission))) {
         request.log.warn({ permission: contract.permission }, 'permission denied');
         throw ProblemError.forbidden('You do not have permission to do that.', {

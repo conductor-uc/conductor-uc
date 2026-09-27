@@ -1,0 +1,68 @@
+import { secretEquals } from '@cuc/crypto';
+import { ProblemError, Type, type Server } from '@cuc/http';
+
+import type { AgentRepo } from '../repo/agent.repo.js';
+import type { ExtensionRepo } from '../repo/extension.repo.js';
+import type { QueueTierRepo } from '../repo/queue-tier.repo.js';
+
+const ParamsSchema = Type.Object({
+  tenantId: Type.String({ minLength: 1 }),
+  number: Type.String({ minLength: 1, maxLength: 16, pattern: '^[0-9]+$' }),
+});
+
+const ResponseSchema = Type.Object({
+  extensionId: Type.String(),
+  number: Type.String(),
+  /** The queues this extension answers as an agent (its tiers); empty when it is no agent. */
+  agentQueueIds: Type.Array(Type.String()),
+});
+
+/**
+ * `GET /internal/v1/tenants/:tenantId/extensions/by-number/:number` (S5-09): which extension a
+ * number is, and which queues it answers as an agent. call-control asks it when a supervisor
+ * listens, whispers or barges, to match a grant scoped to an extension or a queue against a live
+ * call, whose legs name extensions only by the number the node vouched for (07 §3.3: a grant on
+ * `queue:Q1` covers a call where the target is an agent of Q1). Service-token gated like this
+ * service's other internal routes; 404 when the tenant has no such extension.
+ */
+export function registerMonitorScopeInternalRoutes(
+  app: Server,
+  deps: {
+    readonly extensions: ExtensionRepo;
+    readonly agents: AgentRepo;
+    readonly queueTiers: QueueTierRepo;
+    readonly internalServiceToken: string;
+  },
+): void {
+  const { extensions, agents, queueTiers, internalServiceToken } = deps;
+  app.get(
+    '/internal/v1/tenants/:tenantId/extensions/by-number/:number',
+    {
+      config: { public: true },
+      schema: { params: ParamsSchema, response: { 200: ResponseSchema } },
+    },
+    async (request) => {
+      const header = request.headers.authorization;
+      const [scheme, presented] = header?.split(' ') ?? [];
+      if (
+        scheme !== 'Bearer' ||
+        presented === undefined ||
+        !secretEquals(internalServiceToken, presented)
+      ) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const ctx = { tenantId: request.params.tenantId };
+      const extension = await extensions.findByNumber(ctx, request.params.number);
+      if (extension === undefined) {
+        throw ProblemError.notFound('No extension with that number in that tenant.');
+      }
+      const agent = await agents.findByExtensionId(ctx, extension.id);
+      const tiers = agent === undefined ? [] : await queueTiers.listForAgent(ctx, agent.id);
+      return {
+        extensionId: extension.id,
+        number: extension.number,
+        agentQueueIds: [...new Set(tiers.map((tier) => tier.queueId))],
+      };
+    },
+  );
+}

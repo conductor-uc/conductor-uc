@@ -36,6 +36,17 @@ export interface FakeEslServer {
    * names its channel in `Recording-Call-UUID`).
    */
   echoEvents: boolean;
+  /** S5-09: every `bgapi <command>` received (without its `Job-UUID` line), in arrival order. */
+  readonly receivedBgApiCommands: readonly string[];
+  /**
+   * S5-09: the `BACKGROUND_JOB` body for a `bgapi` command (default `+OK <command>`). Return
+   * `undefined` to hold the result back until {@link releaseBgApiJobs} (a phone still ringing).
+   */
+  bgApiResponder: ((command: string) => string | undefined) | undefined;
+  /** S5-09: when set, the next `bgapi` is refused in its `command/reply` with this text. */
+  refuseNextBgApi: string | undefined;
+  /** S5-09: delivers the held-back results, each with the body given. */
+  releaseBgApiJobs(body: string): void;
   close(): Promise<void>;
 }
 
@@ -45,6 +56,10 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
   let rejectNextAuth = false;
   const receivedApiCommands: string[] = [];
   let nextApiResponse = '+OK';
+  const receivedBgApiCommands: string[] = [];
+  let bgApiResponder: ((command: string) => string | undefined) | undefined;
+  let refuseNextBgApi: string | undefined;
+  const heldJobs: string[] = [];
   let apiResponder: ((command: string) => string) | undefined;
   const receivedEvents: { name: string; headers: Record<string, string> }[] = [];
   let echoEvents = false;
@@ -92,6 +107,24 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
           receivedEvents.push({ name, headers });
           socket.write('Content-Type: command/reply\nReply-Text: +OK 0000-event\n\n');
           if (echoEvents) deliver({ 'Event-Name': name, ...headers });
+        } else if (line.startsWith('bgapi ')) {
+          const [first = '', ...rest] = line.split('\n');
+          const command = first.slice('bgapi '.length);
+          const jobUuid =
+            rest
+              .find((header) => header.startsWith('Job-UUID:'))
+              ?.slice('Job-UUID:'.length)
+              .trim() ?? 'job-without-uuid';
+          receivedBgApiCommands.push(command);
+          if (refuseNextBgApi !== undefined) {
+            socket.write(`Content-Type: command/reply\nReply-Text: ${refuseNextBgApi}\n\n`);
+            refuseNextBgApi = undefined;
+          } else {
+            socket.write(`Content-Type: command/reply\nReply-Text: +OK Job-UUID: ${jobUuid}\n\n`);
+            const body = bgApiResponder === undefined ? `+OK ${command}` : bgApiResponder(command);
+            if (body === undefined) heldJobs.push(jobUuid);
+            else deliver({ 'Event-Name': 'BACKGROUND_JOB', 'Job-UUID': jobUuid, _body: body });
+          }
         } else if (line.startsWith('api ')) {
           const command = line.slice(4);
           receivedApiCommands.push(command);
@@ -149,6 +182,24 @@ export async function startFakeEslServer(password: string): Promise<FakeEslServe
       apiResponder = value;
     },
     receivedEvents,
+    receivedBgApiCommands,
+    get bgApiResponder() {
+      return bgApiResponder;
+    },
+    set bgApiResponder(value: ((command: string) => string | undefined) | undefined) {
+      bgApiResponder = value;
+    },
+    get refuseNextBgApi() {
+      return refuseNextBgApi;
+    },
+    set refuseNextBgApi(value: string | undefined) {
+      refuseNextBgApi = value;
+    },
+    releaseBgApiJobs(body) {
+      for (const jobUuid of heldJobs.splice(0)) {
+        deliver({ 'Event-Name': 'BACKGROUND_JOB', 'Job-UUID': jobUuid, _body: body });
+      }
+    },
     get echoEvents() {
       return echoEvents;
     },

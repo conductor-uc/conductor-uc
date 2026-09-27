@@ -42,11 +42,15 @@ export function registerRouteContractGuard(app: Server): void {
     const method = methodsOf(route).join(',');
 
     if (contract.public === true) {
-      if (contract.permission !== undefined || contract.dataClass !== undefined) {
+      if (
+        contract.permission !== undefined ||
+        contract.dataClass !== undefined ||
+        contract.scopedPermission !== undefined
+      ) {
         throw new RouteContractError(
           method,
           route.url,
-          'is marked public but also declares a permission or data class',
+          'is marked public but also declares a permission, data class or scoped permission',
         );
       }
       for (const single of methodsOf(route)) {
@@ -82,6 +86,7 @@ export function registerRouteContractGuard(app: Server): void {
         permission: contract.permission,
         dataClass: contract.dataClass,
         public: false,
+        ...(contract.scopedPermission === true ? { scopedPermission: true as const } : {}),
       });
     }
   });

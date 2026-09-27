@@ -381,6 +381,12 @@ importers:
       '@cuc/api-contracts':
         specifier: workspace:*
         version: link:../../packages/api-contracts
+      '@cuc/audit':
+        specifier: workspace:*
+        version: link:../../packages/audit
+      '@cuc/authz':
+        specifier: workspace:*
+        version: link:../../packages/authz
       '@cuc/config':
         specifier: workspace:*
         version: link:../../packages/config

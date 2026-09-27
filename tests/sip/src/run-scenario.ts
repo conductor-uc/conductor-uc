@@ -12,7 +12,7 @@
  * not by calling it in-process).
  */
 import { execFile } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -434,6 +434,10 @@ export async function tenantAdminHeaders(
 export async function createSignInAdmin(
   tenantId: string,
   resellerId: string,
+  /** S5-09: another built-in role, for a person who is not an administrator. */
+  role: 'tenant_admin' | 'tenant_user' = 'tenant_admin',
+  /** S5-09: a grant for the person, written directly (see `seed.ts`). */
+  grant?: { readonly permission: string; readonly scopeType: string; readonly scopeId: string },
 ): Promise<{ userId: string; email: string; password: string }> {
   const env = sipTestEnv();
   const { stdout } = await execFileAsync(
@@ -463,6 +467,8 @@ export async function createSignInAdmin(
       'sign-in-admin',
       tenantId,
       resellerId,
+      role,
+      ...(grant === undefined ? [] : [grant.permission, grant.scopeType, grant.scopeId]),
     ],
     { maxBuffer: 16 * 1024 * 1024 },
   );
@@ -1412,7 +1418,7 @@ export async function startDelayedCaller(opts: {
  * parsed back out below.
  */
 export async function dockerCurlJson(
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   body?: unknown,
   headers: Readonly<Record<string, string>> = {},
@@ -1509,4 +1515,56 @@ export async function dockerCurlUpload(
     { maxBuffer: 16 * 1024 * 1024 },
   );
   return { status: Number(stdout.trim()) };
+}
+
+/** RFC 6238 with the defaults identity-service enrols (SHA-1, 6 digits, 30 s). */
+export function totp(base32Secret: string): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  let bits = '';
+  for (const char of base32Secret.replace(/=+$/, '').toUpperCase()) {
+    bits += alphabet.indexOf(char).toString(2).padStart(5, '0');
+  }
+  const bytes = Buffer.from((bits.match(/.{8}/g) ?? []).map((byte) => Number.parseInt(byte, 2)));
+  const counter = Buffer.alloc(8);
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30_000)));
+  const hmac = createHmac('sha1', bytes).update(counter).digest();
+  const offset = (hmac[hmac.length - 1] ?? 0) & 0x0f;
+  const code = (hmac.readUInt32BE(offset) & 0x7fffffff) % 1_000_000;
+  return code.toString().padStart(6, '0');
+}
+
+/**
+ * Signs a person in through api-gateway the way the console does (password, then enrolling a
+ * TOTP code when asked) and returns their access token. Throws when it cannot.
+ */
+export async function signInThroughGateway(
+  gatewayUrl: string,
+  orgId: string,
+  email: string,
+  password: string,
+): Promise<string> {
+  const login = await dockerCurlJson('POST', `${gatewayUrl}/v1/auth/login`, {
+    orgId,
+    email,
+    password,
+  });
+  if (login.status !== 200) throw new Error(`sign-in failed: ${JSON.stringify(login.json)}`);
+  const signedIn = login.json as {
+    status: string;
+    accessToken?: string;
+    enrollmentTicket?: string;
+    totp?: { secret: string };
+  };
+  if (signedIn.status === 'ok' && signedIn.accessToken !== undefined) return signedIn.accessToken;
+  if (signedIn.status !== 'mfa_enrollment_required') {
+    throw new Error(`unexpected sign-in step: ${JSON.stringify(signedIn)}`);
+  }
+  const confirmed = await dockerCurlJson('POST', `${gatewayUrl}/v1/auth/mfa/enroll/confirm`, {
+    enrollmentTicket: signedIn.enrollmentTicket,
+    code: totp(signedIn.totp?.secret ?? ''),
+  });
+  if (confirmed.status !== 200) {
+    throw new Error(`MFA enrolment failed: ${JSON.stringify(confirmed.json)}`);
+  }
+  return (confirmed.json as { accessToken: string }).accessToken;
 }

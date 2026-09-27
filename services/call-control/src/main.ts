@@ -1,13 +1,21 @@
+import { recordAuditEvent } from '@cuc/audit';
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
-import { createRemotePermissionResolver, createServer } from '@cuc/http';
+import { createHttpAccessClient, createRemotePermissionResolver, createServer } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
 import { Redis } from 'ioredis';
 
 import { createAffinityManager } from './affinity/manager.js';
 import { createChannelHandler } from './channel-handler.js';
-import { createRecordingControlClient, createUserExtensionLookup } from './clients.js';
+import {
+  createExtensionScopeLookup,
+  createRecordingControlClient,
+  createTenantDomainLookup,
+  createUserExtensionLookup,
+} from './clients.js';
+import { createMonitorController } from './monitor-control.js';
+import { registerMonitorRoutes } from './routes/monitor.routes.js';
 import { createRecordingController } from './recording-control.js';
 import { registerRecordingControlRoutes } from './routes/recording.routes.js';
 import { configSchema, loadServiceConfig, parseFsNodes } from './config.js';
@@ -156,6 +164,11 @@ const app = await createServer({
 
 registerInternalRoutes(app, affinity, config.INTERNAL_SERVICE_TOKEN, registry);
 
+const userExtension = createUserExtensionLookup({
+  baseUrl: config.PBX_CONFIG_SERVICE_URL,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
+
 // S5-15: the recording buttons for live calls.
 registerRecordingControlRoutes(app, {
   controller: createRecordingController({
@@ -171,9 +184,35 @@ registerRecordingControlRoutes(app, {
       handleInOrder(nodeId, () => channelHandler.handleEvent(nodeId, raw));
     },
   }),
-  userExtension: createUserExtensionLookup({
-    baseUrl: config.PBX_CONFIG_SERVICE_URL,
-    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  userExtension,
+});
+
+// S5-09: listen, whisper and barge, from the supervisor's own phone.
+registerMonitorRoutes(app, {
+  controller: createMonitorController({
+    registry,
+    esl: (nodeId) => eslClientsById.get(nodeId),
+    access: createHttpAccessClient({
+      baseUrl: config.IDENTITY_SERVICE_URL,
+      internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+      ttlMs: config.ACCESS_CACHE_TTL_MS,
+    }),
+    userExtension,
+    extensionScope: createExtensionScopeLookup({
+      baseUrl: config.PBX_CONFIG_SERVICE_URL,
+      internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+    }),
+    tenantDomain: createTenantDomainLookup({
+      baseUrl: config.ORG_SERVICE_URL,
+      internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+    }),
+    // Committed to the outbox before the phone rings; the relay publishes it.
+    audit: async (input) => {
+      await recordAuditEvent(db.kysely, input);
+    },
+    opensipsSipUri: config.OPENSIPS_SIP_URI,
+    ringTimeoutSeconds: config.MONITOR_RING_TIMEOUT_SECONDS,
+    logger,
   }),
 });
 

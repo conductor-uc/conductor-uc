@@ -19,6 +19,8 @@
   "dependencies": {
     "@cuc/affinity": "workspace:*",
     "@cuc/api-contracts": "workspace:*",
+    "@cuc/audit": "workspace:*",
+    "@cuc/authz": "workspace:*",
     "@cuc/config": "workspace:*",
     "@cuc/crypto": "workspace:*",
     "@cuc/db": "workspace:*",
