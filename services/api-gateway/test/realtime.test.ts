@@ -150,6 +150,10 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
   const liveCalls = new Map<string, object[]>();
   /** S5-10: telephony-config's presence answer per tenant (registration and do not disturb). */
   const presenceStatuses = new Map<string, object[]>();
+  /** G-119 (1): each person's roles and grants, as the fake identity-service's `/access` answers. */
+  const accessOf = new Map<string, object>();
+  /** G-119 (1): each queue's agents' extension numbers, for the fake monitor-scope answer. */
+  const queueAgents = new Map<string, string[]>();
   /** S5-15: each person's extension number, as the fake pbx-config-service answers, by user id. */
   const extensionNumbers = new Map<string, string>();
 
@@ -195,6 +199,27 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
           ? reply(404, {})
           : reply(200, { extensionId: `ext-${number}`, number });
       }
+      const access = /^\/internal\/v1\/orgs\/[^/]+\/users\/([^/]+)\/access$/.exec(url);
+      if (access !== null) {
+        const found = accessOf.get(access[1] ?? '');
+        return found === undefined ? reply(404, {}) : reply(200, found);
+      }
+      if (
+        request.method === 'POST' &&
+        /^\/internal\/v1\/tenants\/[^/]+\/monitor-scope$/.test(url)
+      ) {
+        let raw = '';
+        request.on('data', (chunk: Buffer) => (raw += chunk.toString('utf8')));
+        request.on('end', () => {
+          const body = JSON.parse(raw) as { extensionIds: string[]; queueIds: string[] };
+          const numbers = new Set(body.extensionIds.map((id) => id.replace(/^ext-/, '')));
+          for (const queueId of body.queueIds) {
+            for (const number of queueAgents.get(queueId) ?? []) numbers.add(number);
+          }
+          reply(200, { extensions: [...numbers].sort() });
+        });
+        return;
+      }
       const statuses = /^\/internal\/v1\/tenants\/([^/]+)\/presence$/.exec(url);
       if (statuses !== null) {
         return reply(200, { extensions: presenceStatuses.get(statuses[1] ?? '') ?? [] });
@@ -218,6 +243,7 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
         CALL_CONTROL_URL: fakeUrl,
         PBX_CONFIG_SERVICE_URL: fakeUrl,
         TELEPHONY_CONFIG_URL: fakeUrl,
+        IDENTITY_SERVICE_URL: fakeUrl,
         CONSOLE_HOSTNAMES: CONSOLE_HOST,
         REALTIME_AUTH_TIMEOUT_MS: '1000',
         REALTIME_PERMISSION_RECHECK_MS: '1000',
@@ -592,6 +618,101 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
         id: 'x',
       });
       client.close();
+    });
+  });
+
+  describe('the calls a person may monitor (G-119 (1))', () => {
+    it("shows a queue lead only their queue's calls and its agents', with the legs bridged to them", async () => {
+      const tenantId = TENANT_B;
+      const queueId = randomUUID();
+      queueAgents.set(queueId, ['301']);
+      const leg = (overrides: object) => ({
+        nodeId: 'fs-1',
+        tenantId,
+        direction: 'inbound',
+        state: 'answered',
+        startedAt: Date.parse('2026-09-27T10:00:00.000Z'),
+        answeredAt: Date.parse('2026-09-27T10:00:01.000Z'),
+        from: '+15550100',
+        to: '+15550199',
+        bridgedTo: null,
+        recording: 'off',
+        extension: null,
+        controls: 'none',
+        queueId: null,
+        ...overrides,
+      });
+      // A caller in the queue, bridged to agent 301; and an unrelated call between 401 and 402.
+      liveCalls.set(tenantId, [
+        leg({ callUuid: 'caller-1', queueId, bridgedTo: 'agent-1' }),
+        leg({ callUuid: 'agent-1', direction: 'outbound', to: '301', extension: '301', queueId }),
+        leg({ callUuid: 'other-a', from: '401', extension: '401', bridgedTo: 'other-b' }),
+        leg({ callUuid: 'other-b', direction: 'outbound', to: '402', extension: '402' }),
+      ]);
+      const lead = person(tenantId, 'tenant', []);
+      accessOf.set(lead.sub, {
+        roles: [{ id: 'tenant_user', permissions: ['self.history'] }],
+        grants: [
+          {
+            principalType: 'user',
+            principalId: lead.sub,
+            permission: 'monitor.whisper',
+            scope: { type: 'queue', id: queueId },
+          },
+        ],
+      });
+      const client = await connectAs(lead);
+      const topicName = `tenant:${tenantId}:user:${lead.sub}:supervised`;
+      expect(await client.subscribe(topicName)).toMatchObject({ type: 'subscribed' });
+      const snapshot = await client.next((m) => m.type === 'snapshot' && m['topic'] === topicName);
+      expect(
+        (snapshot['data'] as { calls: { callUuid: string }[] }).calls.map((c) => c.callUuid).sort(),
+      ).toEqual(['agent-1', 'caller-1']);
+
+      // A new caller joins the queue: shown once call-control says which queue it is in.
+      await publish('call.channel.created', tenantId, {
+        callUuid: 'caller-2',
+        nodeId: 'fs-1',
+        tenantId,
+        direction: 'inbound',
+        from: '+15550111',
+        to: '+15550199',
+      });
+      await publish('call.channel.queued', tenantId, {
+        callUuid: 'caller-2',
+        nodeId: 'fs-1',
+        queueId,
+      });
+      const started = await client.next(
+        (m) => m.type === 'event' && (m['event'] as { type: string }).type === 'call.started',
+      );
+      expect(started['event']).toMatchObject({ call: { callUuid: 'caller-2', queueId } });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(JSON.stringify(client.messages)).not.toMatch(/other-a|other-b/);
+
+      // The subscription was audited like every private one.
+      expect(auditRecords.map((r) => JSON.stringify(r)).join()).toContain(topicName);
+      client.close();
+    });
+
+    it("refuses someone who may monitor nothing, another person's topic, and a reseller", async () => {
+      const nobody = person(TENANT_B, 'tenant', []);
+      accessOf.set(nobody.sub, { roles: [], grants: [] });
+      const client = await connectAs(nobody);
+      expect(
+        await client.subscribe(`tenant:${TENANT_B}:user:${nobody.sub}:supervised`),
+      ).toMatchObject({ type: 'error', code: 'permission_denied' });
+      expect(
+        await client.subscribe(`tenant:${TENANT_B}:user:${randomUUID()}:supervised`),
+      ).toMatchObject({ type: 'error', code: 'forbidden' });
+      client.close();
+
+      const reseller = person(RESELLER_B, 'reseller', ['monitor.listen']);
+      const walled = await connectAs(reseller);
+      expect(
+        await walled.subscribe(`tenant:${TENANT_B}:user:${reseller.sub}:supervised`),
+      ).toMatchObject({ type: 'error' });
+      walled.close();
     });
   });
 

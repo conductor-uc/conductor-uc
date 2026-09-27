@@ -55,6 +55,8 @@ export function createTopicAuthorizer(options: {
         if (!h1RouteLevelWall(actor.orgType, definition.dataClass)) {
           return { allowed: false, code: 'reseller_private_data_denied' };
         }
+        // G-119 (1): a permission that may be held on a scope is the hub's to judge.
+        if (definition.scoped === true) return { allowed: true };
         if (!(await options.permissions(actor, definition.permission))) {
           return { allowed: false, code: 'permission_denied' };
         }

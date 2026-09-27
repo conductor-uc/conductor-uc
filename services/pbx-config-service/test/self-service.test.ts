@@ -747,4 +747,43 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in pbx-config-s
       ).toBe(400);
     });
   });
+
+  describe('POST /internal/v1/tenants/:tenantId/monitor-scope (G-119 (1))', () => {
+    const url = (tenantId: string) => `/internal/v1/tenants/${tenantId}/monitor-scope`;
+    const auth = { authorization: `Bearer ${SERVICE_TOKEN}` };
+
+    it('answers the granted extensions and every agent of the granted queues, in this tenant only', async () => {
+      const tenantId = crypto.randomUUID();
+      const other = crypto.randomUUID();
+      const e301 = await makeExtension(tenantId, '301');
+      const e302 = await makeExtension(tenantId, '302');
+      const e401 = await makeExtension(tenantId, '401');
+      await makeExtension(tenantId, '402');
+      const foreign = await makeExtension(other, '501');
+      const queue = await h.queues.create(
+        { tenantId },
+        { label: 'Q1', strategy: 'ring-all', maxWaitSeconds: 0, announcePosition: false },
+      );
+      for (const extension of [e301, e302]) {
+        const agent = await h.agents.create({ tenantId }, { extensionId: extension.id });
+        await h.queueTiers.add({ tenantId }, { queueId: queue.id, agentId: agent.id });
+      }
+      const body = {
+        extensionIds: [e401.id, foreign.id],
+        queueIds: [queue.id, crypto.randomUUID()],
+      };
+
+      expect(
+        (await app.inject({ method: 'POST', url: url(tenantId), payload: body })).statusCode,
+      ).toBe(401);
+      const response = await app.inject({
+        method: 'POST',
+        url: url(tenantId),
+        payload: body,
+        headers: auth,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ extensions: ['301', '302', '401'] });
+    });
+  });
 });

@@ -25,10 +25,11 @@ import {
   extensionStatusOf,
   type LiveCallsSource,
   type PresenceStatusSource,
+  type SupervisionScopeSource,
   type UserExtensionSource,
 } from './sources.js';
 import { parseTopic, TOPICS, topicName, type Topic } from './topics.js';
-import { UserCalls } from './user-calls.js';
+import { CallsView, sameScope, UserCalls, type CallScope } from './user-calls.js';
 
 export interface RealtimeLimits {
   readonly authTimeoutMs: number;
@@ -63,6 +64,11 @@ export interface RealtimeHubOptions {
    * presence. Without it presence is calls only, as in S5-08 (`presence.ts`).
    */
   readonly presenceStatuses?: PresenceStatusSource;
+  /**
+   * G-119 (1): the calls a person may monitor, for their `user:{u}:supervised` topic. Without it
+   * that topic is refused as `unavailable`.
+   */
+  readonly supervision?: SupervisionScopeSource;
   readonly logger: Logger;
   readonly limits: RealtimeLimits;
   /**
@@ -106,7 +112,7 @@ interface Subscription {
   /** The presence tracker this subscription holds a share of (presence topics only). */
   tracker?: PresenceTracker;
   /** S5-15: a person's own calls (`mycalls` topics only): the tenant's legs, and which of them this subscriber is shown. */
-  own?: { readonly calls: CallsTracker; view: UserCalls | undefined };
+  own?: { readonly calls: CallsTracker; view: CallsView | undefined };
 }
 
 interface Connection {
@@ -421,6 +427,19 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
     }
   }
 
+  /** G-119 (1): what the topic's person may monitor; undefined for nothing. */
+  async function supervisionScope(
+    topic: Topic,
+  ): Promise<CallScope | undefined | typeof UNAVAILABLE> {
+    if (options.supervision === undefined || topic.userId === undefined) return UNAVAILABLE;
+    try {
+      return await options.supervision(topic.tenantId, topic.userId);
+    } catch (error) {
+      logger.warn({ err: error, topic: topic.name }, 'monitoring scope unavailable');
+      return UNAVAILABLE;
+    }
+  }
+
   async function handleAuth(connection: Connection, token: string): Promise<void> {
     let claims;
     try {
@@ -613,6 +632,36 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
         snapshot = { calls: view.load(own.calls.legs) };
         break;
       }
+      case 'supervised': {
+        // G-119 (1): the calls the person may monitor, from their grants, then the tenant's legs.
+        let names = userTopics.get(topic.tenantId);
+        if (names === undefined) {
+          names = new Set();
+          userTopics.set(topic.tenantId, names);
+        }
+        names.add(name);
+        const own: NonNullable<Subscription['own']> = {
+          calls: acquireCalls(topic.tenantId),
+          view: undefined,
+        };
+        subscription.own = own;
+        const scope = await supervisionScope(topic);
+        const loaded = await own.calls.ready;
+        if (connection.subscriptions.get(name) !== subscription) return;
+        if (!loaded || scope === UNAVAILABLE || scope === undefined) {
+          removeSubscription(connection, name);
+          sendError(
+            connection,
+            loaded && scope === undefined ? 'permission_denied' : 'unavailable',
+            { topic: name, id },
+          );
+          return;
+        }
+        const view = new CallsView(scope);
+        own.view = view;
+        snapshot = { calls: view.load(own.calls.legs) };
+        break;
+      }
     }
 
     // Unsubscribed, replaced, or closed while the snapshot was on its way.
@@ -638,7 +687,20 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
       // S5-15: a person's extension may have been unlinked or changed. Their view was built for
       // the old one; ending it (the client subscribes again) gives them a fresh, right one.
       const view = subscription.own?.view;
-      if (view !== undefined) {
+      // G-119 (1): grants given or taken away change what a person may monitor; a changed scope
+      // ends the view (the client subscribes again and gets the right one), none at all refuses.
+      if (view !== undefined && !(view instanceof UserCalls)) {
+        const scope = await supervisionScope(subscription.topic);
+        if (connection.subscriptions.get(name) !== subscription) continue;
+        if (scope === undefined) {
+          endSubscription(connection, name, 'permission_denied');
+        } else if (scope !== UNAVAILABLE && !sameScope(scope, view.scope)) {
+          logger.info({ topic: name }, 'monitoring scope changed; subscription ended');
+          endSubscription(connection, name, 'unavailable');
+        }
+        continue;
+      }
+      if (view instanceof UserCalls) {
         const number = await ownNumber(subscription.topic);
         if (connection.subscriptions.get(name) !== subscription) continue;
         if (number !== view.number && number !== UNAVAILABLE) {

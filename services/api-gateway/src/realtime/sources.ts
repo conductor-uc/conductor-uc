@@ -1,4 +1,8 @@
+import { allowed, type Permission, type Scope } from '@cuc/authz';
+import type { AccessClient, ActorAccess } from '@cuc/http';
+
 import { liveCallFromSnapshot, type LiveCall } from './calls.js';
+import type { CallScope } from './user-calls.js';
 import type { ExtensionStatus } from './presence.js';
 
 /** Where an org sits in the tree (org-service's `GET /internal/v1/orgs/:id/lineage`). */
@@ -180,5 +184,84 @@ export function createUserExtensionSource(
     if (cache.size > 10_000) cache.clear();
     cache.set(key, { number, expires: now() + ttlMs });
     return number;
+  };
+}
+
+/**
+ * G-119 (1): which live calls a person may monitor, for their `user:{u}:supervised` topic: every
+ * call of the tenant when they hold `monitor.listen`, `whisper` or `barge` across it (a role such
+ * as `tenant_supervisor`, or a grant on the org); otherwise the extensions and queues they are
+ * granted any of those on, where a queue also covers its agents' extensions (pbx-config-service's
+ * `POST /internal/v1/tenants/:t/monitor-scope`). Undefined when they may monitor nothing. Throws
+ * when identity-service or pbx-config-service cannot be asked.
+ */
+export type SupervisionScopeSource = (
+  tenantId: string,
+  userId: string,
+) => Promise<CallScope | undefined>;
+
+const MONITORING: readonly Permission[] = ['monitor.listen', 'monitor.whisper', 'monitor.barge'];
+
+export function createSupervisionScopeSource(
+  options: InternalClientOptions & { readonly access: AccessClient },
+): SupervisionScopeSource {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  return async (tenantId, userId) => {
+    let held: ActorAccess;
+    try {
+      held = await options.access.resolve({ orgId: tenantId, actorId: userId });
+    } catch (error) {
+      throw new SourceUnavailableError(error instanceof Error ? error.message : String(error));
+    }
+    const org = { id: tenantId, type: 'tenant' as const, resellerId: null };
+    const actor = { id: userId, type: 'user' as const, org, roleIds: held.roles.map((r) => r.id) };
+    const roles = new Map(
+      held.roles.map((role) => [role.id, { id: role.id, permissions: new Set(role.permissions) }]),
+    );
+    const may = (permission: Permission, scope?: Scope) =>
+      allowed({
+        actor,
+        permission,
+        resource: scope === undefined ? { org } : { org, scope },
+        roles,
+        grants: held.grants,
+      });
+    if (MONITORING.some((permission) => may(permission))) {
+      return { extensions: 'all', queues: new Set() };
+    }
+
+    const extensionIds = new Set<string>();
+    const queueIds = new Set<string>();
+    for (const grant of held.grants) {
+      if (!MONITORING.includes(grant.permission)) continue;
+      if (grant.scope.type !== 'extension' && grant.scope.type !== 'queue') continue;
+      if (!may(grant.permission, grant.scope)) continue;
+      (grant.scope.type === 'extension' ? extensionIds : queueIds).add(grant.scope.id);
+    }
+    if (extensionIds.size === 0 && queueIds.size === 0) return undefined;
+
+    let response: Response;
+    try {
+      response = await fetchImpl(
+        `${options.baseUrl.replace(/\/+$/, '')}/internal/v1/tenants/${encodeURIComponent(tenantId)}/monitor-scope`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${options.internalServiceToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ extensionIds: [...extensionIds], queueIds: [...queueIds] }),
+          signal: AbortSignal.timeout(options.timeoutMs ?? 5_000),
+        },
+      );
+    } catch (error) {
+      throw new SourceUnavailableError(error instanceof Error ? error.message : String(error));
+    }
+    if (!response.ok) throw new SourceUnavailableError(`HTTP ${String(response.status)}`);
+    const body = (await response.json()) as { extensions?: unknown };
+    if (!Array.isArray(body.extensions) || !body.extensions.every((n) => typeof n === 'string')) {
+      throw new SourceUnavailableError('Unexpected monitor scope answer.');
+    }
+    return { extensions: new Set(body.extensions), queues: queueIds };
   };
 }
