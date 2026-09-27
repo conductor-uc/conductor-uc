@@ -12,7 +12,7 @@ import {
   type LiveCall,
 } from './calls.js';
 import { startEventFeed, type EventFeed } from './feed.js';
-import { TenantPresence } from './presence.js';
+import { TenantPresence, type ExtensionStatus } from './presence.js';
 import {
   CLOSE,
   ERROR_MESSAGES,
@@ -21,7 +21,12 @@ import {
   type CloseSpec,
   type ErrorCode,
 } from './protocol.js';
-import type { LiveCallsSource, UserExtensionSource } from './sources.js';
+import {
+  extensionStatusOf,
+  type LiveCallsSource,
+  type PresenceStatusSource,
+  type UserExtensionSource,
+} from './sources.js';
 import { parseTopic, TOPICS, topicName, type Topic } from './topics.js';
 import { UserCalls } from './user-calls.js';
 
@@ -53,6 +58,11 @@ export interface RealtimeHubOptions {
    * Without it that topic is refused as `unavailable`.
    */
   readonly userExtensions?: UserExtensionSource;
+  /**
+   * S5-10 (G-122): every extension's registration and do not disturb (telephony-config), for
+   * presence. Without it presence is calls only, as in S5-08 (`presence.ts`).
+   */
+  readonly presenceStatuses?: PresenceStatusSource;
   readonly logger: Logger;
   readonly limits: RealtimeLimits;
   /**
@@ -118,10 +128,15 @@ interface Connection {
   messagesInWindow: number;
 }
 
+/** A change presence follows: a call's, or an extension's registration or do not disturb. */
+type PresenceInput =
+  | { readonly kind: 'call'; readonly event: CallTopicEvent }
+  | { readonly kind: 'status'; readonly status: ExtensionStatus };
+
 interface PresenceTracker {
   readonly presence: TenantPresence;
   loaded: boolean;
-  readonly pending: CallTopicEvent[];
+  readonly pending: PresenceInput[];
   readonly ready: Promise<boolean>;
   subscribers: number;
 }
@@ -329,17 +344,19 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
       return existing;
     }
     const presence = new TenantPresence();
-    const pending: CallTopicEvent[] = [];
+    const pending: PresenceInput[] = [];
     const tracker: PresenceTracker = {
       presence,
       loaded: false,
       pending,
       subscribers: 1,
-      ready: options
-        .liveCalls(tenantId)
-        .then((calls) => {
-          presence.load(calls);
-          for (const event of pending) presence.apply(event);
+      ready: Promise.all([
+        options.liveCalls(tenantId),
+        options.presenceStatuses === undefined ? undefined : options.presenceStatuses(tenantId),
+      ])
+        .then(([calls, statuses]) => {
+          presence.load(calls, statuses);
+          for (const input of pending) applyPresence(presence, input);
           pending.length = 0;
           tracker.loaded = true;
           return true;
@@ -733,22 +750,39 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
     }
   }
 
+  function applyPresence(presence: TenantPresence, input: PresenceInput) {
+    return input.kind === 'call' ? presence.apply(input.event) : presence.applyStatus(input.status);
+  }
+
+  /** Feeds one presence change to the tenant's tracker, and its watchers what it changed. */
+  function dispatchPresence(tenantId: string, input: PresenceInput): void {
+    const tracker = presenceTrackers.get(tenantId);
+    if (tracker === undefined) return;
+    if (!tracker.loaded) {
+      tracker.pending.push(input);
+      return;
+    }
+    for (const change of applyPresence(tracker.presence, input)) {
+      deliver(topicName(tenantId, 'presence'), change);
+    }
+  }
+
   function dispatch(envelope: BusEnvelope): void {
+    // S5-10 (G-122): telephony-config's registration and do not disturb, for presence only.
+    if (envelope.type === 'call.presence.changed') {
+      const tenantId = envelope.orgContext.tenantId;
+      const status = extensionStatusOf(envelope.data);
+      if (tenantId !== undefined && status !== undefined) {
+        dispatchPresence(tenantId, { kind: 'status', status });
+      }
+      return;
+    }
     const mapped = callEventFromEnvelope(envelope);
     if (mapped === undefined) return;
     const { tenantId, event } = mapped;
     deliver(topicName(tenantId, 'calls'), event);
     dispatchOwn(tenantId, event);
-
-    const tracker = presenceTrackers.get(tenantId);
-    if (tracker === undefined) return;
-    if (!tracker.loaded) {
-      tracker.pending.push(event);
-      return;
-    }
-    for (const change of tracker.presence.apply(event)) {
-      deliver(topicName(tenantId, 'presence'), change);
-    }
+    dispatchPresence(tenantId, { kind: 'call', event });
   }
 
   return {

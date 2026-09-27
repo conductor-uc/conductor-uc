@@ -12,6 +12,7 @@ import * as addParkingLots from './009_add_parking_lots.js';
 import * as addConferenceRooms from './010_add_conference_rooms.js';
 import * as addExtensionCallHandling from './011_add_extension_call_handling.js';
 import * as addRecordingSettings from './012_add_recording_settings.js';
+import * as addExtensionPresence from './013_add_extension_presence.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -35,4 +36,5 @@ export const migrations: Record<string, Migration> = {
   '010_add_conference_rooms': addConferenceRooms,
   '011_add_extension_call_handling': addExtensionCallHandling,
   '012_add_recording_settings': addRecordingSettings,
+  '013_add_extension_presence': addExtensionPresence,
 };

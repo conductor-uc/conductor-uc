@@ -65,7 +65,7 @@ Every application service listens on 8080. This is the complete list of callers,
 | voicemail-service | api-gateway, telephony-config, notification-service, **every recording-uploader** (voicemail messages, S5-16) | HTTP |
 | recording-service | api-gateway, telephony-config, call-control (the recording buttons on live calls, S5-15), **every recording-uploader** | HTTP |
 | cdr-service | api-gateway, **every FreeSWITCH node** (`/ingest/json-cdr`) | HTTP |
-| telephony-config | **every FreeSWITCH node** (`/fs/*`), trunk-service | HTTP |
+| telephony-config | **every FreeSWITCH node** (`/fs/*`), trunk-service, api-gateway (the realtime hub's presence snapshot, `/internal/v1/tenants/{t}/presence`, S5-10) | HTTP |
 | call-control | telephony-config, api-gateway (the realtime hub asks for a tenant's live calls, `/internal/v1/tenants/{t}/calls`; since S5-15 it also forwards the console's recording buttons, `/v1/tenants/*/calls` and `/v1/tenants/*/me/live-calls`, and since S5-09 listen, whisper and barge) | HTTP |
 | media-worker | nobody (health checks only) | — |
 | notification-service | nobody (health checks only) | — |

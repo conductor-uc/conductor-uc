@@ -705,7 +705,7 @@ services:
 - `HTTP_PORT` must be 443 inside the container, because the HTTP-to-HTTPS redirect is built from it. `net.ipv4.ip_unprivileged_port_start=0` lets the non-root process bind 80 and 443 inside its own network namespace only.
 - Put the bootstrap certificate ([DNS/TLS §4](dns-tls-and-certificates.md#4-the-bootstrap-certificate-first-installation)) in `/opt/voice/bootstrap-tls/fullchain.pem` and `privkey.pem`, readable by uid 65532 (`chmod 644 fullchain.pem; chmod 640 privkey.pem; chgrp 65532 privkey.pem`).
 - It faces the internet directly, so leave `TRUSTED_PROXIES` unset: the client address is the connection's own, and `X-Forwarded-For` from clients is ignored ([network §6.3](network-and-firewall.md#63-client-addresses-and-x-forwarded-headers)).
-- The console's live view (Monitoring) is a WebSocket on the same port 443 (`/v1/ws`). The gateway gets NATS (`*nats`) and `CALL_CONTROL_URL` (`*urls`) for it; nothing else needs opening. `REALTIME_ENABLED=false` turns it off ([configuration §4.1](configuration-reference.md#41-api-gateway)).
+- The console's live view (Monitoring) is a WebSocket on the same port 443 (`/v1/ws`). The gateway gets NATS (`*nats`), `CALL_CONTROL_URL` and (for presence: registration and do not disturb, S5-10) `TELEPHONY_CONFIG_URL` (`*urls`) for it; nothing else needs opening. `REALTIME_ENABLED=false` turns it off ([configuration §4.1](configuration-reference.md#41-api-gateway)).
 
 ### 7.6 Self-hosted MinIO instead of hosted S3
 

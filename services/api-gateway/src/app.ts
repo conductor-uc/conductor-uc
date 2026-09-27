@@ -22,6 +22,7 @@ import { REALTIME_PATH, registerRealtimeRoute } from './realtime/route.js';
 import {
   createLineageLookup,
   createLiveCallsSource,
+  createPresenceStatusSource,
   createUserExtensionSource,
 } from './realtime/sources.js';
 import { buildRouteTable } from './routing/route-table.js';
@@ -186,6 +187,15 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
         lineage: createLineageLookup({ baseUrl: config.ORG_SERVICE_URL, internalServiceToken }),
       }),
       liveCalls: createLiveCallsSource({ baseUrl: callControlUrl, internalServiceToken }),
+      // S5-10: registration and do not disturb for presence, when telephony-config is configured.
+      ...(config.TELEPHONY_CONFIG_URL === undefined
+        ? {}
+        : {
+            presenceStatuses: createPresenceStatusSource({
+              baseUrl: config.TELEPHONY_CONFIG_URL,
+              internalServiceToken,
+            }),
+          }),
       // S5-15: a person's own extension, for their own calls' topic.
       userExtensions: createUserExtensionSource({
         baseUrl: config.PBX_CONFIG_SERVICE_URL,

@@ -120,6 +120,14 @@ export const configSchema = Type.Object({
   RECONCILE_INTERVAL_MS: Env.int({ minimum: 1000, default: 15 * 60 * 1000 }),
 
   /**
+   * S5-10 (G-122): how often OpenSIPs is asked for every registration (`ul_dump`) to announce
+   * which phones came and went, and which extensions changed do not disturb. A change reaches
+   * the presence board within this. Each pass reads the whole registration table, so keep it
+   * seconds, not less.
+   */
+  PRESENCE_POLL_INTERVAL_MS: Env.int({ minimum: 1000, default: 5000 }),
+
+  /**
    * Shared secret FreeSWITCH presents as the password half of HTTP Basic
    * auth (`gateway-credentials value="fs-node:..."`,
    * `telephony/freeswitch/conf/autoload_configs/xml_curl.conf.xml`) on every

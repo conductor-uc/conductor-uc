@@ -163,6 +163,7 @@ Groups: base, and `NATS_SERVERS`/`NATS_USER`/`NATS_PASSWORD` from events (for th
 | `JWKS_CACHE_MAX_AGE_MS` / `JWKS_COOLDOWN_MS` | `600000` / `30000` | no | Signing-key cache. Keep the cache age shorter than identity-service's `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` (15 minutes), so a new signing key is fetched before it signs. |
 | `PROXY_TIMEOUT_MS` | `15000` | no | Upstream timeout |
 | `REALTIME_ENABLED` | `true` | no | The realtime hub, `/v1/ws` (S5-08): live calls and presence for the console. Needs `INTERNAL_SERVICE_TOKEN` and NATS; the gateway refuses to start with it on and the token unset. `false` removes `/v1/ws` and the NATS connection. |
+| `TELEPHONY_CONFIG_URL` | — | no (S5-10) | telephony-config, for example `http://10.10.0.31:8109`: the realtime hub asks it for every extension's registration and do not disturb (`GET /internal/v1/tenants/{t}/presence`) for the presence topic, and follows `call.presence.changed`. Without it presence is calls only: ringing, on a call, or idle, and never offline or do not disturb. |
 | `CALL_CONTROL_URL` | — | **yes** (since S5-15) | call-control, for example `http://10.10.0.31:8080`: the `call` routes (`/v1/tenants/*/calls`, `/v1/tenants/*/me/live-calls`, the recording buttons on live calls) go there, and the hub asks it for a tenant's live calls (`GET /internal/v1/tenants/{t}/calls`) when someone subscribes. The hub also asks pbx-config-service (`PBX_CONFIG_SERVICE_URL`) for a person's own extension. |
 | `NATS_SERVERS`, `NATS_USER`, `NATS_PASSWORD` | `127.0.0.1:4222`, —, — | no | Where the hub reads call events. Connected in the background with retries: NATS being down never stops the gateway from serving the API, but live subscriptions are refused until it is up. |
 | `REALTIME_AUTH_TIMEOUT_MS` | `10000` | no | How long a new live connection has to send its access token |
@@ -290,6 +291,7 @@ Groups: base, database (`telephony_config`), events, storage. It accepts the sig
 | `SELF_URL` | — | **yes** | This service's address **as FreeSWITCH reaches it**. Must equal FreeSWITCH's `TELEPHONY_CONFIG_URL`. Written into prompt URLs. |
 | `PBX_CONFIG_SERVICE_URL`, `TRUNK_SERVICE_URL`, `ORG_SERVICE_URL`, `VOICEMAIL_SERVICE_URL`, `CALLFLOW_SERVICE_URL`, `CALL_CONTROL_URL`, `RECORDING_SERVICE_URL` | — | **yes** | |
 | `RECORDING_SPOOL_DIR` | `/var/spool/cuc/rec` | no | Must match the uploader's `SPOOL_DIR` and FreeSWITCH's (fixed) recordings directory |
+| `PRESENCE_POLL_INTERVAL_MS` | `5000` | no | S5-10: how often OpenSIPs is asked for every registration (MI `ul_dump`, over `OPENSIPS_MI_URL`) to announce which phones came and went and which extensions changed do not disturb (`call.presence.changed`). The presence board lags by at most this |
 | `RECORDING_POLICY_TIMEOUT_MS` | `800` | no | After this, a call proceeds unrecorded and flagged |
 | `RECORDING_POLICY_CACHE_TTL_MS` | `30000` | no | A recording-rule change takes effect within this |
 | `REDIS_URL` | — | **yes** | |

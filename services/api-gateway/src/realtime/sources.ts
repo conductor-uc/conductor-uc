@@ -1,4 +1,5 @@
 import { liveCallFromSnapshot, type LiveCall } from './calls.js';
+import type { ExtensionStatus } from './presence.js';
 
 /** Where an org sits in the tree (org-service's `GET /internal/v1/orgs/:id/lineage`). */
 export interface OrgLineage {
@@ -99,6 +100,43 @@ export function createLiveCallsSource(options: InternalClientOptions): LiveCalls
       return call === undefined ? [] : [call];
     });
   };
+}
+
+/**
+ * S5-10 (G-122): every extension of the tenant with whether a phone is registered for it and
+ * whether it is set to do not disturb (telephony-config's `GET /internal/v1/tenants/:t/presence`),
+ * for the presence topic's snapshot. Throws when telephony-config cannot be asked.
+ */
+export type PresenceStatusSource = (tenantId: string) => Promise<ExtensionStatus[]>;
+
+export function createPresenceStatusSource(options: InternalClientOptions): PresenceStatusSource {
+  return async (tenantId) => {
+    const { body } = await internalGet(
+      options,
+      `/internal/v1/tenants/${encodeURIComponent(tenantId)}/presence`,
+    );
+    const extensions = (body as { extensions?: unknown } | undefined)?.extensions;
+    if (!Array.isArray(extensions)) throw new SourceUnavailableError('Unexpected presence answer.');
+    return extensions.flatMap((entry) => {
+      const status = extensionStatusOf(entry);
+      return status === undefined ? [] : [status];
+    });
+  };
+}
+
+/** An extension's status from a snapshot entry or a `call.presence.changed` payload; undefined when malformed. */
+export function extensionStatusOf(value: unknown): ExtensionStatus | undefined {
+  const record = value as { extension?: unknown; registered?: unknown; dnd?: unknown } | null;
+  if (typeof record !== 'object' || record === null) return undefined;
+  const { extension, registered, dnd } = record;
+  if (
+    typeof extension !== 'string' ||
+    typeof registered !== 'boolean' ||
+    typeof dnd !== 'boolean'
+  ) {
+    return undefined;
+  }
+  return { extension, registered, dnd };
 }
 
 /**

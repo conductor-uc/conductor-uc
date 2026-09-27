@@ -41,6 +41,13 @@ export const configSchema = Type.Object({
    * someone subscribes to the realtime hub (S5-08).
    */
   CALL_CONTROL_URL: Env.url(),
+  /**
+   * S5-10 (G-122): telephony-config, e.g. http://telephony-config:8080, which the realtime hub
+   * asks for every extension's registration and do not disturb (`GET /internal/v1/tenants/{t}/
+   * presence`) for the presence topic. Optional: without it presence is calls only (ringing, on a
+   * call, or idle), as before S5-10.
+   */
+  TELEPHONY_CONFIG_URL: Env.optional(Env.url()),
 
   /**
    * The routing table (06, api-gateway): which downstream service owns which

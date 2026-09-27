@@ -892,6 +892,8 @@ services:
       # its calls to identity-service, org-service and call-control.
       NATS_SERVERS: nats://nats:4222
       CALL_CONTROL_URL: http://call-control:8080
+      # S5-10: registration and do not disturb for the presence topic.
+      TELEPHONY_CONFIG_URL: http://telephony-config:8080
     healthcheck: *node-healthcheck
 
   notification-service:
