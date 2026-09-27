@@ -5,7 +5,7 @@ import 'api_client.dart';
 import 'session.dart';
 
 /// A GET carrying the signed-in user's access token, for screens whose calls
-/// are one-off reads (audit, platform health) rather than a resource.
+/// are one-off reads (audit, operations) rather than a resource.
 Future<Object?> authedGet(
   Ref ref,
   String path, {

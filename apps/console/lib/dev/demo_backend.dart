@@ -5,6 +5,7 @@ import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
 
 import 'demo_access.dart';
+import 'demo_operations.dart';
 import 'demo_pbx.dart';
 import 'demo_realtime.dart';
 
@@ -27,6 +28,7 @@ ConsoleApi demoApi() =>
 
 class _DemoAdapter implements HttpClientAdapter {
   final _pbx = DemoPbx();
+  final _operations = DemoOperations();
   var _orgType = 'tenant';
   var _email = '';
   var _signedIn = false;
@@ -258,7 +260,7 @@ class _DemoAdapter implements HttpClientAdapter {
     return _json(plain ? tokens : {'status': 'ok', ...tokens});
   }
 
-  /// What the user may do, their org's audit trail, and platform health.
+  /// What the user may do, their org's audit trail, and the Operations console.
   ResponseBody? _access(RequestOptions options) {
     final path = options.path;
     if (RegExp(r'^/v1/orgs/[^/]+/me$').hasMatch(path)) {
@@ -277,16 +279,50 @@ class _DemoAdapter implements HttpClientAdapter {
     if (RegExp(r'^/v1/orgs/[^/]+/audit-events$').hasMatch(path)) {
       return _json({'rows': demoAuditEvents(path.split('/')[3], _orgType)});
     }
-    if (path == '/v1/platform/health') {
-      return _orgType == 'master'
-          ? _json(demoPlatformHealth())
-          : _problem(
-              403,
-              'forbidden',
-              'Only the master can see platform health.',
-            );
+    if (path == '/v1/platform/overview' ||
+        path.startsWith('/v1/platform/nodes/')) {
+      return _operationsRoute(options);
     }
     return null;
+  }
+
+  /// The overview and the media node actions (11 §2.2): the master only, and
+  /// the actions only for someone who holds `platform.operate`.
+  ResponseBody _operationsRoute(RequestOptions options) {
+    final permissions = demoPermissions(_orgType, _email) ?? const [];
+    if (_orgType != 'master' || !permissions.contains('platform.observe')) {
+      return _problem(403, 'forbidden', 'Only the master can see operations.');
+    }
+    if (options.path == '/v1/platform/overview') {
+      return _json(_operations.overview());
+    }
+    final match = RegExp(r'^/v1/platform/nodes/([^/]+)/(drain|undrain|weight)$')
+        .firstMatch(options.path);
+    if (match == null) return _problem(404, 'not_found', 'No such route.');
+    if (!permissions.contains('platform.operate')) {
+      return _problem(403, 'forbidden', 'You cannot change media nodes.');
+    }
+    final nodeId = Uri.decodeComponent(match[1]!);
+    final Map<String, Object?>? node;
+    switch (match[2]) {
+      case 'weight':
+        if (options.method != 'PUT') {
+          return _problem(405, 'method_not_allowed', 'Use PUT.');
+        }
+        final weight = _body(options)['weight'];
+        if (weight is! int || weight < 1 || weight > 999) {
+          return _problem(400, 'validation', 'The weight must be 1 to 999.');
+        }
+        node = _operations.setWeight(nodeId, weight);
+      default:
+        if (options.method != 'POST') {
+          return _problem(405, 'method_not_allowed', 'Use POST.');
+        }
+        node = _operations.drain(nodeId, draining: match[2] == 'drain');
+    }
+    return node == null
+        ? _problem(404, 'not_found', 'No such node.')
+        : _json(node);
   }
 
   ResponseBody _problem(int status, String code, String detail) =>

@@ -8,7 +8,7 @@ import '../../core/session.dart';
 import '../../widgets/page.dart';
 import '../orgs/orgs_api.dart';
 import '../pbx/pbx_api.dart';
-import '../platform/platform_health_page.dart';
+import '../platform/operations_api.dart';
 import '../shell/sections.dart';
 import '../users/users_api.dart';
 
@@ -143,15 +143,15 @@ class DashboardPage extends ConsumerWidget {
           ),
         );
       }
-      if (visible.contains('/platform-health')) {
-        final health = ref.watch(platformHealthProvider);
+      if (visible.contains('/operations')) {
+        final overview = ref.watch(operationsOverviewProvider);
         tiles.add(
           _Tile(
             'Services ready',
             Icons.monitor_heart_outlined,
-            '/platform-health',
-            health.whenData((h) => h.ready),
-            () => 'of ${health.requireValue.services.length}',
+            '/operations',
+            overview.whenData((o) => o.servicesReady),
+            () => 'of ${overview.requireValue.services.length}',
           ),
         );
       }
