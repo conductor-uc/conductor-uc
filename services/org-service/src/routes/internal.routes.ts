@@ -82,6 +82,31 @@ export function registerInternalRoutes(
   );
 
   /**
+   * `GET /internal/v1/tenant-domains/:fqdn` (G-119 (3)): which tenant a domain belongs to.
+   * call-control asks it for a queue agent's events, where `mod_callcenter` names the agent only
+   * as `extension@domain`. 404 when no tenant has that domain.
+   */
+  app.get(
+    '/internal/v1/tenant-domains/:fqdn',
+    {
+      config: { public: true },
+      schema: {
+        params: Type.Object({ fqdn: Type.String({ minLength: 1, maxLength: 253 }) }),
+        response: { 200: Type.Object({ tenantId: Type.String() }) },
+      },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.');
+      }
+      const tenantId = await domains.findTenantByFqdn(request.params.fqdn);
+      if (tenantId === undefined) throw ProblemError.notFound('No tenant has that domain.');
+      return { tenantId };
+    },
+  );
+
+  /**
    * `GET /internal/v1/tenants/:id/reseller` (S2-01). trunk-service denormalizes
    * a trunk's owning reseller onto the row itself (05 §3.4: `trunks.reseller_id`)
    * so a reseller-scoped trunk list never needs a cross-schema join (05 §1.1) —

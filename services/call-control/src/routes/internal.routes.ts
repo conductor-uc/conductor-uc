@@ -49,6 +49,8 @@ const LiveCallSchema = Type.Object({
   extension: Type.Union([Type.String(), Type.Null()]),
   /** S5-15: what the recording buttons may do on the call. */
   controls: Type.Union([Type.Literal('none'), Type.Literal('on_demand'), Type.Literal('pause')]),
+  /** G-119 (3): the queue the leg is in, from mod_callcenter. */
+  queueId: Type.Union([Type.String(), Type.Null()]),
 });
 
 const LiveCallsResponseSchema = Type.Object({ calls: Type.Array(LiveCallSchema) });

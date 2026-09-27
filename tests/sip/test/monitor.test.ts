@@ -48,7 +48,8 @@ interface AuditEvent {
  * S5-09 (G-121), live: a supervisor whispers to a queue agent from their own phone.
  *
  * A carrier call into queue Q1, answered by agent 301. Two people who are not supervisors (the
- * `tenant_user` role, which holds no monitoring): one granted `monitor.whisper` on Q1, whose own
+ * `tenant_user` role, which holds no monitoring), each granted by the tenant's administrator: one
+ * granted `monitor.whisper` on Q1, whose own
  * extension is 302 (registered by SIPp through OpenSIPs), and one granted it on Q2, a queue 301
  * does not answer. Through api-gateway, as each signs in from the console:
  *
@@ -150,16 +151,23 @@ describe.skipIf(skipReason !== undefined)('S5-09 listen, whisper and barge (live
   }
 
   /**
-   * A person of the tenant who holds no monitoring but `monitor.whisper` on one queue. The grant is
-   * written directly: no one in a tenant may grant `monitor.*` through the API (G-121).
+   * A person of the tenant who holds no monitoring but `monitor.whisper` on one queue, granted by
+   * the tenant's administrator through identity-service, which allows exactly that (G-121 (7)).
    */
   async function queueLead(queueId: string) {
     const tenantId = seed.tenantQueue.id;
-    const person = await createSignInAdmin(tenantId, seed.resellerId, 'tenant_user', {
-      permission: 'monitor.whisper',
-      scopeType: 'queue',
-      scopeId: queueId,
-    });
+    const person = await createSignInAdmin(tenantId, seed.resellerId, 'tenant_user');
+    await ok(
+      'POST',
+      `${IDENTITY_SERVICE_URL}/v1/orgs/${tenantId}/grants`,
+      {
+        principalType: 'user',
+        principalId: person.userId,
+        permission: 'monitor.whisper',
+        scope: { type: 'queue', id: queueId },
+      },
+      201,
+    );
     const token = await signInThroughGateway(GATEWAY_URL, tenantId, person.email, person.password);
     return { userId: person.userId, token };
   }
@@ -291,6 +299,20 @@ describe.skipIf(skipReason !== undefined)('S5-09 listen, whisper and barge (live
         });
         trunk = await trunkAndDid(caller.ip, e164, q1.id);
         const leg = await agentLeg();
+
+        // G-119 (3): both legs of the queue call carry the queue, from mod_callcenter's events.
+        const live = await dockerCurlJson(
+          'GET',
+          `${CALL_CONTROL_URL}/internal/v1/tenants/${tenantId}/calls`,
+          undefined,
+          internalServiceHeaders(),
+        );
+        const legs = (
+          live.json as { calls: (LiveLeg & { queueId: string | null; bridgedTo: string | null })[] }
+        ).calls;
+        const agentSide = legs.find((call) => call.callUuid === leg);
+        expect(agentSide?.queueId, JSON.stringify(legs)).toBe(q1.id);
+        expect(legs.find((call) => call.callUuid === agentSide?.bridgedTo)?.queueId).toBe(q1.id);
 
         const whisper = (token: string) =>
           dockerCurlJson(

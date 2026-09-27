@@ -103,6 +103,20 @@ export function createDomainRepo(db: Database<OrgServiceDb>) {
       return rows.map(toBaseDomain);
     },
 
+    /**
+     * G-119 (3): which tenant a domain belongs to. Domains are globally unique (02 §3), and a
+     * tenant's SIP domain is its tenant domain, so call-control can learn the tenant of a queue
+     * agent that `mod_callcenter` names only as `extension@domain`.
+     */
+    async findTenantByFqdn(fqdn: string): Promise<string | undefined> {
+      const row = await kysely
+        .selectFrom('tenant_domains')
+        .select('tenant_id')
+        .where('fqdn', '=', fqdn.toLowerCase())
+        .executeTakeFirst();
+      return row?.tenant_id;
+    },
+
     async findPrimaryTenantDomain(tenantId: string): Promise<TenantDomain | undefined> {
       const row = await kysely
         .selectFrom('tenant_domains')

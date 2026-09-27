@@ -31,7 +31,6 @@ import {
   type Org,
 } from '@cuc/org-service/dist/src/repo/org.repo.js';
 import type { OrgServiceDb } from '@cuc/org-service/dist/src/schema.js';
-import { createGrantRepo } from '@cuc/identity-service/dist/src/repo/grant.repo.js';
 import { createRoleRepo } from '@cuc/identity-service/dist/src/repo/role.repo.js';
 import { createUserRepo } from '@cuc/identity-service/dist/src/repo/user.repo.js';
 import type { IdentityServiceDb } from '@cuc/identity-service/dist/src/schema.js';
@@ -558,12 +557,6 @@ export async function createSignInAdmin(
   tenantId: string,
   resellerId: string,
   role: 'tenant_admin' | 'tenant_user' = 'tenant_admin',
-  /**
-   * S5-09: a grant for the person, written directly: a tenant administrator cannot grant a
-   * permission they do not hold (identity-service refuses it as an escalation), and
-   * `monitor.*` is not theirs (G-121).
-   */
-  grant?: { readonly permission: string; readonly scopeType: string; readonly scopeId: string },
 ): Promise<{ readonly userId: string; readonly email: string; readonly password: string }> {
   const identityDb = createDatabase<IdentityServiceDb>({
     host: env('IDENTITY_DB_HOST'),
@@ -591,13 +584,6 @@ export async function createSignInAdmin(
       },
     );
     await roles.assignRole(userId, role, tenantId);
-    if (grant !== undefined) {
-      type Create = ReturnType<typeof createGrantRepo>['create'];
-      await createGrantRepo(identityDb).create(tenantId, 'user', userId, grant.permission, {
-        type: grant.scopeType,
-        id: grant.scopeId,
-      } as Parameters<Create>[4]);
-    }
     return { userId, email, password };
   } finally {
     await identityDb.destroy();
@@ -639,18 +625,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       (role !== 'tenant_admin' && role !== 'tenant_user')
     ) {
       throw new Error(
-        'usage: seed.js sign-in-admin <tenantId> <resellerId> [tenant_admin|tenant_user [permission scopeType scopeId]]',
+        'usage: seed.js sign-in-admin <tenantId> <resellerId> [tenant_admin|tenant_user]',
       );
     }
-    const [permission, scopeType, scopeId] = process.argv.slice(6);
-    const admin = await createSignInAdmin(
-      tenantId,
-      resellerId,
-      role,
-      permission !== undefined && scopeType !== undefined && scopeId !== undefined
-        ? { permission, scopeType, scopeId }
-        : undefined,
-    );
+    const admin = await createSignInAdmin(tenantId, resellerId, role);
     process.stdout.write(`\n${JSON.stringify(admin)}\n`);
   } else {
     const result = await seed();

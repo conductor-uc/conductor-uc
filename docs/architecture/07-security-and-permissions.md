@@ -78,12 +78,14 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 | `voicemail.access` | private | Mailbox owner; grantable per `mailbox` |
 | `monitor.presence` | config | Tenant users (tenant-wide) |
 | `monitor.calls` | private | Tenant admin, tenant supervisor, master support: watching the tenant's live calls (the realtime `calls` topic, S5-08, G-119) |
-| `monitor.listen` / `monitor.whisper` / `monitor.barge` | private | Tenant supervisors, **scoped to target extensions or queues** |
+| `monitor.listen` / `monitor.whisper` / `monitor.barge` | private | Tenant supervisors (the whole tenant); anyone else **granted them on an extension or a queue**, which a tenant's own administrator may grant without holding them (G-121 (7)) |
 | `analytics.view` | private | Tenant admin / supervisor |
 | `audit.read` | config/private | Org admins (private entries are visible only to the tenant and the master) |
 | `apikey.manage` | secret | Org admins |
 
 **Read twins (G-10).** Every configuration management permission has a `.read` twin of the same class. List and view routes declare the twin and writes keep the management permission. Holding a management permission implies its twin wherever permissions are evaluated (`READ_TWINS` in `@cuc/authz`: `roleHas`, `grantMatches`, identity-service's permission lookup and `/me`, the `@cuc/http` permission guard, and the console), so admins and custom roles that name only `.manage` keep reading without being re-granted. Nothing else implies anything, and no permission implies a `private` one. The secret-class permissions (`secret.reveal`, `apikey.manage`) have no twin. The console shows a screen read-only to a person who holds its `.read` permission without its `.manage` permission.
+
+**Who may grant what.** A grant or a custom role may carry only permissions the granter holds (`permission_escalation`), and never to oneself. One exception (G-121 (7), the owner's decision): a tenant's own administrator (a holder of `grant.manage` granting inside their own tenant) may grant `monitor.listen`, `monitor.whisper` or `monitor.barge` **scoped to an extension or a queue**, to a user (not a role), without holding it. That is less than the `tenant_supervisor` role they may already assign, and it gives the administrator no monitoring of their own.
 
 Monitoring is a "who can do this to whom" check. A grant `monitor.barge` scoped to `queue:Q1` lets its holder barge calls where the target channel is an agent of Q1 **or** the call is in Q1. `call-control` evaluates this against the live call (its registry in Redis, the queue variables on the node, and the queue's agents from pbx-config-service). Holding `monitor.*` across the tenant, through the `tenant_supervisor` role or a grant on the org, covers every call of the tenant, the same rule as `recording.listen` (G-121). Since the permission guard counts only holdings across the organization, these routes declare `scopedPermission`: the guard still applies H1 and the tenant boundary, and call-control checks the permission against the call.
 

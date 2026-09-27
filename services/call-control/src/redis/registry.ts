@@ -101,6 +101,8 @@ export interface LiveCall {
   readonly extension: string | null;
   /** S5-15: what the recording buttons may do on the call (`none` when nothing). */
   readonly controls: RecordingControls;
+  /** G-119 (3): the queue this leg is in (a caller waiting or talking, or the agent answering). */
+  readonly queueId: string | null;
 }
 
 /**
@@ -135,6 +137,7 @@ export function toLiveCall(
     recording: recording === 'on' || recording === 'paused' ? recording : 'off',
     extension: hash['ext'] === undefined || hash['ext'] === '' ? null : hash['ext'],
     controls: parseRecordingControls(hash['controls']),
+    queueId: hash['queue'] === undefined || hash['queue'] === '' ? null : hash['queue'],
   };
 }
 

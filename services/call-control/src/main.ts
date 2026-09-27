@@ -11,6 +11,7 @@ import { createChannelHandler } from './channel-handler.js';
 import {
   createExtensionScopeLookup,
   createRecordingControlClient,
+  createTenantByDomainLookup,
   createTenantDomainLookup,
   createUserExtensionLookup,
 } from './clients.js';
@@ -80,6 +81,11 @@ const channelHandler = createChannelHandler({
   logger,
   callSafetyTtlMs: config.CALL_SAFETY_TTL_MS,
   heartbeatTtlMs: config.HEARTBEAT_TTL_MS,
+  // G-119 (3): a queue agent's tenant, from the domain in its name.
+  tenantByDomain: createTenantByDomainLookup({
+    baseUrl: config.ORG_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
 });
 
 // One ESL client per configured node (`FS_NODES`), each with its own
