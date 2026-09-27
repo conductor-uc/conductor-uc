@@ -312,7 +312,13 @@ describe.skipIf(skipReason !== undefined)('S5-09 listen, whisper and barge (live
         ).calls;
         const agentSide = legs.find((call) => call.callUuid === leg);
         expect(agentSide?.queueId, JSON.stringify(legs)).toBe(q1.id);
-        expect(legs.find((call) => call.callUuid === agentSide?.bridgedTo)?.queueId).toBe(q1.id);
+        // The caller's leg: after mod_callcenter's bridge only it names the other (`bridgedTo`).
+        const callerSide = legs.find(
+          (call) =>
+            call.callUuid !== leg &&
+            (call.bridgedTo === leg || call.callUuid === agentSide?.bridgedTo),
+        );
+        expect(callerSide?.queueId, JSON.stringify(legs)).toBe(q1.id);
 
         const whisper = (token: string) =>
           dockerCurlJson(
