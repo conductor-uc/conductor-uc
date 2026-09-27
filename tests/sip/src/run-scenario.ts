@@ -13,7 +13,7 @@
  */
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -807,6 +807,8 @@ function buildSippCommand(opts: {
   localPort?: number | undefined;
   remoteHost?: string | undefined;
   logPrefix?: string | undefined;
+  /** `-trace_err`: SIPp writes every unexpected message it aborted on to `-error_file`. */
+  traceErrors?: boolean | undefined;
 }): string {
   const parts = [
     'sipp',
@@ -862,6 +864,8 @@ function buildSippCommand(opts: {
   parts.push('-key', 'extraheader', `"${opts.extraHeader ?? 'X-Sip-Test: 1'}"`);
   if (opts.localPort !== undefined) parts.push('-p', String(opts.localPort));
   const prefix = opts.logPrefix ?? 'run';
+  // SIPp only writes these files when the matching `-trace_*` flag is on.
+  if (opts.traceErrors === true) parts.push('-trace_err');
   parts.push(
     '-message_file',
     `/data/${prefix}_messages.log`,
@@ -1031,6 +1035,7 @@ export function startAgentUas(opts: StartAgentUasOptions): UasHandle {
       localPort: opts.localPort ?? 6000,
       remoteHost: env.opensipsTarget,
       logPrefix: 'agent_reg',
+      traceErrors: true,
     });
     const loginCmd = buildSippCommand({
       scenarioPath: '/scenarios/login_feature_code.xml',
@@ -1038,12 +1043,14 @@ export function startAgentUas(opts: StartAgentUasOptions): UasHandle {
       localPort: opts.localPort ?? 6000,
       remoteHost: env.opensipsTarget,
       logPrefix: 'agent_login',
+      traceErrors: true,
     });
     const answerCmd = buildSippCommand({
       scenarioPath: '/scenarios/answer_call.xml',
       csvPath: '/data/fields.csv',
       localPort: opts.localPort ?? 6000,
       logPrefix: 'agent_ans',
+      traceErrors: true,
     });
     // Same defensive cleanup as `startUas` — a killed (not just failed)
     // prior run can leave a same-named container behind despite this not
@@ -1073,7 +1080,15 @@ export function startAgentUas(opts: StartAgentUasOptions): UasHandle {
     // target, not a true "server mode" listener — so this correctly means
     // "registered AND logged in AND now actually waiting for the queue's
     // own distributed call", not just "the container started".
-    await waitForLog(opts.containerName, 'Sipp Server Mode', CONTAINER_LOG_TIMEOUT_MS);
+    try {
+      await waitForLog(opts.containerName, 'Sipp Server Mode', CONTAINER_LOG_TIMEOUT_MS);
+    } catch (error) {
+      // `stop()` removes the container and its /data dir, which hold the only
+      // record of which of the three steps failed and what OpenSIPs or FS sent
+      // back (neither logs individual transactions). Print them first.
+      await dumpSippDiagnostics(opts.containerName, hostCsvDir);
+      throw error;
+    }
   })();
 
   return {
@@ -1093,6 +1108,42 @@ export function startAgentUas(opts: StartAgentUasOptions): UasHandle {
       if (hostCsvDir !== undefined) await rm(hostCsvDir, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * Writes a SIPp container's state, its stdout and stderr, and any SIPp log
+ * files in its /data dir to stderr, for a container that never got ready.
+ * Best effort: a failure here must not replace the test's own error.
+ */
+async function dumpSippDiagnostics(
+  containerName: string,
+  hostCsvDir: string | undefined,
+): Promise<void> {
+  const state = await execFileAsync('docker', [
+    'inspect',
+    '-f',
+    '{{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}',
+    containerName,
+  ])
+    .then(({ stdout }) => stdout.trim())
+    .catch(() => '<unavailable>');
+  const logs = await execFileAsync('docker', ['logs', '--tail', '200', containerName], {
+    maxBuffer: 16 * 1024 * 1024,
+  })
+    .then(({ stdout, stderr }) => `stdout:\n${stdout}\nstderr:\n${stderr}`)
+    .catch(() => '<unavailable>');
+  let files = '';
+  if (hostCsvDir !== undefined) {
+    const names = await readdir(hostCsvDir).catch(() => [] as string[]);
+    for (const name of names.filter((n) => n.endsWith('.log')).sort()) {
+      const text = await readFile(path.join(hostCsvDir, name), 'utf8').catch(() => '');
+      files += `\n[${name}]\n${text.slice(-8000)}`;
+    }
+  }
+  process.stderr.write(
+    `\n--- SIPp ${containerName} never got ready ---\n` +
+      `state: ${state}\n${logs}\nlog files:${files === '' ? ' none' : files}\n`,
+  );
 }
 
 async function waitForLog(containerName: string, needle: string, timeoutMs: number): Promise<void> {
