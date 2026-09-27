@@ -46,15 +46,15 @@ env:
 jobs:
   check:
     name: lint, typecheck, test, build
-    # Self-hosted like `sip`: the runner is faster than GitHub-hosted
-    # tenancy. It is a long-lived host, not a fresh VM, so anything a step
-    # starts by hand must be removed again (see the MinIO step).
-    runs-on: self-hosted
-    timeout-minutes: 20
+    # GitHub-hosted: only the `sip` job needs the self-hosted runner's
+    # headroom (see its comment), and keeping this off it lets the two run
+    # at the same time instead of queueing behind each other.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
-      # The live SIP suite belongs to the `sip` job. Without this it runs
-      # here whenever that job's compose network happens to exist on this
-      # shared runner, against that job's stack (run #286).
+      # The live SIP suite belongs to the `sip` job. When this job shared the
+      # self-hosted runner, it ran here against that job's stack whenever the
+      # compose network happened to exist (run #286); kept so it never can.
       SKIP_SIP_TESTS: '1'
 
     services:
@@ -130,7 +130,6 @@ jobs:
         # @cuc/storage's tests fall back to Testcontainers pulling the image
         # cold, which routinely outruns vitest's default hook timeout here.
         run: |
-          docker rm -f minio >/dev/null 2>&1 || true
           docker run -d --name minio -p 9000:9000 \
             -e MINIO_ROOT_USER=ci-minio -e MINIO_ROOT_PASSWORD=ci-minio-password \
             pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data
@@ -196,11 +195,6 @@ jobs:
       - name: Show MinIO logs on failure
         if: failure()
         run: docker logs minio || true
-
-      - name: Remove MinIO
-        # Not a `services:` entry, so the runner does not clean it up.
-        if: always()
-        run: docker rm -f minio || true
 
   # A separate job, not a step in `check` above, so the slowest suite (real SIP
   # transaction timers over real UDP) runs alongside the other jobs instead of
@@ -347,22 +341,11 @@ jobs:
   # only place `apps/console/build/web` exists to be scanned.
   console:
     name: console (analyze, test, build web)
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v4
-
-      # `runs-on: self-hosted` can land on more than one runner, and a runner
-      # that starts its jobs with no HOME (seen on `runner-1`) stops
-      # flutter-action's setup script with "HOME: unbound variable" before it does
-      # anything. Give the rest of the job a HOME when it has none; where there is
-      # one (the `dell` runner) this leaves it exactly as it was.
-      - name: Make sure HOME is set
-        run: |
-          home="${HOME:-$RUNNER_TEMP/home}"
-          mkdir -p "$home"
-          echo "HOME=$home" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@v4
 
