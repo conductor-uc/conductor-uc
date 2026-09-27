@@ -15,6 +15,7 @@ import {
   stopContainer,
   tenantAdminHeaders,
   withSingleFsNode,
+  waitForTrunkRemoved,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -235,6 +236,7 @@ describe.skipIf(skipReason !== undefined)('realtime hub (live SIPp)', () => {
           scenario: 'trunk_invite_hold.xml',
           csvLine: `carrier;opensips;${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         trunkId = (
           await ok(
@@ -265,6 +267,7 @@ describe.skipIf(skipReason !== undefined)('realtime hub (live SIPp)', () => {
             201,
           )
         ).id;
+        await caller.startWhenRouted({ trunkId, didId });
 
         // Someone who opens the page mid-call is given the call in the snapshot.
         await watcher.next(
@@ -370,7 +373,8 @@ describe.skipIf(skipReason !== undefined)('realtime hub (live SIPp)', () => {
             undefined,
             204,
           ).catch(() => undefined);
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+          // The next test's container may be given this IP.
+          await waitForTrunkRemoved(trunkId);
         }
         if (policyId !== undefined) {
           await ok(

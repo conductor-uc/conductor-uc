@@ -9,6 +9,7 @@ import {
   startBackgroundUas,
   stopContainer,
   uasReceivedCall,
+  waitForProjected,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -154,7 +155,8 @@ describe.skipIf(skipReason !== undefined)('S2-04 outbound failover', () => {
       // route-creation call). Both trunk HTTP calls above only wait for
       // trunk-service's own write+outbox-publish, not for telephony-config
       // to have consumed either event yet.
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await waitForProjected('trunks', 'id', trunkPrimary.id);
+      await waitForProjected('trunks', 'id', trunkSecondary.id);
 
       // Priority order matters: `dr_rules.gwlist` is tried in this exact
       // order (`opensips-projection.repo.ts`'s `upsertDrRule`, `sort_alg`
@@ -164,7 +166,7 @@ describe.skipIf(skipReason !== undefined)('S2-04 outbound failover', () => {
 
       // Same reasoning as above, now for the route's own projection to
       // land before the call below depends on it.
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await waitForProjected('outbound_routes', 'id', route.id);
 
       const caller = await runForeground({
         scenario: 'uac_call.xml',

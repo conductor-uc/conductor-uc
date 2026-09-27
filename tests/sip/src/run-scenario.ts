@@ -1350,9 +1350,99 @@ export interface DelayedCallerHandle {
   readonly containerName: string;
   /** The container's own IP on the compose network — what a trunk's `ips` CIDR must whitelist to be recognized as this "carrier". */
   readonly ip: string;
-  /** Resolves once the container (and the scenario's own leading pause + INVITE exchange) has finished. */
+  /** With `startOnSignal`: lets the scenario begin now. */
+  start(): Promise<void>;
+  /**
+   * With `startOnSignal`: waits until telephony-config has projected `trunkId`'s
+   * IPs (and so reloaded OpenSIPs' `address` table) and, when given, the DID
+   * `didId`, then lets the scenario begin. See {@link waitForInboundRoute}.
+   */
+  startWhenRouted(route: { readonly trunkId: string; readonly didId?: string }): Promise<void>;
+  /** Resolves once the container (and the scenario's own INVITE exchange) has finished. */
   result(): Promise<SippStats>;
   stop(): Promise<void>;
+}
+
+/**
+ * Waits until telephony-config's own copy has `trunkId`'s IPs and, when given,
+ * the DID `didId` — what a carrier call from that trunk to that DID needs. The
+ * trunk's IPs are written in the same transaction that projects them into
+ * OpenSIPs' `address` table and runs `address_reload`
+ * (`services/telephony-config/src/projection.ts`), so once the row is
+ * visible OpenSIPs already knows the address. `/fs/dialplan` resolves a DID
+ * against telephony-config's `dids` table directly.
+ */
+export async function waitForInboundRoute(route: {
+  readonly trunkId: string;
+  readonly didId?: string;
+}): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    const ips = await telephonyConfigSql(
+      `SELECT COUNT(*) FROM trunk_ips WHERE trunk_id = '${route.trunkId}'`,
+    );
+    const dids =
+      route.didId === undefined
+        ? '1'
+        : await telephonyConfigSql(`SELECT COUNT(*) FROM dids WHERE id = '${route.didId}'`);
+    if (ips !== '0' && dids !== '0') return;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `telephony-config never projected trunk ${route.trunkId}'s IPs (${ips}) ` +
+          `or DID ${route.didId ?? '-'} (${dids})`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+/**
+ * Waits until telephony-config's own copy of `table` has a row whose `column`
+ * is `value`: a resource created through its owning service's API, projected
+ * here from that service's event. Replaces the fixed 2–3 s "projection
+ * settling" sleeps the tests used to take, which were both slower than the
+ * projection usually is and not a guarantee when it was slow. Projections that
+ * also write OpenSIPs' tables reload OpenSIPs inside the same transaction
+ * (`services/telephony-config/src/projection.ts`), so a visible row means
+ * OpenSIPs has it too.
+ */
+export async function waitForProjected(
+  table: string,
+  column: string,
+  value: string,
+): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  for (;;) {
+    const found = await telephonyConfigSql(
+      `SELECT COUNT(*) FROM ${table} WHERE ${column} = '${value}'`,
+    );
+    if (found !== '0') return;
+    if (Date.now() > deadline) {
+      throw new Error(`telephony-config never projected ${table}.${column} = ${value}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+}
+
+/**
+ * Waits until telephony-config has removed `trunkId` and its IPs, and so
+ * dropped them from OpenSIPs' `address` table: a later test's container that
+ * Docker gives the same IP must not still match this trunk.
+ *
+ * Tests call this from `finally` blocks, so it never throws: an error here
+ * would replace the test's own. After 15 s it gives up quietly, and a
+ * leftover trunk shows up in whichever later test it affects.
+ */
+export async function waitForTrunkRemoved(trunkId: string): Promise<void> {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    const left = await telephonyConfigSql(
+      `SELECT (SELECT COUNT(*) FROM trunks WHERE id = '${trunkId}') + ` +
+        `(SELECT COUNT(*) FROM trunk_ips WHERE trunk_id = '${trunkId}')`,
+    ).catch(() => undefined);
+    if (left === '0') return;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
 }
 
 /**
@@ -1360,11 +1450,13 @@ export interface DelayedCallerHandle {
  * sending an unsolicited INVITE — `trunk_invite*.xml`'s own doc comments)
  * detached (`-d`), so this function can read back the container's real
  * compose-network IP (`docker inspect`) before the scenario's first message
- * ever goes out. Every `trunk_invite*.xml` scenario starts with a
- * `<pause milliseconds="…">` for exactly this reason: it gives the caller
- * (provision a trunk/DID whitelisting this IP, wait for telephony-config's
- * event-driven projection) a real window to run *after* the IP is known but
- * *before* the INVITE that depends on it fires. `runForeground`'s "bind to
+ * ever goes out. With `startOnSignal` (every `trunk_invite*.xml` and
+ * `options_burst.xml` caller), SIPp does not start until the test calls
+ * `start()` or `startWhenRouted()`: the test provisions a trunk/DID
+ * whitelisting this IP, waits for telephony-config to project it, and only
+ * then lets the INVITE go. Those scenarios used to open with a fixed 6–8 s
+ * `<pause>` instead, which every call paid in full and which still lost the
+ * race whenever provisioning plus projection took longer. `runForeground`'s "bind to
  * `$(hostname -i)`" trick alone cannot do this — that command only resolves
  * inside the already-started container, is inlined into the same shell
  * invocation that immediately sends traffic, and is never visible to the
@@ -1386,11 +1478,27 @@ export async function startDelayedCaller(opts: {
   readonly au?: string;
   readonly ap?: string;
   readonly authUri?: string;
+  /** Hold SIPp until `start()`/`startWhenRouted()` (the doc comment above). */
+  readonly startOnSignal?: boolean;
 }): Promise<DelayedCallerHandle> {
   const env = sipTestEnv();
   await execFileAsync('docker', ['rm', '-f', opts.containerName]).catch(() => undefined);
   const hostCsvDir = await mkdtemp(path.join(tmpdir(), 'sip-test-'));
   await writeFile(path.join(hostCsvDir, 'fields.csv'), `SEQUENTIAL\n${opts.csvLine}\n`);
+  const startOnSignal = opts.startOnSignal === true;
+  const sippCommand = buildSippCommand({
+    scenarioPath: `/scenarios/${opts.scenario}`,
+    csvPath: '/data/fields.csv',
+    au: opts.au,
+    ap: opts.ap,
+    authUri: opts.authUri,
+    remoteHost: env.opensipsTarget,
+    logPrefix: 'delayed',
+  });
+  // `/data` is `hostCsvDir`, so `start()` creating `go` there is visible here.
+  const command = startOnSignal
+    ? `until [ -e /data/go ]; do sleep 0.1; done; ${sippCommand}`
+    : sippCommand;
 
   await execFileAsync('docker', [
     'run',
@@ -1409,24 +1517,13 @@ export async function startDelayedCaller(opts: {
     `${hostCsvDir}:/data`,
     env.sippImage,
     '-c',
-    buildSippCommand({
-      scenarioPath: `/scenarios/${opts.scenario}`,
-      csvPath: '/data/fields.csv',
-      au: opts.au,
-      ap: opts.ap,
-      authUri: opts.authUri,
-      remoteHost: env.opensipsTarget,
-      logPrefix: 'delayed',
-    }),
+    command,
   ]);
 
   // `docker run -d` returning is not always synchronous with the network
-  // attachment being visible to `docker inspect` yet — never observed
-  // across this function's original `trunk_invite*.xml` callers (S2-03),
-  // each of which happens to start with its own multi-second `<pause>`
-  // (long enough to never race this), but a scenario with no leading
-  // pause (S2-05's `uac_call_hold.xml`) can ask before it's ready. A short
-  // poll is cheap and only ever taken on the rare empty-IP case.
+  // attachment being visible to `docker inspect` yet: a scenario that starts
+  // straight away (S2-05's `uac_call_hold.xml`) can ask before it's ready. A
+  // short poll is cheap and only ever taken on the rare empty-IP case.
   let ip = '';
   for (let attempt = 1; attempt <= CONTAINER_IP_LOOKUP_ATTEMPTS && ip === ''; attempt += 1) {
     const { stdout } = await execFileAsync('docker', [
@@ -1443,10 +1540,27 @@ export async function startDelayedCaller(opts: {
   if (ip === '')
     throw new Error(`could not determine ${opts.containerName}'s IP on ${env.network}`);
 
+  let started = !startOnSignal;
+  const start = async (): Promise<void> => {
+    if (started) return;
+    await writeFile(path.join(hostCsvDir, 'go'), '');
+    started = true;
+  };
+
   return {
     containerName: opts.containerName,
     ip,
+    start,
+    startWhenRouted: async (route) => {
+      await waitForInboundRoute(route);
+      await start();
+    },
     result: async () => {
+      // A held caller never started would only surface as the exit wait
+      // below timing out, 90 s later and with no hint why.
+      if (!started) {
+        throw new Error(`${opts.containerName} was never started (start()/startWhenRouted())`);
+      }
       await waitForContainerExit(opts.containerName, CONTAINER_EXIT_TIMEOUT_MS);
       const { stdout: logs } = await execFileAsync('docker', ['logs', opts.containerName], {
         maxBuffer: 16 * 1024 * 1024,
@@ -1461,12 +1575,73 @@ export async function startDelayedCaller(opts: {
 }
 
 /**
+ * The long-lived `curlimages/curl` container every {@link dockerCurlJson} and
+ * {@link dockerCurlText} request is `docker exec`'d in. These used to start a
+ * throwaway `docker run --rm` container per request: about 450 ms each against
+ * about 45 ms for an exec, over several hundred requests a run (every poll
+ * loop, every fixture call). `global-setup.ts` starts it once per run and
+ * removes it at the end; it must be gone before `docker compose down`, which
+ * cannot remove a network a container outside the project is still attached to.
+ */
+export function curlContainer(): string {
+  return envOr('SIP_TEST_CURL_CONTAINER', 'sip-test-curl');
+}
+
+/** (Re)starts {@link curlContainer} on the compose network. */
+export async function startCurlContainer(): Promise<void> {
+  const env = sipTestEnv();
+  await removeCurlContainer();
+  await execFileAsync('docker', [
+    'run',
+    '-d',
+    '--name',
+    curlContainer(),
+    '--network',
+    env.network,
+    '--entrypoint',
+    'tail',
+    'curlimages/curl:latest',
+    '-f',
+    '/dev/null',
+  ]);
+}
+
+export async function removeCurlContainer(): Promise<void> {
+  await execFileAsync('docker', ['rm', '-f', curlContainer()]).catch(() => undefined);
+}
+
+let curlContainerChecked: Promise<void> | undefined;
+
+/**
+ * Runs `curl` with `args` inside {@link curlContainer}. Each test file runs in
+ * its own worker, so each checks once that the container is up (and on this
+ * stack's network: a new compose stack is a new network) and starts it if not,
+ * so a file run on its own, without `global-setup.ts`, still works.
+ */
+async function curlOnNetwork(args: readonly string[]): Promise<string> {
+  curlContainerChecked ??= (async () => {
+    const env = sipTestEnv();
+    const { stdout } = await execFileAsync('docker', [
+      'inspect',
+      curlContainer(),
+      '--format',
+      `{{ .State.Running }} {{ with index .NetworkSettings.Networks "${env.network}" }}attached{{ end }}`,
+    ]).catch(() => ({ stdout: '' }));
+    if (stdout.trim() !== 'true attached') await startCurlContainer();
+  })();
+  await curlContainerChecked;
+  const { stdout } = await execFileAsync('docker', ['exec', curlContainer(), 'curl', ...args], {
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  return stdout;
+}
+
+/**
  * Runs a JSON HTTP request against a service reachable only on the compose
  * network (trunk-service, telephony-config — deliberately unpublished, the
- * same reasoning `seedFixtures`'s own comment gives for org-service) from a
- * throwaway `curlimages/curl` container, since a host-side `fetch` cannot
- * reach it. `-w` appends the HTTP status code after a literal newline,
- * parsed back out below.
+ * same reasoning `seedFixtures`'s own comment gives for org-service) from
+ * {@link curlContainer}, since a host-side `fetch` cannot reach it. `-w`
+ * appends the HTTP status code after a literal newline, parsed back out below.
  */
 export async function dockerCurlJson(
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
@@ -1474,25 +1649,12 @@ export async function dockerCurlJson(
   body?: unknown,
   headers: Readonly<Record<string, string>> = {},
 ): Promise<{ status: number; json: unknown }> {
-  const env = sipTestEnv();
-  const args = [
-    'run',
-    '--rm',
-    '--network',
-    env.network,
-    'curlimages/curl:latest',
-    '-s',
-    '-X',
-    method,
-    url,
-    '-w',
-    '\n%{http_code}',
-  ];
+  const args = ['-s', '-X', method, url, '-w', '\n%{http_code}'];
   for (const [name, value] of Object.entries(headers)) args.push('-H', `${name}: ${value}`);
   if (body !== undefined) {
     args.push('-H', 'content-type: application/json', '-d', JSON.stringify(body));
   }
-  const { stdout } = await execFileAsync('docker', args, { maxBuffer: 16 * 1024 * 1024 });
+  const stdout = await curlOnNetwork(args);
   const lastNewline = stdout.lastIndexOf('\n');
   const bodyText = stdout.slice(0, lastNewline);
   const status = Number(stdout.slice(lastNewline + 1).trim());
@@ -1506,22 +1668,7 @@ export async function dockerCurlJson(
  * `dockerCurlUpload` gives for the upload direction.
  */
 export async function dockerCurlText(url: string): Promise<{ status: number; text: string }> {
-  const env = sipTestEnv();
-  const { stdout } = await execFileAsync(
-    'docker',
-    [
-      'run',
-      '--rm',
-      '--network',
-      env.network,
-      'curlimages/curl:latest',
-      '-s',
-      url,
-      '-w',
-      '\n%{http_code}',
-    ],
-    { maxBuffer: 16 * 1024 * 1024 },
-  );
+  const stdout = await curlOnNetwork(['-s', url, '-w', '\n%{http_code}']);
   const lastNewline = stdout.lastIndexOf('\n');
   return {
     status: Number(stdout.slice(lastNewline + 1).trim()),

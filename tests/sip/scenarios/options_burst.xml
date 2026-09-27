@@ -7,14 +7,13 @@
   listed on a trunk, or a FreeSWITCH node. From an unknown source the block
   drops a request partway through, the `recv` times out and the call fails.
 
-  The leading pause gives the test time to register this container's address
-  on a trunk and for telephony-config to reload OpenSIPs' address table.
+  Run with `startDelayedCaller`'s `startOnSignal`, so the burst starts only
+  once the test has listed this container's address on a trunk and
+  telephony-config has reloaded OpenSIPs' address table.
 
   `[field0]`=caller user, `[field1]`=the proxy's SIP domain (`opensips`).
 -->
 <scenario name="OPTIONS burst">
-  <pause milliseconds="8000"/>
-
   <nop>
     <action>
       <assign assign_to="1" value="0"/>

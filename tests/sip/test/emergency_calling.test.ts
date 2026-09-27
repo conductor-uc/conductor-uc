@@ -10,6 +10,7 @@ import {
   startBackgroundUas,
   startDelayedCaller,
   stopContainer,
+  waitForProjected,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -160,10 +161,9 @@ describe.skipIf(skipReason !== undefined)('S2-06 emergency calling', () => {
       route = await createOutboundRoute(tenantId, [trunk.id], '+1');
       await putEmergencyRoute(tenantId, trunk.id, ['911']);
       emergencyRouteCreated = true;
-      // Same event-driven-projection settling window S2-04/S2-05's own
-      // outbound tests use — one more event to settle here than theirs
-      // (trunk, outbound route, *and* emergency route).
-      await new Promise((resolve) => setTimeout(resolve, 2500));
+      // Wait for telephony-config's copy of the outbound and emergency routes.
+      await waitForProjected('outbound_routes', 'id', route.id);
+      await waitForProjected('emergency_routes', 'trunk_id', trunk.id);
       await setTenantLimits(tenantId, { maxConcurrentChannels: 1 });
 
       // Held open for 4s (`uac_call_hold.xml`) — long enough for the

@@ -127,7 +127,7 @@ describe.skipIf(skipReason !== undefined)('S5-13 on-demand recording and pause (
       );
       last = rows;
       if (rows.length > 0 && rows.every((r) => r.status === 'ready')) return rows;
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
     throw new Error(`no ready recording; last seen: ${JSON.stringify(last)}`);
   }

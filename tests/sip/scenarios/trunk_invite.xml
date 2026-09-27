@@ -17,14 +17,12 @@
   Call-ID-reuse rationale, same post-`topology_hiding()` Contact-targeting
   for in-dialog requests) — see that scenario's own doc comment for why.
 
-  The leading `<pause>` gives `run-scenario.ts`'s `startDelayedCaller` a real
-  window to read this container's own IP back out and provision (and wait
-  for telephony-config to project) a trunk/DID whitelisting it *before* the
-  INVITE below ever fires — see that function's own doc comment.
+  Run with `startDelayedCaller`'s `startOnSignal`: SIPp only starts once the
+  test has provisioned a trunk/DID whitelisting this container's IP and
+  telephony-config has projected it, so the INVITE below is never sent before
+  it can be routed — see that function's own doc comment.
 -->
 <scenario name="Trunk INVITE to a DID">
-  <pause milliseconds="6000"/>
-
   <send retrans="4000">
     <![CDATA[
       INVITE sip:[field2]@[field1] SIP/2.0

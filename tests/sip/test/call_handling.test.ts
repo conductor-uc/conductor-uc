@@ -11,6 +11,7 @@ import {
   stopContainer,
   tenantAdminHeaders,
   withSingleFsNode,
+  waitForTrunkRemoved,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -144,6 +145,7 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
           scenario: options.caller ?? 'trunk_invite_hold.xml',
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         const trunk = await ok<{ id: string }>(
           'POST',
@@ -172,6 +174,7 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
           201,
         );
         didId = did.id;
+        await caller.startWhenRouted({ trunkId, didId });
 
         const result = await caller.result();
         await new Promise((resolve) => setTimeout(resolve, 2500));
@@ -182,7 +185,7 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
         }
         if (trunkId !== undefined) {
           await call('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`);
-          await new Promise((resolve) => setTimeout(resolve, 1500));
+          await waitForTrunkRemoved(trunkId);
         }
         await call(
           'PUT',
@@ -235,7 +238,7 @@ describe.skipIf(skipReason !== undefined)('call handling (live SIPp)', () => {
     for (;;) {
       const rows = await messages(tenantId, mailboxId);
       if (rows.length > 0 || Date.now() > deadline) return rows;
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 

@@ -10,6 +10,8 @@ import {
   startDelayedCaller,
   stopContainer,
   withSingleFsNode,
+  waitForTrunkRemoved,
+  waitForProjected,
   type SeedResult,
   type UasHandle,
 } from '../src/run-scenario.js';
@@ -165,10 +167,8 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
       'DELETE',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${trunkId}`,
     );
-    // Same settle window `trunk_did_routing.test.ts` already uses before a
-    // freed IP could be recycled by the very next test's own caller
-    // container.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // The next test's container may be given this IP.
+    await waitForTrunkRemoved(trunkId);
   }
 
   async function createDid(
@@ -245,10 +245,9 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
         agentId = createdAgent.id;
         await addTier(tenantId, queue.id, agentId);
 
-        // Real-time settling window for the queue/agent/tier event-driven
-        // projection into telephony-config's local mirror — same reasoning
-        // parking/conference's own tests already use before dialing in.
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        // Wait for telephony-config's copy of the queue, the agent and its tier.
+        await waitForProjected('queues', 'id', queue.id);
+        await waitForProjected('queue_tiers', 'agent_id', agentId);
 
         // A fresh number per run, not a fixed literal: this test was seen
         // live routing to a *stale, already-deleted* queue id after a
@@ -268,9 +267,11 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
           scenario: 'trunk_invite.xml',
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         trunk = await createIpTrunk(tenantId, primingCaller.ip);
         didId = await createDid(tenantId, e164, trunk.id, queue.id);
+        await primingCaller.startWhenRouted({ trunkId: trunk.id, didId });
 
         // Confirmed live: on a FS node that has never had *any* call touch
         // this queue, `mod_callcenter` has it loaded nowhere in memory at
@@ -334,12 +335,14 @@ describe.skipIf(skipReason !== undefined)('S2-13 call queues (live SIPp, G-47)',
           scenario: 'trunk_invite_hold.xml',
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         // A fresh trunk/DID for the real assertion call, created only now
         // — see the deletion above for why reusing the priming call's own
         // trunk was actually the bug, not just unnecessary.
         trunk = await createIpTrunk(tenantId, caller.ip);
         didId = await createDid(tenantId, e164, trunk.id, queue.id);
+        await caller.startWhenRouted({ trunkId: trunk.id, didId });
 
         const callerResult = await caller.result();
         // `answer` runs before `callcenter`, so a caller-side 200 alone

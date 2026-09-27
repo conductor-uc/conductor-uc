@@ -18,6 +18,8 @@ import {
   stopContainer,
   tenantAdminHeaders,
   withSingleFsNode,
+  waitForTrunkRemoved,
+  waitForProjected,
   type SeedResult,
   type UasHandle,
 } from '../src/run-scenario.js';
@@ -195,8 +197,8 @@ describe.skipIf(skipReason !== undefined)('S5-09 listen, whisper and barge (live
     const tenantId = seed.tenantQueue.id;
     await asAdmin('DELETE', `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/dids/${ids.didId}`);
     await asAdmin('DELETE', `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/trunks/${ids.trunkId}`);
-    // As `queue.test.ts`: let a freed IP settle before the next container can reuse it.
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    // The next test's container may be given this IP.
+    await waitForTrunkRemoved(ids.trunkId);
   }
 
   /**
@@ -294,7 +296,9 @@ describe.skipIf(skipReason !== undefined)('S5-09 listen, whisper and barge (live
           { agentId },
           201,
         );
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await waitForProjected('queues', 'id', q1.id);
+        await waitForProjected('queues', 'id', q2.id);
+        await waitForProjected('queue_tiers', 'agent_id', agentId);
 
         // Prime mod_callcenter's load of the new queue with a throwaway call, then remove its
         // trunk before the agent registers: `queue.test.ts` explains both steps.
@@ -303,8 +307,10 @@ describe.skipIf(skipReason !== undefined)('S5-09 listen, whisper and barge (live
           scenario: 'trunk_invite.xml',
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         trunk = await trunkAndDid(priming.ip, e164, q1.id);
+        await priming.startWhenRouted(trunk);
         await priming.result();
         await removeTrunkAndDid(trunk);
         trunk = undefined;
@@ -345,8 +351,10 @@ describe.skipIf(skipReason !== undefined)('S5-09 listen, whisper and barge (live
           scenario: 'trunk_invite_hold_long.xml',
           csvLine: `carrier;${CARRIER_TARGET_DOMAIN};${e164}`,
           containerName: CALLER_CONTAINER,
+          startOnSignal: true,
         });
         trunk = await trunkAndDid(caller.ip, e164, q1.id);
+        await caller.startWhenRouted(trunk);
         const leg = await agentLeg();
 
         // G-119 (3): both legs of the queue call carry the queue, from mod_callcenter's events.

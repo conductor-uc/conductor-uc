@@ -11,7 +11,7 @@
   OpenSIPs unchanged. No ACK/BYE, same reasoning as
   `trunk_invite_expect_403.xml`.
 
-  The leading `<pause>` matches `trunk_invite.xml`'s own — this scenario
+  Started on a signal like `trunk_invite.xml` — this scenario
   still needs its *own* trunk provisioned (with this container's real IP
   whitelisted) so the call reaches FS's dialplan at all; only the DID lookup
   there is what's meant to fail.
@@ -25,8 +25,6 @@
   this test exists to check for is never even sent.
 -->
 <scenario name="Trunk INVITE to a DID rejected by the dialplan (expect 404)">
-  <pause milliseconds="6000"/>
-
   <send retrans="4000">
     <![CDATA[
       INVITE sip:[field2]@[field1] SIP/2.0

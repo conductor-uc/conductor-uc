@@ -10,8 +10,6 @@
   `[field0]`=caller user, `[field1]`=R-URI/To domain, `[field2]`=dialed DID.
 -->
 <scenario name="Trunk INVITE to a DID, wait for the far end's own BYE">
-  <pause milliseconds="6000"/>
-
   <send retrans="4000">
     <![CDATA[
       INVITE sip:[field2]@[field1] SIP/2.0

@@ -7,6 +7,7 @@ import {
   clearRegistration,
   createSignInAdmin,
   dockerCurlJson,
+  fsCliAll,
   seedFixtures,
   signInThroughGateway,
   sipInfraOrSkipReason,
@@ -155,7 +156,8 @@ class HubClient {
  * S5-15 (G-111 (3), G-120), live: the console's record, stop, pause and resume buttons, pressed
  * on a real call through api-gateway as a signed-in tenant administrator, with exactly the rules
  * of the in-call feature codes. 402 calls 401 (an internal call; `uac_call_hold_long.xml` holds it
- * for 45 s) under a rule for 401, and the test acts while it is up:
+ * until FreeSWITCH hangs up, 45 s at most) under a rule for 401, and the test acts while it is up,
+ * then ends the call:
  *
  * - A rule that does not record but allows on demand: the call says `controls: on_demand`;
  *   Start starts an on-demand recording (the hub shows it on), a second Start is refused (409),
@@ -272,7 +274,7 @@ describe.skipIf(skipReason !== undefined)('S5-15 live recording buttons (live SI
     while (Date.now() < deadline) {
       last = await recordingsSince(id401, since);
       if (last.length > 0 && last.every((r) => r.status === 'ready')) return last;
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
     throw new Error(`no ready recording; last seen: ${JSON.stringify(last)}`);
   }
@@ -354,6 +356,11 @@ describe.skipIf(skipReason !== undefined)('S5-15 live recording buttons (live SI
           40_000,
         );
         await options.during(hub, leg401);
+        // Hang up now rather than wait out the scenario's 45 s: `during` is done with the call.
+        // Both legs, so neither depends on how the other's hangup is propagated.
+        for (const leg of callOf(hub, leg401)) {
+          await fsCliAll(`uuid_kill ${leg.callUuid}`).catch(() => undefined);
+        }
 
         const result = await caller.result();
         expect(result.successfulCalls, result.stdout).toBe(1);
