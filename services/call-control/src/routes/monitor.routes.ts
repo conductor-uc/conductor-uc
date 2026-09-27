@@ -34,7 +34,31 @@ function person(request: SignedRequest) {
   return { id: actorId, orgId, orgType, resellerId: request.context.resellerId ?? null };
 }
 
-const MODES: readonly MonitorMode[] = ['listen', 'whisper', 'barge'];
+/**
+ * One route per mode, each written out in full: api-gateway's route-table test finds every service
+ * route by its path literal, so a path built at run time would escape it.
+ */
+const ROUTES: readonly {
+  readonly mode: MonitorMode;
+  readonly path: string;
+  readonly permission: 'monitor.listen' | 'monitor.whisper' | 'monitor.barge';
+}[] = [
+  {
+    mode: 'listen',
+    path: '/v1/tenants/:tenantId/calls/:callUuid/listen',
+    permission: 'monitor.listen',
+  },
+  {
+    mode: 'whisper',
+    path: '/v1/tenants/:tenantId/calls/:callUuid/whisper',
+    permission: 'monitor.whisper',
+  },
+  {
+    mode: 'barge',
+    path: '/v1/tenants/:tenantId/calls/:callUuid/barge',
+    permission: 'monitor.barge',
+  },
+];
 
 /**
  * S5-09: listen to, whisper into and barge a live call, from the supervisor's own phone (O-14).
@@ -56,11 +80,11 @@ export function registerMonitorRoutes(
   app: Server,
   deps: { readonly controller: MonitorController },
 ): void {
-  for (const mode of MODES) {
+  for (const { mode, path, permission } of ROUTES) {
     app.post(
-      `/v1/tenants/:tenantId/calls/:callUuid/${mode}`,
+      path,
       {
-        config: { permission: `monitor.${mode}`, dataClass: 'private', scopedPermission: true },
+        config: { permission, dataClass: 'private', scopedPermission: true },
         schema: { params: ParamsSchema, response: { 200: ResultSchema } },
       },
       async (request) => {
