@@ -12,13 +12,13 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S1 Orgs, identity, single-node (16) | 14 | 1 | 1 |
 | S2 Core telephony (21) | 17 | 3 | 1 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
-| S4 HA and scale (11) | 0 | 4 | 7 |
+| S4 HA and scale (11) | 1 | 3 | 7 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (110)** | **69** | **14** | **27** |
+| **Total (110)** | **70** | **13** | **27** |
 
 Milestones: M1 (S1) reached except API-key auth and organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below (and S2-21, retention, added later). M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -106,7 +106,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 
 | ID | Status | Evidence |
 |---|---|---|
-| S4-01 | Partial | O-1 accepted in decisions.md (2026-09-25: Compose per server now, Kubernetes for the application tier later); `docs/operations/deploy-distributed.md` describes the Compose roles, unverified on real servers and without HA; no ADR or HA topology doc; `infra/deploy` is empty |
+| S4-01 | Done | [ADR 0001](../architecture/adr/0001-orchestrator.md) (O-1: Compose per server now, Kubernetes for the application tier later) and [10-production-topology.md](../architecture/10-production-topology.md) (roles, zones, per-component HA and stable endpoints, the S4 task that builds each). Two choices in it are Proposed for the owner: D-016 (MariaDB Galera, single writer) and D-017 (floating addresses and internal load balancers). `infra/deploy` stays empty until S4-11 |
 | S4-02 | Partial | dispatcher probing (`ds_ping_interval`) and round-robin over two nodes; no weights or draining |
 | S4-03 | Partial | leases live in Redis via call-control; compose runs one call-control replica; no multi-replica test |
 | S4-04 | Not started | `call-control/src/events.ts` only comments the `call.lost` sequence; no teardown, synthetic CDRs, or Redis rebuild |
@@ -216,7 +216,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 ## Ten biggest gaps
 
 1. No HA (S4-02 to S4-08): every server but the media nodes is a single point of failure; no failover handling (`call.lost`), OpenSIPs clustering, data-store HA, or chaos tests; only one dispatcher path over two nodes.
-2. No tested production deployment: O-1 is accepted (Compose per server now), but there is no topology ADR and no manifests (S4-01, S4-11, `infra/deploy` empty); the `docs/operations` guides are unverified on real servers; the release workflow and image publishing (O-5) are not built.
+2. No tested production deployment: the orchestrator ADR and HA topology exist (S4-01), but there are no manifests (S4-11, `infra/deploy` empty); the `docs/operations` guides are unverified on real servers; the release workflow and image publishing (O-5) are not built.
 3. Release readiness: no security review or penetration test; backup/restore and operations are documented (`docs/operations/operations.md`) but untested, with no failover drills; O-6 still needs a contributor licence agreement and counsel's confirmation.
 4. Queues need a hand-added tier: tier assignments are not loaded into `mod_callcenter` on a running node, so distribution to agents depends on it (G-47 (a), S2-13).
 5. Emergency calling incomplete: no emergency-call notification, carrier-specific location format unresolved (S2-06, G-1, G-33).

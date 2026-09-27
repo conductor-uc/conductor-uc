@@ -16,6 +16,8 @@ These docs turn the [Software Architecture Document](sad.md) into implementation
 | 07 | [Security & permissions](architecture/07-security-and-permissions.md) | AuthN, the grant-based AuthZ model, data classes, audit, secrets |
 | 08 | [Console](architecture/08-console.md) | Flutter web app structure, theming, call-flow builder, live monitoring |
 | 09 | [Engineering conventions](architecture/09-engineering-conventions.md) | API style, testing strategy, observability, CI, coding rules |
+| 10 | [Production topology](architecture/10-production-topology.md) | The highly available layout: server roles, zones, how each component survives a server loss, stable endpoints (Stage 4 target) |
+| — | [Architecture decision records](architecture/adr/README.md) | The long form of significant decisions, starting with [ADR 0001](architecture/adr/0001-orchestrator.md) (container orchestration) |
 | — | [Implementation plan](plan/implementation-plan.md) | Stages 0–8 with task IDs, dependencies, and acceptance criteria |
 | — | [Decisions & open questions](decisions.md) | Decision register, open questions, and gaps/conflicts found in the SAD |
 | — | [Operations and deployment](operations/README.md) | For system administrators: components, ports and firewalls, configuration, DNS and certificates, all-in-one and distributed deployment, day-2 operations |
