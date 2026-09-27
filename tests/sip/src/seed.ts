@@ -43,6 +43,8 @@ import {
 import type { PbxConfigServiceDb } from '@cuc/pbx-config-service/dist/src/schema.js';
 
 export interface SeedResult {
+  /** S4-12: the master org, for a master administrator's sign-in. */
+  readonly masterId: string;
   readonly resellerId: string;
   readonly tenantA: { readonly id: string; readonly fqdn: string };
   readonly tenantB: { readonly id: string; readonly fqdn: string };
@@ -372,6 +374,7 @@ export async function seed(): Promise<SeedResult> {
     }
 
     const result: SeedResult = {
+      masterId: master.id,
       resellerId: reseller.id,
       tenantA: { id: tenantA.id, fqdn: await tenantFqdn(orgDb, tenantA.id) },
       tenantB: { id: tenantB.id, fqdn: await tenantFqdn(orgDb, tenantB.id) },
@@ -590,6 +593,46 @@ export async function createSignInAdmin(
   }
 }
 
+/**
+ * S4-12: a fresh master person with a built-in master role, for the operations console's live
+ * test: `master_admin` operates, `master_support` only observes.
+ */
+export async function createSignInMaster(
+  masterId: string,
+  role: 'master_admin' | 'master_support',
+): Promise<{ readonly userId: string; readonly email: string; readonly password: string }> {
+  const identityDb = createDatabase<IdentityServiceDb>({
+    host: env('IDENTITY_DB_HOST'),
+    port: Number(env('IDENTITY_DB_PORT')),
+    user: env('IDENTITY_DB_USER'),
+    password: env('IDENTITY_DB_PASSWORD'),
+    database: env('IDENTITY_DB_NAME'),
+    poolSize: 2,
+    logger,
+  });
+  try {
+    const users = createUserRepo(identityDb);
+    const roles = createRoleRepo(identityDb);
+    const email = `sip-test-master-${randomBytes(6).toString('hex')}@sip-test.invalid`;
+    const password = randomBytes(24).toString('base64url');
+    const { id: userId } = await users.create(
+      { requestId: 'sip-test-seed' },
+      {
+        orgId: masterId,
+        orgType: 'master',
+        resellerId: null,
+        email,
+        displayName: role === 'master_admin' ? 'SIP test operator' : 'SIP test support',
+        password,
+      },
+    );
+    await roles.assignRole(userId, role, masterId);
+    return { userId, email, password };
+  } finally {
+    await identityDb.destroy();
+  }
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   if (process.argv[2] === 'set-limits') {
     const tenantId = process.argv[3];
@@ -630,6 +673,14 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
     const admin = await createSignInAdmin(tenantId, resellerId, role);
     process.stdout.write(`\n${JSON.stringify(admin)}\n`);
+  } else if (process.argv[2] === 'sign-in-master') {
+    const masterId = process.argv[3];
+    const role = process.argv[4];
+    if (masterId === undefined || (role !== 'master_admin' && role !== 'master_support')) {
+      throw new Error('usage: seed.js sign-in-master <masterId> master_admin|master_support');
+    }
+    const person = await createSignInMaster(masterId, role);
+    process.stdout.write(`\n${JSON.stringify(person)}\n`);
   } else {
     const result = await seed();
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

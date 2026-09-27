@@ -165,6 +165,8 @@ export interface SeedExtension {
 }
 
 export interface SeedResult {
+  /** S4-12: the master org. */
+  readonly masterId: string;
   readonly resellerId: string;
   readonly tenantA: { readonly id: string; readonly fqdn: string };
   readonly tenantB: { readonly id: string; readonly fqdn: string };
@@ -465,6 +467,53 @@ export async function createSignInAdmin(
       'sign-in-admin',
       tenantId,
       resellerId,
+      role,
+    ],
+    { maxBuffer: 16 * 1024 * 1024 },
+  );
+  const start = stdout.lastIndexOf('\n{');
+  return JSON.parse(start === -1 ? stdout : stdout.slice(start + 1)) as {
+    userId: string;
+    email: string;
+    password: string;
+  };
+}
+
+/**
+ * S4-12: a fresh master person (`master_admin` or `master_support`) who can sign in through the
+ * gateway, made the way {@link createSignInAdmin} makes a tenant's.
+ */
+export async function createSignInMaster(
+  masterId: string,
+  role: 'master_admin' | 'master_support',
+): Promise<{ userId: string; email: string; password: string }> {
+  const env = sipTestEnv();
+  const { stdout } = await execFileAsync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      env.network,
+      '-v',
+      `${REPO_ROOT}:/repo`,
+      '-w',
+      '/repo/tests/sip',
+      '-e',
+      `IDENTITY_DB_HOST=${envOr('SIP_TEST_DB_HOST', 'mariadb')}`,
+      '-e',
+      `IDENTITY_DB_PORT=${envOr('SIP_TEST_DB_PORT', '3306')}`,
+      '-e',
+      'IDENTITY_DB_USER=identity_service',
+      '-e',
+      `IDENTITY_DB_PASSWORD=${envOr('IDENTITY_SERVICE_DB_PASSWORD', 'dev-identity-password')}`,
+      '-e',
+      'IDENTITY_DB_NAME=identity_service',
+      'node:22',
+      'node',
+      'dist/src/seed.js',
+      'sign-in-master',
+      masterId,
       role,
     ],
     { maxBuffer: 16 * 1024 * 1024 },
