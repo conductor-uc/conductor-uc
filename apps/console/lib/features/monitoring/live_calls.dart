@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/permissions.dart';
 import '../../core/realtime.dart';
+import '../../core/session.dart';
 import '../pbx/pbx_api.dart';
 
 /// One leg of a live call, as the `tenant:{t}:calls` topic sends it.
@@ -234,14 +236,31 @@ List<LiveCallRow> groupLegs(Iterable<LiveCall> legs) {
 /// The topic name for a tenant's live calls.
 String liveCallsTopic(String tenantId) => 'tenant:$tenantId:calls';
 
-/// The live calls of the tenant being looked at, from the realtime hub. Only
-/// watched while a screen shows them: leaving the screen unsubscribes.
+/// The topic name for the live calls one person may monitor (G-119 (1)): the
+/// gateway's `user:{u}:supervised`, in the same shape as [liveCallsTopic].
+String supervisedCallsTopic(String tenantId, String userId) =>
+    'tenant:$tenantId:user:$userId:supervised';
+
+/// Whether the viewer sees only the calls they may monitor: they may listen,
+/// whisper or barge (perhaps only on some extensions or queues) but do not
+/// hold `monitor.calls`, which shows all of the tenant's.
+final supervisesOnlyProvider = Provider<bool>(
+  (ref) => !ref.watch(canProvider('monitor.calls')),
+);
+
+/// The live calls of the tenant being looked at, from the realtime hub: all of
+/// them for a holder of `monitor.calls`, else the ones the viewer may monitor.
+/// Only watched while a screen shows them: leaving the screen unsubscribes.
 final liveCallsProvider = StreamProvider.autoDispose<LiveCallsView>((ref) {
   final tenant = ref.watch(tenantIdProvider);
   final client = ref.watch(realtimeClientProvider);
   if (tenant == null || client == null) return const Stream.empty();
+  final userId = ref.watch(sessionProvider)?.userId ?? '';
+  final topic = ref.watch(supervisesOnlyProvider)
+      ? supervisedCallsTopic(tenant, userId)
+      : liveCallsTopic(tenant);
   final book = LiveCallBook();
-  return client.watch(liveCallsTopic(tenant)).map(book.apply);
+  return client.watch(topic).map(book.apply);
 });
 
 /// The time now, once a second, so call durations count up. Tests fix it.

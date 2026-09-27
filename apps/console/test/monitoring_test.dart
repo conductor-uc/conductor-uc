@@ -864,6 +864,8 @@ void main() {
     /// Pumps the live calls panel alone, as a tenant person holding [held]
     /// (or a reseller inside a tenant), with [calls] as the snapshot. A press
     /// is answered by [answer].
+    late FakeHub hub;
+
     Future<void> panelWith(
       WidgetTester tester,
       Set<String> held,
@@ -871,7 +873,7 @@ void main() {
       OrgType orgType = OrgType.tenant,
       ResponseBody Function(RequestOptions options)? answer,
     }) async {
-      final hub = FakeHub();
+      hub = FakeHub();
       final dio = Dio()
         ..httpClientAdapter = FakeAdapter(
           answer ?? (_) => jsonBody(const {}, status: 500),
@@ -886,6 +888,7 @@ void main() {
                   expiresIn: 600,
                   orgId: 'org-1',
                   orgType: orgType,
+                  userId: 'user-1',
                   permissions: const [],
                 ),
               ),
@@ -904,7 +907,11 @@ void main() {
       final socket = hub.last;
       socket.reply({'type': 'authenticated'});
       await tester.pumpAndSettle();
-      final topic = subscribedTopic(socket, 'calls');
+      // All of the tenant's calls, or (G-119 (1)) the ones this person may monitor.
+      final topic = [
+        for (final m in socket.sent)
+          if (m['type'] == 'subscribe') m['topic'] as String,
+      ].firstWhere((t) => t.endsWith(':calls') || t.endsWith(':supervised'));
       socket
         ..reply({'type': 'subscribed', 'topic': topic})
         ..reply({
@@ -914,6 +921,60 @@ void main() {
         });
       await tester.pumpAndSettle();
     }
+
+    testWidgets(
+      'G-119 (1): without monitor.calls, a person who may whisper watches the calls they may monitor',
+      (tester) async {
+        await panelWith(
+          tester,
+          {'monitor.whisper'},
+          [
+            leg('a', bridgedTo: 'b'),
+            leg('b', direction: 'outbound', startedSecondsAgo: 64),
+          ],
+        );
+        final subscribed = [
+          for (final m in hub.last.sent)
+            if (m['type'] == 'subscribe') m['topic'],
+        ];
+        expect(subscribed, ['tenant:tenant-1:user:user-1:supervised']);
+        expect(find.byKey(const ValueKey('monitor-whisper-a')), findsOneWidget);
+        expect(find.byKey(const ValueKey('monitor-listen-a')), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'G-119 (1): a holder of monitor.calls still watches every call',
+      (tester) async {
+        await panelWith(
+          tester,
+          {'monitor.calls', 'monitor.whisper'},
+          [leg('a')],
+        );
+        expect(
+          [
+            for (final m in hub.last.sent)
+              if (m['type'] == 'subscribe') m['topic'],
+          ],
+          ['tenant:tenant-1:calls'],
+        );
+      },
+    );
+
+    testWidgets('G-119 (1): never a reseller, whatever it may monitor (H1)', (
+      tester,
+    ) async {
+      await panelWith(
+        tester,
+        {'monitor.whisper'},
+        const [],
+        orgType: OrgType.reseller,
+      );
+      expect(
+        find.text("Your role doesn't include live calls."),
+        findsOneWidget,
+      );
+    });
 
     testWidgets(
       'S5-10: offers each monitor button to its permission, on answered and held calls only',
