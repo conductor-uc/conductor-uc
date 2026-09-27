@@ -6,16 +6,20 @@ import '../../core/session.dart';
 import '../pbx/pbx_api.dart';
 import '../../widgets/page.dart';
 import 'live_calls.dart';
+import 'monitor_controls.dart';
+import 'presence_board.dart';
 import 'recording_controls.dart';
 
-/// Monitoring (08 §5). For now: the tenant's live calls, streamed from the
-/// gateway's realtime hub, with the recording buttons (S5-15). The presence
-/// board and the listen, whisper and barge actions come with S5-09/S5-10.
+/// Monitoring (08 §5): the presence board and the tenant's live calls, both
+/// streamed from the gateway's realtime hub, with the recording buttons
+/// (S5-15) and the listen, whisper and barge buttons (S5-10).
 class MonitoringPage extends ConsumerWidget {
   const MonitoringPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final title = Theme.of(context).textTheme.titleMedium;
+    final showsCalls = ref.watch(showsLiveCallsProvider);
     return PageFrame(
       children: [
         const PageHeader(
@@ -23,13 +27,30 @@ class MonitoringPage extends ConsumerWidget {
           subtitle: 'What is happening on the phones right now.',
         ),
         const SizedBox(height: 16),
-        Text('Live calls', style: Theme.of(context).textTheme.titleMedium),
+        Text('Presence', style: title),
         const SizedBox(height: 8),
-        const Expanded(child: LiveCallsPanel()),
+        // The board takes what it needs, up to a third of the height when the
+        // calls table is below it, and scrolls beyond that.
+        const Flexible(child: PresencePanel()),
+        const SizedBox(height: 24),
+        Text('Live calls', style: title),
+        const SizedBox(height: 8),
+        if (showsCalls)
+          const Expanded(flex: 2, child: LiveCallsPanel())
+        else
+          const LiveCallsPanel(),
       ],
     );
   }
 }
+
+/// Whether the viewer is shown live calls: `private` tenant data, so never a
+/// reseller (rule H1), and anyone else needs `monitor.calls`.
+final showsLiveCallsProvider = Provider<bool>(
+  (ref) =>
+      ref.watch(sessionProvider)?.orgType != OrgType.reseller &&
+      ref.watch(canProvider('monitor.calls')),
+);
 
 /// The tenant's calls in progress, updated as they change. Live calls are
 /// `private` tenant data: a reseller never sees them (rule H1), and anyone else
@@ -44,8 +65,7 @@ class LiveCallsPanel extends ConsumerWidget {
     if (ref.watch(tenantIdProvider) == null) {
       return const Text('Choose a tenant to see its live calls.');
     }
-    if (session?.orgType == OrgType.reseller ||
-        !ref.watch(canProvider('monitor.calls'))) {
+    if (!ref.watch(showsLiveCallsProvider)) {
       return const Text("Your role doesn't include live calls.");
     }
     final view = ref.watch(liveCallsProvider).value;
@@ -63,6 +83,15 @@ class LiveCallsPanel extends ConsumerWidget {
       canControl:
           session?.orgType != OrgType.reseller &&
           ref.watch(canProvider('recording.control')),
+      // Listen, whisper and barge (S5-10): each its own permission, private,
+      // so never a reseller's. `/me` lists a permission held only as a grant
+      // on an extension or a queue as well: the service refuses a call
+      // outside that grant (a snackbar), which the console cannot tell apart.
+      monitorModes: [
+        if (session?.orgType != OrgType.reseller)
+          for (final mode in MonitorMode.values)
+            if (ref.watch(canProvider(mode.permission))) mode,
+      ],
     );
   }
 }
@@ -96,6 +125,7 @@ class _LiveCallsTable extends ConsumerWidget {
     required this.rows,
     required this.tenantId,
     required this.canControl,
+    required this.monitorModes,
   });
 
   final List<LiveCallRow> rows;
@@ -104,12 +134,16 @@ class _LiveCallsTable extends ConsumerWidget {
   /// Whether the viewer may press the recording buttons (`recording.control`).
   final bool canControl;
 
+  /// The monitor buttons the viewer may press (`monitor.listen`, ...).
+  final List<MonitorMode> monitorModes;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(clockProvider).value ?? DateTime.now();
+    final actions = canControl || monitorModes.isNotEmpty;
     return SingleChildScrollView(
       child: SingleChildScrollView(
-        // The recording buttons make a row wider than a narrow window.
+        // The buttons make a row wider than a narrow window.
         scrollDirection: Axis.horizontal,
         child: DataTable(
           columns: [
@@ -118,7 +152,7 @@ class _LiveCallsTable extends ConsumerWidget {
             const DataColumn(label: Text('State')),
             const DataColumn(label: Text('Duration')),
             const DataColumn(label: Text('Recording')),
-            if (canControl) const DataColumn(label: Text('Actions')),
+            if (actions) const DataColumn(label: Text('Actions')),
           ],
           rows: [
             for (final row in rows)
@@ -133,14 +167,28 @@ class _LiveCallsTable extends ConsumerWidget {
                     Text(liveDuration(row.answeredAt ?? row.startedAt, now)),
                   ),
                   DataCell(Text(recordingLabel(row.recordingState))),
-                  if (canControl)
+                  if (actions)
                     DataCell(
-                      RecordingControls(
-                        tenantId: tenantId,
-                        callId: row.id,
-                        actOn: row.first.callUuid,
-                        recording: row.recordingState,
-                        controls: row.controls,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // A ringing call cannot be joined yet.
+                          if (monitorable(row.state))
+                            MonitorControls(
+                              tenantId: tenantId,
+                              callId: row.id,
+                              actOn: row.first.callUuid,
+                              modes: monitorModes,
+                            ),
+                          if (canControl)
+                            RecordingControls(
+                              tenantId: tenantId,
+                              callId: row.id,
+                              actOn: row.first.callUuid,
+                              recording: row.recordingState,
+                              controls: row.controls,
+                            ),
+                        ],
                       ),
                     ),
                 ],
