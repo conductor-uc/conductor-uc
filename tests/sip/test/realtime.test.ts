@@ -383,4 +383,78 @@ describe.skipIf(skipReason !== undefined)('realtime hub (live SIPp)', () => {
       }
     });
   }, 240_000);
+
+  /**
+   * S5-10 (G-122), live: presence from registration and do not disturb. telephony-config polls
+   * OpenSIPs every 5 s (compose's default), so each step waits up to 20 s for the board's state.
+   */
+  it('follows a phone registering, do not disturb on and off, and the phone going away', async () => {
+    const tenantId = seed.tenantVoicemail.id;
+    const fqdn = seed.tenantVoicemail.fqdn;
+    const presenceTopic = `tenant:${tenantId}:presence`;
+    const { rows } = await ok<{ rows: { id: string; number: string }[] }>(
+      'GET',
+      `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/extensions`,
+      undefined,
+      200,
+    );
+    const id402 = rows.find((row) => row.number === '402')?.id;
+    if (id402 === undefined) throw new Error("no seeded extension '402'");
+    const callHandling = `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/extensions/${id402}/call-handling`;
+    await clearRegistration(`402@${fqdn}`);
+
+    const watcher = await HubClient.open(wsUrl, accessToken);
+    /** 402's state as the board shows it: the latest event, else the snapshot. */
+    const stateOf402 = (): unknown => {
+      const events = watcher.events(presenceTopic).filter((e) => e['extension'] === '402');
+      if (events.length > 0) return events.at(-1)?.['state'];
+      const snapshot = watcher.messages.find(
+        (m) => m.type === 'snapshot' && m['topic'] === presenceTopic,
+      );
+      const entries = (snapshot?.['data'] as { extensions?: Message[] } | undefined)?.extensions;
+      return entries?.find((e) => e['extension'] === '402')?.['state'];
+    };
+    const until = async (state: string) => {
+      const deadline = Date.now() + 20_000;
+      while (stateOf402() !== state) {
+        if (Date.now() > deadline) {
+          throw new Error(
+            `402 never became ${state}: ${JSON.stringify(watcher.events(presenceTopic))}`,
+          );
+        }
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    };
+    try {
+      await watcher.subscribe(presenceTopic);
+      await until('offline');
+
+      const phone = startUas({
+        au: '402',
+        ap: seed.extensions[`${fqdn}/402`]?.password ?? '',
+        authUri: fqdn,
+        csvLine: `402;${fqdn}`,
+        containerName: UAS_401,
+      });
+      await phone.ready();
+      await until('idle');
+
+      await ok('PUT', callHandling, { dnd: true }, 200);
+      await until('dnd');
+      await ok('PUT', callHandling, { dnd: false }, 200);
+      await until('idle');
+
+      await stopContainer(UAS_401);
+      await clearRegistration(`402@${fqdn}`);
+      await until('offline');
+
+      // Presence names extensions and states only: never a phone's address.
+      expect(JSON.stringify(watcher.events(presenceTopic))).not.toMatch(
+        /sip:|@|\d+\.\d+\.\d+\.\d+/,
+      );
+    } finally {
+      watcher.close();
+      await ok('PUT', callHandling, { dnd: false }, 200);
+    }
+  }, 180_000);
 });
