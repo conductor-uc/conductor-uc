@@ -219,7 +219,7 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
                     ),
             ),
             Align(
-              alignment: Alignment.centerLeft,
+              alignment: AlignmentDirectional.centerStart,
               child: TextButton.icon(
                 onPressed: () =>
                     launchUrl(Uri.parse(termsUrl), webOnlyWindowName: '_blank'),

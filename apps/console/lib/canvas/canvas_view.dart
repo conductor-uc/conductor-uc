@@ -185,6 +185,16 @@ class _CanvasViewState extends State<CanvasView> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // S9-17: a flow is a diagram laid out left to right, with the positions
+    // it was saved with, in every language; only the text in it follows the
+    // reading direction.
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: _surface(context, scheme),
+    );
+  }
+
+  Widget _surface(BuildContext context, ColorScheme scheme) {
     return LayoutBuilder(
       builder: (context, constraints) {
         _c.viewSize = constraints.biggest;

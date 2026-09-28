@@ -65,7 +65,7 @@ class _TenantPicker extends ConsumerWidget {
     final tenants = ref.watch(tenantsProvider(resellerId));
     final picked = ref.watch(pickedTenantProvider);
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       child: SizedBox(
         width: 320,
         child: tenants.when(

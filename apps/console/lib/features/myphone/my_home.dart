@@ -431,7 +431,10 @@ class _RecordGreetingDialogState extends ConsumerState<RecordGreetingDialog> {
             if (_recording)
               Row(
                 children: [
-                  Icon(Icons.fiber_manual_record, color: Colors.red.shade700),
+                  Icon(
+                    Icons.fiber_manual_record,
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                   const SizedBox(width: 8),
                   Text(formatClock(_seconds)),
                 ],

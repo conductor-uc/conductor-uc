@@ -180,7 +180,7 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
     }
     if (!_asking) {
       return Align(
-        alignment: Alignment.centerLeft,
+        alignment: AlignmentDirectional.centerStart,
         child: Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Wrap(

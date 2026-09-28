@@ -207,10 +207,44 @@ class _AppTableState<T> extends State<AppTable<T>> {
               child: ConstrainedBox(
                 constraints: BoxConstraints(minWidth: constraints.maxWidth),
                 child: DataTable(
-                  showCheckboxColumn: selectable,
-                  sortColumnIndex: _sortColumn,
+                  // S9-17: the selection checkboxes are drawn here, so each
+                  // can be named for screen readers ("Select 101 Alice");
+                  // the table's own are unlabeled and make every cell a
+                  // tap target.
+                  showCheckboxColumn: false,
+                  sortColumnIndex: _sortColumn == null
+                      ? null
+                      : _sortColumn! + (selectable ? 1 : 0),
                   sortAscending: _ascending,
                   columns: [
+                    if (selectable)
+                      DataColumn(
+                        label: Checkbox(
+                          value:
+                              shown.isNotEmpty &&
+                                  shown.every(
+                                    (r) => _selected.contains(widget.rowKey(r)),
+                                  )
+                              ? true
+                              : shown.any(
+                                  (r) => _selected.contains(widget.rowKey(r)),
+                                )
+                              ? null
+                              : false,
+                          tristate: true,
+                          semanticLabel: l10n.tableSelectAll,
+                          onChanged: (_) => setState(() {
+                            final all = shown.every(
+                              (r) => _selected.contains(widget.rowKey(r)),
+                            );
+                            for (final r in shown) {
+                              all
+                                  ? _selected.remove(widget.rowKey(r))
+                                  : _selected.add(widget.rowKey(r));
+                            }
+                          }),
+                        ),
+                      ),
                     for (final (i, c) in widget.columns.indexed)
                       DataColumn(
                         label: Text(c.label),
@@ -240,14 +274,22 @@ class _AppTableState<T> extends State<AppTable<T>> {
                       DataRow(
                         key: ValueKey(widget.rowKey(r)),
                         selected: _selected.contains(widget.rowKey(r)),
-                        onSelectChanged: selectable
-                            ? (on) => setState(
-                                () => on == true
-                                    ? _selected.add(widget.rowKey(r))
-                                    : _selected.remove(widget.rowKey(r)),
-                              )
-                            : null,
                         cells: [
+                          if (selectable)
+                            DataCell(
+                              Checkbox(
+                                value: _selected.contains(widget.rowKey(r)),
+                                semanticLabel: l10n.tableSelectRow(
+                                  widget.columns.first.text?.call(r) ??
+                                      widget.rowKey(r),
+                                ),
+                                onChanged: (on) => setState(
+                                  () => on == true
+                                      ? _selected.add(widget.rowKey(r))
+                                      : _selected.remove(widget.rowKey(r)),
+                                ),
+                              ),
+                            ),
                           for (final c in widget.columns) DataCell(c.cell(r)),
                           if (widget.actions != null)
                             DataCell(

@@ -20,10 +20,14 @@ Future<void> openRoutes(
   await tester.pumpAndSettle();
 }
 
-/// The text of each cell of the routes table, row by row.
+/// The text of each cell of the routes table, row by row (after the
+/// selection checkbox, S9-17).
 List<List<String>> tableRows(WidgetTester tester) => [
   for (final row in tester.widget<DataTable>(find.byType(DataTable)).rows)
-    [for (final cell in row.cells.take(5)) (cell.child as Text).data!],
+    [
+      for (final cell in row.cells.where((c) => c.child is Text).take(5))
+        (cell.child as Text).data!,
+    ],
 ];
 
 Finder field(String label) => find.widgetWithText(TextFormField, label);

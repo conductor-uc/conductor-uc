@@ -91,11 +91,35 @@ Color _onColor(Color background) =>
     ? Colors.white
     : Colors.black;
 
-/// ThemeData from a brand, or from the neutral grayscale palette (02 §5.3).
-ThemeData buildTheme(Brand brand) {
+/// ThemeData from a brand, or from the neutral grayscale palette (02 §5.3),
+/// light or (S9-17) dark.
+///
+/// In dark mode the palette is generated from the brand's color, so it keeps
+/// the brand's hue; the brand's own colors are used as they are only where they
+/// stand out from the dark background (3:1, WCAG's figure for large text and
+/// controls). A dark navy primary would otherwise vanish on a dark surface.
+ThemeData buildTheme(Brand brand, {Brightness brightness = Brightness.light}) {
   final primary = brand.primary ?? _neutralPrimary;
   final secondary = brand.accent ?? _neutralAccent;
-  final scheme = ColorScheme.fromSeed(seedColor: primary).copyWith(
+  final seeded = ColorScheme.fromSeed(
+    seedColor: primary,
+    brightness: brightness,
+  );
+  if (brightness == Brightness.dark) {
+    bool readable(Color c) => contrastRatio(c, seeded.surface) >= 3;
+    final darkPrimary = readable(primary) ? primary : seeded.primary;
+    final darkSecondary = readable(secondary) ? secondary : seeded.secondary;
+    return ThemeData(
+      colorScheme: seeded.copyWith(
+        primary: darkPrimary,
+        onPrimary: _onColor(darkPrimary),
+        secondary: darkSecondary,
+        onSecondary: _onColor(darkSecondary),
+      ),
+      useMaterial3: true,
+    );
+  }
+  final scheme = seeded.copyWith(
     primary: primary,
     onPrimary: _onColor(primary),
     secondary: secondary,

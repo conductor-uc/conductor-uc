@@ -19,31 +19,45 @@ class PresenceLook {
 }
 
 /// The look of each state the topic sends. An unknown one is shown as it
-/// comes, in neutral.
-PresenceLook presenceLook(AppLocalizations l, String state) => switch (state) {
-  'idle' => PresenceLook(
-    l.presenceAvailable,
-    Icons.check_circle_outline,
-    Colors.green.shade800,
-  ),
-  'ringing' => PresenceLook(
-    l.presenceRinging,
-    Icons.ring_volume_outlined,
-    Colors.orange.shade900,
-  ),
-  'on_call' => PresenceLook(l.presenceOnACall, Icons.call, Colors.red.shade700),
-  'dnd' => PresenceLook(
-    l.presenceDoNotDisturb,
-    Icons.do_not_disturb_on_outlined,
-    Colors.purple.shade700,
-  ),
-  'offline' => PresenceLook(
-    l.presenceOffline,
-    Icons.phone_disabled_outlined,
-    Colors.grey.shade700,
-  ),
-  _ => PresenceLook(_unknownLabel(l, state), Icons.help_outline, null),
-};
+/// comes, in neutral. Colors are the shade that reads on the theme's
+/// background: darker on light, lighter on dark (S9-17).
+PresenceLook presenceLook(
+  AppLocalizations l,
+  String state, {
+  Brightness brightness = Brightness.light,
+}) {
+  final dark = brightness == Brightness.dark;
+  Color shade(MaterialColor c, int light, int onDark) =>
+      c[dark ? onDark : light]!;
+  return switch (state) {
+    'idle' => PresenceLook(
+      l.presenceAvailable,
+      Icons.check_circle_outline,
+      shade(Colors.green, 800, 300),
+    ),
+    'ringing' => PresenceLook(
+      l.presenceRinging,
+      Icons.ring_volume_outlined,
+      shade(Colors.orange, 900, 300),
+    ),
+    'on_call' => PresenceLook(
+      l.presenceOnACall,
+      Icons.call,
+      shade(Colors.red, 700, 300),
+    ),
+    'dnd' => PresenceLook(
+      l.presenceDoNotDisturb,
+      Icons.do_not_disturb_on_outlined,
+      shade(Colors.purple, 700, 200),
+    ),
+    'offline' => PresenceLook(
+      l.presenceOffline,
+      Icons.phone_disabled_outlined,
+      shade(Colors.grey, 700, 400),
+    ),
+    _ => PresenceLook(_unknownLabel(l, state), Icons.help_outline, null),
+  };
+}
 
 /// `on_break` reads as "On break"; nothing at all as "Unknown".
 String _unknownLabel(AppLocalizations l, String state) {
@@ -120,7 +134,11 @@ class PresenceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final look = presenceLook(context.l10n, presence.state);
+    final look = presenceLook(
+      context.l10n,
+      presence.state,
+      brightness: Theme.of(context).brightness,
+    );
     final color = look.color ?? theme.colorScheme.outline;
     final name = this.name;
     return MergeSemantics(

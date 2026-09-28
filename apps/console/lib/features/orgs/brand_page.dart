@@ -277,18 +277,18 @@ class _BrandPageState extends ConsumerState<BrandPage> {
                       ),
                     if (_error != null)
                       Align(
-                        alignment: Alignment.centerLeft,
+                        alignment: AlignmentDirectional.centerStart,
                         child: ErrorText(_error!),
                       ),
                     if (_status != null)
                       Align(
-                        alignment: Alignment.centerLeft,
+                        alignment: AlignmentDirectional.centerStart,
                         child: Text(_status!),
                       ),
                     const SizedBox(height: 8),
                     if (canChange)
                       Align(
-                        alignment: Alignment.centerLeft,
+                        alignment: AlignmentDirectional.centerStart,
                         child: FilledButton(
                           onPressed: _busy ? null : _save,
                           child: Text(context.l10n.brandSave),

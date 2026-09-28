@@ -96,13 +96,13 @@ class EmergencyRoutePanel extends ConsumerWidget {
             builder: (data) {
               if (data == null) {
                 return Align(
-                  alignment: Alignment.topLeft,
+                  alignment: AlignmentDirectional.topStart,
                   child: Text(l.routeNoEmergency),
                 );
               }
               final trunk = trunks?.where((t) => t['id'] == data['trunkId']);
               return Align(
-                alignment: Alignment.topLeft,
+                alignment: AlignmentDirectional.topStart,
                 child: Card(
                   margin: EdgeInsets.zero,
                   child: SizedBox(
@@ -126,7 +126,7 @@ class EmergencyRoutePanel extends ConsumerWidget {
                         ),
                         if (canChange)
                           Align(
-                            alignment: Alignment.centerRight,
+                            alignment: AlignmentDirectional.centerEnd,
                             child: TextButton(
                               onPressed: () => _remove(context, ref),
                               child: Text(l.routeRemoveEmergency),
