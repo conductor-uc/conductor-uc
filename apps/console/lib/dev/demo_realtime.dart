@@ -151,8 +151,15 @@ List<Map<String, Object?>> demoQueues(DateTime now) {
       'callsAbandoned': 1,
       'agents': [
         {
+          'extension': '101',
+          'status': demoAgentStatusOf('101'),
+          'activity': 'idle',
+          'callsAnswered': 4,
+          'statusSince': null,
+        },
+        {
           'extension': '103',
-          'status': _agentStatus['103'] ?? 'available',
+          'status': demoAgentStatusOf('103'),
           'activity': 'on_call',
           'callsAnswered': 12,
           'statusSince': null,
@@ -307,9 +314,13 @@ List<Map<String, Object?>> demoQueues(DateTime now) {
   return answer;
 }
 
+/// A demo queue agent's status (S9-20: the demo person, 101, answers too).
+String demoAgentStatusOf(String extension) =>
+    _agentStatus[extension] ?? 'available';
+
 /// Sets a demo queue agent's status, and tells every open queues view.
 (int, Map<String, Object?>) demoAgentStatus(String extension, String status) {
-  if (extension != '103') {
+  if (extension != '101' && extension != '103') {
     return (
       404,
       {'code': 'not_an_agent', 'detail': 'That extension answers no queue.'},

@@ -144,6 +144,8 @@ export const configSchema = Type.Object({
       // S9-13: agents signing in, out and on a break.
       '/v1/tenants/*/me/agent-status=call',
       '/v1/tenants/*/live-agents=call',
+      // S9-20: an agent's own queues, and who waits in them.
+      '/v1/tenants/*/me/queues=call',
       // call-control (S4-12): the operations console's drain, undrain and weight.
       '/v1/platform/nodes=call',
     ],

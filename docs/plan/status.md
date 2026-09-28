@@ -17,7 +17,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
-| S9 Console usability and localization (21) | 19 | 0 | 2 |
+| S9 Console usability and localization (21) | 20 | 0 | 1 |
 | Release readiness (7) | 2 | 3 | 2 |
 | **Total (127)** | **70** | **13** | **44** |
 
@@ -198,7 +198,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S9-17 | Done | Every string in the ARB (#279); accessibility, right to left, dark mode (#280); 08 rewritten (#281) |
 | S9-18 | Done | Pickup groups (pbx-config `/pickup-groups`, `pbx.pickup_group.*`); a person picks up a call ringing within their groups from their home or with `*8` (call-control `/me/pickup`, `pickup-target`; telephony-config answers and intercepts); SIPp-tested |
 | S9-19 | Done | Waiting callers hear the tenant's hold music (telephony-config exports `hold_music` on every tenant call: the latest ready `moh` asset, or a neutral tone), parked and during an attended transfer; an attended transfer's waiting caller rings the person back after 5 minutes (a `sched_api` task on the node, cancelled on complete or cancel). Confirmed live |
-| S9-20 | Not started | Planned 2026-09-28 (G-126) |
+| S9-20 | Done | `queue.agent.manage` (admins and supervisors; grantable per queue, read twin `queue.read`) replaces `call.control` for signing someone else in, out or on a break, checked against the agent's queues; `GET /me/queues` and a **Your queues** card on an agent's home (who waits, their own status). Confirmed live |
 | S9-21 | Not started | Planned 2026-09-28 (G-127) |
 
 ## Cross-cutting release readiness

@@ -311,7 +311,15 @@ const queueStatus = createQueueStatus({
   opensipsSipUri: config.OPENSIPS_SIP_URI,
   logger,
 });
-registerQueueStatusRoutes(app, { status: queueStatus, userExtension });
+registerQueueStatusRoutes(app, {
+  status: queueStatus,
+  userExtension,
+  access: createHttpAccessClient({
+    baseUrl: config.IDENTITY_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+    ttlMs: config.ACCESS_CACHE_TTL_MS,
+  }),
+});
 registerQueueStatusInternalRoutes(app, {
   status: queueStatus,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,

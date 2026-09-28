@@ -72,6 +72,7 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
   'emergency_route.manage',
   'group.manage',
   'queue.manage',
+  'queue.agent.manage',
   'parking_lot.manage',
   'conference_room.manage',
   'schedule.manage',
@@ -150,7 +151,8 @@ const RESELLER_SUPPORT_PERMISSIONS: readonly Permission[] = [
  * live call (`recording.control`, S5-15): pausing while a caller reads out card
  * or medical details is a supervisor's everyday job, within the tenant's rules.
  * And it moves live calls (`call.control`, S9-12): transferring, parking and
- * picking up calls for the people it supervises.
+ * picking up calls for the people it supervises; and signs its agents in, out
+ * or on a break (`queue.agent.manage`, S9-20).
  */
 const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
   'org.view',
@@ -163,6 +165,7 @@ const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
   'monitor.barge',
   'recording.control',
   'call.control',
+  'queue.agent.manage',
   'analytics.view',
   ...SELF_PERMISSIONS,
 ];

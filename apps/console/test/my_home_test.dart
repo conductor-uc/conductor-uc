@@ -42,6 +42,14 @@ class _FakeRecorder implements Recorder {
 /// What the page put in storage: (address, bytes, type).
 typedef _Upload = (String, Uint8List, String);
 
+/// Taps [finder] after scrolling it into view: the home's cards go below the
+/// fold of the test's screen.
+Future<void> _tapBelow(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+}
+
 Future<List<_Upload>> _signIn(
   WidgetTester tester, {
   String email = user,
@@ -164,7 +172,7 @@ void main() {
         tester,
         picked: PickedFile('hello.wav', 'audio/wav', wav),
       );
-      await tester.tap(find.text('Upload a greeting'));
+      await _tapBelow(tester, find.text('Upload a greeting'));
       await tester.pumpAndSettle();
 
       expect(uploads, hasLength(1));
@@ -180,7 +188,7 @@ void main() {
         tester,
         picked: PickedFile('hello.mp3', 'audio/mpeg', Uint8List(4)),
       );
-      await tester.tap(find.text('Upload a greeting'));
+      await _tapBelow(tester, find.text('Upload a greeting'));
       await tester.pumpAndSettle();
       expect(uploads, isEmpty);
       expect(find.text('Choose a WAV file.'), findsOneWidget);
@@ -189,7 +197,7 @@ void main() {
     testWidgets('records a greeting from the microphone', (tester) async {
       final log = <String>[];
       final uploads = await _signIn(tester, recorderLog: log);
-      await tester.tap(find.text('Record a greeting'));
+      await _tapBelow(tester, find.text('Record a greeting'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Start'));
       await tester.pump();
@@ -212,7 +220,7 @@ void main() {
         recorderLog: <String>[],
         refuseMicrophone: true,
       );
-      await tester.tap(find.text('Record a greeting'));
+      await _tapBelow(tester, find.text('Record a greeting'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Start'));
       await tester.pumpAndSettle();
@@ -270,6 +278,37 @@ void main() {
         expect(find.text('Your phone is taking the call.'), findsOneWidget);
         // Taken: nothing is ringing any more.
         expect(find.byKey(const ValueKey('my-pickup')), findsNothing);
+      },
+    );
+  });
+
+  group('an agent\'s own queues (S9-20)', () {
+    testWidgets(
+      'shows who waits in the queues they answer, and changes their own status',
+      (tester) async {
+        resetDemoRecordings();
+        addTearDown(resetDemoRecordings);
+        await _signIn(tester);
+        final card = find.byKey(const ValueKey('my-queues'));
+        await tester.ensureVisible(card);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(of: card, matching: find.text('Support')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: card, matching: find.textContaining('1 waiting')),
+          findsOneWidget,
+        );
+        ChoiceChip chip(String status) =>
+            tester.widget<ChoiceChip>(find.byKey(ValueKey('my-agent-$status')));
+        expect(chip('available').selected, isTrue);
+
+        await tester.tap(find.byKey(const ValueKey('my-agent-on_break')));
+        await tester.pumpAndSettle();
+        expect(find.text('Status changed.'), findsOneWidget);
+        expect(chip('on_break').selected, isTrue);
+        expect(chip('available').selected, isFalse);
       },
     );
   });

@@ -7287,5 +7287,37 @@
   "myPickupButton": "Pick up",
   "@myPickupButton": {
     "description": "A person's own home page. Button: answer this call on my phone."
+  },
+  "myQueuesTitle": "Your queues",
+  "@myQueuesTitle": {
+    "description": "A person's own home page. Card title: the call queues this person answers."
+  },
+  "myQueuesHelp": "Callers waiting for someone to answer, in the queues you take calls for.",
+  "@myQueuesHelp": {
+    "description": "A person's own home page. Queues card explanation."
+  },
+  "myQueueUnnamed": "A queue",
+  "@myQueueUnnamed": {
+    "description": "A person's own home page. Shown for a queue whose name could not be read."
+  },
+  "myAgentStatusLabel": "Your status",
+  "@myAgentStatusLabel": {
+    "description": "A person's own home page. Label above the choice of taking calls, on a break, or not taking calls."
+  },
+  "myAgentAvailable": "Taking calls",
+  "@myAgentAvailable": {
+    "description": "A person's own home page. Queue status choice: ready to be sent queue calls."
+  },
+  "myAgentOnBreak": "On a break",
+  "@myAgentOnBreak": {
+    "description": "A person's own home page. Queue status choice: on a break, no queue calls until they come back."
+  },
+  "myAgentSignedOut": "Not taking calls",
+  "@myAgentSignedOut": {
+    "description": "A person's own home page. Queue status choice: signed out of the queues."
+  },
+  "myAgentStatusSaved": "Status changed.",
+  "@myAgentStatusSaved": {
+    "description": "A person's own home page. Confirmation after changing their queue status."
   }
 }

@@ -91,6 +91,7 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in pbx-config-s
       extensions: h.extensions,
       agents: h.agents,
       queueTiers: h.queueTiers,
+      queues: h.queues,
       internalServiceToken: SERVICE_TOKEN,
     });
     await app.ready();
@@ -766,9 +767,14 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in pbx-config-s
       expect([...asAgent.json<{ agentQueueIds: string[] }>().agentQueueIds].sort()).toEqual(
         [q1.id, q2.id].sort(),
       );
+      // S9-20: with their labels, for the agent's own home.
+      expect(asAgent.json<{ agentQueues: unknown[] }>().agentQueues).toEqual([
+        { id: q1.id, label: 'Q1' },
+        { id: q2.id, label: 'Q2' },
+      ]);
       expect(
         (await app.inject({ method: 'GET', url: url(tenantId, '302'), headers: auth })).json(),
-      ).toEqual({ extensionId: plain.id, number: '302', agentQueueIds: [] });
+      ).toEqual({ extensionId: plain.id, number: '302', agentQueueIds: [], agentQueues: [] });
     });
 
     it('is 404 for a number the tenant does not have, or another tenant’s', async () => {

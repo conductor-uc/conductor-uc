@@ -162,6 +162,7 @@ const OVERRIDES = {
   // S9-13: agents signing in, out and on a break.
   'get /v1/tenants/{tenantId}/me/agent-status': 'getMyAgentStatus',
   'put /v1/tenants/{tenantId}/me/agent-status': 'setMyAgentStatus',
+  'get /v1/tenants/{tenantId}/me/queues': 'getMyQueues',
   'put /v1/tenants/{tenantId}/live-agents/{extension}/status': 'setAgentStatus',
   'delete /v1/tenants/{tenantId}/me/voicemail/messages/{messageId}': 'deleteMyMessage',
   'post /v1/tenants/{tenantId}/me/voicemail/reset-pin': 'resetMyVoicemailPin',

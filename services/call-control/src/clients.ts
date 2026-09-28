@@ -146,6 +146,8 @@ export interface ExtensionScope {
   readonly number: string;
   /** The queues the extension answers as an agent. */
   readonly agentQueueIds: readonly string[];
+  /** The same queues with their labels (S9-20), when pbx-config-service names them. */
+  readonly agentQueues?: readonly { readonly id: string; readonly label: string }[];
 }
 
 /**
@@ -179,10 +181,23 @@ export function createExtensionScopeLookup(options: ClientOptions): ExtensionSco
     ) {
       throw new UpstreamError('pbx-config-service gave an answer this service cannot read');
     }
+    const listed: unknown = body.agentQueues;
+    const named = Array.isArray(listed)
+      ? (listed as unknown[]).filter(
+          (queue): queue is { id: string; label: string } =>
+            typeof queue === 'object' &&
+            queue !== null &&
+            typeof (queue as Record<string, unknown>)['id'] === 'string' &&
+            typeof (queue as Record<string, unknown>)['label'] === 'string',
+        )
+      : undefined;
     return {
       extensionId: body.extensionId,
       number: body.number,
       agentQueueIds: body.agentQueueIds,
+      ...(named === undefined
+        ? {}
+        : { agentQueues: named.map((queue) => ({ id: queue.id, label: queue.label })) }),
     };
   };
 }

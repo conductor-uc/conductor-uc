@@ -1,4 +1,10 @@
-import 'demo_realtime.dart' show demoCallAction, demoLiveCalls;
+import 'demo_realtime.dart'
+    show
+        demoAgentStatus,
+        demoAgentStatusOf,
+        demoCallAction,
+        demoLiveCalls,
+        demoQueues;
 
 import 'dart:convert';
 import 'dart:math' as math;
@@ -80,6 +86,14 @@ class DemoPbx {
         {
           'id': 'ag-1',
           'extensionId': 'ext-3',
+          'maxNoAnswer': 3,
+          'wrapUpSeconds': 10,
+          'rejectDelaySeconds': 10,
+        },
+        // S9-20: the demo person answers Support too, so their home shows it.
+        {
+          'id': 'ag-2',
+          'extensionId': 'ext-1',
           'maxNoAnswer': 3,
           'wrapUpSeconds': 10,
           'rejectDelaySeconds': 10,
@@ -387,6 +401,13 @@ class DemoPbx {
         'agentId': 'ag-1',
         'level': 1,
         'position': 1,
+      },
+      {
+        'id': 'tier-2',
+        'queueId': 'q-1',
+        'agentId': 'ag-2',
+        'level': 1,
+        'position': 2,
       },
     ],
   };
@@ -1920,6 +1941,19 @@ class DemoPbx {
     return null;
   }
 
+  /// The queues the extension [extensionId] answers as an agent (its tiers).
+  List<String> _myQueueIds(String extensionId) {
+    final agentIds = {
+      for (final a in _rows['agents']!)
+        if (a['extensionId'] == extensionId) '${a['id']}',
+    };
+    return {
+      for (final tiers in _queueTiers.values)
+        for (final t in tiers)
+          if (agentIds.contains(t['agentId'])) '${t['queueId']}',
+    }.toList();
+  }
+
   ResponseBody _noExtension() => _problem(
     404,
     'No extension is linked to your account yet. Ask an administrator to link one.',
@@ -1931,7 +1965,7 @@ class DemoPbx {
   /// number from the request: everything is worked out from who signed in.
   ResponseBody? _myPhone(RequestOptions options, String? userId) {
     final match = RegExp(
-      r'^/v1/tenants/[^/]+/me/(extension|directory|call-handling|voicemail|calls|sip-endpoint|pickup)(?:/(.*))?$',
+      r'^/v1/tenants/[^/]+/me/(extension|directory|call-handling|voicemail|calls|sip-endpoint|pickup|queues|agent-status)(?:/(.*))?$',
     ).firstMatch(options.path);
     if (match == null) return null;
     final method = options.method.toUpperCase();
@@ -1968,6 +2002,49 @@ class DemoPbx {
           );
         }
         final (status, body) = demoCallAction('pickup', '$chosen', const {});
+        return status == 200
+            ? _json(body)
+            : _problem(status, '${body['detail']}', code: '${body['code']}');
+      // S9-20: the queues I answer, who waits in them, and my own status.
+      case 'queues':
+        final queueIds = _myQueueIds('${extension['id']}');
+        final live = {
+          for (final q in demoQueues(DateTime.now())) '${q['queueId']}': q,
+        };
+        return _json({
+          'queues': [
+            for (final q in _rows['queues']!)
+              if (queueIds.contains(q['id']))
+                {
+                  'queueId': q['id'],
+                  'label': q['label'],
+                  'waiting': live['${q['id']}']?['waiting'] ?? 0,
+                  'longestWaitingSince':
+                      live['${q['id']}']?['longestWaitingSince'],
+                },
+          ],
+        });
+      case 'agent-status':
+        final number = '${extension['number']}';
+        final queueIds = _myQueueIds('${extension['id']}');
+        if (queueIds.isEmpty) {
+          return _problem(
+            404,
+            'That extension answers no queue.',
+            code: 'not_an_agent',
+          );
+        }
+        if (method == 'GET') {
+          return _json({
+            'extension': number,
+            'status': demoAgentStatusOf(number),
+            'queueIds': queueIds,
+          });
+        }
+        final wanted = options.data is Map
+            ? '${(options.data as Map)['status']}'
+            : '';
+        final (status, body) = demoAgentStatus(number, wanted);
         return status == 200
             ? _json(body)
             : _problem(status, '${body['detail']}', code: '${body['code']}');
