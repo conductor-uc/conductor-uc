@@ -1354,6 +1354,97 @@
         ]
       }
     },
+    "/v1/platform/security-settings": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "requireMasterMfa",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "requireMasterMfa": {
+                      "type": "boolean"
+                    },
+                    "updatedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getSecuritySettings",
+        "tags": [
+          "Platform"
+        ]
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "requireMasterMfa"
+                ],
+                "properties": {
+                  "requireMasterMfa": {
+                    "type": "boolean"
+                  },
+                  "stepUpCode": {
+                    "type": "string",
+                    "maxLength": 16,
+                    "description": "A current code from the acting person’s own authenticator app, confirming this action (G-100)."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "requireMasterMfa",
+                    "updatedAt"
+                  ],
+                  "properties": {
+                    "requireMasterMfa": {
+                      "type": "boolean"
+                    },
+                    "updatedAt": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "saveSecuritySettings",
+        "tags": [
+          "Platform"
+        ]
+      }
+    },
     "/v1/resellers/{id}/brand": {
       "put": {
         "requestBody": {

@@ -91,6 +91,8 @@ export const configSchema = Type.Object({
       '/v1/platform/acme-settings=org',
       '/v1/platform/certificates=org',
       '/v1/platform/network-settings=org',
+      // The platform's sign-in policy: whether the master's users must use two-step verification.
+      '/v1/platform/security-settings=identity',
       // pbx-config-service
       // Desk phones fetching their settings (public; they send Basic credentials).
       '/v1/public/provision=pbx',

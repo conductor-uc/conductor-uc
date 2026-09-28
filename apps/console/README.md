@@ -29,7 +29,8 @@ while acting, and a reseller does not see the private-data sections (voicemail,
 recordings).
 
 Sign-in details for the demo: `master@` is asked for a code, `reseller@` first sets up
-an authenticator (both accept `123456`), any other email signs in directly. Resetting
+an authenticator (both accept `123456`), any other email signs in directly. Under **Security**, `master@` can require two-step verification for the platform's
+administrators; turning it off again asks for your own code (`123456`). Resetting
 someone's two-step verification under **Users** asks for your own code too (`123456`;
 anything else shows the wrong-code message). Open
 `/reset` for password reset (a token of `expired` is rejected on the confirm page) and
@@ -50,8 +51,8 @@ flutter run -d chrome --dart-define=API_BASE_URL=http://localhost:8080
 ```
 
 The gateway allows the console's origin only if its hostname is in the gateway's
-console hostnames. Master and reseller users must complete MFA (07 §1), which the
-console cannot do until S3-04, so only tenant users can sign in for now.
+console hostnames. Reseller users always complete two-step verification (07 §1); master users
+do once it is turned on under **Security**, which a new platform leaves off until it is set up.
 
 ## Checks
 

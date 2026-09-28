@@ -9,6 +9,10 @@ import { createStepUp, type StepUp } from '../src/auth/step-up.js';
 import { createGrantRepo, type GrantRepo } from '../src/repo/grant.repo.js';
 import { createMfaRepo, type MfaRepo } from '../src/repo/mfa.repo.js';
 import { createRoleRepo, type RoleRepo } from '../src/repo/role.repo.js';
+import {
+  createSecuritySettingsRepo,
+  type SecuritySettingsRepo,
+} from '../src/repo/security-settings.repo.js';
 import { createSessionRepo } from '../src/repo/session.repo.js';
 import { createTokenRepo } from '../src/repo/token.repo.js';
 import { createSigningKeyRepo } from '../src/repo/signing-key.repo.js';
@@ -23,6 +27,7 @@ export interface Harness {
   readonly mfa: MfaRepo;
   readonly roles: RoleRepo;
   readonly grants: GrantRepo;
+  readonly securitySettings: SecuritySettingsRepo;
   readonly auth: ReturnType<typeof createAuthService>;
   readonly stepUp: StepUp;
   readonly handle: TestDatabaseHandle;
@@ -69,7 +74,17 @@ export async function startHarness(): Promise<Harness> {
   await signingKeys.ensureCurrentKey();
 
   const tokens = createTokenRepo(db);
-  const auth = createAuthService({ users, sessions, mfa, signingKeys, tokens, kek, ...TEST_TTL });
+  const securitySettings = createSecuritySettingsRepo(db);
+  const auth = createAuthService({
+    users,
+    sessions,
+    mfa,
+    signingKeys,
+    tokens,
+    kek,
+    securitySettings,
+    ...TEST_TTL,
+  });
 
   return {
     db,
@@ -78,6 +93,7 @@ export async function startHarness(): Promise<Harness> {
     mfa,
     roles,
     grants,
+    securitySettings,
     auth,
     stepUp: createStepUp({ mfa, kek }),
     handle,

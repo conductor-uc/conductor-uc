@@ -5,6 +5,7 @@ import { generateTotpSecret, verifyTotpCode } from '../domain/totp.js';
 import { assertPasswordDistinct } from './ambiguity.js';
 import { assertPasswordStrength, verifyPassword } from '../domain/password.js';
 import { mfaSecretAssociatedData, type MfaRepo } from '../repo/mfa.repo.js';
+import type { SecuritySettings } from '../repo/security-settings.repo.js';
 import type { SessionRepo } from '../repo/session.repo.js';
 import type { SigningKeyRepo } from '../repo/signing-key.repo.js';
 import type { LinkIssue, TokenRepo } from '../repo/token.repo.js';
@@ -125,6 +126,8 @@ export interface AuthServiceOptions {
   readonly signingKeyOverlapDays: number;
   readonly passwordResetTtlMinutes: number;
   readonly invitationTtlHours: number;
+  /** The platform's sign-in policy: whether the master's own users must enrol (D-012 as amended). */
+  readonly securitySettings: { get(): Promise<Pick<SecuritySettings, 'requireMasterMfa'>> };
 }
 
 /**
@@ -147,11 +150,23 @@ export function createAuthService(options: AuthServiceOptions) {
     signingKeyOverlapDays,
     passwordResetTtlMinutes,
     invitationTtlHours,
+    securitySettings,
   } = options;
 
-  /** 07 §1: MFA is required for master and reseller users. */
-  function mfaRequired(user: User): boolean {
-    return user.orgType === 'master' || user.orgType === 'reseller';
+  /**
+   * 07 §1 and D-012 as amended 2026-09-28: reseller users must always prove a
+   * second factor. The master's users must when the platform setting says so,
+   * which a fresh install leaves off until the platform is configured; while
+   * it is off, a master user who has enrolled anyway is still asked for their
+   * code, so turning the requirement off never skips a factor someone has.
+   * Tenant users are not asked (O-17).
+   */
+  async function mfaPolicy(user: User): Promise<'required' | 'if_enrolled' | 'none'> {
+    if (user.orgType === 'reseller') return 'required';
+    if (user.orgType === 'master') {
+      return (await securitySettings.get()).requireMasterMfa ? 'required' : 'if_enrolled';
+    }
+    return 'none';
   }
 
   async function activeCandidates(where: OrgTarget | string, email: string) {
@@ -187,9 +202,9 @@ export function createAuthService(options: AuthServiceOptions) {
 
   return {
     /**
-     * Email + password. Returns tokens directly only when the org type needs
-     * no MFA. A master or reseller user always gets a ticket instead — never
-     * a token — until a second factor is proven (07 §1's own acceptance
+     * Email + password. Returns tokens directly only when {@link mfaPolicy}
+     * asks for no second factor. Otherwise the caller gets a ticket instead —
+     * never a token — until a second factor is proven (07 §1's own acceptance
      * criterion: "cannot obtain an access token beyond MFA enrollment").
      */
     async login(
@@ -218,7 +233,8 @@ export function createAuthService(options: AuthServiceOptions) {
 
       await users.recordLogin(user.id);
 
-      if (!mfaRequired(user)) {
+      const policy = await mfaPolicy(user);
+      if (policy === 'none' || (policy === 'if_enrolled' && !user.mfaEnrolled)) {
         const session = await sessions.create(user.id, refreshTokenTtlDays, meta);
         return { status: 'ok', ...(await issueTokens(user, session, ['pwd'])) };
       }
@@ -335,6 +351,11 @@ export function createAuthService(options: AuthServiceOptions) {
       const user = await users.findById(found.userId);
       if (user === undefined || user.status !== 'active')
         throw new InvalidRefreshTokenError('User no longer active.');
+      // Signed in before the master turned the requirement on: the session
+      // ends here, and the next sign-in asks them to enrol.
+      if (!user.mfaEnrolled && (await mfaPolicy(user)) === 'required') {
+        throw new InvalidRefreshTokenError('Two-step verification is now required.');
+      }
 
       const rotated = await sessions.rotate(
         found.id,

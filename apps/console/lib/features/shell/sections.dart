@@ -107,6 +107,13 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       Icons.verified_user_outlined,
       requires: ['domain.read'],
     ),
+    // Whether the platform's administrators must use two-step verification.
+    Section(
+      '/security',
+      'Security',
+      Icons.lock_outline,
+      requires: ['platform.observe'],
+    ),
     _audit,
     _users,
   ],

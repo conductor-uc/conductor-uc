@@ -48,6 +48,7 @@ describe.skipIf(skipReason !== undefined)('password reset, invitations, refresh 
       'invitations',
       'users',
       'outbox',
+      'platform_security_settings',
     ] as const) {
       await h.db.kysely.deleteFrom(table).execute();
     }
@@ -181,6 +182,10 @@ describe.skipIf(skipReason !== undefined)('password reset, invitations, refresh 
     it('sets the cookie after MFA, too, and never before it', async () => {
       const orgId = crypto.randomUUID();
       await makeUser(orgId, 'master');
+      await h.securitySettings.save(
+        { actorId: crypto.randomUUID(), orgId },
+        { requireMasterMfa: true },
+      );
       const start = await login(orgId, PASSWORD, { 'x-refresh-transport': 'cookie' });
       const step = start.json<{
         status: string;

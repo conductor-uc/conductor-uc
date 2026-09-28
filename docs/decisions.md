@@ -21,7 +21,7 @@ Status values:
 | D-009 | Voicemail audio, greetings, and prompts live centrally in S3. Voicemail runs as a Lua app backed by `voicemail-service`, not stock `mod_voicemail` storage. This is required for non-pinned nodes. | **Accepted** (2026-09-25) | S2 | [03 §5](architecture/03-signaling-and-media.md#5-stateless-node-rules-for-features) |
 | D-010 | Queues, parking lots, and conference rooms are pinned to one node at a time through Redis affinity leases | **Accepted** (2026-09-25) | S2 (abstraction) / S4 (multi-node) | [04 §3.3](architecture/04-high-availability.md#33-resource-affinity-leases) |
 | D-011 | Recordings go to a transient node spool, then an uploader pushes them to S3 and deletes the local copy. No durable node storage. | **Accepted** (2026-09-25) | S5 | [03 §6](architecture/03-signaling-and-media.md#6-recording-pipeline-summary) |
-| D-012 | Short-lived EdDSA JWT access tokens + rotating refresh cookies. MFA required for master and reseller users. | **Accepted** (2026-09-25) | S1 | [07 §2](architecture/07-security-and-permissions.md#2-tokens) |
+| D-012 | Short-lived EdDSA JWT access tokens + rotating refresh cookies. MFA required for reseller users. For master users it is a platform setting, off on a fresh install and turned on by a master administrator once the platform is configured (amended 2026-09-28). | **Accepted** (2026-09-25); **amended** by the owner (2026-09-28): the master's requirement became a setting so first-run setup does not need an authenticator app | S1 | [07 §2](architecture/07-security-and-permissions.md#2-tokens) |
 | D-013 | **Reseller access to billing data.** See conflict C-1. | **Accepted** (2026-09-15, issue #95) | S2 | below |
 | D-014 | Five services added to the SAD §7 list: api-gateway, pbx-config-service, telephony-config, call-control, notification-service | **Accepted** (2026-09-25) | S1 | [06](architecture/06-services.md) |
 | D-015 | Voicemail storage core is pulled forward from Phase 5 to Stage 2 (email and transcription stay in Stage 5) | **Accepted** (2026-09-25) | S2 | [plan](plan/implementation-plan.md) |
@@ -65,7 +65,7 @@ New questions raised during breakdown:
 | O-14 | In-browser listen/whisper/barge | Out of scope (no softphone). The supervisor's own SIP device is used. Revisit if WebRTC is ever added. | S5 |
 | O-15 | Bridge SIP "on a call" state into XMPP presence | Nice to have. Optional adapter in S6. | S6 |
 | O-16 | Moving a tenant between resellers | Master-only, audited, post-v1 | Post-v1 |
-| O-17 | Should a tenant be able to require two-step verification for its own users? | Deferred by the owner (2026-09-25). Today only master and reseller users must enrol (D-012). A per-tenant "require two-step" setting would reuse the enrolment flow; decide when a tenant asks. | Later |
+| O-17 | Should a tenant be able to require two-step verification for its own users? | Deferred by the owner (2026-09-25). Today reseller users must enrol, and master users when the platform setting requires it (D-012 as amended). A per-tenant "require two-step" setting would reuse the enrolment flow; decide when a tenant asks. | Later |
 
 ## 3. Conflicts & gaps found in the SAD
 
