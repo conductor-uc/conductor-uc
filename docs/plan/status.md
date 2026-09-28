@@ -17,8 +17,9 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
+| S9 Console usability and localization (17) | 0 | 0 | 17 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (110)** | **70** | **13** | **27** |
+| **Total (127)** | **70** | **13** | **44** |
 
 Milestones: M1 (S1) reached except API-key auth and organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below (and S2-21, retention, added later). M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -173,6 +174,28 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S8-02 | Partial | Yealink template only (`domain/provisioning.ts`); no BLF keys, time zone, or codec settings; no Polycom, Snom, Grandstream |
 | S8-03 | Not started | no vendor redirection integration |
 | S8-04 | Partial | Phones screen (`devicesDef`, `provisioning_dialog.dart`); no key layouts |
+
+## Stage 9
+
+| ID | Status | Evidence |
+|---|---|---|
+| S9-01 | Not started | Planned 2026-09-28 |
+| S9-02 | Not started | Planned 2026-09-28 |
+| S9-03 | Not started | Planned 2026-09-28 |
+| S9-04 | Not started | Planned 2026-09-28 |
+| S9-05 | Not started | Planned 2026-09-28 |
+| S9-06 | Not started | Planned 2026-09-28 |
+| S9-07 | Not started | Planned 2026-09-28 |
+| S9-08 | Not started | Planned 2026-09-28 |
+| S9-09 | Not started | Planned 2026-09-28 |
+| S9-10 | Not started | Planned 2026-09-28 |
+| S9-11 | Not started | Planned 2026-09-28 |
+| S9-12 | Not started | Planned 2026-09-28 |
+| S9-13 | Not started | Planned 2026-09-28 |
+| S9-14 | Not started | Planned 2026-09-28 |
+| S9-15 | Not started | Planned 2026-09-28 |
+| S9-16 | Not started | Planned 2026-09-28 |
+| S9-17 | Not started | Planned 2026-09-28 |
 
 ## Cross-cutting release readiness
 
