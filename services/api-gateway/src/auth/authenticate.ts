@@ -36,7 +36,9 @@ export function registerAuthentication(app: Server, options: AuthenticationOptio
 
     const header = request.headers.authorization;
     if (header === undefined) {
-      throw ProblemError.unauthorized('Authentication required.');
+      throw ProblemError.unauthorized('Authentication required.', {
+        code: 'authentication_required',
+      });
     }
 
     const [scheme, credential] = splitScheme(header);
@@ -47,7 +49,9 @@ export function registerAuthentication(app: Server, options: AuthenticationOptio
         claims = await options.verifier.verify(credential);
       } catch (error) {
         if (error instanceof InvalidAccessTokenError) {
-          throw ProblemError.unauthorized('The access token is invalid or expired.');
+          throw ProblemError.unauthorized('The access token is invalid or expired.', {
+            code: 'access_token_invalid',
+          });
         }
         throw error;
       }
@@ -69,16 +73,15 @@ export function registerAuthentication(app: Server, options: AuthenticationOptio
       // endpoint yet (06 lists it as future scope), so there is nothing here
       // to verify a key against. A distinct 501 rather than a 401 makes that
       // an obviously different failure from "your key is wrong."
-      throw new ProblemError(
-        501,
-        '/problems/not-implemented',
-        'Not implemented',
-        'api_key_auth_not_implemented',
-        { detail: 'API-key authentication is not available yet.' },
-      );
+      throw new ProblemError(501, '/problems/not-implemented', 'Not implemented', {
+        code: 'api_key_auth_not_implemented',
+        detail: 'API-key authentication is not available yet.',
+      });
     }
 
-    throw ProblemError.unauthorized('Unrecognised authentication scheme.');
+    throw ProblemError.unauthorized('Unrecognised authentication scheme.', {
+      code: 'auth_scheme_unsupported',
+    });
   });
 }
 

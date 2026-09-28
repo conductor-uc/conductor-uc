@@ -9,15 +9,17 @@ const NAME_PATTERN = /^[\p{L}\p{N} .,'-]{1,128}$/u;
 
 export class InvalidFlowNameError extends Error {
   override readonly name = 'InvalidFlowNameError';
+
+  constructor(readonly input: string) {
+    super(`'${input}' is not a valid name: 1-128 characters, letters, numbers, and . , ' - only.`);
+  }
 }
 
 /** Trims and validates a proposed name, throwing if it cannot be accepted. */
 export function normalizeFlowName(input: string): string {
   const trimmed = input.trim();
   if (!NAME_PATTERN.test(trimmed)) {
-    throw new InvalidFlowNameError(
-      `'${input}' is not a valid name: 1-128 characters, letters, numbers, and . , ' - only.`,
-    );
+    throw new InvalidFlowNameError(input);
   }
   return trimmed;
 }

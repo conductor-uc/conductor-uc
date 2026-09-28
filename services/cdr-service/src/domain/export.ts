@@ -14,19 +14,33 @@ const MAX_RANGE_DAYS = 366;
 
 export class InvalidExportRangeError extends Error {
   override readonly name = 'InvalidExportRangeError';
+
+  constructor(
+    message: string,
+    /** Stable problem code for the route to return (S9-02). */
+    readonly code: string,
+    readonly params?: Readonly<Record<string, number>>,
+  ) {
+    super(message);
+  }
 }
 
 export function validateExportRange(fromAt: Date, toAt: Date): { fromAt: Date; toAt: Date } {
   if (Number.isNaN(fromAt.getTime()) || Number.isNaN(toAt.getTime())) {
-    throw new InvalidExportRangeError('from and to must be valid RFC 3339 timestamps.');
+    throw new InvalidExportRangeError(
+      'from and to must be valid RFC 3339 timestamps.',
+      'invalid_export_timestamp',
+    );
   }
   if (toAt <= fromAt) {
-    throw new InvalidExportRangeError('to must be after from.');
+    throw new InvalidExportRangeError('to must be after from.', 'export_range_reversed');
   }
   const spanDays = (toAt.getTime() - fromAt.getTime()) / (24 * 60 * 60 * 1000);
   if (spanDays > MAX_RANGE_DAYS) {
     throw new InvalidExportRangeError(
       `from/to cannot span more than ${String(MAX_RANGE_DAYS)} days.`,
+      'export_range_too_long',
+      { maxDays: MAX_RANGE_DAYS },
     );
   }
   return { fromAt, toAt };

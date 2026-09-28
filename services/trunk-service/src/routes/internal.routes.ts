@@ -87,7 +87,10 @@ export function registerInternalRoutes(
 
       const { tenantId, id } = request.params;
       const trunk = await trunks.findForProjection(tenantId, id);
-      if (trunk === undefined) throw ProblemError.notFound('No trunk with that id in that tenant.');
+      if (trunk === undefined)
+        throw ProblemError.notFound('No trunk with that id in that tenant.', {
+          code: 'trunk_not_found',
+        });
       return { ...trunk, codecs: [...trunk.codecs], ips: [...trunk.ips] } satisfies Static<
         typeof ProjectionViewSchema
       >;
@@ -127,7 +130,9 @@ export function registerInternalRoutes(
       const { tenantId, id } = request.params;
       const route = await outboundRoutes.findById({ tenantId }, id);
       if (route === undefined) {
-        throw ProblemError.notFound('No outbound route with that id in that tenant.');
+        throw ProblemError.notFound('No outbound route with that id in that tenant.', {
+          code: 'outbound_route_not_found',
+        });
       }
       return { ...route, trunkIds: [...route.trunkIds] } satisfies Static<
         typeof OutboundRouteViewSchema
@@ -166,7 +171,9 @@ export function registerInternalRoutes(
       const { tenantId } = request.params;
       const route = await emergencyRoutes.find({ tenantId });
       if (route === undefined) {
-        throw ProblemError.notFound('No emergency route for that tenant.');
+        throw ProblemError.notFound('No emergency route for that tenant.', {
+          code: 'emergency_route_not_found',
+        });
       }
       return { ...route, numbers: [...route.numbers] } satisfies Static<
         typeof EmergencyRouteViewSchema
@@ -191,7 +198,9 @@ export function registerInternalRoutes(
 function requireInternalToken(authorization: string | undefined, expected: string): void {
   const presented = bearerToken(authorization);
   if (presented === undefined || !secretEquals(expected, presented)) {
-    throw ProblemError.unauthorized('A valid internal service token is required.');
+    throw ProblemError.unauthorized('A valid internal service token is required.', {
+      code: 'internal_token_invalid',
+    });
   }
 }
 

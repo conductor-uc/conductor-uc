@@ -155,7 +155,9 @@ describe('permission guard', () => {
   });
 
   it('a resolver that cannot tell fails the request rather than allowing it', async () => {
-    const app = await server(() => Promise.reject(ProblemError.unavailable('down')));
+    const app = await server(() =>
+      Promise.reject(ProblemError.unavailable('down', { code: 'test_down' })),
+    );
     const response = await app.inject({
       method: 'GET',
       url: '/v1/tenants/t1/extensions',

@@ -24,7 +24,7 @@ type Json = Record<string, unknown>;
 function internal(app: Server, path: string, body: () => unknown): void {
   app.get(path, { config: { public: true } }, (request) => {
     if (request.headers.authorization !== `Bearer ${TOKEN}`) {
-      throw ProblemError.unauthorized('token');
+      throw ProblemError.unauthorized('token', { code: 'access_token_invalid' });
     }
     return body();
   });

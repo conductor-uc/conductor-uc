@@ -41,6 +41,7 @@ export function registerSecuritySettingsRoutes(
     if (orgType !== 'master') {
       throw ProblemError.forbidden(
         "Only the platform operator can see or change the platform's sign-in settings.",
+        { code: 'security_settings_master_only' },
       );
     }
   }
@@ -67,7 +68,7 @@ export function registerSecuritySettingsRoutes(
       requireMaster(request.context.orgType);
       const { actorId, orgId } = request.context;
       if (actorId === undefined || orgId === undefined) {
-        throw ProblemError.unauthorized('Sign in to continue.');
+        throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
       }
 
       const current = await settings.get();

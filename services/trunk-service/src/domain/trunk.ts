@@ -16,6 +16,13 @@ export class InvalidTrunkConfigError extends Error {
 
 export class InvalidCidrError extends Error {
   override readonly name = 'InvalidCidrError';
+
+  constructor(
+    readonly cidr: string,
+    message: string,
+  ) {
+    super(message);
+  }
 }
 
 export interface CallerIdPolicy {
@@ -96,7 +103,7 @@ export function validateCidr(cidr: string): string {
       .split('.')
       .every((octet) => Number(octet) <= 255);
   if (!isIpv4 && !IPV6_CIDR.test(trimmed)) {
-    throw new InvalidCidrError(`'${cidr}' is not a valid IPv4 or IPv6 CIDR.`);
+    throw new InvalidCidrError(cidr, `'${cidr}' is not a valid IPv4 or IPv6 CIDR.`);
   }
   return trimmed;
 }

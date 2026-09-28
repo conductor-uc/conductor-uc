@@ -10,6 +10,7 @@ import {
   type MessageRepo,
   type VoicemailMessage,
 } from '../repo/message.repo.js';
+import { internalTokenInvalid, messageNotFound } from './problems.js';
 
 const IdParamsSchema = Type.Object({ id: Type.String({ minLength: 1 }) });
 const UploadUrlResponseSchema = Type.Object({
@@ -72,14 +73,14 @@ export function registerUploadRoutes(app: Server, deps: UploadRoutesDeps): void 
   function requireToken(request: { headers: { authorization?: string | undefined } }): void {
     const presented = bearerToken(request.headers.authorization);
     if (presented === undefined || !secretEquals(deps.internalServiceToken, presented)) {
-      throw ProblemError.unauthorized('A valid internal service token is required.');
+      throw internalTokenInvalid();
     }
   }
 
   async function findForUpload(id: string): Promise<VoicemailMessage> {
-    if (!isMessageId(id)) throw ProblemError.notFound('No message with that id.');
+    if (!isMessageId(id)) throw messageNotFound('No message with that id.');
     const found = await messages.findByIdForUpload({}, id);
-    if (found === undefined) throw ProblemError.notFound('No message with that id.');
+    if (found === undefined) throw messageNotFound('No message with that id.');
     return found;
   }
 
@@ -152,7 +153,7 @@ export function registerUploadRoutes(app: Server, deps: UploadRoutesDeps): void 
         return { id: done.id, status: done.status, sizeBytes: done.sizeBytes };
       } catch (error) {
         if (error instanceof MessageAlreadyReadyError) throw alreadyUploaded();
-        if (error instanceof MessageNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MessageNotFoundError) throw messageNotFound(error);
         throw error;
       }
     },

@@ -85,7 +85,8 @@ function toResponse(device: Device) {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidMacError) return ProblemError.badRequest(error.message);
+  if (error instanceof InvalidMacError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_mac_address' });
   // The same answer whichever tenant holds the address: the reply must not say
   // whose phone it is.
   if (error instanceof DeviceMacTakenError) {
@@ -96,7 +97,8 @@ function toProblem(error: unknown): ProblemError {
   if (error instanceof DeviceExtensionNotFoundError) {
     return ProblemError.badRequest(error.message, { code: 'extension_not_found' });
   }
-  if (error instanceof DeviceNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof DeviceNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'device_not_found' });
   throw error;
 }
 
@@ -147,7 +149,8 @@ export function registerDeviceRoutes(
     },
     async (request) => {
       const found = await devices.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No device with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No device with that id.', { code: 'device_not_found' });
       return toResponse(found);
     },
   );
@@ -223,6 +226,7 @@ export function registerDeviceRoutes(
       if (actorId === undefined || actorType === undefined || orgId === undefined) {
         throw ProblemError.unauthorized(
           'An identified actor is required to issue provisioning credentials.',
+          { code: 'actor_required' },
         );
       }
 

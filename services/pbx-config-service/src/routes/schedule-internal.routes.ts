@@ -44,12 +44,16 @@ export function registerScheduleInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const { tenantId, id } = request.params;
       const schedule = await schedules.findById({ tenantId }, id);
       if (schedule === undefined) {
-        throw ProblemError.notFound('No schedule with that id in that tenant.');
+        throw ProblemError.notFound('No schedule with that id in that tenant.', {
+          code: 'schedule_not_found',
+        });
       }
       const at = request.query.at === undefined ? new Date() : new Date(request.query.at);
       return { open: isScheduleOpen(schedule, at), evaluatedAt: at.toISOString() };

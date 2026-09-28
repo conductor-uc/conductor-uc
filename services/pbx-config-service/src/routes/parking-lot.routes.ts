@@ -50,9 +50,15 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidParkingLotError) return ProblemError.badRequest(error.message);
-  if (error instanceof ParkingLotNotFoundError) return ProblemError.notFound(error.message);
-  if (error instanceof ParkingLotSlotOverlapError) return ProblemError.conflict(error.message);
+  if (error instanceof InvalidParkingLotError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_parking_lot' });
+  if (error instanceof ParkingLotNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'parking_lot_not_found' });
+  if (error instanceof ParkingLotSlotOverlapError)
+    return ProblemError.conflict(error.message, {
+      code: 'parking_lot_slots_overlap',
+      params: error.params,
+    });
   throw error;
 }
 
@@ -82,7 +88,10 @@ export function registerParkingLotRoutes(app: Server, parkingLots: ParkingLotRep
     },
     async (request) => {
       const found = await parkingLots.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No parking lot with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No parking lot with that id.', {
+          code: 'parking_lot_not_found',
+        });
       return found;
     },
   );

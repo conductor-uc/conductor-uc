@@ -23,7 +23,9 @@ export function registerPlatformStatusRoutes(
       presented === undefined ||
       !secretEquals(deps.internalServiceToken, presented)
     ) {
-      throw ProblemError.unauthorized('A valid internal service token is required.');
+      throw ProblemError.unauthorized('A valid internal service token is required.', {
+        code: 'internal_token_invalid',
+      });
     }
     return deps.status.read();
   });

@@ -68,7 +68,12 @@ export function registerDomainRoutes(app: Server, repo: DomainRepo, resolver: Dn
         const domain = await repo.registerBaseDomain(request.params.id, request.body.fqdn);
         return reply.status(201).send(toResponse(domain));
       } catch (error) {
-        if (error instanceof InvalidFqdnError) throw ProblemError.badRequest(error.message);
+        if (error instanceof InvalidFqdnError) {
+          throw ProblemError.badRequest(error.message, {
+            code: 'invalid_fqdn',
+            params: { fqdn: request.body.fqdn },
+          });
+        }
         if (error instanceof DomainTakenError) {
           throw ProblemError.conflict(error.message, { code: 'domain_taken' });
         }
@@ -98,7 +103,9 @@ export function registerDomainRoutes(app: Server, repo: DomainRepo, resolver: Dn
     async (request) => {
       const domain = await repo.findBaseDomain(request.params.domainId);
       if (domain === undefined || domain.resellerId !== request.params.id) {
-        throw ProblemError.notFound('No base domain with that id.');
+        throw ProblemError.notFound('No base domain with that id.', {
+          code: 'base_domain_not_found',
+        });
       }
       return toResponse(domain);
     },
@@ -120,7 +127,12 @@ export function registerDomainRoutes(app: Server, repo: DomainRepo, resolver: Dn
         );
         return toResponse(domain);
       } catch (error) {
-        if (error instanceof BaseDomainNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof BaseDomainNotFoundError) {
+          throw ProblemError.notFound(error.message, {
+            code: 'base_domain_not_found',
+            params: { domainId: request.params.domainId },
+          });
+        }
         if (error instanceof DomainNotVerifiedError) {
           throw ProblemError.conflict(error.message, { code: 'domain_not_verified' });
         }
@@ -142,7 +154,10 @@ export function registerDomainRoutes(app: Server, repo: DomainRepo, resolver: Dn
     },
     async (request) => {
       const domain = await repo.findPrimaryTenantDomain(request.params.id);
-      if (domain === undefined) throw ProblemError.notFound('No primary domain for that tenant.');
+      if (domain === undefined)
+        throw ProblemError.notFound('No primary domain for that tenant.', {
+          code: 'tenant_domain_not_found',
+        });
       return domain;
     },
   );

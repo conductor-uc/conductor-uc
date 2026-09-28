@@ -67,8 +67,10 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidMediaAssetError) return ProblemError.badRequest(error.message);
-  if (error instanceof MediaAssetNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof InvalidMediaAssetError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_media_asset' });
+  if (error instanceof MediaAssetNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'media_asset_not_found' });
   if (error instanceof InvalidMediaAssetStatusError) {
     return ProblemError.conflict(error.message, { code: 'invalid_media_asset_status' });
   }
@@ -104,7 +106,10 @@ export function registerMediaAssetRoutes(app: Server, assets: MediaAssetRepo): v
     },
     async (request) => {
       const found = await assets.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No media asset with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No media asset with that id.', {
+          code: 'media_asset_not_found',
+        });
       return toResponse(found);
     },
   );

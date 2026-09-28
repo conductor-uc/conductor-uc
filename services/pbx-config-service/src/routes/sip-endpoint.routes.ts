@@ -77,6 +77,7 @@ export function registerSipEndpointRoutes(
       if (domain === undefined) {
         throw ProblemError.conflict(
           'This tenant has no domain yet, so phones have nothing to register to.',
+          { code: 'tenant_domain_not_found' },
         );
       }
       return {

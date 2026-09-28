@@ -50,9 +50,15 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidConferenceRoomError) return ProblemError.badRequest(error.message);
-  if (error instanceof ConferenceRoomNotFoundError) return ProblemError.notFound(error.message);
-  if (error instanceof ConferenceRoomNumberTakenError) return ProblemError.conflict(error.message);
+  if (error instanceof InvalidConferenceRoomError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_conference_room' });
+  if (error instanceof ConferenceRoomNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'conference_room_not_found' });
+  if (error instanceof ConferenceRoomNumberTakenError)
+    return ProblemError.conflict(error.message, {
+      code: 'conference_room_number_taken',
+      params: error.params,
+    });
   throw error;
 }
 
@@ -91,7 +97,10 @@ export function registerConferenceRoomRoutes(
     },
     async (request) => {
       const found = await conferenceRooms.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No conference room with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No conference room with that id.', {
+          code: 'conference_room_not_found',
+        });
       return found;
     },
   );

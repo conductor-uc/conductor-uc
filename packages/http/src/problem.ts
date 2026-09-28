@@ -4,11 +4,25 @@ import type { Server } from './server-type.js';
 
 export const PROBLEM_CONTENT_TYPE = 'application/problem+json';
 
-/** One field-level validation failure. */
+/** A value a message is built from: never a credential or a request body. */
+export type ProblemParam = string | number | boolean | readonly (string | number | boolean)[];
+
+/**
+ * One field-level validation failure.
+ *
+ * A client shows it under the field it names, in its own language: schema
+ * failures carry the JSON Schema `keyword` (`required`, `minLength`,
+ * `maximum`, ...) with its `params` (`{ limit: 12 }`), and a service's own
+ * checks carry a `code` (`extension_number_taken`). `message` is English, for
+ * clients that translate neither (S9-02, D-018).
+ */
 export interface ProblemFieldError {
   /** JSON Pointer-ish path to the offending field, e.g. `/name`. */
   readonly field: string;
   readonly message: string;
+  readonly keyword?: string;
+  readonly code?: string;
+  readonly params?: Readonly<Record<string, ProblemParam>>;
 }
 
 /**
@@ -21,8 +35,15 @@ export interface Problem {
   readonly type: string;
   readonly title: string;
   readonly status: number;
+  /**
+   * Stable and machine-readable (`extension_number_taken`): what a client
+   * translates and branches on. `detail` is English, for the log and for
+   * clients that do not know the code (S9-02, D-018).
+   */
   readonly code: string;
   readonly detail?: string;
+  /** The values `detail` names, so a client can say the same in its language. */
+  readonly params?: Readonly<Record<string, ProblemParam>>;
   readonly instance?: string;
   readonly errors?: readonly ProblemFieldError[];
   readonly requestId?: string;
@@ -47,7 +68,13 @@ export const PROBLEM_TYPES = {
 export interface ProblemOptions {
   readonly detail?: string;
   readonly errors?: readonly ProblemFieldError[];
-  readonly code?: string;
+  /**
+   * Required (S9-02): every problem a service raises names what went wrong
+   * in a way a client can translate, `snake_case`, specific to the case
+   * (`extension_not_found`, not `not_found`).
+   */
+  readonly code: string;
+  readonly params?: Readonly<Record<string, ProblemParam>>;
 }
 
 /**
@@ -65,20 +92,16 @@ export class ProblemError extends Error {
   readonly status: number;
   readonly code: string;
   readonly errors?: readonly ProblemFieldError[];
+  readonly params?: Readonly<Record<string, ProblemParam>>;
 
-  constructor(
-    status: number,
-    type: string,
-    title: string,
-    code: string,
-    options: ProblemOptions = {},
-  ) {
+  constructor(status: number, type: string, title: string, options: ProblemOptions) {
     super(options.detail ?? title);
     this.status = status;
     this.type = type;
     this.title = title;
-    this.code = options.code ?? code;
+    this.code = options.code;
     if (options.errors !== undefined) this.errors = options.errors;
+    if (options.params !== undefined) this.params = options.params;
   }
 
   toProblem(instance?: string, requestId?: string): Problem {
@@ -88,90 +111,84 @@ export class ProblemError extends Error {
       status: this.status,
       code: this.code,
       ...(this.message === this.title ? {} : { detail: this.message }),
+      ...(this.params === undefined ? {} : { params: this.params }),
       ...(instance === undefined ? {} : { instance }),
       ...(this.errors === undefined ? {} : { errors: this.errors }),
       ...(requestId === undefined ? {} : { requestId }),
     };
   }
 
-  static badRequest(detail?: string, options: ProblemOptions = {}): ProblemError {
-    return new ProblemError(400, PROBLEM_TYPES.validation, 'Invalid request', 'bad_request', {
+  static validation(
+    errors: readonly ProblemFieldError[],
+    detail?: string,
+    code = 'validation_failed',
+  ): ProblemError {
+    return new ProblemError(400, PROBLEM_TYPES.validation, 'Request validation failed', {
+      code,
+      errors,
+      ...(detail === undefined ? {} : { detail }),
+    });
+  }
+
+  static badRequest(detail: string | undefined, options: ProblemOptions): ProblemError {
+    return new ProblemError(400, PROBLEM_TYPES.validation, 'Invalid request', {
       ...options,
       ...(detail === undefined ? {} : { detail }),
     });
   }
 
-  static validation(errors: readonly ProblemFieldError[], detail?: string): ProblemError {
-    return new ProblemError(
-      400,
-      PROBLEM_TYPES.validation,
-      'Request validation failed',
-      'validation_failed',
-      { errors, ...(detail === undefined ? {} : { detail }) },
-    );
-  }
-
-  static unauthorized(detail?: string, options: ProblemOptions = {}): ProblemError {
-    return new ProblemError(
-      401,
-      PROBLEM_TYPES.unauthorized,
-      'Authentication required',
-      'unauthorized',
-      { ...options, ...(detail === undefined ? {} : { detail }) },
-    );
-  }
-
-  static forbidden(detail?: string, options: ProblemOptions = {}): ProblemError {
-    return new ProblemError(403, PROBLEM_TYPES.forbidden, 'Not permitted', 'forbidden', {
+  static unauthorized(detail: string | undefined, options: ProblemOptions): ProblemError {
+    return new ProblemError(401, PROBLEM_TYPES.unauthorized, 'Authentication required', {
       ...options,
       ...(detail === undefined ? {} : { detail }),
     });
   }
 
-  static notFound(detail?: string, options: ProblemOptions = {}): ProblemError {
-    return new ProblemError(404, PROBLEM_TYPES.notFound, 'Not found', 'not_found', {
+  static forbidden(detail: string | undefined, options: ProblemOptions): ProblemError {
+    return new ProblemError(403, PROBLEM_TYPES.forbidden, 'Not permitted', {
       ...options,
       ...(detail === undefined ? {} : { detail }),
     });
   }
 
-  static conflict(detail?: string, options: ProblemOptions = {}): ProblemError {
-    return new ProblemError(409, PROBLEM_TYPES.conflict, 'Conflict', 'conflict', {
+  static notFound(detail: string | undefined, options: ProblemOptions): ProblemError {
+    return new ProblemError(404, PROBLEM_TYPES.notFound, 'Not found', {
       ...options,
       ...(detail === undefined ? {} : { detail }),
     });
   }
 
-  static preconditionFailed(detail?: string, options: ProblemOptions = {}): ProblemError {
-    return new ProblemError(
-      412,
-      PROBLEM_TYPES.preconditionFailed,
-      'Precondition failed',
-      'precondition_failed',
-      { ...options, ...(detail === undefined ? {} : { detail }) },
-    );
+  static conflict(detail: string | undefined, options: ProblemOptions): ProblemError {
+    return new ProblemError(409, PROBLEM_TYPES.conflict, 'Conflict', {
+      ...options,
+      ...(detail === undefined ? {} : { detail }),
+    });
+  }
+
+  static preconditionFailed(detail: string | undefined, options: ProblemOptions): ProblemError {
+    return new ProblemError(412, PROBLEM_TYPES.preconditionFailed, 'Precondition failed', {
+      ...options,
+      ...(detail === undefined ? {} : { detail }),
+    });
   }
 
   /** `If-Match` is required on PATCH/PUT (09 §2). */
-  static preconditionRequired(detail?: string, options: ProblemOptions = {}): ProblemError {
-    return new ProblemError(
-      428,
-      PROBLEM_TYPES.preconditionRequired,
-      'Precondition required',
-      'precondition_required',
-      { ...options, ...(detail === undefined ? {} : { detail }) },
-    );
-  }
-
-  static rateLimited(detail?: string, options: ProblemOptions = {}): ProblemError {
-    return new ProblemError(429, PROBLEM_TYPES.rateLimited, 'Too many requests', 'rate_limited', {
+  static preconditionRequired(detail: string | undefined, options: ProblemOptions): ProblemError {
+    return new ProblemError(428, PROBLEM_TYPES.preconditionRequired, 'Precondition required', {
       ...options,
       ...(detail === undefined ? {} : { detail }),
     });
   }
 
-  static unavailable(detail?: string, options: ProblemOptions = {}): ProblemError {
-    return new ProblemError(503, PROBLEM_TYPES.unavailable, 'Service unavailable', 'unavailable', {
+  static rateLimited(detail: string | undefined, options: ProblemOptions): ProblemError {
+    return new ProblemError(429, PROBLEM_TYPES.rateLimited, 'Too many requests', {
+      ...options,
+      ...(detail === undefined ? {} : { detail }),
+    });
+  }
+
+  static unavailable(detail: string | undefined, options: ProblemOptions): ProblemError {
+    return new ProblemError(503, PROBLEM_TYPES.unavailable, 'Service unavailable', {
       ...options,
       ...(detail === undefined ? {} : { detail }),
     });
@@ -189,11 +206,35 @@ function fieldErrors(error: FastifyError): ProblemFieldError[] {
   return validation.map((entry) => {
     const path = typeof entry.instancePath === 'string' ? entry.instancePath : '';
     const missing = (entry.params as { missingProperty?: string } | undefined)?.missingProperty;
+    const params = schemaParams(entry.params);
     return {
       field: path === '' && missing !== undefined ? `/${missing}` : path === '' ? '/' : path,
       message: entry.message ?? 'is invalid',
+      ...(typeof entry.keyword === 'string' ? { keyword: entry.keyword } : {}),
+      ...(params === undefined ? {} : { params }),
     };
   });
+}
+
+/**
+ * Ajv's `params` for a keyword (`{ limit: 12 }`, `{ allowedValues: [...] }`),
+ * keeping only plain values. They describe the schema, never the request, so
+ * nothing the caller sent is echoed back.
+ */
+function schemaParams(params: unknown): Record<string, ProblemParam> | undefined {
+  if (typeof params !== 'object' || params === null) return undefined;
+  const out: Record<string, ProblemParam> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (['string', 'number', 'boolean'].includes(typeof value)) {
+      out[key] = value as string | number | boolean;
+    } else if (
+      Array.isArray(value) &&
+      value.every((v) => ['string', 'number', 'boolean'].includes(typeof v))
+    ) {
+      out[key] = value as (string | number | boolean)[];
+    }
+  }
+  return Object.keys(out).length === 0 ? undefined : out;
 }
 
 /** Where the failure happened: `body`, `querystring`, `params`, or `headers`. */
@@ -316,10 +357,9 @@ export function registerProblemHandlers(app: Server): void {
   });
 
   app.setNotFoundHandler((request: FastifyRequest, reply: FastifyReply) => {
-    const problem = ProblemError.notFound('No route matches this path.').toProblem(
-      request.url,
-      request.id,
-    );
+    const problem = ProblemError.notFound('No route matches this path.', {
+      code: 'route_not_found',
+    }).toProblem(request.url, request.id);
     void reply.status(404).type(PROBLEM_CONTENT_TYPE).send(problem);
   });
 }

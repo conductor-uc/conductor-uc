@@ -129,6 +129,10 @@ describe.skipIf(skipReason !== undefined)('conference room HTTP routes', () => {
       payload: { label: 'Room B', number: '602', maxMembers: 10 },
     });
     expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: 'conference_room_number_taken',
+      params: { number: '602' },
+    });
   });
 
   it('404s getting a conference room in a different tenant', async () => {

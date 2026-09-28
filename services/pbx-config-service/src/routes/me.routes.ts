@@ -154,7 +154,7 @@ export function registerMeRoutes(
           throw ProblemError.badRequest(error.message, { code: 'invalid_call_handling' });
         }
         if (error instanceof CallHandlingExtensionNotFoundError) {
-          throw ProblemError.notFound(error.message);
+          throw ProblemError.notFound(error.message, { code: 'extension_not_found' });
         }
         throw error;
       }

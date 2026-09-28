@@ -116,6 +116,10 @@ describe.skipIf(skipReason !== undefined)('parking lot HTTP routes', () => {
       payload: { label: 'Lot B', slotStart: 710, slotEnd: 730, timeoutSeconds: 120 },
     });
     expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({
+      code: 'parking_lot_slots_overlap',
+      params: { slotStart: 710, slotEnd: 730, lot: 'Lot A', lotSlotStart: 700, lotSlotEnd: 719 },
+    });
   });
 
   it('404s getting a parking lot in a different tenant', async () => {

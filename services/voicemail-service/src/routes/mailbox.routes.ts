@@ -1,5 +1,5 @@
 import type { DbContext } from '@cuc/db';
-import { ProblemError, Type, type Server, type Static } from '@cuc/http';
+import { type ProblemError, Type, type Server, type Static } from '@cuc/http';
 import type { Storage } from '@cuc/storage';
 
 import {
@@ -13,6 +13,15 @@ import {
   type MailboxRepo,
 } from '../repo/mailbox.repo.js';
 import { MessageNotFoundError, type MessageRepo } from '../repo/message.repo.js';
+import {
+  emailSettingsInvalid,
+  extensionIdRequired,
+  mailboxAlreadyExists,
+  mailboxNotFound,
+  messageNotFound,
+  pinInvalid,
+  readyMessageNotFound,
+} from './problems.js';
 
 const TenantParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
 const MailboxParamsSchema = Type.Object({
@@ -76,14 +85,12 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidExtensionIdError) return ProblemError.badRequest(error.message);
-  if (error instanceof InvalidPinError) return ProblemError.badRequest(error.message);
-  if (error instanceof InvalidEmailSettingsError) return ProblemError.badRequest(error.message);
-  if (error instanceof MailboxAlreadyExistsError) {
-    return ProblemError.conflict(error.message, { code: 'mailbox_already_exists' });
-  }
-  if (error instanceof MailboxNotFoundError) return ProblemError.notFound(error.message);
-  if (error instanceof MessageNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof InvalidExtensionIdError) return extensionIdRequired(error);
+  if (error instanceof InvalidPinError) return pinInvalid(error);
+  if (error instanceof InvalidEmailSettingsError) return emailSettingsInvalid(error);
+  if (error instanceof MailboxAlreadyExistsError) return mailboxAlreadyExists(error);
+  if (error instanceof MailboxNotFoundError) return mailboxNotFound(error);
+  if (error instanceof MessageNotFoundError) return messageNotFound(error);
   throw error;
 }
 
@@ -154,7 +161,7 @@ export function registerMailboxRoutes(
     async (request) => {
       const ctx = ctxFor(request);
       const found = await mailboxes.findById(ctx, request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No mailbox with that id.');
+      if (found === undefined) throw mailboxNotFound();
       return toResponse(ctx, found);
     },
   );
@@ -312,7 +319,7 @@ export function registerMailboxRoutes(
         message.mailboxId !== request.params.id ||
         message.status !== 'ready'
       ) {
-        throw ProblemError.notFound('No ready message with that id in that mailbox.');
+        throw readyMessageNotFound();
       }
       const url = await storage.forTenant(request.params.tenantId).presignGet(message.objectKey);
       return { url };
@@ -330,7 +337,7 @@ export function registerMailboxRoutes(
         const ctx = ctxFor(request);
         const message = await messages.findById(ctx, request.params.messageId);
         if (message === undefined || message.mailboxId !== request.params.id) {
-          throw ProblemError.notFound('No message with that id in that mailbox.');
+          throw messageNotFound('No message with that id in that mailbox.');
         }
         await messages.remove(ctx, request.params.messageId);
       } catch (error) {

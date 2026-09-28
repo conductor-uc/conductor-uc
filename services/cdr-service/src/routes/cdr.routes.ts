@@ -168,7 +168,8 @@ export function registerCdrRoutes(
     },
     async (request) => {
       const found = await cdrs.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No CDR with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No CDR with that id.', { code: 'cdr_not_found' });
       return toCdrResponse(found);
     },
   );
@@ -199,7 +200,12 @@ export function registerCdrRoutes(
           errorMessage: null,
         });
       } catch (error) {
-        if (error instanceof InvalidExportRangeError) throw ProblemError.badRequest(error.message);
+        if (error instanceof InvalidExportRangeError) {
+          throw ProblemError.badRequest(error.message, {
+            code: error.code,
+            ...(error.params === undefined ? {} : { params: error.params }),
+          });
+        }
         throw error;
       }
     },
@@ -213,7 +219,10 @@ export function registerCdrRoutes(
     },
     async (request) => {
       const found = await exports_.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No CDR export with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No CDR export with that id.', {
+          code: 'cdr_export_not_found',
+        });
 
       const downloadUrl =
         found.status === 'ready' && found.objectKey !== null

@@ -46,10 +46,21 @@ export interface PublishedIr {
 
 export class FlowNotFoundError extends Error {
   override readonly name = 'FlowNotFoundError';
+
+  constructor(readonly flowId: string) {
+    super(`No flow with id '${flowId}'.`);
+  }
 }
 
 export class FlowVersionNotFoundError extends Error {
   override readonly name = 'FlowVersionNotFoundError';
+
+  constructor(
+    readonly flowId: string,
+    readonly versionNumber: number,
+  ) {
+    super(`Flow '${flowId}' has no published version number ${String(versionNumber)}.`);
+  }
 }
 
 /** The draft fails `validateGraph` — carries every issue, not just the first. */
@@ -195,7 +206,7 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
     /** Replaces the draft graph wholesale. Does not touch published versions. */
     async updateDraft(ctx: DbContext, id: string, graph: FlowGraphInput): Promise<Flow> {
       const existing = await this.findById(ctx, id);
-      if (existing === undefined) throw new FlowNotFoundError(`No flow with id '${id}'.`);
+      if (existing === undefined) throw new FlowNotFoundError(id);
 
       const now = new Date();
       await db
@@ -211,7 +222,7 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
     /** Pure check, no write: runs the current draft through `validateGraph`. */
     async validateDraft(ctx: DbContext, id: string): Promise<ValidationIssue[]> {
       const existing = await this.findById(ctx, id);
-      if (existing === undefined) throw new FlowNotFoundError(`No flow with id '${id}'.`);
+      if (existing === undefined) throw new FlowNotFoundError(id);
       return validateGraph(existing.draftGraph);
     },
 
@@ -224,7 +235,7 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
     async publish(ctx: DbContext, id: string): Promise<FlowVersionSummary> {
       const { tenantId } = requireTenant(ctx);
       const existing = await this.findById(ctx, id);
-      if (existing === undefined) throw new FlowNotFoundError(`No flow with id '${id}'.`);
+      if (existing === undefined) throw new FlowNotFoundError(id);
 
       let ir: FlowIR;
       try {
@@ -287,7 +298,7 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
     async rollback(ctx: DbContext, id: string, versionNumber: number): Promise<FlowVersionSummary> {
       const { tenantId } = requireTenant(ctx);
       const existing = await this.findById(ctx, id);
-      if (existing === undefined) throw new FlowNotFoundError(`No flow with id '${id}'.`);
+      if (existing === undefined) throw new FlowNotFoundError(id);
 
       let result: FlowVersionSummary | undefined;
 
@@ -299,9 +310,7 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
           .where('version_number', '=', versionNumber)
           .executeTakeFirst();
         if (target === undefined) {
-          throw new FlowVersionNotFoundError(
-            `Flow '${id}' has no published version number ${String(versionNumber)}.`,
-          );
+          throw new FlowVersionNotFoundError(id, versionNumber);
         }
 
         await trx

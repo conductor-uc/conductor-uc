@@ -38,13 +38,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const published = await flows.findPublishedIrWithVersion({ tenantId }, id);
       if (published === undefined) {
-        throw ProblemError.notFound('No published version for that flow in that tenant.');
+        throw ProblemError.notFound('No published version for that flow in that tenant.', {
+          code: 'flow_not_published',
+        });
       }
       return published;
     },

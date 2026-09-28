@@ -62,7 +62,7 @@ function toProblem(error: unknown): ProblemError {
     return ProblemError.badRequest(error.message, { code: 'invalid_call_handling' });
   }
   if (error instanceof CallHandlingExtensionNotFoundError) {
-    return ProblemError.notFound(error.message);
+    return ProblemError.notFound(error.message, { code: 'extension_not_found' });
   }
   throw error;
 }
@@ -110,7 +110,10 @@ export function registerCallHandlingRoutes(
     async (request) => {
       const { actorId, actorType, orgId } = request.context;
       if (actorId === undefined || actorType === undefined || orgId === undefined) {
-        throw ProblemError.unauthorized('An identified actor is required to change call handling.');
+        throw ProblemError.unauthorized(
+          'An identified actor is required to change call handling.',
+          { code: 'actor_required' },
+        );
       }
 
       let saved;

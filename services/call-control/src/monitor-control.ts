@@ -329,6 +329,7 @@ export function createMonitorController(options: MonitorControllerOptions): Moni
           `You do not have the ${permission} permission for this call.`,
           {
             code: 'insufficient_permission',
+            params: { permission },
           },
         );
       }

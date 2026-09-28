@@ -64,6 +64,7 @@ export function registerNetworkRoutes(
       if (actorId === undefined || actorType === undefined || orgId === undefined) {
         throw ProblemError.unauthorized(
           'An identified actor is required to change these settings.',
+          { code: 'actor_required' },
         );
       }
       let publicAddress: string | null;
@@ -118,6 +119,7 @@ export function registerNetworkRoutes(
     if (orgType !== 'master') {
       throw ProblemError.forbidden(
         "Only the platform operator can see or change the platform's address.",
+        { code: 'platform_operator_only' },
       );
     }
   }

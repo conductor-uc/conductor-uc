@@ -6,7 +6,7 @@ import '../../core/api_client.dart';
 import '../../core/session.dart';
 import '../users/users_api.dart';
 
-export '../../core/problem.dart' show problemMessage;
+export '../../core/problem.dart' show problemFieldMessages, problemMessage;
 
 typedef Json = Map<String, dynamic>;
 

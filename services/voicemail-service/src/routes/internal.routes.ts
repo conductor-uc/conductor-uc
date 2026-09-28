@@ -1,11 +1,18 @@
 import { secretEquals } from '@cuc/crypto';
-import { ProblemError, Type, type Server, type Static } from '@cuc/http';
+import { Type, type Server, type Static } from '@cuc/http';
 
 import type { Storage } from '@cuc/storage';
 
 import { spoolFileName } from '../domain/message.js';
 import { MailboxNotFoundError, type MailboxRepo } from '../repo/mailbox.repo.js';
 import { MessageNotFoundError, type MessageRepo } from '../repo/message.repo.js';
+import {
+  extensionHasNoMailbox,
+  internalTokenInvalid,
+  mailboxNotFound,
+  messageNotFound,
+  readyMessageNotFound,
+} from './problems.js';
 
 const MailboxParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
@@ -89,7 +96,7 @@ export function registerInternalRoutes(
   function requireToken(request: { headers: { authorization?: string | undefined } }): void {
     const presented = bearerToken(request.headers.authorization);
     if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-      throw ProblemError.unauthorized('A valid internal service token is required.');
+      throw internalTokenInvalid();
     }
   }
 
@@ -152,7 +159,7 @@ export function registerInternalRoutes(
       requireToken(request);
       const { tenantId, extensionId } = request.params;
       const mailbox = await mailboxes.findByExtensionId({ tenantId }, extensionId);
-      if (mailbox === undefined) throw ProblemError.notFound('That extension has no mailbox.');
+      if (mailbox === undefined) throw extensionHasNoMailbox();
       return toMailboxResponse(tenantId, mailbox);
     },
   );
@@ -167,7 +174,7 @@ export function registerInternalRoutes(
       requireToken(request);
       const { tenantId, id } = request.params;
       const mailbox = await mailboxes.findById({ tenantId }, id);
-      if (mailbox === undefined) throw ProblemError.notFound('No mailbox with that id.');
+      if (mailbox === undefined) throw mailboxNotFound();
       return toMailboxResponse(tenantId, mailbox);
     },
   );
@@ -189,7 +196,7 @@ export function registerInternalRoutes(
         const valid = await mailboxes.verifyPin({ tenantId }, id, request.body.pin);
         return { valid };
       } catch (error) {
-        if (error instanceof MailboxNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MailboxNotFoundError) throw mailboxNotFound(error);
         throw error;
       }
     },
@@ -209,7 +216,7 @@ export function registerInternalRoutes(
       requireToken(request);
       const { tenantId, id } = request.params;
       const mailbox = await mailboxes.findById({ tenantId }, id);
-      if (mailbox === undefined) throw ProblemError.notFound('No mailbox with that id.');
+      if (mailbox === undefined) throw mailboxNotFound();
 
       const { message } = await messages.create({ tenantId }, id, request.body);
       return reply.status(201).send({
@@ -252,7 +259,7 @@ export function registerInternalRoutes(
         request.params.messageId,
       );
       if (message === undefined || message.mailboxId !== request.params.id) {
-        throw ProblemError.notFound('No message with that id in that mailbox.');
+        throw messageNotFound('No message with that id in that mailbox.');
       }
       return toMessageResponse(message);
     },
@@ -271,7 +278,7 @@ export function registerInternalRoutes(
       const { tenantId, id, messageId } = request.params;
       const message = await messages.findById({ tenantId }, messageId);
       if (message === undefined || message.mailboxId !== id || message.status !== 'ready') {
-        throw ProblemError.notFound('No ready message with that id in that mailbox.');
+        throw readyMessageNotFound();
       }
       const bytes = await storage.forTenant(tenantId).getObject(message.objectKey);
       reply.type('audio/wav');
@@ -294,7 +301,7 @@ export function registerInternalRoutes(
         );
         return toMessageResponse(message);
       } catch (error) {
-        if (error instanceof MessageNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MessageNotFoundError) throw messageNotFound(error);
         throw error;
       }
     },
@@ -308,7 +315,7 @@ export function registerInternalRoutes(
       try {
         await messages.remove({ tenantId: request.params.tenantId }, request.params.messageId);
       } catch (error) {
-        if (error instanceof MessageNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MessageNotFoundError) throw messageNotFound(error);
         throw error;
       }
       return reply.status(204).send();
@@ -333,7 +340,7 @@ export function registerInternalRoutes(
         );
         return reply.status(201).send(result);
       } catch (error) {
-        if (error instanceof MailboxNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MailboxNotFoundError) throw mailboxNotFound(error);
         throw error;
       }
     },
@@ -354,7 +361,7 @@ export function registerInternalRoutes(
         );
         return toMailboxResponse(request.params.tenantId, mailbox);
       } catch (error) {
-        if (error instanceof MailboxNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MailboxNotFoundError) throw mailboxNotFound(error);
         throw error;
       }
     },

@@ -48,7 +48,7 @@ export function registerMeRoutes(app: Server, roles: RoleRepo, grants: GrantRepo
     async (request) => {
       const { actorId, orgId, orgType } = request.context;
       if (actorId === undefined || orgId === undefined || orgType === undefined) {
-        throw ProblemError.unauthorized('Sign in to continue.');
+        throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
       }
       if (request.params.orgId !== orgId) {
         throw ProblemError.forbidden('You can only ask about your own organization.', {

@@ -51,6 +51,13 @@ export class ConferenceRoomNotFoundError extends Error {
 /** This room's number is already in use by another room in the same tenant — the `(tenant_id, number)` unique index. */
 export class ConferenceRoomNumberTakenError extends Error {
   override readonly name = 'ConferenceRoomNumberTakenError';
+
+  constructor(
+    message: string,
+    readonly params: { readonly number: string },
+  ) {
+    super(message);
+  }
 }
 
 interface ConferenceRoomRow {
@@ -158,6 +165,7 @@ export function createConferenceRoomRepo(db: Database<PbxConfigServiceDb>, kek: 
         if (isDuplicateKeyError(error)) {
           throw new ConferenceRoomNumberTakenError(
             `Conference room number '${number}' is already in use.`,
+            { number },
           );
         }
         throw error;
@@ -236,6 +244,7 @@ export function createConferenceRoomRepo(db: Database<PbxConfigServiceDb>, kek: 
         if (isDuplicateKeyError(error)) {
           throw new ConferenceRoomNumberTakenError(
             `Conference room number '${number}' is already in use.`,
+            { number },
           );
         }
         throw error;

@@ -68,6 +68,11 @@ no `BuildContext` (formatters, error messages) uses `currentL10n`.
   from nouns ("No ${plural} yet"): other languages inflect them.
 - **Dates, times, durations and numbers** go through `lib/core/format.dart`,
   never by hand.
+- **Errors from the services** are translated by their `code`
+  (`lib/l10n/problems.dart`), with the service's English `detail` as the
+  fallback; field errors are worded from their schema rule (`minLength`,
+  `format`, ...). Add a code's words there when a screen meets it. Every code
+  there must be in `api/problem-codes.json` (`node tool/dump-problem-codes.mjs`).
 - **CI** runs `node tool/check-strings.mjs`, which fails when Dart code gains a
   user-facing literal. The literals that predate the rule are counted per file
   in `tool/strings-baseline.json`; after moving some into the ARB, run

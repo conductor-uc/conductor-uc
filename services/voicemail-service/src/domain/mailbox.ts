@@ -25,8 +25,19 @@ export function validateExtensionId(extensionId: string): string {
   return extensionId;
 }
 
+type EmailSettingsRule =
+  'notify_email_invalid' | 'email_after_invalid' | 'email_delete_requires_attachment';
+
 export class InvalidEmailSettingsError extends Error {
   override readonly name = 'InvalidEmailSettingsError';
+
+  /** Which rule failed: the stable problem code the route answers with (S9-02). */
+  readonly code: EmailSettingsRule;
+
+  constructor(message: string, options: { readonly code: EmailSettingsRule }) {
+    super(message);
+    this.code = options.code;
+  }
 }
 
 export const EMAIL_AFTER_VALUES = ['keep', 'mark_read', 'delete'] as const;
@@ -50,15 +61,22 @@ export function validateEmailSettings(input: {
 }): EmailSettings {
   const trimmed = input.notifyEmail === null ? '' : input.notifyEmail.trim();
   if (trimmed.length > 254 || (trimmed !== '' && !EMAIL_PATTERN.test(trimmed))) {
-    throw new InvalidEmailSettingsError('notifyEmail must be a single valid email address.');
+    throw new InvalidEmailSettingsError('notifyEmail must be a single valid email address.', {
+      code: 'notify_email_invalid',
+    });
   }
   if (!(EMAIL_AFTER_VALUES as readonly string[]).includes(input.afterEmail)) {
-    throw new InvalidEmailSettingsError("afterEmail must be 'keep', 'mark_read' or 'delete'.");
+    throw new InvalidEmailSettingsError("afterEmail must be 'keep', 'mark_read' or 'delete'.", {
+      code: 'email_after_invalid',
+    });
   }
   const afterEmail = input.afterEmail as EmailAfter;
   if (afterEmail === 'delete' && !input.attachAudio) {
     throw new InvalidEmailSettingsError(
       "afterEmail 'delete' requires attachAudio: the email is then the only copy.",
+      {
+        code: 'email_delete_requires_attachment',
+      },
     );
   }
   return {

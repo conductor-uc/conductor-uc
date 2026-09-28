@@ -44,10 +44,14 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidAgentError) return ProblemError.badRequest(error.message);
-  if (error instanceof AgentNotFoundError) return ProblemError.notFound(error.message);
-  if (error instanceof AgentExtensionNotFoundError) return ProblemError.badRequest(error.message);
-  if (error instanceof ExtensionAlreadyAgentError) return ProblemError.conflict(error.message);
+  if (error instanceof InvalidAgentError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_agent' });
+  if (error instanceof AgentNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'agent_not_found' });
+  if (error instanceof AgentExtensionNotFoundError)
+    return ProblemError.badRequest(error.message, { code: 'extension_not_found' });
+  if (error instanceof ExtensionAlreadyAgentError)
+    return ProblemError.conflict(error.message, { code: 'extension_already_agent' });
   throw error;
 }
 
@@ -78,7 +82,8 @@ export function registerAgentRoutes(app: Server, agents: AgentRepo): void {
     },
     async (request) => {
       const found = await agents.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No agent with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No agent with that id.', { code: 'agent_not_found' });
       return found;
     },
   );

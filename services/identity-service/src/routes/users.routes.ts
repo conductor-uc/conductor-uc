@@ -104,7 +104,10 @@ export function registerUserRoutes(
         });
       }
       const updated = await users.update(request.context, orgId, userId, request.body);
-      if (updated === undefined) throw ProblemError.notFound('No such user in this organization.');
+      if (updated === undefined)
+        throw ProblemError.notFound('No such user in this organization.', {
+          code: 'user_not_found',
+        });
       const roleIds = await roles.roleIdsByUserIn(orgId);
       return {
         id: updated.id,
@@ -147,7 +150,7 @@ export function registerUserRoutes(
       const { userId } = request.params;
       const { actorId, orgId: actorOrgId } = request.context;
       if (actorId === undefined || actorOrgId === undefined) {
-        throw ProblemError.unauthorized('Sign in to continue.');
+        throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
       }
       if (userId === actorId) {
         throw ProblemError.conflict('You cannot reset your own two-step verification.', {
@@ -156,7 +159,9 @@ export function registerUserRoutes(
       }
       const target = await users.findById(userId);
       if (target === undefined || target.orgId !== orgId) {
-        throw ProblemError.notFound('No such user in this organization.');
+        throw ProblemError.notFound('No such user in this organization.', {
+          code: 'user_not_found',
+        });
       }
       if (!target.mfaEnrolled) throw notEnrolled();
       await stepUp.require(request, { action: 'user.mfa_reset', targetOrgId: orgId });
@@ -167,14 +172,19 @@ export function registerUserRoutes(
         userId,
       );
       if (result.outcome === 'not_found') {
-        throw ProblemError.notFound('No such user in this organization.');
+        throw ProblemError.notFound('No such user in this organization.', {
+          code: 'user_not_found',
+        });
       }
       if (result.outcome === 'not_enrolled') throw notEnrolled();
       const [user, roleIds] = await Promise.all([
         users.listByOrg(orgId).then((rows) => rows.find((u) => u.id === userId)),
         roles.roleIdsByUserIn(orgId),
       ]);
-      if (user === undefined) throw ProblemError.notFound('No such user in this organization.');
+      if (user === undefined)
+        throw ProblemError.notFound('No such user in this organization.', {
+          code: 'user_not_found',
+        });
       return {
         id: user.id,
         email: user.email,

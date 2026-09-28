@@ -6,7 +6,7 @@ import type { Storage } from '@cuc/storage';
 import type { AccessClient } from '../access.js';
 import { auditFor, requireForTenant, resolveCaller, type Caller } from '../authorize.js';
 import { InvalidPolicyError, validatePolicy, type Policy } from '../domain/policy.js';
-import { InvalidRetentionError } from '../domain/retention.js';
+import { InvalidRetentionError, MAX_RETENTION_DAYS } from '../domain/retention.js';
 import { PolicyConflictError, PolicyNotFoundError, type PolicyRepo } from '../repo/policy.repo.js';
 import type { SettingsRepo } from '../repo/settings.repo.js';
 import { applyLifecycleBackstop } from '../retention.js';
@@ -77,9 +77,18 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidPolicyError) return ProblemError.badRequest(error.message);
-  if (error instanceof InvalidRetentionError) return ProblemError.badRequest(error.message);
-  if (error instanceof PolicyNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof InvalidPolicyError) {
+    return ProblemError.badRequest(error.message, { code: 'recording_policy_invalid' });
+  }
+  if (error instanceof InvalidRetentionError) {
+    return ProblemError.badRequest(error.message, {
+      code: 'recording_retention_invalid',
+      params: { min: 0, max: MAX_RETENTION_DAYS },
+    });
+  }
+  if (error instanceof PolicyNotFoundError) {
+    return ProblemError.notFound(error.message, { code: 'recording_policy_not_found' });
+  }
   if (error instanceof PolicyConflictError) {
     return ProblemError.conflict(error.message, { code: 'policy_exists' });
   }
@@ -268,7 +277,9 @@ export function registerPolicyRoutes(app: Server, deps: PolicyRoutesDeps): void 
       const caller = await authorized(request);
       const { retentionDays, failClosed } = request.body;
       if (retentionDays === undefined && failClosed === undefined) {
-        throw ProblemError.badRequest('Give retentionDays, failClosed, or both.');
+        throw ProblemError.badRequest('Give retentionDays, failClosed, or both.', {
+          code: 'recording_settings_empty',
+        });
       }
       try {
         const saved = await settings.update(

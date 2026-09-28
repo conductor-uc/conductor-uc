@@ -88,17 +88,24 @@ function ctxFor(request: {
 }
 
 function toQueueProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidQueueError) return ProblemError.badRequest(error.message);
-  if (error instanceof QueueNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof InvalidQueueError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_queue' });
+  if (error instanceof QueueNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'queue_not_found' });
   throw error;
 }
 
 function toTierProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidAgentError) return ProblemError.badRequest(error.message);
-  if (error instanceof QueueTierNotFoundError) return ProblemError.notFound(error.message);
-  if (error instanceof QueueForTierNotFoundError) return ProblemError.badRequest(error.message);
-  if (error instanceof AgentForTierNotFoundError) return ProblemError.badRequest(error.message);
-  if (error instanceof AgentAlreadyTieredError) return ProblemError.conflict(error.message);
+  if (error instanceof InvalidAgentError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_queue_tier' });
+  if (error instanceof QueueTierNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'queue_tier_not_found' });
+  if (error instanceof QueueForTierNotFoundError)
+    return ProblemError.badRequest(error.message, { code: 'queue_not_found' });
+  if (error instanceof AgentForTierNotFoundError)
+    return ProblemError.badRequest(error.message, { code: 'agent_not_found' });
+  if (error instanceof AgentAlreadyTieredError)
+    return ProblemError.conflict(error.message, { code: 'agent_already_tiered' });
   throw error;
 }
 
@@ -129,7 +136,8 @@ export function registerQueueRoutes(app: Server, queues: QueueRepo, tiers: Queue
     },
     async (request) => {
       const found = await queues.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No queue with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No queue with that id.', { code: 'queue_not_found' });
       return found;
     },
   );

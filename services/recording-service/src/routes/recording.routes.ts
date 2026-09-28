@@ -120,7 +120,10 @@ function parseDate(value: string | undefined, name: string): Date | undefined {
   if (value === undefined) return undefined;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime()))
-    throw ProblemError.badRequest(`'${name}' is not a valid date.`);
+    throw ProblemError.badRequest(`'${name}' is not a valid date.`, {
+      code: 'recording_date_invalid',
+      params: { field: name },
+    });
   return parsed;
 }
 
@@ -172,13 +175,10 @@ export function registerRecordingRoutes(app: Server, deps: RecordingRoutesDeps):
         { err: error instanceof Error ? error.message : String(error), action },
         'audit publish failed; refusing the request',
       );
-      throw new ProblemError(
-        503,
-        '/problems/unavailable',
-        'Service unavailable',
-        'audit_unavailable',
-        { detail: 'The action could not be recorded, so it was not done. Try again shortly.' },
-      );
+      throw new ProblemError(503, '/problems/unavailable', 'Service unavailable', {
+        code: 'audit_unavailable',
+        detail: 'The action could not be recorded, so it was not done. Try again shortly.',
+      });
     }
   }
 
@@ -189,7 +189,8 @@ export function registerRecordingRoutes(app: Server, deps: RecordingRoutesDeps):
     permission: string,
   ): Promise<Recording> {
     const recording = await recordings.findById(ctx, id);
-    if (recording === undefined) throw ProblemError.notFound('No recording with that id.');
+    if (recording === undefined)
+      throw ProblemError.notFound('No recording with that id.', { code: 'recording_not_found' });
     if (!canForRecording(who, permission, recording)) throw forbidden(permission);
     return recording;
   }
@@ -221,7 +222,10 @@ export function registerRecordingRoutes(app: Server, deps: RecordingRoutesDeps):
       const query = request.query;
       const limit = query.limit === undefined ? undefined : Number(query.limit);
       if (limit !== undefined && (limit < 1 || limit > 200)) {
-        throw ProblemError.badRequest("'limit' must be between 1 and 200.");
+        throw ProblemError.badRequest("'limit' must be between 1 and 200.", {
+          code: 'recording_limit_invalid',
+          params: { min: 1, max: 200 },
+        });
       }
       let page;
       try {
@@ -245,7 +249,9 @@ export function registerRecordingRoutes(app: Server, deps: RecordingRoutesDeps):
                 })),
         });
       } catch (error) {
-        if (error instanceof InvalidCursorError) throw ProblemError.badRequest(error.message);
+        if (error instanceof InvalidCursorError) {
+          throw ProblemError.badRequest(error.message, { code: 'recording_cursor_invalid' });
+        }
         throw error;
       }
       await auditBestEffort(who, 'recording.listed', `tenant:${request.params.tenantId}`);
@@ -263,7 +269,8 @@ export function registerRecordingRoutes(app: Server, deps: RecordingRoutesDeps):
       const who = await caller(request);
       const ctx = ctxFor(request);
       const recording = await recordings.findById(ctx, request.params.id);
-      if (recording === undefined) throw ProblemError.notFound('No recording with that id.');
+      if (recording === undefined)
+        throw ProblemError.notFound('No recording with that id.', { code: 'recording_not_found' });
       const permitted = (
         ['recording.listen', 'recording.download', 'recording.delete'] as const
       ).some((permission) => canForRecording(who, permission, recording));
@@ -343,7 +350,9 @@ export function registerRecordingRoutes(app: Server, deps: RecordingRoutesDeps):
           }),
         );
       } catch (error) {
-        if (error instanceof RecordingNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof RecordingNotFoundError) {
+          throw ProblemError.notFound(error.message, { code: 'recording_not_found' });
+        }
         throw error;
       }
       return reply.status(204).send();

@@ -57,7 +57,9 @@ export function registerLinkRoutes(
   function authorize(header: string | undefined): void {
     const presented = bearerToken(header);
     if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-      throw ProblemError.unauthorized('A valid internal service token is required.');
+      throw ProblemError.unauthorized('A valid internal service token is required.', {
+        code: 'internal_token_invalid',
+      });
     }
   }
 
@@ -66,11 +68,20 @@ export function registerLinkRoutes(
       case 'issued':
         return { token: issue.token, expiresAt: issue.expiresAt.toISOString() };
       case 'not_found':
-        throw ProblemError.notFound(`No such ${what} in that organization.`);
+        throw ProblemError.notFound(`No such ${what} in that organization.`, {
+          code: 'link_not_found',
+          params: { linkKind: what },
+        });
       case 'used':
-        throw ProblemError.conflict(`That ${what} has already been used.`, { code: 'link_used' });
+        throw ProblemError.conflict(`That ${what} has already been used.`, {
+          code: 'link_used',
+          params: { linkKind: what },
+        });
       case 'expired':
-        throw ProblemError.conflict(`That ${what} has expired.`, { code: 'link_expired' });
+        throw ProblemError.conflict(`That ${what} has expired.`, {
+          code: 'link_expired',
+          params: { linkKind: what },
+        });
       case 'user_inactive':
         throw ProblemError.conflict('That user is no longer active.', { code: 'user_inactive' });
     }

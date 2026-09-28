@@ -178,6 +178,13 @@ jobs:
           node apps/console/tool/dump-openapi.mjs
           git diff --exit-code -- apps/console/api/openapi.json
 
+      - name: Console problem-code catalog is current
+        # S9-02: the console translates problems by code, and its tests check
+        # each translated code against this list of what the services send.
+        run: |
+          node apps/console/tool/dump-problem-codes.mjs
+          git diff --exit-code -- apps/console/api/problem-codes.json
+
       - name: Console call-flow IR snapshot is current
         # apps/console/api/callflow-ir.json holds what the call-flow builder
         # must agree with @cuc/callflow-ir on (node schemas, ports, validator

@@ -37,13 +37,18 @@ export function registerUserExtensionInternalRoutes(
         presented === undefined ||
         !secretEquals(internalServiceToken, presented)
       ) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const found = await extensions.findByUserId(
         { tenantId: request.params.tenantId },
         request.params.userId,
       );
-      if (found === undefined) throw ProblemError.notFound('No extension is linked to that user.');
+      if (found === undefined)
+        throw ProblemError.notFound('No extension is linked to that user.', {
+          code: 'no_linked_extension',
+        });
       return { extensionId: found.id, number: found.number };
     },
   );

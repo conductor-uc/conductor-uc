@@ -64,12 +64,13 @@ export function registerRoleRoutes(
   ): Promise<void> {
     const { actorId, orgId } = context;
     if (actorId === undefined || orgId === undefined) {
-      throw ProblemError.unauthorized('Sign in to manage roles.');
+      throw ProblemError.unauthorized('Sign in to manage roles.', { code: 'sign_in_required' });
     }
     const unknown = permissions.find((p) => !isKnownPermission(p));
     if (unknown !== undefined) {
       throw ProblemError.badRequest(`'${unknown}' is not a permission.`, {
         code: 'unknown_permission',
+        params: { permission: unknown },
       });
     }
     const held = await lookup.ofUser(actorId, orgId);
@@ -92,12 +93,13 @@ export function registerRoleRoutes(
       if (!roleId.startsWith(`${org.type}_`)) {
         throw ProblemError.forbidden(`'${roleId}' cannot be assigned inside this organization.`, {
           code: 'role_wrong_tier',
+          params: { roleId },
         });
       }
       return;
     }
     if (!(await roles.listCustomRoles(org.orgId)).some((role) => role.id === roleId)) {
-      throw ProblemError.notFound('No such role in this organization.');
+      throw ProblemError.notFound('No such role in this organization.', { code: 'role_not_found' });
     }
   }
 
@@ -113,7 +115,9 @@ export function registerRoleRoutes(
   /** Assigning or revoking a role reaches only people who belong to the org. */
   async function memberOf(orgId: string, userId: string): Promise<void> {
     const user = await users.findById(userId);
-    if (user?.orgId !== orgId) throw ProblemError.notFound('No such user in this organization.');
+    if (user?.orgId !== orgId) {
+      throw ProblemError.notFound('No such user in this organization.', { code: 'user_not_found' });
+    }
   }
 
   app.get(
@@ -170,7 +174,10 @@ export function registerRoleRoutes(
           .send({ ...created, permissions: [...created.permissions], builtIn: false });
       } catch (error) {
         if (error instanceof RoleNameTakenError) {
-          throw ProblemError.conflict(error.message, { code: 'role_name_taken' });
+          throw ProblemError.conflict(error.message, {
+            code: 'role_name_taken',
+            params: { name: request.body.name },
+          });
         }
         throw error;
       }

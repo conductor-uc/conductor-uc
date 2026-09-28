@@ -134,7 +134,9 @@ export function registerBrandRoutes(
         const brand = await repo.upsertBrand(request.context, request.params.id, request.body);
         return toResponse(brand);
       } catch (error) {
-        if (error instanceof InvalidColorError) throw ProblemError.badRequest(error.message);
+        if (error instanceof InvalidColorError) {
+          throw ProblemError.badRequest(error.message, { code: 'invalid_color' });
+        }
         if (error instanceof InsufficientContrastError) {
           throw ProblemError.badRequest(error.message, { code: 'insufficient_contrast' });
         }
@@ -152,7 +154,9 @@ export function registerBrandRoutes(
     async (request) => {
       const brand = await repo.findBrand(request.params.id);
       if (brand === undefined)
-        throw ProblemError.notFound('No brand configured for that reseller.');
+        throw ProblemError.notFound('No brand configured for that reseller.', {
+          code: 'brand_not_found',
+        });
       return toResponse(brand);
     },
   );
@@ -195,7 +199,12 @@ export function registerBrandRoutes(
         const hostname = await repo.registerConsoleHostname(request.params.id, request.body.fqdn);
         return reply.status(201).send(hostname);
       } catch (error) {
-        if (error instanceof InvalidFqdnError) throw ProblemError.badRequest(error.message);
+        if (error instanceof InvalidFqdnError) {
+          throw ProblemError.badRequest(error.message, {
+            code: 'invalid_fqdn',
+            params: { fqdn: request.body.fqdn },
+          });
+        }
         if (error instanceof ConsoleHostnameTakenError) {
           throw ProblemError.conflict(error.message, { code: 'console_hostname_taken' });
         }
@@ -251,9 +260,10 @@ export function registerBrandRoutes(
     },
     async (request) => {
       const orgId = request.context.orgId;
-      if (orgId === undefined) throw ProblemError.unauthorized('Sign in to continue.');
+      if (orgId === undefined)
+        throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
       const org = await orgs.findById(orgId);
-      if (org === undefined) throw ProblemError.notFound('No such org.');
+      if (org === undefined) throw ProblemError.notFound('No such org.', { code: 'org_not_found' });
       const resellerId =
         org.type === 'reseller' ? org.id : org.type === 'tenant' ? org.resellerId : null;
       if (resellerId === null) return { neutral: true as const };

@@ -37,7 +37,7 @@ export function createOrgAccess(orgs: Pick<OrgClient, 'lineage'>): OrgAccess {
     async resolve(actor, targetOrgId) {
       const { orgId, orgType } = actor;
       if (orgId === undefined || orgType === undefined) {
-        throw ProblemError.unauthorized('Sign in to manage users.');
+        throw ProblemError.unauthorized('Sign in to manage users.', { code: 'sign_in_required' });
       }
       if (targetOrgId === orgId) {
         return {
@@ -54,13 +54,10 @@ export function createOrgAccess(orgs: Pick<OrgClient, 'lineage'>): OrgAccess {
         lineage = await orgs.lineage(targetOrgId);
       } catch (error) {
         if (error instanceof OrgClientError) {
-          throw new ProblemError(
-            503,
-            '/problems/unavailable',
-            'Service unavailable',
-            'org_lookup_unavailable',
-            { detail: 'Could not check that organization. Try again shortly.' },
-          );
+          throw new ProblemError(503, '/problems/unavailable', 'Service unavailable', {
+            code: 'org_lookup_unavailable',
+            detail: 'Could not check that organization. Try again shortly.',
+          });
         }
         throw error;
       }

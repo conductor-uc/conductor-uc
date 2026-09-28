@@ -7,6 +7,7 @@ import 'package:console/core/api_client.dart';
 import 'package:console/dev/demo_backend.dart';
 import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
+import 'package:console/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -101,3 +102,13 @@ Future<void> submitSignIn(WidgetTester tester, String email) async {
     await tester.pumpAndSettle();
   }
 }
+
+/// A bare app around [child] with the console's strings, for widget tests
+/// that do not need the whole console.
+Widget localizedApp(Widget child) => ProviderScope(
+  child: MaterialApp(
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(body: child),
+  ),
+);

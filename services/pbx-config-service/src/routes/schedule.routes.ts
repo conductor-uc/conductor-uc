@@ -50,8 +50,10 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidScheduleError) return ProblemError.badRequest(error.message);
-  if (error instanceof ScheduleNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof InvalidScheduleError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_schedule' });
+  if (error instanceof ScheduleNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'schedule_not_found' });
   throw error;
 }
 
@@ -97,7 +99,8 @@ export function registerScheduleRoutes(app: Server, schedules: ScheduleRepo): vo
     },
     async (request) => {
       const found = await schedules.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No schedule with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No schedule with that id.', { code: 'schedule_not_found' });
       return toResponse(found);
     },
   );

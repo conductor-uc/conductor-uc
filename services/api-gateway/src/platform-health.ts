@@ -89,7 +89,9 @@ export function registerPlatformHealth(app: Server, options: PlatformHealthOptio
     },
     async (request) => {
       if (request.context.orgType !== 'master') {
-        throw ProblemError.forbidden('Only the master can see platform health.');
+        throw ProblemError.forbidden('Only the master can see platform health.', {
+          code: 'platform_master_only',
+        });
       }
       const services = await Promise.all(
         options.targets.map((target) => probe(target, options.timeoutMs)),

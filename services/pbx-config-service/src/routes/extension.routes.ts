@@ -108,9 +108,13 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidExtensionNumberError) return ProblemError.badRequest(error.message);
+  if (error instanceof InvalidExtensionNumberError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_extension_number' });
   if (error instanceof ExtensionNumberTakenError) {
-    return ProblemError.conflict(error.message, { code: 'extension_number_taken' });
+    return ProblemError.conflict(error.message, {
+      code: 'extension_number_taken',
+      params: error.params,
+    });
   }
   if (error instanceof ExtensionUserTakenError) {
     return ProblemError.conflict(error.message, { code: 'extension_user_taken' });
@@ -118,7 +122,8 @@ function toProblem(error: unknown): ProblemError {
   if (error instanceof TenantDomainNotFoundError) {
     return ProblemError.conflict(error.message, { code: 'tenant_domain_not_found' });
   }
-  if (error instanceof ExtensionNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof ExtensionNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'extension_not_found' });
   if (error instanceof EmergencyLocationNotFoundError) {
     return ProblemError.badRequest(error.message, { code: 'emergency_location_not_found' });
   }
@@ -197,7 +202,8 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
     },
     async (request) => {
       const found = await extensions.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No extension with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No extension with that id.', { code: 'extension_not_found' });
       return toResponse(found);
     },
   );
@@ -281,6 +287,7 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
       if (actorId === undefined || actorType === undefined || orgId === undefined) {
         throw ProblemError.unauthorized(
           'An identified actor is required to reveal a SIP credential.',
+          { code: 'actor_required' },
         );
       }
 
@@ -327,6 +334,7 @@ export function registerExtensionRoutes(app: Server, extensions: ExtensionRepo, 
       if (actorId === undefined || actorType === undefined || orgId === undefined) {
         throw ProblemError.unauthorized(
           'An identified actor is required to reset a SIP credential.',
+          { code: 'actor_required' },
         );
       }
 
