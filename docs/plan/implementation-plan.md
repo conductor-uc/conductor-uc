@@ -302,7 +302,7 @@ Stage 3's non-telephony screens can start as soon as Stage 1 lands, in parallel 
 **S3-04 Auth screens.** Login, MFA enroll and verify, password reset, and accept invitation. Refresh cookie handling and silent refresh.
 *Done when:* integration tests cover the full login and MFA flows on the web build.
 
-**S3-05 Shell.** Role-based navigation ([08 §3](../architecture/08-console.md#3-navigation-by-role)), a permission-aware UI helper, the act-as-descendant banner, and error and forbidden pages.
+**S3-05 Shell.** Role-based navigation ([08 §4](../architecture/08-console.md#4-navigation)), a permission-aware UI helper, the act-as-descendant banner, and error and forbidden pages.
 *Done when:* a reseller user never sees private-data navigation entries, and direct URL access shows the forbidden page (the server also returns 403).
 
 **S3-06 to S3-08 CRUD screens.** List, detail, create, and edit screens for each resource, with server-side validation messages, optimistic-concurrency conflict handling (ETag), and empty states. Each resource is one PR.
