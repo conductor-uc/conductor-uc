@@ -1,3 +1,4 @@
+import { ORG_DELETED_EVENTS } from '@cuc/events';
 import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
@@ -14,6 +15,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * event with no single owning table).
  */
 export const flowEvents = defineEvents({
+  // S1-16 (G-11): org-service's deletions, which this service acts on.
+  ...ORG_DELETED_EVENTS,
   /**
    * Fired whenever the *active* published version of a flow changes — both
    * `:publish` (a new version becomes active) and `:rollback` (an older

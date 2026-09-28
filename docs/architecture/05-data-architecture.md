@@ -120,7 +120,7 @@ No business tables of its own either — `outbox`/`consumed_events` only. Call o
 
 ## 4. Object storage layout (D-011, O-9)
 
-Default: **one bucket per tenant**, as the SAD specifies. It sits behind a `@cuc/storage` abstraction that also supports a **prefix-per-tenant** mode, because some S3-compatible providers cap the number of buckets per account.
+Default: **one bucket per tenant**, as the SAD specifies. A deleted tenant's objects, whichever service wrote them, are removed once by org-service (`purgeTenant`: every object, then the bucket; or everything under the tenant's prefix of the shared bucket; S1-16, G-11 (3)). It sits behind a `@cuc/storage` abstraction that also supports a **prefix-per-tenant** mode, because some S3-compatible providers cap the number of buckets per account.
 
 ```
 bucket: {STORAGE_BUCKET_PREFIX}-t-{tenantShortId}      (per-tenant mode)

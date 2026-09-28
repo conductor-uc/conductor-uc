@@ -15,6 +15,11 @@ export {
   type EventHandler,
 } from './consumer.js';
 export {
+  createOrgDeletedConsumer,
+  ORG_DELETED_EVENTS,
+  type OrgDeletedConsumerOptions,
+} from './org-deleted.js';
+export {
   enqueueEvent,
   envelopeFromRow,
   newEventId,

@@ -1,3 +1,4 @@
+import { ORG_DELETED_EVENTS } from '@cuc/events';
 import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
@@ -13,6 +14,8 @@ const policyData = Type.Object({ policyId: Type.String({ minLength: 1 }) });
 const recordingData = Type.Object({ recordingId: Type.String({ minLength: 1 }) });
 
 export const recordingEvents = defineEvents({
+  // S1-16 (G-11): org-service's deletions, which this service acts on.
+  ...ORG_DELETED_EVENTS,
   'recording.policy.created': {
     schemaVersion: 1,
     description: 'A recording policy was created.',

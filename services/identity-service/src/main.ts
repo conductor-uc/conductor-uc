@@ -45,6 +45,7 @@ import { registerRoleRoutes } from './routes/roles.routes.js';
 import { registerSecuritySettingsRoutes } from './routes/security-settings.routes.js';
 import { registerUserRoutes } from './routes/users.routes.js';
 import type { IdentityServiceDb } from './schema.js';
+import { createOrgDeletionConsumer } from './org-deletion.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -103,6 +104,11 @@ const auditRepo = createAuditRepo(db);
 const auditConsumer = createAuditConsumer(db, bus, logger, auditRepo);
 await auditConsumer.ensure();
 const auditConsumerLoop = auditConsumer.run();
+
+// S1-16 (G-11): a deleted org's people and access go when org-service says so.
+const orgDeletion = createOrgDeletionConsumer(db, bus, logger);
+await orgDeletion.ensure();
+const orgDeletionLoop = orgDeletion.run();
 
 const userRepo = createUserRepo(db);
 const roleRepo = createRoleRepo(db);
@@ -242,12 +248,14 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   relay.stop();
   auditConsumer.stop();
+  orgDeletion.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   await relayLoop;
   await auditConsumerLoop;
+  await orgDeletionLoop;
   await bus.close();
   await kekRewrap.stop();
   await partitions.stop();

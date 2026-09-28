@@ -66,6 +66,7 @@ describe.skipIf(skipReason !== undefined)('org consumer', () => {
       | 'org.tenant.resumed'
       | 'org.tenant.deletion_requested'
       | 'org.tenant.deletion_cancelled'
+      | 'org.tenant.deleted'
       | 'org.domain.added',
     data: Record<string, unknown>,
   ): Promise<string> {
@@ -263,6 +264,35 @@ describe.skipIf(skipReason !== undefined)('org consumer', () => {
     await runOnceUntilHandled(c);
     expect(await h.opensipsProjection.listDomains()).toContain(fqdn);
     expect((await h.readModel.findTenant(h.db.kysely, tenantId))?.status).toBe('active');
+  }, 60000);
+
+  it('S1-16: a deleted tenant leaves the SIP edge and the read model the media nodes use', async () => {
+    const c = consumer();
+    await c.ensure();
+    const tenantId = crypto.randomUUID();
+    const fqdn = `gone-${tenantId.slice(0, 8)}.platform.test`;
+    await publish('org.tenant.created', {
+      orgId: tenantId,
+      slug: 'gone',
+      name: 'Gone',
+      parentId: crypto.randomUUID(),
+    });
+    await runOnceUntilHandled(c);
+    await publish('org.domain.added', {
+      domainId: crypto.randomUUID(),
+      fqdn,
+      scope: 'tenant',
+      ownerId: tenantId,
+    });
+    await runOnceUntilHandled(c);
+    expect(await h.opensipsProjection.listDomains()).toContain(fqdn);
+
+    await publish('org.tenant.deleted', { orgId: tenantId });
+    await runOnceUntilHandled(c);
+
+    expect(await h.opensipsProjection.listDomains()).not.toContain(fqdn);
+    expect(await h.readModel.findTenant(h.db.kysely, tenantId)).toBeUndefined();
+    expect(await h.readModel.findDomain(h.db.kysely, tenantId)).toBeUndefined();
   }, 60000);
 
   it('redelivery does not re-project twice (dedupe via consumed_events)', async () => {

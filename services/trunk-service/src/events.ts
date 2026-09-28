@@ -1,3 +1,4 @@
+import { ORG_DELETED_EVENTS } from '@cuc/events';
 import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
@@ -7,6 +8,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * `trunk.emergency_route.created|updated|deleted`, the same thin-event shape).
  */
 export const trunkEvents = defineEvents({
+  // S1-16 (G-11): org-service's deletions, which this service acts on.
+  ...ORG_DELETED_EVENTS,
   'trunk.trunk.created': {
     schemaVersion: 1,
     description: 'A trunk was created for a tenant.',

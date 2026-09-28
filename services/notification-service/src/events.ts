@@ -1,3 +1,4 @@
+import { ORG_DELETED_EVENTS } from '@cuc/events';
 import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
@@ -12,6 +13,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * when this service sends the email (`identity-client.ts`).
  */
 export const notificationEvents = defineEvents({
+  // S1-16 (G-11): org-service's deletions, which this service acts on.
+  ...ORG_DELETED_EVENTS,
   'identity.user.password_reset_requested': {
     schemaVersion: 2,
     description:

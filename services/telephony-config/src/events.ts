@@ -1,3 +1,4 @@
+import { ORG_DELETED_EVENTS } from '@cuc/events';
 import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
@@ -20,6 +21,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * ordinary dual-publish discipline 05 §5 already asks of every event change.
  */
 export const telephonyEvents = defineEvents({
+  // S1-16 (G-11): org-service's deletions.
+  ...ORG_DELETED_EVENTS,
   'org.tenant.created': {
     schemaVersion: 1,
     description: 'A tenant org was created under a reseller.',

@@ -16,6 +16,7 @@ import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerPolicyRoutes } from './routes/policy.routes.js';
 import { registerRecordingRoutes } from './routes/recording.routes.js';
 import type { RecordingServiceDb } from './schema.js';
+import { createOrgDeletionConsumer } from './org-deletion.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -62,6 +63,11 @@ const relay = createRelay({
   retentionDays: config.OUTBOX_RETENTION_DAYS,
 });
 const relayLoop = relay.run();
+
+// S1-16 (G-11): a deleted org's rows go when org-service says so.
+const orgDeletion = createOrgDeletionConsumer(db, bus, logger);
+await orgDeletion.ensure();
+const orgDeletionLoop = orgDeletion.run();
 
 const storage = storageFromConfig(config, logger);
 const policies = createPolicyRepo(db);
@@ -134,7 +140,9 @@ async function shutdown(signal: string): Promise<void> {
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
+  orgDeletion.stop();
   await relayLoop;
+  await orgDeletionLoop;
   await bus.close();
   await db.destroy();
   logger.info('shutdown complete');
