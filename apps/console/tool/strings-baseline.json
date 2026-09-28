@@ -25,7 +25,6 @@
   "lib/features/pbx/call_handling_dialog.dart": 24,
   "lib/features/pbx/connect_phone_dialog.dart": 18,
   "lib/features/pbx/provisioning_dialog.dart": 11,
-  "lib/features/pbx/resource_form.dart": 5,
   "lib/features/pbx/resource_page.dart": 13,
   "lib/features/pbx/resource.dart": 63,
   "lib/features/pbx/schedule_fields.dart": 13,

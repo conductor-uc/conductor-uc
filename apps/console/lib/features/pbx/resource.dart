@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/l10n.dart';
+
 /// How a field is edited and displayed.
 enum FieldKind {
   text,
@@ -31,6 +33,19 @@ enum FieldKind {
 /// Whether a field appears when creating, when editing, or both.
 enum FieldScope { both, create, edit }
 
+/// What a text field holds, so the form can check it as it is typed and
+/// send it the way the service wants it (S9-04).
+enum FieldFormat {
+  /// A phone number, typed the way people write it and sent as E.164.
+  phone,
+
+  /// A phone's MAC address, with or without separators.
+  mac,
+
+  /// One email address.
+  email,
+}
+
 /// One property of a resource. The set of fields mirrors the service's request
 /// schema; `test/contract_test.dart` checks that against the OpenAPI snapshot.
 class Field {
@@ -58,6 +73,11 @@ class Field {
     this.emptyLabel,
     this.needs,
     this.notForReseller = false,
+    this.format,
+    this.advanced = false,
+    this.choiceHelp = const {},
+    this.placeholder,
+    this.check,
   });
 
   final String key;
@@ -110,6 +130,23 @@ class Field {
   /// refuses it): linking a person gives them an extension's voicemail and
   /// call history, which are private to the tenant.
   final bool notForReseller;
+
+  /// Checked and normalized by the form ([FieldFormat]).
+  final FieldFormat? format;
+
+  /// Folded away under "Advanced settings": most people never change it.
+  final bool advanced;
+
+  /// One line explaining each choice, shown under it in the list and under
+  /// the field once chosen.
+  final Map<String, String> choiceHelp;
+
+  /// An example of what to type, shown in the empty field.
+  final String? placeholder;
+
+  /// A rule across fields ("the last slot comes after the first"): given
+  /// every value in the form, the problem with this field, or null.
+  final String? Function(Map<String, Object?> values)? check;
 
   bool inScope({required bool editing}) =>
       scope == FieldScope.both ||
@@ -197,7 +234,12 @@ const extensionsDef = ResourceDef(
       showInList: true,
     ),
     Field('callerIdName', 'Caller ID name', FieldKind.text),
-    Field('callerIdNumber', 'Caller ID number', FieldKind.text),
+    Field(
+      'callerIdNumber',
+      'Caller ID number',
+      FieldKind.text,
+      format: FieldFormat.phone,
+    ),
     Field(
       'voicemailEnabled',
       'Voicemail',
@@ -246,7 +288,10 @@ const didsDef = ResourceDef(
       FieldKind.text,
       required: true,
       showInList: true,
-      help: 'E.164, for example +14155550100.',
+      format: FieldFormat.phone,
+      help:
+          'As you would dial it, such as (415) 555-0100, or with its '
+          'country code, such as +44 20 7946 0958.',
     ),
     Field(
       'trunkId',
@@ -571,6 +616,7 @@ const parkingLotsDef = ResourceDef(
       min: 0,
       showInList: true,
       initial: 720,
+      check: _lastSlotAfterFirst,
     ),
     Field(
       'timeoutSeconds',
@@ -683,7 +729,7 @@ const trunksDef = ResourceDef(
       initial: 'udp',
       showInList: true,
     ),
-    Field('username', 'Username', FieldKind.text),
+    Field('username', 'Username', FieldKind.text, check: _usernameForRegister),
     Field(
       'secret',
       'Secret',
@@ -811,6 +857,7 @@ const devicesDef = ResourceDef(
       required: true,
       showInList: true,
       scope: FieldScope.create,
+      format: FieldFormat.mac,
       help: 'Printed on the back of the phone, such as 00:15:65:aa:bb:cc.',
     ),
     Field(
@@ -874,3 +921,20 @@ String _personTitle(Map<String, dynamic> row) {
 ResourceDef resourceByKey(String key) => key == peopleDef.key
     ? peopleDef
     : allResources.firstWhere((r) => r.key == key);
+
+/// A parking lot's slots run from the first to the last.
+String? _lastSlotAfterFirst(Map<String, Object?> values) {
+  final first = values['slotStart'];
+  final last = values['slotEnd'];
+  return first is int && last is int && last < first
+      ? currentL10n.formLastSlotAfterFirst
+      : null;
+}
+
+/// A trunk that registers with the carrier signs in with a username.
+String? _usernameForRegister(Map<String, Object?> values) {
+  final username = values['username'];
+  return values['authMode'] != 'ip' && (username == null || username == '')
+      ? currentL10n.formTrunkNeedsUsername
+      : null;
+}

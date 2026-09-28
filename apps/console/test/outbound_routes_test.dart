@@ -98,12 +98,12 @@ void main() {
       await save(tester);
       // The dialog stays, saying what is missing.
       expect(find.text('New outbound route'), findsWidgets);
-      expect(find.text('Required'), findsNWidgets(2));
+      expect(find.text('This is required.'), findsNWidgets(2));
       expect(tableRows(tester), hasLength(2));
 
       await tester.enterText(field('Priority *'), '-1');
       await save(tester);
-      expect(find.text('At least 0'), findsOneWidget);
+      expect(find.text('Use 0 or more.'), findsOneWidget);
     });
 
     testWidgets('show the service\'s reason for a prefix it refuses', (
@@ -193,7 +193,7 @@ void main() {
       await tester.tap(find.text('Set emergency route'));
       await tester.pumpAndSettle();
       await save(tester);
-      expect(find.text('Required'), findsNWidgets(2));
+      expect(find.text('This is required.'), findsNWidgets(2));
 
       await tester.tap(find.byKey(const ValueKey('emergency-trunk')));
       await tester.pumpAndSettle();

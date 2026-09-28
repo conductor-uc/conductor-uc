@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource.dart';
@@ -270,7 +271,8 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
                       ),
                   ],
                   onChanged: (v) => setState(() => _trunkId = v),
-                  validator: (v) => v == null ? 'Required' : null,
+                  validator: (v) =>
+                      v == null ? context.l10n.fieldRequired : null,
                 ),
               ),
               TextFormField(
@@ -283,7 +285,7 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
                 validator: (v) =>
                     (v ?? '').split(',').any((w) => w.trim().isNotEmpty)
                     ? null
-                    : 'Required',
+                    : context.l10n.fieldRequired,
               ),
               if (_error != null)
                 Padding(

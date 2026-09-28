@@ -101,7 +101,7 @@ void main() {
       await tester.enterText(field('Codecs *'), ' , ');
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
-      expect(find.text('Required'), findsNWidgets(3));
+      expect(find.text('This is required.'), findsNWidgets(3));
     });
 
     testWidgets('editing changes the codecs, and the secret is never shown', (

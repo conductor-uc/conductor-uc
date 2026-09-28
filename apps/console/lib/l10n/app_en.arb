@@ -896,5 +896,77 @@
   "confirmAlsoAffects": "This also affects:",
   "@confirmAlsoAffects": {
     "description": "Heading above the list of other things a deletion or change affects."
+  },
+  "formPhoneInvalid": "Enter a phone number, such as (415) 555-0100 or +44 20 7946 0958.",
+  "@formPhoneInvalid": {
+    "description": "A phone number field holds something that is not a phone number."
+  },
+  "formPhoneNeedsCountry": "Include the country code, starting with +, such as +44 20 7946 0958.",
+  "@formPhoneNeedsCountry": {
+    "description": "A phone number was typed without its country code where one is needed."
+  },
+  "formMacInvalid": "A MAC address is 12 characters, 0–9 and A–F, such as 00:15:65:AA:BB:CC. It's printed on a label on the phone.",
+  "@formMacInvalid": {
+    "description": "A MAC address field holds something else."
+  },
+  "formDigitsOnly": "Use digits only.",
+  "@formDigitsOnly": {
+    "description": "A field that takes only digits holds something else."
+  },
+  "formDigitsLength": "Use {min, plural, =1{1} other{{min}}} to {max} digits.",
+  "@formDigitsLength": {
+    "description": "A digits-only field is too short or too long.",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "formWholeNumber": "Enter a whole number.",
+  "@formWholeNumber": {
+    "description": "A number field holds something that is not a whole number."
+  },
+  "formNone": "None",
+  "@formNone": {
+    "description": "The choice in a list for leaving a setting empty."
+  },
+  "formChooseTypeFirst": "Choose what it is first.",
+  "@formChooseTypeFirst": {
+    "description": "Shown in a picker whose options depend on a choice above it."
+  },
+  "formAdvanced": "Advanced settings",
+  "@formAdvanced": {
+    "description": "Heading of the folded part of a form with settings most people don't change."
+  },
+  "formAdvancedHint": "Most people can leave these as they are.",
+  "@formAdvancedHint": {
+    "description": "Explanation under the advanced settings heading."
+  },
+  "formCreateNew": "Create new…",
+  "@formCreateNew": {
+    "description": "The last item in a list of things to pick: opens a form to make a new one."
+  },
+  "formNoneYet": "There are none yet. Create one to choose it here.",
+  "@formNoneYet": {
+    "description": "Shown in a picker when there is nothing to pick."
+  },
+  "formFilter": "Filter",
+  "@formFilter": {
+    "description": "Placeholder in the box that narrows a long list of choices."
+  },
+  "formRequiredLegend": "Fields marked * are required.",
+  "@formRequiredLegend": {
+    "description": "Note at the top of a form that has required fields."
+  },
+  "formLastSlotAfterFirst": "The last slot can't come before the first.",
+  "@formLastSlotAfterFirst": {
+    "description": "A parking lot's last slot number is lower than its first."
+  },
+  "formTrunkNeedsUsername": "A trunk that registers with the carrier needs its username.",
+  "@formTrunkNeedsUsername": {
+    "description": "A carrier connection set to register was given no username."
   }
 }
