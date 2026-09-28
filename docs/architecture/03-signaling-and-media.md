@@ -107,7 +107,7 @@ Tenant data is never inferred from the context name. It always comes from the tr
 
 **(Proposed, D-008)**: visual flows are compiled into a versioned **intermediate representation (IR)** that a generic Lua interpreter executes on the FS node.
 
-- The console edits a **graph** (nodes, ports, edges, positions). See [08 §4](08-console.md#4-call-flow-builder).
+- The console edits a **graph** (nodes, ports, edges, positions). See [08 §6](08-console.md#6-call-flows).
 - `callflow-service` validates the graph and, on publish, compiles it to IR (`@cuc/callflow-ir`, JSON, schema-versioned). Published versions are immutable.
 - The dialplan response for a DID or entry point sets `flow_id` and `flow_version` and runs `flow_runner.lua`.
 - `flow_runner.lua` fetches the IR from `callflow-service` (via `mod_curl`) and caches it on local disk keyed by `flow_id@version`. Because published versions are immutable, the cache never needs invalidation.
