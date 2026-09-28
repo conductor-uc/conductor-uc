@@ -94,6 +94,17 @@ class PbxApi {
     await _dio.delete<Object?>(_path(resource, id), options: _options);
   }
 
+  /// Replaces a call flow's draft (`PUT .../flows/{id}/draft`): how a flow
+  /// is made from a template, or copied (S9-10).
+  Future<Json> saveFlowDraft(String flowId, Json graph) async {
+    final response = await _dio.put<Object?>(
+      _path('flows', flowId, 'draft'),
+      data: graph,
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   /// A short-lived address a ready media file's converted audio can be played
   /// from (`GET .../media-assets/{id}/download-url`, the 16 kHz copy).
   Future<String> mediaPlayUrl(String assetId) async {

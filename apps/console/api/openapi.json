@@ -535,6 +535,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 255
+                  },
+                  "extensionId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 36
                   }
                 }
               }
@@ -1341,6 +1346,15 @@
                       "items": {
                         "type": "string"
                       }
+                    },
+                    "displayName": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "orgName": {
+                      "type": "string"
                     }
                   }
                 }
@@ -14724,6 +14738,203 @@
           }
         },
         "operationId": "getFlow",
+        "tags": [
+          "Flows"
+        ]
+      },
+      "patch": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "name",
+                    "currentPublishedVersionId",
+                    "draftGraph",
+                    "draftUpdatedAt"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "currentPublishedVersionId": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "draftGraph": {
+                      "type": "object",
+                      "required": [
+                        "entryPoints",
+                        "nodes",
+                        "edges"
+                      ],
+                      "properties": {
+                        "entryPoints": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "nodes": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "id",
+                              "type",
+                              "config"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "type": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "config": {},
+                              "position": {
+                                "type": "object",
+                                "required": [
+                                  "x",
+                                  "y"
+                                ],
+                                "properties": {
+                                  "x": {
+                                    "type": "number"
+                                  },
+                                  "y": {
+                                    "type": "number"
+                                  }
+                                }
+                              },
+                              "openPorts": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          }
+                        },
+                        "edges": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "from",
+                              "port",
+                              "to"
+                            ],
+                            "properties": {
+                              "from": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "port": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "to": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "draftUpdatedAt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "updateFlow",
+        "tags": [
+          "Flows"
+        ]
+      },
+      "delete": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "operationId": "deleteFlow",
         "tags": [
           "Flows"
         ]

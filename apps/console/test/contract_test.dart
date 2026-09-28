@@ -606,18 +606,24 @@ void main() {
       );
     });
 
-    test('the invite form is exactly the invitation body', () {
-      final invite = '/v1/orgs/{orgId}/invitations';
-      expect({
-        for (final f in userInviteDef.fields) f.key,
-      }, props(invite, 'post'));
-      final required = {
-        ...(body(invite, 'post')['required'] as List).cast<String>(),
-      };
-      expect({
-        for (final f in userInviteDef.fields.where((f) => f.required)) f.key,
-      }, required);
-    });
+    test(
+      'the invite form is the invitation body, less the extension People sends',
+      () {
+        final invite = '/v1/orgs/{orgId}/invitations';
+        // `extensionId` (S9-07) names the extension waiting for the person; the
+        // People screen sends it when it adds someone, this form never does.
+        expect({
+          for (final f in userInviteDef.fields) f.key,
+          'extensionId',
+        }, props(invite, 'post'));
+        final required = {
+          ...(body(invite, 'post')['required'] as List).cast<String>(),
+        };
+        expect({
+          for (final f in userInviteDef.fields.where((f) => f.required)) f.key,
+        }, required);
+      },
+    );
 
     test('the two-step reset is a POST on the user carrying only the step-up code, answering a user', () {
       const reset = '/v1/orgs/{orgId}/users/{userId}/mfa-reset';

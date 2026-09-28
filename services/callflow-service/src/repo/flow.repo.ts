@@ -52,6 +52,18 @@ export class FlowNotFoundError extends Error {
   }
 }
 
+/** Another flow jumps to this one (a "Go to flow" step), so it can't go (S9-10). */
+export class FlowInUseError extends Error {
+  override readonly name = 'FlowInUseError';
+
+  constructor(
+    readonly flowId: string,
+    readonly usedBy: readonly string[],
+  ) {
+    super(`Flow '${flowId}' is used by ${usedBy.join(', ')}.`);
+  }
+}
+
 export class FlowVersionNotFoundError extends Error {
   override readonly name = 'FlowVersionNotFoundError';
 
@@ -201,6 +213,76 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
         draftUpdatedAt: now,
         currentPublishedVersionId: null,
       };
+    },
+
+    /** Renames a flow (S9-10). Its draft and versions are untouched. */
+    async rename(ctx: DbContext, id: string, name: string): Promise<Flow> {
+      const existing = await this.findById(ctx, id);
+      if (existing === undefined) throw new FlowNotFoundError(id);
+      await db
+        .scoped(ctx)
+        .updateTable('flows')
+        .set({ name, updated_at: new Date() })
+        .where('id', '=', id)
+        .execute();
+      return { ...existing, name };
+    },
+
+    /**
+     * Deletes a flow and every version of it (S9-10). Refused while another
+     * flow of the tenant jumps to it, in its draft or its live version, so a
+     * working flow never loses its destination here. Says so on the bus
+     * (`callflow.flow.deleted`) in the same transaction.
+     */
+    async remove(ctx: DbContext, id: string): Promise<void> {
+      const { tenantId } = requireTenant(ctx);
+      const existing = await this.findById(ctx, id);
+      if (existing === undefined) throw new FlowNotFoundError(id);
+
+      const others = await db
+        .scoped(ctx)
+        .selectFrom('flows')
+        .select(['id', 'name', 'draft_graph', 'current_published_version_id'])
+        .where('id', '!=', id)
+        .execute();
+      const live = await db
+        .scoped(ctx)
+        .selectFrom('flow_versions')
+        .select(['id', 'graph'])
+        .where(
+          'id',
+          'in',
+          others
+            .flatMap((o) =>
+              o.current_published_version_id === null ? [] : [o.current_published_version_id],
+            )
+            .concat(['']),
+        )
+        .execute();
+      const liveGraph = new Map(live.map((v) => [v.id, v.graph]));
+      const usedBy = others
+        .filter(
+          (o) =>
+            jumpsTo(o.draft_graph, id) ||
+            (o.current_published_version_id !== null &&
+              jumpsTo(liveGraph.get(o.current_published_version_id), id)),
+        )
+        .map((o) => o.name);
+      if (usedBy.length > 0) throw new FlowInUseError(id, usedBy);
+
+      await db.scoped(ctx).transaction(async (trx, raw) => {
+        await trx.deleteFrom('flow_versions').where('flow_id', '=', id).execute();
+        await trx.deleteFrom('flows').where('id', '=', id).execute();
+        await enqueueEvent(raw, flowEvents, {
+          type: 'callflow.flow.deleted',
+          data: { flowId: id },
+          orgContext: { tenantId },
+          ...(ctx.actorId === undefined || ctx.orgId === undefined
+            ? {}
+            : { actor: { type: 'user', id: ctx.actorId, orgId: ctx.orgId } }),
+          ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
+        });
+      });
     },
 
     /** Replaces the draft graph wholesale. Does not touch published versions. */
@@ -381,3 +463,26 @@ export function createFlowRepo(db: Database<CallflowServiceDb>) {
 }
 
 export type FlowRepo = ReturnType<typeof createFlowRepo>;
+
+/**
+ * Whether a stored graph has a "Go to flow" step into [flowId]. The driver
+ * may hand a JSON column back parsed or as text; both are read.
+ */
+function jumpsTo(graph: unknown, flowId: string): boolean {
+  let parsed: unknown = graph;
+  if (typeof graph === 'string') {
+    try {
+      parsed = JSON.parse(graph);
+    } catch {
+      return false;
+    }
+  }
+  const nodes = (parsed as { nodes?: unknown } | null | undefined)?.nodes;
+  return (
+    Array.isArray(nodes) &&
+    nodes.some(
+      (n: { type?: unknown; config?: { flowId?: unknown } }) =>
+        n.type === 'goto_flow' && n.config?.flowId === flowId,
+    )
+  );
+}

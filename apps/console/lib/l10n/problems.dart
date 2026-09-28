@@ -43,6 +43,9 @@ String? problemText(
   'agent_already_tiered' => l.problemAgentAlreadyTiered,
   'role_name_taken' => l.problemRoleNameTaken('${params['name'] ?? ''}'),
   'email_taken' => l.problemEmailTaken,
+  'flow_in_use' => l.problemFlowInUse(
+    [...?(params['usedBy'] as List?)].join(', '),
+  ),
   _ => null,
 };
 

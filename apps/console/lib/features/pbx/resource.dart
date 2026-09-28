@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../forms/validators.dart';
 import '../../l10n/l10n.dart';
 
 /// How a field is edited and displayed.
@@ -390,7 +391,8 @@ ResourceDef get didsDef {
   );
 }
 
-String _didTitle(Map<String, dynamic> row) => '${row['e164']}';
+/// A number as people read it: "(415) 555-0100" for a +1 number.
+String _didTitle(Map<String, dynamic> row) => formatPhone('${row['e164']}');
 
 ResourceDef get ringGroupsDef {
   final l = currentL10n;

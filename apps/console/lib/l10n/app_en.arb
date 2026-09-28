@@ -2289,5 +2289,104 @@
   "mediaFailed": "Failed",
   "@mediaFailed": {
     "description": "Configuration screen text. A recording that could not be processed."
+  },
+  "flowsSubtitle": "Menus, business hours and other ways of answering, that a phone number can point at.",
+  "@flowsSubtitle": {
+    "description": "Line under the Call flows heading."
+  },
+  "flowsEmptyBody": "Build how calls are answered: a menu (\"press 1 for sales\"), different answering after hours, and more. Start from a template.",
+  "@flowsEmptyBody": {
+    "description": "Explanation on the empty Call flows screen."
+  },
+  "flowsStatus": "Status",
+  "@flowsStatus": {
+    "description": "Column: whether a call flow is live."
+  },
+  "flowsPublished": "Live",
+  "@flowsPublished": {
+    "description": "A call flow whose current version answers calls."
+  },
+  "flowsNotPublished": "Not live yet",
+  "@flowsNotPublished": {
+    "description": "A call flow never published."
+  },
+  "flowsAnswers": "Answers",
+  "@flowsAnswers": {
+    "description": "Column: the phone numbers a call flow answers."
+  },
+  "flowsOpen": "Open",
+  "@flowsOpen": {
+    "description": "Tooltip: open the call flow in the builder."
+  },
+  "flowsRename": "Rename",
+  "@flowsRename": {
+    "description": "Tooltip and heading: rename a call flow."
+  },
+  "flowsDuplicate": "Make a copy",
+  "@flowsDuplicate": {
+    "description": "Tooltip: copy a call flow."
+  },
+  "flowsCopyName": "Copy of {name}",
+  "@flowsCopyName": {
+    "description": "Name of a copied call flow.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "flowsCopied": "Made {name}.",
+  "@flowsCopied": {
+    "description": "Notice after copying a call flow.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "flowsStartFrom": "Start from",
+  "@flowsStartFrom": {
+    "description": "Label above the choice of templates for a new call flow."
+  },
+  "flowsCreate": "Create",
+  "@flowsCreate": {
+    "description": "Button that creates a call flow."
+  },
+  "flowTemplateBlank": "A blank page",
+  "@flowTemplateBlank": {
+    "description": "Template: an empty call flow."
+  },
+  "flowTemplateBlankHelp": "Build it step by step.",
+  "@flowTemplateBlankHelp": {
+    "description": "Explains the blank template."
+  },
+  "flowTemplateHours": "Business hours",
+  "@flowTemplateHours": {
+    "description": "Template: answer during open hours, voicemail when closed."
+  },
+  "flowTemplateHoursHelp": "Rings a group of phones when you're open, and takes a message when you're closed or no one answers.",
+  "@flowTemplateHoursHelp": {
+    "description": "Explains the business hours template."
+  },
+  "flowTemplateMenu": "A simple menu",
+  "@flowTemplateMenu": {
+    "description": "Template: press 1 or 2."
+  },
+  "flowTemplateMenuHelp": "\"Press 1 for… press 2 for…\", each ringing someone, and a message if no one answers.",
+  "@flowTemplateMenuHelp": {
+    "description": "Explains the menu template."
+  },
+  "problemFlowInUse": "Another call flow goes to this one ({usedBy}). Change that one first.",
+  "@problemFlowInUse": {
+    "description": "A call flow could not be deleted because another jumps to it. {usedBy} names them.",
+    "placeholders": {
+      "usedBy": {
+        "type": "String"
+      }
+    }
+  },
+  "flowsOpenFromNumber": "Open its call flow",
+  "@flowsOpenFromNumber": {
+    "description": "Tooltip on a phone number that a call flow answers: opens that flow."
   }
 }

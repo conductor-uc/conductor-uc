@@ -208,7 +208,7 @@ Resellers configure trunks for their tenants. Tenant admins can view trunks and,
 
 **Public API:**
 
-- `/v1/tenants/{t}/flows` (CRUD)
+- `/v1/tenants/{t}/flows` (CRUD). S9-10: `PATCH .../flows/{id}` renames; `DELETE .../flows/{id}` (`callflow.publish`, since it changes live routing) removes a flow and its versions, refused with `409 flow_in_use` while another flow's draft or live version jumps to it, and emits `callflow.flow.deleted`. Numbers still pointing at a deleted flow are pbx-config-service's; the console lists them before deleting. Reseller administrators edit and publish flows too (D-020).
 - `/v1/tenants/{t}/flows/{id}/versions/{v}` (get or put the draft graph)
 - `:validate`, which returns a list of issues with node IDs
 - `:publish`, which compiles the IR and makes the version immutable

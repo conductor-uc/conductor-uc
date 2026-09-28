@@ -77,6 +77,9 @@ const _resellerAdmin = [
   'conference_room.manage',
   'schedule.manage',
   'media.manage',
+  // D-020: a reseller sets up its customers' call flows.
+  'callflow.edit',
+  'callflow.publish',
   'trunk.manage',
   'audit.read',
   'apikey.manage',
