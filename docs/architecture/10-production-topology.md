@@ -72,7 +72,7 @@ flowchart TB
 
 ### 4.1 Stable endpoints
 
-There is no service discovery: every client is configured with one address per upstream ([ADR 0001](adr/0001-orchestrator.md#consequences)). So every component a client reaches must sit behind an address that stays put when a member dies. Three mechanisms, per environment (**Proposed, D-017**):
+There is no service discovery: every client is configured with one address per upstream ([ADR 0001](adr/0001-orchestrator.md#consequences)). So every component a client reaches must sit behind an address that stays put when a member dies. Three mechanisms, per environment (**D-017, decided by the owner 2026-09-28**):
 
 | Mechanism | Where | Used for |
 |---|---|---|
@@ -100,9 +100,9 @@ The internal load balancer health-checks what it balances: `/readyz` for service
 | **Object storage** | provider | Provider-managed; uploaders buffer on the spool and retry | HTTPS endpoint | Yes | — |
 | **Internal load balancers** | 2 (on the app servers) | Two HAProxy copies behind one keepalived private address, or the provider's internal LB | — | Not provided | S4-07/S4-11 |
 
-### 4.3 MariaDB: Galera or primary–replica (Proposed, D-016)
+### 4.3 MariaDB: Galera or primary–replica (D-016, decided: Galera)
 
-04 §2 left the choice to Stage 4. Recommendation: **Galera, three members, single writer.**
+04 §2 left the choice to Stage 4. Decided (owner, 2026-09-28): **Galera, three members, single writer.**
 
 - **For Galera:** failover needs no external tool (every member has all committed data; the LB just switches writer), and a lost member rejoins by itself. Three members fit the three data servers that Redis Sentinel and NATS need anyway.
 - **Single writer**, because writing to several members at once risks certification conflicts (retried transactions, deadlock errors) that the services' repositories are not written to expect, and the outbox relay's `FOR UPDATE SKIP LOCKED` behaves as designed only on one writer.
