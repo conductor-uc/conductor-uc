@@ -14,8 +14,11 @@ import type { DataClass } from '@cuc/authz';
  *   on a call, and nothing about the other party.
  * - `queues` is `queue.read` (config): live queue and agent state, as counts
  *   and statuses, never a caller's number. Per-call queue detail belongs on
- *   `calls`. Nothing publishes to it yet (see `feed.ts`); the topic exists so
- *   wallboards (S7-06) plug in without a protocol change.
+ *   `calls`. S9-13: the snapshot is `{queues}` as call-control reads them from
+ *   the nodes, and each change is the whole list again
+ *   (`{type:"queues.changed", queues}`), sent when a queue event arrives or the
+ *   periodic refresh finds it changed. The attendant console, monitoring and
+ *   wallboards (S7-06) share it.
  * - `user:{userId}:calls` (S5-15), written `tenant:{t}:user:{u}:calls`, is one
  *   person's own live calls, for the self-service portal's recording buttons:
  *   the legs on the person's own extension (as call-control vouches for it,

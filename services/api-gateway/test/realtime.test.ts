@@ -154,6 +154,8 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
   const accessOf = new Map<string, object>();
   /** G-119 (1): each queue's agents' extension numbers, for the fake monitor-scope answer. */
   const queueAgents = new Map<string, string[]>();
+  /** S9-13: the queues the fake call-control answers with, by tenant. */
+  const liveQueues = new Map<string, object[]>();
   /** S5-15: each person's extension number, as the fake pbx-config-service answers, by user id. */
   const extensionNumbers = new Map<string, string>();
 
@@ -223,6 +225,11 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
       const statuses = /^\/internal\/v1\/tenants\/([^/]+)\/presence$/.exec(url);
       if (statuses !== null) {
         return reply(200, { extensions: presenceStatuses.get(statuses[1] ?? '') ?? [] });
+      }
+      const queues = /^\/internal\/v1\/tenants\/([^/]+)\/queues$/.exec(url);
+      if (queues !== null) {
+        if (queues[1] === TENANT_DOWN) return reply(500, {});
+        return reply(200, { queues: liveQueues.get(queues[1] ?? '') ?? [] });
       }
       const calls = /^\/internal\/v1\/tenants\/([^/]+)\/calls$/.exec(url);
       if (calls !== null) {
@@ -780,6 +787,66 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
         event: { extension: '201', state: 'on_call' },
       });
       watcher.close();
+    });
+  });
+
+  describe('live queues (S9-13)', () => {
+    const queue = (waiting: number, status = 'available') => ({
+      queueId: 'q1',
+      waiting,
+      longestWaitingSince: waiting === 0 ? null : '2026-09-28T10:00:00.000Z',
+      answered: 0,
+      callsAnswered: 0,
+      callsAbandoned: 0,
+      agents: [
+        { extension: '301', status, activity: 'waiting', callsAnswered: 0, statusSince: null },
+      ],
+    });
+
+    it('sends the queues on subscribe, then the whole list again when a queue event changes them', async () => {
+      const tenantId = TENANT_A;
+      liveQueues.set(tenantId, [queue(0)]);
+      liveQueues.set(TENANT_B, [queue(5)]);
+      const watcher = await connectAs(person(tenantId, 'tenant', ['queue.read']));
+      const other = await connectAs(person(TENANT_B, 'tenant', ['queue.read']));
+      expect(await watcher.subscribe(topic(tenantId, 'queues'))).toMatchObject({
+        type: 'subscribed',
+      });
+      expect(await other.subscribe(topic(TENANT_B, 'queues'))).toMatchObject({
+        type: 'subscribed',
+      });
+      expect((await watcher.next((m) => m.type === 'snapshot'))['data']).toEqual({
+        queues: [queue(0)],
+      });
+
+      // A caller joins and the agent goes on a break: one read after the burst of events.
+      liveQueues.set(tenantId, [queue(1, 'on_break')]);
+      await publish('call.channel.queued', tenantId, {
+        callUuid: randomUUID(),
+        nodeId: 'fs-1',
+        queueId: 'q1',
+      });
+      await publish('call.queue.agent_status_changed', tenantId, {
+        agentName: '301@x',
+        extension: '301',
+        status: 'On Break',
+      });
+      expect((await watcher.next((m) => m.type === 'event'))['event']).toEqual({
+        type: 'queues.changed',
+        queues: [queue(1, 'on_break')],
+      });
+
+      // The same again is not sent; the other tenant heard nothing of it.
+      await publish('call.queue.agent_state_changed', tenantId, {
+        agentName: '301@x',
+        extension: '301',
+        state: 'Waiting',
+      });
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      expect(watcher.messages.filter((m) => m.type === 'event')).toHaveLength(1);
+      expect(other.messages.filter((m) => m.type === 'event')).toEqual([]);
+      watcher.close();
+      other.close();
     });
   });
 

@@ -74,7 +74,7 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 | `recording.listen` / `recording.download` / `recording.delete` | private | Tenant admin; grantable per `extension`/`queue` scope |
 | `recording.control` | private | Tenant admin, tenant supervisor: start, stop, pause and resume the recording of any live call in the tenant from the console, with the rules of the in-call feature codes (S5-15, G-120). Not master support (no writes), never a reseller (H1); no read twin |
 | `self.settings` (config), `self.voicemail`, `self.history`, `self.recording`, `self.calls` (private) | config/private | Every tenant-tier role (parity 1e): the person's own call handling, voicemail, call history (and their own live calls on the realtime hub), (S5-15, G-120) recording buttons on their own live calls, and (S9-12, G-125) hanging up, transferring and parking their own live calls and click-to-call from their own phone. The extension is always resolved from the signed actor id, never taken from the request |
-| `call.control` | private | Tenant admin, tenant supervisor (S9-12, G-125): hang up, transfer, park and pick up any live call of the tenant; a pickup rings the person's own phone |
+| `call.control` | private | Tenant admin, tenant supervisor (S9-12, G-125): hang up, transfer, park and pick up any live call of the tenant; a pickup rings the person's own phone. S9-13 (G-126): also sign an agent in, out or on a break |
 | `cdr.read` / `cdr.export` | private | Tenant admin |
 | `voicemail.access` | private | Mailbox owner; grantable per `mailbox` |
 | `monitor.presence` | config | Tenant users (tenant-wide) |

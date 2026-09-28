@@ -90,6 +90,25 @@ export function createLineageLookup(
   };
 }
 
+/**
+ * S9-13: the tenant's queues as they are now, as call-control reads them from the nodes (counts
+ * and statuses only; `GET /internal/v1/tenants/:t/queues`). Passed on as call-control gives them:
+ * the hub only compares and forwards. Throws when call-control cannot be asked.
+ */
+export type LiveQueuesSource = (tenantId: string) => Promise<unknown[]>;
+
+export function createLiveQueuesSource(options: InternalClientOptions): LiveQueuesSource {
+  return async (tenantId) => {
+    const { body } = await internalGet(
+      options,
+      `/internal/v1/tenants/${encodeURIComponent(tenantId)}/queues`,
+    );
+    const queues = (body as { queues?: unknown } | undefined)?.queues;
+    if (!Array.isArray(queues)) throw new SourceUnavailableError('Unexpected queues answer.');
+    return queues as unknown[];
+  };
+}
+
 /** Asks call-control for the tenant's live calls (`GET /internal/v1/tenants/:t/calls`). */
 export function createLiveCallsSource(options: InternalClientOptions): LiveCallsSource {
   return async (tenantId) => {

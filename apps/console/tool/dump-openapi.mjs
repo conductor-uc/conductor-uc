@@ -61,6 +61,7 @@ const SOURCES = [
   // S5-10: listen, whisper and barge on live calls (S5-09's routes).
   ['call-control', 'monitor', 'registerMonitorRoutes', 1],
   ['call-control', 'call-operations', 'registerCallOperationRoutes', 1],
+  ['call-control', 'queue-status', 'registerQueueStatusRoutes', 1],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
   ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
@@ -155,6 +156,10 @@ const OVERRIDES = {
   'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/transfer/cancel': 'cancelMyTransfer',
   'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/park': 'parkMyCall',
   'post /v1/tenants/{tenantId}/me/dial': 'dialFromMyPhone',
+  // S9-13: agents signing in, out and on a break.
+  'get /v1/tenants/{tenantId}/me/agent-status': 'getMyAgentStatus',
+  'put /v1/tenants/{tenantId}/me/agent-status': 'setMyAgentStatus',
+  'put /v1/tenants/{tenantId}/live-agents/{extension}/status': 'setAgentStatus',
   'delete /v1/tenants/{tenantId}/me/voicemail/messages/{messageId}': 'deleteMyMessage',
   'post /v1/tenants/{tenantId}/me/voicemail/reset-pin': 'resetMyVoicemailPin',
   'put /v1/tenants/{tenantId}/me/voicemail/email-settings': 'saveMyVoicemailEmailSettings',

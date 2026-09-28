@@ -27,6 +27,11 @@ import { registerNodeMetrics } from './node-metrics.js';
 import { registerMonitorRoutes } from './routes/monitor.routes.js';
 import { createCallOperations } from './call-operations.js';
 import { registerCallOperationRoutes } from './routes/call-operations.routes.js';
+import { createQueueStatus } from './queue-status.js';
+import {
+  registerQueueStatusInternalRoutes,
+  registerQueueStatusRoutes,
+} from './routes/queue-status.routes.js';
 import { createRecordingController } from './recording-control.js';
 import { registerRecordingControlRoutes } from './routes/recording.routes.js';
 import { configSchema, loadServiceConfig, parseFsNodes } from './config.js';
@@ -274,6 +279,30 @@ registerCallOperationRoutes(app, {
     ringTimeoutSeconds: config.MONITOR_RING_TIMEOUT_SECONDS,
     logger,
   }),
+});
+
+// S9-13: live queues for the realtime `queues` topic, and agents' status from the console.
+const queueStatus = createQueueStatus({
+  liveNodeIds: () => registry.liveNodeIds(),
+  esl: (nodeId) => eslClientsById.get(nodeId),
+  tenantDomain: createTenantDomainLookup({
+    baseUrl: config.ORG_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
+  extensionScope: createExtensionScopeLookup({
+    baseUrl: config.PBX_CONFIG_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
+  audit: async (input) => {
+    await recordAuditEvent(db.kysely, input);
+  },
+  opensipsSipUri: config.OPENSIPS_SIP_URI,
+  logger,
+});
+registerQueueStatusRoutes(app, { status: queueStatus, userExtension });
+registerQueueStatusInternalRoutes(app, {
+  status: queueStatus,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
 
 // S4-12/S4-13: the outbox backlog, for the operations console (`/statusz`, `/metrics`).
