@@ -53,11 +53,14 @@ class OrgsPage extends ConsumerWidget {
               ),
             ))
               FilledButton.icon(
-                onPressed: () => _create(
-                  context,
-                  ref,
-                  showingResellers ? null : resellerId ?? session.orgId,
-                ),
+                // S9-16: a new customer has the setup wizard.
+                onPressed: showingResellers
+                    ? () => _create(context, ref, null)
+                    : () => context.go(
+                        isMaster
+                            ? '/resellers/$resellerId/new-tenant'
+                            : '/tenants/new',
+                      ),
                 icon: const Icon(Icons.add),
                 label: Text(showingResellers ? 'New reseller' : 'New tenant'),
               ),

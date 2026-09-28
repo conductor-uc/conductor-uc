@@ -87,14 +87,8 @@ void main() {
       expect(find.text('Brand saved.'), findsOneWidget);
 
       await openNav(tester, 'Tenants');
-      await tester.tap(find.text('New tenant'));
-      await tester.pumpAndSettle();
-      await tester.enterText(field('Short name *'), 'bright-dental');
-      await tester.enterText(field('Name *'), 'Bright Dental');
-      await tester.enterText(field('Admin email *'), 'admin@dental.example');
-      await tester.enterText(field('Admin name *'), 'Dee Admin');
-      await tester.enterText(field('Admin password *'), 'a-long-password');
-      await save(tester);
+      // S9-16: the new-tenant wizard.
+      await createTenantWithWizard(tester, name: 'Bright Dental');
       expect(find.text('Bright Dental'), findsOneWidget);
 
       // 3. Trunks: the section is there for a reseller, but it has no screen

@@ -1049,7 +1049,11 @@ class DemoPbx {
       }
     }
     if (into.any((o) => o['slug'] == body['slug'])) {
-      return _problem(409, 'The short name ${body['slug']} is taken.');
+      return _problem(
+        409,
+        'The short name ${body['slug']} is taken.',
+        code: 'slug_taken',
+      );
     }
     final created = _org(
       'org-${_next++}',

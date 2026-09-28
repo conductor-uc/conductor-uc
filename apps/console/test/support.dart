@@ -135,3 +135,39 @@ Future<void> openAdvanced(WidgetTester tester) async {
   await tester.tap(heading);
   await tester.pumpAndSettle();
 }
+
+/// Sets up a tenant with the new-tenant wizard (S9-16), from the tenants list
+/// with its "New tenant" button, and comes back to the list ("Later").
+Future<void> createTenantWithWizard(
+  WidgetTester tester, {
+  required String name,
+  String adminName = 'Dee Admin',
+  String adminEmail = 'admin@dental.example',
+}) async {
+  await tester.tap(find.text('New tenant'));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byKey(const ValueKey('nt-name')), name);
+  await tester.ensureVisible(find.byKey(const ValueKey('nt-next')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('nt-next')));
+  await tester.pumpAndSettle();
+  await tester.enterText(
+    find.byKey(const ValueKey('nt-admin-name')),
+    adminName,
+  );
+  await tester.enterText(
+    find.byKey(const ValueKey('nt-admin-email')),
+    adminEmail,
+  );
+  await tester.ensureVisible(find.byKey(const ValueKey('nt-next')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('nt-next')));
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(find.byKey(const ValueKey('nt-create')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(const ValueKey('nt-create')));
+  await tester.pumpAndSettle();
+  expect(find.text('$name is ready.'), findsOneWidget);
+  await tester.tap(find.widgetWithText(TextButton, 'Later'));
+  await tester.pumpAndSettle();
+}

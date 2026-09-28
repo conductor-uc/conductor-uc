@@ -51,6 +51,10 @@ Master and reseller users can **enter** a descendant org ("act as tenant"). The 
 
 Private-data sections are hidden for resellers (H1). The server enforces this independently.
 
+**Homes (S9-06, S9-16).** Everyone starts at `/dashboard`. A tenant's home (`tenant_home.dart`) has its setup checklist. A reseller's and the master's (`org_home.dart`) say what needs them, each item leading to the screen that deals with it, from lists those screens already read (nothing is estimated): for a reseller, no tenants yet, suspended tenants, no brand, domains not verified, certificates that cannot be renewed; for the master, services not ready, media servers out of service, two-step verification off for platform administrators, certificates, no resellers or suspended ones. Then the main action (a reseller: **Set up a new tenant**; the master: **Add a reseller**) and the figures.
+
+**Setting up a new tenant (S9-16).** `/tenants/new` (a reseller) or `/resellers/{id}/new-tenant` (the master, for that reseller), `new_tenant_page.dart`: three checked steps (who they are: name, short name made from it, country, time zone from the browser; their administrator: name, email, a password made up for them; a last look), then the sign-in details to give the administrator and **Set up their phone system**, which acts as the new tenant and opens its home checklist. A short name already taken sends them back to it. Resellers are still made in a short form.
+
 ## 4. Call-flow builder
 
 The interaction model is like React Flow, implemented natively in Flutter.

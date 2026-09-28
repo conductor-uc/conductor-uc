@@ -3166,5 +3166,319 @@
   "monRecordingPaused": "Paused",
   "@monRecordingPaused": {
     "description": "Monitoring page (live presence, queues and calls). A call's recording is paused."
+  },
+  "ntTitle": "Set up a new tenant",
+  "@ntTitle": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Page title."
+  },
+  "ntSubtitle": "Three short steps. Their phone system is set up afterwards, from their home page.",
+  "@ntSubtitle": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Page subtitle."
+  },
+  "ntDoneTitle": "Tenant created",
+  "@ntDoneTitle": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Page title once created."
+  },
+  "ntBack": "Back to tenants",
+  "@ntBack": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Back button tooltip."
+  },
+  "ntNext": "Continue",
+  "@ntNext": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Button: next step."
+  },
+  "ntPrevious": "Back",
+  "@ntPrevious": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Button: previous step."
+  },
+  "ntCreate": "Create tenant",
+  "@ntCreate": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Button: create the tenant."
+  },
+  "ntCreating": "Creating…",
+  "@ntCreating": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Button while creating."
+  },
+  "ntStepCustomer": "Who they are",
+  "@ntStepCustomer": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Step title: the tenant's name, country and time zone."
+  },
+  "ntStepAdmin": "Who looks after their phones",
+  "@ntStepAdmin": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Step title: the tenant's first administrator."
+  },
+  "ntStepReview": "Check and create",
+  "@ntStepReview": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Step title: review."
+  },
+  "ntName": "Name",
+  "@ntName": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Field: the tenant's name."
+  },
+  "ntNameHelp": "The company or organization, as their people know it.",
+  "@ntNameHelp": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Help under the name field."
+  },
+  "ntNameRequired": "Enter their name.",
+  "@ntNameRequired": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). The name is missing."
+  },
+  "ntSlug": "Short name",
+  "@ntSlug": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Field: the tenant's short name, used in addresses."
+  },
+  "ntSlugHelp": "Used in their addresses. Lowercase letters, digits and hyphens; it cannot be changed later.",
+  "@ntSlugHelp": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Help under the short name field."
+  },
+  "ntSlugInvalid": "Use at least two lowercase letters, digits or hyphens, not starting or ending with a hyphen.",
+  "@ntSlugInvalid": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). The short name is not valid."
+  },
+  "ntSlugTaken": "That short name is taken. Choose another.",
+  "@ntSlugTaken": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). The short name is already used."
+  },
+  "ntCountry": "Country",
+  "@ntCountry": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Field: the tenant's country."
+  },
+  "ntCountryHelp": "Phone numbers are read and dialed as in this country.",
+  "@ntCountryHelp": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Help under the country field."
+  },
+  "ntTimeZone": "Time zone",
+  "@ntTimeZone": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Field: the tenant's time zone."
+  },
+  "ntTimeZoneHelp": "Office hours and call times are shown in this time zone.",
+  "@ntTimeZoneHelp": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Help under the time zone field."
+  },
+  "ntAdminHelp": "The first administrator of their phone system. They can add more people later.",
+  "@ntAdminHelp": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Text at the start of the administrator step."
+  },
+  "ntAdminName": "Their name",
+  "@ntAdminName": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Field: the administrator's name."
+  },
+  "ntAdminNameRequired": "Enter the administrator's name.",
+  "@ntAdminNameRequired": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). The administrator's name is missing."
+  },
+  "ntAdminEmail": "Their email address",
+  "@ntAdminEmail": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Field: the administrator's email, used to sign in."
+  },
+  "ntEmailInvalid": "Enter an email address, like name@example.com.",
+  "@ntEmailInvalid": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). The email address is not valid."
+  },
+  "ntPassword": "Their first password",
+  "@ntPassword": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Field: the administrator's first password."
+  },
+  "ntPasswordHelp": "Made up for you; give it to them with the sign-in details at the end. At least 12 characters.",
+  "@ntPasswordHelp": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Help under the password field."
+  },
+  "ntPasswordShort": "Use at least 12 characters.",
+  "@ntPasswordShort": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). The password is too short."
+  },
+  "ntNewPassword": "Make up another",
+  "@ntNewPassword": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Tooltip: generate a new password."
+  },
+  "ntDoneHeading": "{name} is ready.",
+  "@ntDoneHeading": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Heading once created.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Acme Dental"
+      }
+    }
+  },
+  "ntDoneHelp": "Give their administrator these sign-in details. Then set up their phone system: people, phones and numbers.",
+  "@ntDoneHelp": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Text once created."
+  },
+  "ntDetailsEmail": "Email: {email}",
+  "@ntDetailsEmail": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). A line of the sign-in details.",
+    "placeholders": {
+      "email": {
+        "type": "String",
+        "example": "pat@example.com"
+      }
+    }
+  },
+  "ntDetailsPassword": "Password: {password}",
+  "@ntDetailsPassword": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). A line of the sign-in details.",
+    "placeholders": {
+      "password": {
+        "type": "String",
+        "example": "x7Kp2mQr9tWb3Zc4"
+      }
+    }
+  },
+  "ntDetailsAddress": "Address: {address}",
+  "@ntDetailsAddress": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). A line of the sign-in details: their own web address.",
+    "placeholders": {
+      "address": {
+        "type": "String",
+        "example": "acme.voice.example.com"
+      }
+    }
+  },
+  "ntSetUpNow": "Set up their phone system",
+  "@ntSetUpNow": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Button: act as the new tenant and start its setup."
+  },
+  "ntCopyDetails": "Copy sign-in details",
+  "@ntCopyDetails": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Button: copy the sign-in details."
+  },
+  "ntCopied": "Copied.",
+  "@ntCopied": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Confirmation after copying."
+  },
+  "ntLater": "Later",
+  "@ntLater": {
+    "description": "New tenant setup wizard (a reseller setting up one of their tenants). Button: leave the setup for later."
+  },
+  "countryUS": "United States",
+  "@countryUS": {
+    "description": "A country's name."
+  },
+  "countryCA": "Canada",
+  "@countryCA": {
+    "description": "A country's name."
+  },
+  "countryGB": "United Kingdom",
+  "@countryGB": {
+    "description": "A country's name."
+  },
+  "countryIE": "Ireland",
+  "@countryIE": {
+    "description": "A country's name."
+  },
+  "countryAU": "Australia",
+  "@countryAU": {
+    "description": "A country's name."
+  },
+  "countryNZ": "New Zealand",
+  "@countryNZ": {
+    "description": "A country's name."
+  },
+  "countryDE": "Germany",
+  "@countryDE": {
+    "description": "A country's name."
+  },
+  "countryFR": "France",
+  "@countryFR": {
+    "description": "A country's name."
+  },
+  "countryES": "Spain",
+  "@countryES": {
+    "description": "A country's name."
+  },
+  "countryMX": "Mexico",
+  "@countryMX": {
+    "description": "A country's name."
+  },
+  "ohMasterSubtitle": "What needs you across the platform, and how it stands.",
+  "@ohMasterSubtitle": {
+    "description": "Reseller or master home page. Subtitle for the platform operator."
+  },
+  "ohResellerSubtitle": "What needs you across your tenants, and how they stand.",
+  "@ohResellerSubtitle": {
+    "description": "Reseller or master home page. Subtitle for a reseller."
+  },
+  "ohNewReseller": "Add a reseller",
+  "@ohNewReseller": {
+    "description": "Reseller or master home page. Main action for the platform operator."
+  },
+  "ohNewCustomer": "Set up a new tenant",
+  "@ohNewCustomer": {
+    "description": "Reseller or master home page. Main action for a reseller."
+  },
+  "ohNoCustomers": "You have no tenants yet. Set up your first one.",
+  "@ohNoCustomers": {
+    "description": "Reseller or master home page. Attention item."
+  },
+  "ohSuspendedCustomers": "{count, plural, =1{1 tenant is suspended} other{{count} tenants are suspended}}",
+  "@ohSuspendedCustomers": {
+    "description": "Reseller or master home page. Attention item.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ohNoBrand": "Your brand isn't set up, so your tenants see a plain console.",
+  "@ohNoBrand": {
+    "description": "Reseller or master home page. Attention item."
+  },
+  "ohUnverifiedDomains": "{count, plural, =1{1 domain isn't verified yet} other{{count} domains aren't verified yet}}",
+  "@ohUnverifiedDomains": {
+    "description": "Reseller or master home page. Attention item.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ohFailingCertificates": "{count, plural, =1{1 certificate can't be renewed} other{{count} certificates can't be renewed}}",
+  "@ohFailingCertificates": {
+    "description": "Reseller or master home page. Attention item.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ohServicesDown": "{count, plural, =1{1 service isn't ready} other{{count} services aren't ready}}",
+  "@ohServicesDown": {
+    "description": "Reseller or master home page. Attention item.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ohNodesOut": "{count, plural, =1{1 media server is out of service} other{{count} media servers are out of service}}",
+  "@ohNodesOut": {
+    "description": "Reseller or master home page. Attention item.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ohMfaOff": "Two-step verification is off for platform administrators.",
+  "@ohMfaOff": {
+    "description": "Reseller or master home page. Attention item: the platform's sign-in protection is off."
+  },
+  "ohNoResellers": "There are no resellers yet. Add the first one.",
+  "@ohNoResellers": {
+    "description": "Reseller or master home page. Attention item."
+  },
+  "ohSuspendedResellers": "{count, plural, =1{1 reseller is suspended} other{{count} resellers are suspended}}",
+  "@ohSuspendedResellers": {
+    "description": "Reseller or master home page. Attention item.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "dashNothingYet": "Nothing to show here for your role yet.",
+  "@dashNothingYet": {
+    "description": "Dashboard: no figures for this person's role."
   }
 }
