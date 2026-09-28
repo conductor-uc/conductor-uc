@@ -94,6 +94,14 @@ class PbxApi {
     await _dio.delete<Object?>(_path(resource, id), options: _options);
   }
 
+  /// Puts a call flow's draft live (`POST .../flows/{id}/publish`).
+  Future<void> publishFlow(String flowId) async {
+    await _dio.post<Object?>(
+      _path('flows', flowId, 'publish'),
+      options: _options,
+    );
+  }
+
   /// Replaces a call flow's draft (`PUT .../flows/{id}/draft`): how a flow
   /// is made from a template, or copied (S9-10).
   Future<Json> saveFlowDraft(String flowId, Json graph) async {

@@ -367,6 +367,18 @@ class ResourcePage extends ConsumerWidget {
   /// The table for [def], with the extras some resources have.
   Widget _view(ResourceDef def) => ResourceView(
     def: def,
+    // S9-09: the main number, set up in one page.
+    headerActions: def.key == 'dids'
+        ? [
+            Builder(
+              builder: (context) => OutlinedButton.icon(
+                onPressed: () => context.go('/phone-numbers/setup'),
+                icon: const Icon(Icons.auto_fix_high_outlined),
+                label: Text(context.l10n.mainNumberSetUp),
+              ),
+            ),
+          ]
+        : const [],
     rowActions: switch (def.key) {
       'queues' => (context, ref, row) => [
         IconButton(
