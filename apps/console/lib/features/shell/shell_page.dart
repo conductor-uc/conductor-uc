@@ -13,13 +13,32 @@ import 'sections.dart';
 
 /// The signed-in frame: header, role-based navigation, and the section body
 /// (08 §3), narrowed to what the user's permissions allow.
-class ShellPage extends ConsumerWidget {
+class ShellPage extends ConsumerStatefulWidget {
   const ShellPage({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ShellPage> createState() => _ShellPageState();
+}
+
+class _ShellPageState extends ConsumerState<ShellPage> {
+  String? _location;
+
+  /// A note about the last page ("Saved.") is not about the next one, and
+  /// would sit over it: going to another page dismisses it (S9-03).
+  void _dismissToastOnPageChange(String location) {
+    if (_location != null && _location != location) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar(),
+      );
+    }
+    _location = location;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final child = widget.child;
     final session = ref.watch(sessionProvider);
     final brand = ref.watch(effectiveBrandProvider);
     final acting = ref.watch(actingProvider);
@@ -33,6 +52,7 @@ class ShellPage extends ConsumerWidget {
             hasPhone,
           );
     final location = GoRouterState.of(context).uri.path;
+    _dismissToastOnPageChange(location);
     final selected = sections.indexWhere((s) => location.startsWith(s.path));
 
     return Scaffold(
