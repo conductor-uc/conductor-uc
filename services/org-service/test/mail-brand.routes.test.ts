@@ -204,6 +204,7 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/orgs/:id/mail-brand'
       type: string;
       parentId: string | null;
       resellerId: string | null;
+      name: string;
     }
     const lineage = (id: string, headers: Record<string, string> = AUTH) =>
       app.inject({ method: 'GET', url: `/internal/v1/orgs/${id}/lineage`, headers });
@@ -221,18 +222,21 @@ describe.skipIf(skipReason !== undefined)('GET /internal/v1/orgs/:id/mail-brand'
         type: 'master',
         parentId: null,
         resellerId: null,
+        name: master.name,
       });
       expect((await lineage(reseller.id)).json<LineageBody>()).toEqual({
         orgId: reseller.id,
         type: 'reseller',
         parentId: master.id,
         resellerId: reseller.id,
+        name: reseller.name,
       });
       expect((await lineage(tenant.id)).json<LineageBody>()).toEqual({
         orgId: tenant.id,
         type: 'tenant',
         parentId: reseller.id,
         resellerId: reseller.id,
+        name: tenant.name,
       });
     });
   });

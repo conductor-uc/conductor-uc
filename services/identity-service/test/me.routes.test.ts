@@ -165,4 +165,43 @@ describe.skipIf(skipReason !== undefined)('GET /v1/orgs/:orgId/me', () => {
     const anonymous = await app.inject({ method: 'GET', url: '/v1/orgs/org-1/me' });
     expect(anonymous.statusCode).toBe(401);
   });
+
+  it('says who is signed in and where, for the header (S9-05)', async () => {
+    const u1 = await makeUser('org-1', 'tenant', 'maria@example.test');
+    const withProfile = await createServer({
+      serviceName: 'identity-service',
+      logger: silentLogger(),
+      context: { trustInternalHeaders: true, internalHeaderSigningSecret: SECRET },
+    });
+    registerMeRoutes(withProfile, h.roles, h.grants, {
+      users: h.users,
+      lineage: (orgId) =>
+        orgId === 'org-1'
+          ? Promise.resolve({ name: 'Bright Dental' })
+          : Promise.reject(new Error('down')),
+    });
+    await withProfile.ready();
+
+    const response = await withProfile.inject({
+      method: 'GET',
+      url: '/v1/orgs/org-1/me',
+      headers: asUser(u1, 'org-1', 'tenant'),
+    });
+    expect(response.json()).toMatchObject({
+      displayName: 'maria@example.test',
+      email: 'maria@example.test',
+      orgName: 'Bright Dental',
+    });
+
+    // Org-service down: the header goes without the org's name, and /me still answers.
+    const u2 = await makeUser('org-2', 'tenant', 'sam@example.test');
+    const degraded = await withProfile.inject({
+      method: 'GET',
+      url: '/v1/orgs/org-2/me',
+      headers: asUser(u2, 'org-2', 'tenant'),
+    });
+    expect(degraded.statusCode).toBe(200);
+    expect(degraded.json()).not.toHaveProperty('orgName');
+    await withProfile.close();
+  });
 });

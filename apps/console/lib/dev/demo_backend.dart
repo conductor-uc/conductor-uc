@@ -274,6 +274,14 @@ class _DemoAdapter implements HttpClientAdapter {
         'orgType': _orgType,
         'roleIds': const <String>[],
         'permissions': permissions,
+        // S9-05: who is signed in and where, for the header.
+        'displayName': demoDisplayName(_email),
+        'email': _email,
+        'orgName': switch (_orgType) {
+          'master' => 'Platform',
+          'reseller' => 'Northwind Telecom',
+          _ => 'Acme Dental',
+        },
       });
     }
     if (RegExp(r'^/v1/orgs/[^/]+/audit-events$').hasMatch(path)) {
@@ -357,3 +365,12 @@ class _DemoAdapter implements HttpClientAdapter {
   @override
   void close({bool force = false}) {}
 }
+
+/// "maria.lopez@x" → "Maria Lopez": a readable name for the demo's people.
+String demoDisplayName(String email) => email
+    .split('@')
+    .first
+    .split(RegExp(r'[._-]+'))
+    .where((w) => w.isNotEmpty)
+    .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+    .join(' ');

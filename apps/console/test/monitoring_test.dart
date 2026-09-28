@@ -131,7 +131,7 @@ Future<FakeHub> openMonitoring(
   );
   await submitSignIn(tester, email);
   await tester.ensureVisible(navItem('Monitoring'));
-  await tester.tap(navItem('Monitoring'));
+  await tapNav(tester, 'Monitoring');
   await tester.pumpAndSettle();
   return hub;
 }
@@ -555,7 +555,7 @@ void main() {
 
         // Leaving the page stops watching.
         await tester.ensureVisible(navItem('Dashboard'));
-        await tester.tap(navItem('Dashboard'));
+        await tapNav(tester, 'Dashboard');
         await tester.pumpAndSettle();
         expect(find.byType(MonitoringPage), findsNothing);
         expect(
@@ -835,7 +835,7 @@ void main() {
         ),
       );
       await submitSignIn(tester, 'tenant@example.test');
-      await tester.tap(navItem('Monitoring'));
+      await tapNav(tester, 'Monitoring');
       await tester.pumpAndSettle();
       expect(find.byType(MonitoringPage), findsOneWidget);
       final rows = tableRows(tester);
@@ -1173,7 +1173,7 @@ void main() {
         ),
       );
       await submitSignIn(tester, 'supervisor@example.test');
-      await tester.tap(navItem('Monitoring'));
+      await tapNav(tester, 'Monitoring');
       await tester.pumpAndSettle();
       // Answered and held calls; not the one still ringing.
       expect(find.byKey(const ValueKey('monitor-whisper-demo-a1')), findsOne);
@@ -1375,7 +1375,7 @@ void main() {
 
         // Leaving the page stops watching.
         await tester.ensureVisible(navItem('Dashboard'));
-        await tester.tap(navItem('Dashboard'));
+        await tapNav(tester, 'Dashboard');
         await tester.pumpAndSettle();
         expect(
           socket.sent,
@@ -1509,7 +1509,7 @@ void main() {
         ),
       );
       await submitSignIn(tester, 'tenant@example.test');
-      await tester.tap(navItem('Monitoring'));
+      await tapNav(tester, 'Monitoring');
       await tester.pumpAndSettle();
       expect(boardOrder(tester), [
         for (final e in demoPresence) e['extension'],

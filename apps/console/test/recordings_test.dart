@@ -4,6 +4,7 @@ import 'package:console/dev/demo_backend.dart';
 import 'package:console/features/recordings/recordings_api.dart';
 import 'package:console/features/shell/sections.dart';
 import 'package:console/features/voicemail/voicemail_api.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,7 +31,7 @@ Future<List<String>> openRecordings(
     ),
   );
   await submitSignIn(tester, email);
-  await tester.tap(navItem('Recordings'));
+  await tapNav(tester, 'Recordings');
   await tester.pumpAndSettle();
   // The test font is wide; give the table room so every action is on screen.
   tester.view.physicalSize = const Size(2600, 1200);
@@ -166,7 +167,7 @@ void main() {
       expect(navItem('Recordings'), findsNothing);
 
       final container = ProviderScope.containerOf(
-        tester.element(find.byType(NavigationRail)),
+        tester.element(find.byType(AppNavigation)),
       );
       container.read(routerProvider).go('/recordings');
       await tester.pumpAndSettle();

@@ -56,6 +56,43 @@ final routerProvider = Provider<GoRouter>((ref) {
     for (final s in [...myPhoneSections, myPhoneEntry]) s.path: s,
   }.values;
 
+  /// Where a signed-in person may be, given their sections: a section they
+  /// do not have goes to the forbidden page, and so on (the redirect rules
+  /// before S9-05, unchanged).
+  String? sectionRedirect(GoRouterState state, Session session) {
+    final path = state.uri.path;
+    final permissions = ref.read(knownPermissionsProvider);
+    final acting = ref.read(actingProvider);
+    final sections = visibleSections(
+      session,
+      acting,
+      permissions,
+      ref.read(myExtensionProvider).asData?.value != null,
+    );
+    if (_signedOutPaths.contains(path) || path == '/') {
+      return sections.first.path;
+    }
+    // A person with only a phone has no administrator's pages to be told
+    // they may not open: anything else takes them to their own.
+    if (session.orgType == OrgType.tenant &&
+        acting == null &&
+        isSelfOnly(permissions)) {
+      return sections.any((s) => path.startsWith(s.path))
+          ? null
+          : sections.first.path;
+    }
+    // A section the role does not have is not reachable by URL either: it
+    // gets the forbidden page. An address that is no section at all is a
+    // 404 page.
+    if (path == '/forbidden') return null;
+    if (!sections.any((s) => path.startsWith(s.path))) {
+      return everySection.any((s) => path.startsWith(s.path))
+          ? '/forbidden'
+          : null;
+    }
+    return null;
+  }
+
   return GoRouter(
     refreshListenable: refresh,
     errorBuilder: (context, state) => const Scaffold(body: NotFoundPage()),
@@ -72,36 +109,29 @@ final routerProvider = Provider<GoRouter>((ref) {
       }
       // S4-12 replaced Platform health with Operations; old links still work.
       if (path == '/platform-health') return '/operations';
-      final permissions = ref.read(knownPermissionsProvider);
+      // S9-05: the tenant a master or reseller is visiting is in the address
+      // (?as=), so a reload or a shared link comes back to it.
+      final asParam = state.uri.queryParameters['as'];
+      if (session.orgType != OrgType.tenant) {
+        ref.read(actingProvider.notifier).followAddress(asParam);
+      }
+      final target = sectionRedirect(state, session);
       final acting = ref.read(actingProvider);
-      final sections = visibleSections(
-        session,
-        acting,
-        permissions,
-        ref.read(myExtensionProvider).asData?.value != null,
-      );
-      if (_signedOutPaths.contains(path) || path == '/') {
-        return sections.first.path;
+      final uri = target == null ? state.uri : Uri.parse(target);
+      final wanted = acting?.id;
+      if (session.orgType != OrgType.tenant) {
+        ref.read(actingProvider.notifier).addressWritten(wanted);
       }
-      // A person with only a phone has no administrator's pages to be told
-      // they may not open: anything else takes them to their own.
-      if (session.orgType == OrgType.tenant &&
-          acting == null &&
-          isSelfOnly(permissions)) {
-        return sections.any((s) => path.startsWith(s.path))
-            ? null
-            : sections.first.path;
-      }
-      // A section the role does not have is not reachable by URL either: it
-      // gets the forbidden page. An address that is no section at all is a
-      // 404 page.
-      if (path == '/forbidden') return null;
-      if (!sections.any((s) => path.startsWith(s.path))) {
-        return everySection.any((s) => path.startsWith(s.path))
-            ? '/forbidden'
-            : null;
-      }
-      return null;
+      if (uri.queryParameters['as'] == wanted) return target;
+      return uri
+          .replace(
+            queryParameters: {
+              for (final e in uri.queryParameters.entries)
+                if (e.key != 'as') e.key: e.value,
+              'as': ?wanted,
+            },
+          )
+          .toString();
     },
     routes: [
       GoRoute(

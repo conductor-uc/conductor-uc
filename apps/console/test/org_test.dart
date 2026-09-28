@@ -1,3 +1,4 @@
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,7 +14,7 @@ Future<void> signInAs(WidgetTester tester, String email) async {
       : null;
   if (list == null) return;
   await tester.tap(
-    find.descendant(of: find.byType(NavigationRail), matching: find.text(list)),
+    find.descendant(of: find.byType(AppNavigation), matching: find.text(list)),
   );
   await tester.pumpAndSettle();
 }
@@ -169,12 +170,7 @@ void main() {
   group('brand editor (reseller)', () {
     Future<void> openBrand(WidgetTester tester) async {
       await signInAs(tester, 'reseller@example.test');
-      await tester.tap(
-        find.descendant(
-          of: find.byType(NavigationRail),
-          matching: find.text('Brand'),
-        ),
-      );
+      await tapNav(tester, 'Brand');
       await tester.pumpAndSettle();
     }
 
@@ -238,19 +234,9 @@ void main() {
       await tester.enterText(brandField('Display name'), 'Kept Name');
       await tester.pumpAndSettle();
       await tapVisible(tester, find.text('Save brand'));
-      await tester.tap(
-        find.descendant(
-          of: find.byType(NavigationRail),
-          matching: find.text('Users'),
-        ),
-      );
+      await tapNav(tester, 'Users');
       await tester.pumpAndSettle();
-      await tester.tap(
-        find.descendant(
-          of: find.byType(NavigationRail),
-          matching: find.text('Brand'),
-        ),
-      );
+      await tapNav(tester, 'Brand');
       await tester.pumpAndSettle();
       expect(find.text('Kept Name'), findsWidgets);
     });

@@ -20,6 +20,8 @@ export interface OrgLineage {
   readonly parentId: string | null;
   /** The reseller the org is or belongs to; null for the master. */
   readonly resellerId: string | null;
+  /** What the org is called; absent from an org-service older than S9-05. */
+  readonly name?: string;
 }
 
 export interface OrgClient {

@@ -165,9 +165,13 @@ class _OrgTile extends ConsumerWidget {
                             ActingTenant(
                               id: '${org['id']}',
                               name: '${org['name']}',
+                              resellerId: org['resellerId'] is String
+                                  ? org['resellerId'] as String
+                                  : null,
                             ),
                           );
-                      context.go('/extensions');
+                      // S9-05: a visit starts at the tenant's home.
+                      context.go('/dashboard');
                     },
               child: const Text('Act as'),
             ),

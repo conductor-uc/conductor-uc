@@ -194,14 +194,6 @@
   "@navCallRecords": {
     "description": "Navigation menu item. History of calls made and received."
   },
-  "navReports": "Reports",
-  "@navReports": {
-    "description": "Navigation menu item. Call reports and statistics."
-  },
-  "navSettings": "Settings",
-  "@navSettings": {
-    "description": "Navigation menu item. Organization settings."
-  },
   "authOrganizationId": "Organization ID",
   "@authOrganizationId": {
     "description": "Field label for the ID of the organization a person signs in to. Only asked when the web address does not say which organization it is."
@@ -968,5 +960,110 @@
   "formTrunkNeedsUsername": "A trunk that registers with the carrier needs its username.",
   "@formTrunkNeedsUsername": {
     "description": "A carrier connection set to register was given no username."
+  },
+  "navEmergencyLocations": "Emergency locations",
+  "@navEmergencyLocations": {
+    "description": "Navigation menu item. The street addresses sent with emergency calls."
+  },
+  "navGroupPlatform": "Platform",
+  "@navGroupPlatform": {
+    "description": "Heading of a group of navigation items: the platform operator's platform-wide screens."
+  },
+  "navGroupCustomers": "Customers",
+  "@navGroupCustomers": {
+    "description": "Heading of a group of navigation items: a reseller's customers."
+  },
+  "navGroupService": "Service",
+  "@navGroupService": {
+    "description": "Heading of a group of navigation items: what a reseller provides: carrier connections, web addresses, branding."
+  },
+  "navGroupPeople": "People and phones",
+  "@navGroupPeople": {
+    "description": "Heading of a group of navigation items: the people in an organization and their phones."
+  },
+  "navGroupCalls": "Calls",
+  "@navGroupCalls": {
+    "description": "Heading of a group of navigation items: how calls are answered and routed."
+  },
+  "navGroupActivity": "Activity",
+  "@navGroupActivity": {
+    "description": "Heading of a group of navigation items: live and past calls, recordings and voicemail."
+  },
+  "navGroupSettings": "Settings",
+  "@navGroupSettings": {
+    "description": "Heading of a group of navigation items: organization-wide settings."
+  },
+  "navGroupYou": "You",
+  "@navGroupYou": {
+    "description": "Heading of a group of navigation items: the signed-in person's own phone."
+  },
+  "navGroupAdmin": "Administration",
+  "@navGroupAdmin": {
+    "description": "Heading of a group of navigation items: who can sign in and what they did."
+  },
+  "shellMenu": "Menu",
+  "@shellMenu": {
+    "description": "Tooltip on the button that opens the navigation on a small screen."
+  },
+  "shellAccount": "Your account",
+  "@shellAccount": {
+    "description": "Tooltip on the button that opens the account menu."
+  },
+  "shellChangePassword": "Change password",
+  "@shellChangePassword": {
+    "description": "Account menu item: emails a link to choose a new password."
+  },
+  "shellPasswordLinkSent": "We've sent a link to {email} to choose a new password.",
+  "@shellPasswordLinkSent": {
+    "description": "Notice after asking for a password link from the account menu.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "shellLanguage": "Language",
+  "@shellLanguage": {
+    "description": "Account menu item: choose the console's language."
+  },
+  "shellContactSupport": "Contact support",
+  "@shellContactSupport": {
+    "description": "Account menu item: write to the support address."
+  },
+  "shellActingSwitch": "Switch",
+  "@shellActingSwitch": {
+    "description": "Button on the acting banner that moves to another customer organization."
+  },
+  "shellSwitchTitle": "Go to another customer",
+  "@shellSwitchTitle": {
+    "description": "Heading of the list of customer organizations to switch to."
+  },
+  "shellSwitchSearch": "Search customers",
+  "@shellSwitchSearch": {
+    "description": "Placeholder in the box that narrows the list of customer organizations."
+  },
+  "shellSwitchNone": "No other customers here.",
+  "@shellSwitchNone": {
+    "description": "Shown when there is no other customer organization to switch to."
+  },
+  "shellLoading": "Loading…",
+  "@shellLoading": {
+    "description": "Shown while something is on its way."
+  },
+  "shellOrgTypeMaster": "Platform operator",
+  "@shellOrgTypeMaster": {
+    "description": "Who the signed-in person is, under their name: the operator of the whole platform."
+  },
+  "shellOrgTypeReseller": "Reseller",
+  "@shellOrgTypeReseller": {
+    "description": "Who the signed-in person is, under their name: a reseller administrator."
+  },
+  "shellOrgTypeTenant": "Organization",
+  "@shellOrgTypeTenant": {
+    "description": "Who the signed-in person is, under their name: someone in a customer organization."
+  },
+  "languageName": "English",
+  "@languageName": {
+    "description": "This language's own name, as its speakers write it. Translators: put your language's name here."
   }
 }

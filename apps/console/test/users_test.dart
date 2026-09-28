@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'act_as_test.dart' show actAs, navItem, signInAs;
+import 'act_as_test.dart' show actAs, signInAs;
 import 'pbx_test.dart' show field, openSection, pickFromDropdown;
+import 'support.dart';
 
 /// [what], but only where it sits on the same table row as the text [anchor].
 /// (A `DataRow` is data, not a widget, so rows are told apart by position.)
@@ -258,7 +259,7 @@ void main() {
       await tester.tap(find.text('Acme Dental').first);
       await tester.pumpAndSettle();
       await actAs(tester, 'Acme Dental');
-      await tester.tap(navItem('Users'));
+      await tapNav(tester, 'Users');
       await tester.pumpAndSettle();
     }
 
@@ -315,7 +316,7 @@ void main() {
       await enterTenantUsers(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Exit'));
       await tester.pumpAndSettle();
-      await tester.tap(navItem('Users'));
+      await tapNav(tester, 'Users');
       await tester.pumpAndSettle();
       expect(find.text('Riley Owner'), findsNothing);
       expect(find.text('Alex Admin (you)'), findsOneWidget);

@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'act_as_test.dart' show navItem, signInAs;
+import 'support.dart';
 
 Future<void> openSecurity(WidgetTester tester) async {
   await signInAs(tester, 'master@example.test');
-  await tester.tap(navItem('Security'));
+  await tapNav(tester, 'Security');
   await tester.pumpAndSettle();
 }
 

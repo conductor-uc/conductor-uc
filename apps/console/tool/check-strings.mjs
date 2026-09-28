@@ -58,7 +58,16 @@ function count(source) {
     .split('\n')
     .filter((line) => !line.trimStart().startsWith('//'))
     .join('\n');
-  return patterns.reduce((n, re) => n + (code.match(re)?.length ?? 0), 0);
+  let n = 0;
+  for (const re of patterns) {
+    for (const match of code.matchAll(re)) {
+      // Only words count: '${row['name']}' or '$count' is data, not text.
+      const literal = /(['"])(.*)\1\s*$/.exec(match[0])?.[2] ?? match[0];
+      const words = literal.replace(/\$\{[^}]*\}|\$[A-Za-z_]\w*/g, '');
+      if (/[A-Za-z]/.test(words)) n++;
+    }
+  }
+  return n;
 }
 
 const counts = {};

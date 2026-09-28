@@ -3,6 +3,7 @@ import { ProblemError, Type, type Server } from '@cuc/http';
 
 import type { GrantRepo } from '../repo/grant.repo.js';
 import type { RoleRepo } from '../repo/role.repo.js';
+import type { UserRepo } from '../repo/user.repo.js';
 
 const OrgParamsSchema = Type.Object({ orgId: Type.String({ minLength: 1 }) });
 
@@ -23,7 +24,22 @@ const OrgParamsSchema = Type.Object({ orgId: Type.String({ minLength: 1 }) });
  * is also told `extension.read`, so the console shows the screen and the
  * services, which apply the same implication, agree.
  */
-export function registerMeRoutes(app: Server, roles: RoleRepo, grants: GrantRepo): void {
+/**
+ * Where `/me` finds who the person is (S9-05): their name and address from
+ * this service, their org's name from org-service. Both optional, so a
+ * caller that only needs permissions (a test) can leave them out.
+ */
+export interface MeProfileSources {
+  readonly users?: Pick<UserRepo, 'findById'>;
+  readonly lineage?: (orgId: string) => Promise<{ readonly name?: string } | undefined>;
+}
+
+export function registerMeRoutes(
+  app: Server,
+  roles: RoleRepo,
+  grants: GrantRepo,
+  profile: MeProfileSources = {},
+): void {
   app.get(
     '/v1/orgs/:orgId/me',
     {
@@ -41,6 +57,10 @@ export function registerMeRoutes(app: Server, roles: RoleRepo, grants: GrantRepo
             ]),
             roleIds: Type.Array(Type.String()),
             permissions: Type.Array(Type.String()),
+            /** Who is signed in and where, for the console's header (S9-05). */
+            displayName: Type.Optional(Type.String()),
+            email: Type.Optional(Type.String()),
+            orgName: Type.Optional(Type.String()),
           }),
         },
       },
@@ -68,12 +88,20 @@ export function registerMeRoutes(app: Server, roles: RoleRepo, grants: GrantRepo
         permissions.add(grant.permission);
       }
 
+      const [user, org] = await Promise.all([
+        profile.users?.findById(actorId),
+        // The header can do without the org's name; it never fails the call.
+        profile.lineage?.(orgId).catch(() => undefined),
+      ]);
+
       return {
         userId: actorId,
         orgId,
         orgType,
         roleIds,
         permissions: [...expandPermissions(permissions)].sort(),
+        ...(user === undefined ? {} : { displayName: user.displayName, email: user.email }),
+        ...(org?.name === undefined ? {} : { orgName: org.name }),
       };
     },
   );

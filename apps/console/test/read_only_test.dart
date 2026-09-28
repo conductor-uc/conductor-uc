@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:console/core/permissions.dart';
 import 'package:console/core/session.dart';
 import 'package:console/features/shell/sections.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -70,7 +71,7 @@ void main() {
 
     testWidgets('has the configuration sections, read-only', (tester) async {
       await signInAndOpen(tester, 'support@example.test', 'Ring groups');
-      final rail = find.byType(NavigationRail);
+      final rail = find.byType(AppNavigation);
       for (final label in [
         'Extensions',
         'Phone numbers',
@@ -102,12 +103,7 @@ void main() {
   testWidgets('someone holding only extension.manage still sees Extensions, '
       'and can change them', (tester) async {
     await completeSignIn(tester, 'limited@example.test');
-    await tester.tap(
-      find.descendant(
-        of: find.byType(NavigationRail),
-        matching: find.text('Extensions'),
-      ),
-    );
+    await tapNav(tester, 'Extensions');
     await tester.pumpAndSettle();
     expect(find.text('Alice Kim'), findsOneWidget);
     expect(find.text('New extension'), findsOneWidget);

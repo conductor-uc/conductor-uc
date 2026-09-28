@@ -398,11 +398,17 @@ class DemoPbx {
 
   final _tenants = <String, List<Map<String, dynamic>>>{
     'rs-1': [
-      _org('t-1', 'Acme Dental', 'acme-dental'),
-      _org('t-2', 'Blue Bottle Cafe', 'blue-bottle'),
-      _org('t-3', 'Old Company', 'old-co', status: 'suspended'),
+      _org('t-1', 'Acme Dental', 'acme-dental', resellerId: 'rs-1'),
+      _org('t-2', 'Blue Bottle Cafe', 'blue-bottle', resellerId: 'rs-1'),
+      _org(
+        't-3',
+        'Old Company',
+        'old-co',
+        status: 'suspended',
+        resellerId: 'rs-1',
+      ),
     ],
-    'rs-2': [_org('t-4', 'Lakeside Realty', 'lakeside')],
+    'rs-2': [_org('t-4', 'Lakeside Realty', 'lakeside', resellerId: 'rs-2')],
   };
 
   final _baseDomains = <String, List<Map<String, dynamic>>>{
@@ -515,6 +521,7 @@ class DemoPbx {
     String name,
     String slug, {
     String status = 'active',
+    String? resellerId,
   }) => {
     'id': id,
     'name': name,
@@ -522,6 +529,8 @@ class DemoPbx {
     'status': status,
     'timezone': 'UTC',
     'country': 'US',
+    'resellerId': resellerId,
+    'parentId': resellerId,
   };
 
   Map<String, dynamic>? _findOrg(String id) {

@@ -1,7 +1,7 @@
 {
   "lib/features/audit/audit_page.dart": 16,
-  "lib/features/callflow/builder/flow_builder_page.dart": 17,
-  "lib/features/callflow/builder/flow_panels.dart": 24,
+  "lib/features/callflow/builder/flow_builder_page.dart": 16,
+  "lib/features/callflow/builder/flow_panels.dart": 22,
   "lib/features/callflow/builder/node_header.dart": 1,
   "lib/features/callflow/builder/node_types.dart": 19,
   "lib/features/callflow/builder/palette.dart": 1,
@@ -36,12 +36,13 @@
   "lib/features/queues/tiers_dialog.dart": 12,
   "lib/features/recordings/policies_panel.dart": 34,
   "lib/features/recordings/recordings_api.dart": 18,
-  "lib/features/recordings/recordings_page.dart": 35,
+  "lib/features/recordings/recordings_page.dart": 34,
   "lib/features/security/security_page.dart": 14,
+  "lib/features/shell/shell_page.dart": 1,
   "lib/features/trunks/outbound_routes_page.dart": 19,
   "lib/features/trunks/trunks_page.dart": 20,
   "lib/features/users/users_api.dart": 14,
   "lib/features/users/users_page.dart": 28,
   "lib/features/voicemail/voicemail_api.dart": 3,
-  "lib/features/voicemail/voicemail_page.dart": 40
+  "lib/features/voicemail/voicemail_page.dart": 39
 }

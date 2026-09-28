@@ -1,5 +1,6 @@
 import 'package:console/app/router.dart';
 import 'package:console/dev/demo_backend.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,7 +16,7 @@ Future<void> openRoutes(
   await pumpApp(tester, appWith(api: demoApi()));
   await submitSignIn(tester, email);
   await tester.ensureVisible(navItem('Outbound routes'));
-  await tester.tap(navItem('Outbound routes'));
+  await tapNav(tester, 'Outbound routes');
   await tester.pumpAndSettle();
 }
 
@@ -261,7 +262,7 @@ void main() {
       await signInAs(tester, 'limited@example.test');
       expect(navItem('Outbound routes'), findsNothing);
       final container = ProviderScope.containerOf(
-        tester.element(find.byType(NavigationRail)),
+        tester.element(find.byType(AppNavigation)),
       );
       container.read(routerProvider).go('/outbound-routes');
       await tester.pumpAndSettle();
@@ -274,7 +275,7 @@ void main() {
       await actAs(tester, 'Acme Dental');
       expect(navItem('Outbound routes'), findsOneWidget);
       await tester.ensureVisible(navItem('Outbound routes'));
-      await tester.tap(navItem('Outbound routes'));
+      await tapNav(tester, 'Outbound routes');
       await tester.pumpAndSettle();
       expect(tableRows(tester), hasLength(2));
     });

@@ -39,6 +39,8 @@ const LineageResponseSchema = Type.Object({
   parentId: nullableString,
   /** The reseller this org is or belongs to; null for the master. */
   resellerId: nullableString,
+  /** What the org is called, for the console's header (S9-05). */
+  name: Type.String(),
 });
 const LimitsResponseSchema = Type.Object({ limits: Type.Record(Type.String(), Type.Unknown()) });
 
@@ -289,6 +291,7 @@ export function registerInternalRoutes(
         parentId: org.parentId,
         resellerId:
           org.type === 'reseller' ? org.id : org.type === 'tenant' ? org.resellerId : null,
+        name: org.name,
       } satisfies Static<typeof LineageResponseSchema>;
     },
   );

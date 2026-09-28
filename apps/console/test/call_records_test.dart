@@ -1,6 +1,7 @@
 import 'package:console/app/router.dart';
 import 'package:console/dev/demo_backend.dart';
 import 'package:console/features/cdr/call_records_page.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -28,7 +29,7 @@ Future<void> openCalls(
   );
   await submitSignIn(tester, email);
   await tester.ensureVisible(navItem('Call records'));
-  await tester.tap(navItem('Call records'));
+  await tapNav(tester, 'Call records');
   await tester.pumpAndSettle();
 }
 
@@ -328,7 +329,7 @@ void main() {
       expect(navItem('Call records'), findsNothing);
 
       final container = ProviderScope.containerOf(
-        tester.element(find.byType(NavigationRail)),
+        tester.element(find.byType(AppNavigation)),
       );
       container.read(routerProvider).go('/call-records');
       await tester.pumpAndSettle();
@@ -346,7 +347,7 @@ void main() {
       await actAs(tester, 'Acme Dental');
       expect(navItem('Call records'), findsOneWidget);
       await tester.ensureVisible(navItem('Call records'));
-      await tester.tap(navItem('Call records'));
+      await tapNav(tester, 'Call records');
       await tester.pumpAndSettle();
       expect(tableRows(tester), hasLength(50));
     });
