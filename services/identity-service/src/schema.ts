@@ -203,6 +203,8 @@ export interface IdentityServiceDb extends EventTables {
     expires_at: Date;
     accepted_at: Date | null;
     created_at: Date;
+    /** The extension to link to the person once they accept (S9-07); usually null. */
+    extension_id: ColumnType<string | null, string | null | undefined, string | null>;
   };
 
   /**

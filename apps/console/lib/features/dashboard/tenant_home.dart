@@ -77,12 +77,13 @@ class TenantHome extends ConsumerWidget {
           path: '/settings',
           done: has('emergency-locations'),
         ),
-      if (visible.contains('/extensions'))
+      if (visible.contains('/people'))
         _Step(
           title: l10n.homeStepExtensionsTitle,
           why: l10n.homeStepExtensionsWhy,
           action: l10n.homeStepExtensionsAction,
-          path: '/extensions',
+          // S9-07: people are added with their extension, voicemail and phone.
+          path: '/people/new',
           done: has('extensions'),
         ),
       if (visible.contains('/phones'))

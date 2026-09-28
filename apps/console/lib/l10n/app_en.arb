@@ -1102,15 +1102,15 @@
   "@homeStepLocationAction": {
     "description": "Button for the emergency address step."
   },
-  "homeStepExtensionsTitle": "Give your people extensions",
+  "homeStepExtensionsTitle": "Add your people",
   "@homeStepExtensionsTitle": {
     "description": "Setup step: internal numbers for the organization's people."
   },
-  "homeStepExtensionsWhy": "An extension is someone's own number inside the company, with their voicemail.",
+  "homeStepExtensionsWhy": "Each person gets their own number inside the company, with voicemail and a desk phone or app.",
   "@homeStepExtensionsWhy": {
     "description": "Why the extensions step matters. Explains what an extension is."
   },
-  "homeStepExtensionsAction": "Add extensions",
+  "homeStepExtensionsAction": "Add a person",
   "@homeStepExtensionsAction": {
     "description": "Button for the extensions step."
   },
@@ -1209,6 +1209,261 @@
         "type": "String"
       },
       "to": {
+        "type": "String"
+      }
+    }
+  },
+  "navPeople": "People",
+  "@navPeople": {
+    "description": "Navigation menu item. Everyone in the company with a phone number."
+  },
+  "navGroupAdvanced": "Advanced",
+  "@navGroupAdvanced": {
+    "description": "Heading of the navigation group with the lower-level screens most people don't need."
+  },
+  "peopleTitle": "People",
+  "@peopleTitle": {
+    "description": "Heading of the People screen."
+  },
+  "peopleSubtitle": "Everyone with a phone number here, with their voicemail, desk phone and sign-in.",
+  "@peopleSubtitle": {
+    "description": "Line under the People heading."
+  },
+  "peopleAdd": "Add a person",
+  "@peopleAdd": {
+    "description": "Button that opens the form for adding a person."
+  },
+  "peopleEmptyTitle": "No one here yet.",
+  "@peopleEmptyTitle": {
+    "description": "Shown on the People screen when there is no one."
+  },
+  "peopleEmptyBody": "Add the people who make and take calls: each gets their own number, voicemail, and a desk phone or app.",
+  "@peopleEmptyBody": {
+    "description": "Explanation on the empty People screen."
+  },
+  "peopleColumnName": "Name",
+  "@peopleColumnName": {
+    "description": "Column heading: the person's name."
+  },
+  "peopleColumnExtension": "Extension",
+  "@peopleColumnExtension": {
+    "description": "Column heading: the person's internal number."
+  },
+  "peopleColumnPhone": "Phone",
+  "@peopleColumnPhone": {
+    "description": "Column heading: the person's desk phone."
+  },
+  "peopleColumnVoicemail": "Voicemail",
+  "@peopleColumnVoicemail": {
+    "description": "Column heading: whether the person has voicemail."
+  },
+  "peopleColumnSignIn": "Signs in as",
+  "@peopleColumnSignIn": {
+    "description": "Column heading: the email address the person signs in with."
+  },
+  "peopleNoSignIn": "Doesn't sign in",
+  "@peopleNoSignIn": {
+    "description": "Shown for a person with no account to sign in with."
+  },
+  "peopleNoDeskPhone": "App or none",
+  "@peopleNoDeskPhone": {
+    "description": "Shown for a person with no desk phone (they may use a phone app)."
+  },
+  "peopleDeskPhone": "Desk phone",
+  "@peopleDeskPhone": {
+    "description": "A desk phone whose model is not known."
+  },
+  "peopleDeleteTitle": "Remove {name}?",
+  "@peopleDeleteTitle": {
+    "description": "Heading of the confirmation before removing a person.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "peopleDeleteBody": "Extension {number} stops working at once. Calls to it are no longer answered.",
+  "@peopleDeleteBody": {
+    "description": "What removing a person does.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "peopleDeleteImpactPhone": "Their desk phone is signed out.",
+  "@peopleDeleteImpactPhone": {
+    "description": "Consequence of removing a person: their phone stops working."
+  },
+  "peopleDeleteImpactVoicemail": "Their voicemail box stops taking messages.",
+  "@peopleDeleteImpactVoicemail": {
+    "description": "Consequence of removing a person: their voicemail."
+  },
+  "peopleAddTitle": "Add a person",
+  "@peopleAddTitle": {
+    "description": "Heading of the page for adding a person."
+  },
+  "peopleAddSubtitle": "Their number, voicemail and desk phone, all at once. Only their name and number are needed.",
+  "@peopleAddSubtitle": {
+    "description": "Line under the add-a-person heading."
+  },
+  "peopleTryAgain": "Finish",
+  "@peopleTryAgain": {
+    "description": "Save button once adding a person stopped part-way: does the parts not yet done."
+  },
+  "peopleWhoTitle": "Who",
+  "@peopleWhoTitle": {
+    "description": "Heading of the part of the person form about who they are."
+  },
+  "peopleName": "Name",
+  "@peopleName": {
+    "description": "Field label: the person's name as callers and colleagues see it."
+  },
+  "peopleNameHint": "Maria Lopez, or Front desk",
+  "@peopleNameHint": {
+    "description": "Example in the name field."
+  },
+  "peopleExtensionTitle": "Their extension",
+  "@peopleExtensionTitle": {
+    "description": "Heading of the part of the person form about their internal number."
+  },
+  "peopleExtensionDescription": "The short number colleagues dial to reach them, and the number their phone signs in as.",
+  "@peopleExtensionDescription": {
+    "description": "Explains what an extension is."
+  },
+  "peopleExtensionNumber": "Extension number",
+  "@peopleExtensionNumber": {
+    "description": "Field label: the person's internal number."
+  },
+  "peopleExtensionNumberHelp": "2 to 6 digits. We suggested the next free one.",
+  "@peopleExtensionNumberHelp": {
+    "description": "Help under the extension number field."
+  },
+  "peopleVoicemailTitle": "Voicemail",
+  "@peopleVoicemailTitle": {
+    "description": "Heading of the voicemail part of the person form."
+  },
+  "peopleVoicemailOn": "Take messages when they don't answer",
+  "@peopleVoicemailOn": {
+    "description": "Switch that gives the person voicemail."
+  },
+  "peopleVoicemailOnHelp": "Callers can leave a message; they hear it on their phone or in the console.",
+  "@peopleVoicemailOnHelp": {
+    "description": "Help under the voicemail switch."
+  },
+  "peopleVoicemailPin": "Voicemail PIN",
+  "@peopleVoicemailPin": {
+    "description": "Field label: the digits to open voicemail from a phone."
+  },
+  "peopleVoicemailPinHelp": "They enter this to hear their messages from a phone. We made one up; they can change it later.",
+  "@peopleVoicemailPinHelp": {
+    "description": "Help under the voicemail PIN field."
+  },
+  "peoplePhoneTitle": "Desk phone",
+  "@peoplePhoneTitle": {
+    "description": "Heading of the desk phone part of the person form."
+  },
+  "peoplePhoneDescription": "Skip this if they use a phone app on their computer or mobile.",
+  "@peoplePhoneDescription": {
+    "description": "Explains the desk phone part is optional."
+  },
+  "peopleHasDeskPhone": "They have a desk phone",
+  "@peopleHasDeskPhone": {
+    "description": "Switch for adding the person's desk phone."
+  },
+  "peopleHasDeskPhoneHelp": "It sets itself up once plugged in.",
+  "@peopleHasDeskPhoneHelp": {
+    "description": "Help under the desk phone switch."
+  },
+  "peopleMac": "MAC address",
+  "@peopleMac": {
+    "description": "Field label: the hardware address printed on the phone."
+  },
+  "peopleMacHelp": "On the label on the back of the phone, such as 00:15:65:AA:BB:CC.",
+  "@peopleMacHelp": {
+    "description": "Where to find a phone's MAC address."
+  },
+  "peopleModel": "Model",
+  "@peopleModel": {
+    "description": "Field label: the phone's model, for reference."
+  },
+  "peopleModelHint": "Yealink T54W",
+  "@peopleModelHint": {
+    "description": "Example in the phone model field."
+  },
+  "peopleRemovePhone": "Remove phone",
+  "@peopleRemovePhone": {
+    "description": "Button that removes the person's desk phone."
+  },
+  "peopleRemovePhoneTitle": "Remove this phone?",
+  "@peopleRemovePhoneTitle": {
+    "description": "Heading of the confirmation before removing a desk phone."
+  },
+  "peopleRemovePhoneBody": "It stops working at once. Add it again to use it.",
+  "@peopleRemovePhoneBody": {
+    "description": "What removing a desk phone does."
+  },
+  "peopleSignInTitle": "Signing in",
+  "@peopleSignInTitle": {
+    "description": "Heading of the part of the person form about their account."
+  },
+  "peopleSignInDescription": "Let them sign in to change their own forwarding, hear their voicemail, and see their calls.",
+  "@peopleSignInDescription": {
+    "description": "Explains what signing in gives the person."
+  },
+  "peopleInvite": "Invite them to sign in",
+  "@peopleInvite": {
+    "description": "Switch that sends the person an invitation email."
+  },
+  "peopleInviteHelp": "We'll email them a link to choose a password.",
+  "@peopleInviteHelp": {
+    "description": "Help under the invite switch."
+  },
+  "peopleSignsInAs": "Signs in with this address.",
+  "@peopleSignsInAs": {
+    "description": "Shown under the email of a person who has an account."
+  },
+  "peopleEmergencyLocation": "Emergency location",
+  "@peopleEmergencyLocation": {
+    "description": "Field label: the address emergency services are sent to for this person's calls."
+  },
+  "peopleEmergencyLocationHelp": "Where emergency services are sent when they dial 911.",
+  "@peopleEmergencyLocationHelp": {
+    "description": "Help under the emergency location field."
+  },
+  "peopleCallerIdNumber": "Caller ID number",
+  "@peopleCallerIdNumber": {
+    "description": "Field label: the number outside callers see when this person calls them."
+  },
+  "peopleCallerIdNumberHelp": "The number people see when they call out. Leave blank for the company's main number.",
+  "@peopleCallerIdNumberHelp": {
+    "description": "Help under the caller ID field."
+  },
+  "peoplePartExtension": "Extension",
+  "@peoplePartExtension": {
+    "description": "A step in adding a person: making their extension."
+  },
+  "peoplePartVoicemail": "Voicemail",
+  "@peoplePartVoicemail": {
+    "description": "A step in adding a person: their voicemail box."
+  },
+  "peoplePartPhone": "Desk phone",
+  "@peoplePartPhone": {
+    "description": "A step in adding a person: their desk phone."
+  },
+  "peoplePartInvite": "Invitation",
+  "@peoplePartInvite": {
+    "description": "A step in adding a person: emailing their invitation."
+  },
+  "peoplePartlyDone": "Some of it is done. Fix what's marked and press Finish to do the rest.",
+  "@peoplePartlyDone": {
+    "description": "Shown when adding a person stopped part-way."
+  },
+  "peopleAdded": "{name} added.",
+  "@peopleAdded": {
+    "description": "Notice after adding a person.",
+    "placeholders": {
+      "name": {
         "type": "String"
       }
     }

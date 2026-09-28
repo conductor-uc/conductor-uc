@@ -437,7 +437,11 @@ export function createAuthService(options: AuthServiceOptions) {
         readonly resellerId: string | null;
         readonly userId: string | null;
       },
-      input: { readonly email: string; readonly displayName: string },
+      input: {
+        readonly email: string;
+        readonly displayName: string;
+        readonly extensionId?: string | undefined;
+      },
     ) {
       return tokens.createInvitation(
         ctx,
@@ -448,6 +452,7 @@ export function createAuthService(options: AuthServiceOptions) {
           email: input.email,
           displayName: input.displayName,
           invitedBy: actor.userId,
+          extensionId: input.extensionId ?? null,
         },
         invitationTtlHours,
       );
@@ -484,7 +489,7 @@ export function createAuthService(options: AuthServiceOptions) {
         displayName: invitation.displayName,
         password,
       });
-      await tokens.markInvitationAccepted(invitation.id);
+      await tokens.markInvitationAccepted(invitation, user.id, ctx);
       return user;
     },
 

@@ -63,7 +63,8 @@ function count(source) {
     for (const match of code.matchAll(re)) {
       // Only words count: '${row['name']}' or '$count' is data, not text.
       const literal = /(['"])(.*)\1\s*$/.exec(match[0])?.[2] ?? match[0];
-      const words = literal.replace(/\$\{[^}]*\}|\$[A-Za-z_]\w*/g, '');
+      // An interpolation cut short by a nested quote ('${row['mac']}') is still one.
+      const words = literal.replace(/\$\{[^}]*\}?|\$[A-Za-z_]\w*/g, '');
       if (/[A-Za-z]/.test(words)) n++;
     }
   }

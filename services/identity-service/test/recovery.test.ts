@@ -550,6 +550,43 @@ describe.skipIf(skipReason !== undefined)('password reset, invitations, refresh 
       expect(signIn.statusCode).toBe(200);
     });
 
+    it('an invitation can name the extension waiting for them, linked on accepting (S9-07)', async () => {
+      const orgId = crypto.randomUUID();
+      const created = await app.inject({
+        method: 'POST',
+        url: `/v1/orgs/${orgId}/invitations`,
+        headers: asActor(orgId, 'tenant'),
+        payload: { email: 'maria@example.com', displayName: 'Maria Lopez', extensionId: 'ext-201' },
+      });
+      expect(created.statusCode).toBe(201);
+      const token = await tokenOf('maria@example.com');
+      const accept = await app.inject({
+        method: 'POST',
+        url: '/v1/auth/invitations/accept',
+        payload: { token, password: NEW_PASSWORD },
+      });
+      expect(accept.statusCode).toBe(201);
+
+      const user = await h.users.findByOrgAndEmail(orgId, 'maria@example.com');
+      const [event] = await outboxOf('identity.invitation.accepted');
+      const data = (
+        typeof event!.payload === 'string' ? JSON.parse(event!.payload) : event!.payload
+      ) as Record<string, unknown>;
+      expect(data).toMatchObject({ orgId, userId: user?.id, extensionId: 'ext-201' });
+    });
+
+    it("a reseller can't name an extension: that links a person to tenant data", async () => {
+      const resellerId = crypto.randomUUID();
+      const response = await app.inject({
+        method: 'POST',
+        url: `/v1/orgs/${resellerId}/invitations`,
+        headers: asActor(resellerId, 'reseller', resellerId),
+        payload: { email: 'maria@example.com', displayName: 'Maria Lopez', extensionId: 'ext-201' },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'reseller_cannot_link_user' });
+    });
+
     it('an accepted invitation cannot be used again', async () => {
       const orgId = crypto.randomUUID();
       await invite(orgId, asActor(orgId, 'tenant'));

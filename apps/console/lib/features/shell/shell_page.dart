@@ -39,9 +39,13 @@ class _ShellPageState extends ConsumerState<ShellPage> {
   /// would sit over it: going to another page dismisses it (S9-03).
   void _dismissToastOnPageChange(String location) {
     if (_location != null && _location != location) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => ScaffoldMessenger.maybeOf(context)?.hideCurrentSnackBar(),
-      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        messenger?.hideCurrentSnackBar();
+        // A note meant for this page ("Maria Lopez added.").
+        final note = takeNextPageNote();
+        if (note != null && messenger != null) showToast(messenger, note);
+      });
     }
     _location = location;
   }

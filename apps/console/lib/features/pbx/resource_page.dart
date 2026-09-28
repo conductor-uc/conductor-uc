@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../forms/validators.dart';
 import '../../l10n/l10n.dart';
 import '../../widgets/data_table.dart';
 import '../../widgets/feedback.dart';
@@ -209,7 +210,10 @@ class ResourceView extends ConsumerWidget {
       case FieldKind.dateList:
         return summarizeHolidays(value);
       default:
-        return value == null || value == '' ? (f.emptyLabel ?? '—') : '$value';
+        if (value == null || value == '') return f.emptyLabel ?? '—';
+        // S9-07: a MAC reads as printed on the phone.
+        if (f.format == FieldFormat.mac) return formatMac('$value');
+        return '$value';
     }
   }
 

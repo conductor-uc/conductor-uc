@@ -79,6 +79,14 @@ Parsed<String> parseMac(String input) {
       : Parsed.error(currentL10n.formMacInvalid);
 }
 
+/// A MAC address as printed on a phone: `00:15:65:AA:BB:CC`, whatever
+/// separators it was stored or typed with; anything else as it is.
+String formatMac(String? mac) {
+  final bare = (mac ?? '').replaceAll(RegExp(r'[:.\-\s]'), '').toUpperCase();
+  if (!RegExp(r'^[0-9A-F]{12}$').hasMatch(bare)) return mac ?? '';
+  return [for (var i = 0; i < 12; i += 2) bare.substring(i, i + 2)].join(':');
+}
+
 /// One email address.
 Parsed<String> parseEmail(String input) {
   final text = input.trim();

@@ -147,3 +147,18 @@ void showToast(
       ),
     );
 }
+
+String? _nextPageNote;
+
+/// A note for the page about to be opened ("Maria Lopez added." on the way
+/// back to the list): the shell shows it once the page has changed, after
+/// dismissing the last page's notes.
+void showToastOnNextPage(String message) => _nextPageNote = message;
+
+/// Called by the shell when the page changes: the note waiting for the new
+/// page, if any, taken once.
+String? takeNextPageNote() {
+  final note = _nextPageNote;
+  _nextPageNote = null;
+  return note;
+}
