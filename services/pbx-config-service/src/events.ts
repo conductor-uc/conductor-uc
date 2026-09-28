@@ -1,3 +1,4 @@
+import { ORG_DELETED_EVENTS } from '@cuc/events';
 import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
@@ -12,6 +13,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * dual-publish discipline 05 §5 already asks of every event change.
  */
 export const pbxEvents = defineEvents({
+  // S1-16 (G-11): org-service's deletions, which this service acts on.
+  ...ORG_DELETED_EVENTS,
   'pbx.extension.created': {
     schemaVersion: 1,
     description: 'An extension was created, with SIP credentials generated for it.',

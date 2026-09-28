@@ -17,6 +17,7 @@ import { registerOutboundRouteRoutes } from './routes/outbound-route.routes.js';
 import { registerTrunkRoutes } from './routes/trunk.routes.js';
 import type { TrunkServiceDb } from './schema.js';
 import { createTelephonyConfigClient } from './telephony-config-client.js';
+import { createOrgDeletionConsumer } from './org-deletion.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -66,6 +67,11 @@ const relay = createRelay({
   retentionDays: config.OUTBOX_RETENTION_DAYS,
 });
 const relayLoop = relay.run();
+
+// S1-16 (G-11): a deleted org's rows go when org-service says so.
+const orgDeletion = createOrgDeletionConsumer(db, bus, logger);
+await orgDeletion.ensure();
+const orgDeletionLoop = orgDeletion.run();
 
 const kek = fileKekFromConfig(config);
 const orgClient = createOrgClient({
@@ -140,7 +146,9 @@ async function shutdown(signal: string): Promise<void> {
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
+  orgDeletion.stop();
   await relayLoop;
+  await orgDeletionLoop;
   await bus.close();
   await kekRewrap.stop();
   await db.destroy();

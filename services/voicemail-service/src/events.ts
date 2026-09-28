@@ -1,3 +1,4 @@
+import { ORG_DELETED_EVENTS } from '@cuc/events';
 import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
@@ -15,6 +16,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * docs/decisions.md for the open item this leaves.
  */
 export const voicemailEvents = defineEvents({
+  // S1-16 (G-11): org-service's deletions, which this service acts on.
+  ...ORG_DELETED_EVENTS,
   'voicemail.message.created': {
     schemaVersion: 1,
     description: 'A voicemail message finished uploading and is ready to retrieve.',

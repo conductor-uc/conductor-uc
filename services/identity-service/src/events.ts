@@ -1,3 +1,4 @@
+import { ORG_DELETED_EVENTS } from '@cuc/events';
 import { Type, defineEvents } from '@cuc/api-contracts';
 
 /**
@@ -15,6 +16,8 @@ import { Type, defineEvents } from '@cuc/api-contracts';
  * and grants work in later tasks, not invented ahead of a publisher.
  */
 export const identityEvents = defineEvents({
+  // S1-16 (G-11): org-service's deletions, which this service acts on.
+  ...ORG_DELETED_EVENTS,
   'identity.user.created': {
     schemaVersion: 1,
     description: "A user was created — for now, always an org's first admin.",

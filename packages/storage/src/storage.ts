@@ -1,11 +1,14 @@
 import {
   CreateBucketCommand,
+  DeleteBucketCommand,
   DeleteBucketLifecycleCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetBucketLifecycleConfigurationCommand,
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutBucketCorsCommand,
   PutBucketEncryptionCommand,
   PutBucketLifecycleConfigurationCommand,
@@ -79,6 +82,12 @@ export interface ScopedStorage {
   /** Deletes one object. Deleting one that is already gone is not an error (S3 semantics). */
   deleteObject(key: string): Promise<void>;
   /**
+   * Deletes every object whose key starts with `prefix` (S1-16: a deleted
+   * org's data), a thousand at a time. Answers how many were deleted; a
+   * bucket that does not exist has none. Safe to repeat.
+   */
+  deleteUnder(prefix: string): Promise<number>;
+  /**
    * Creates this scope's bucket if it does not exist yet, with server-side
    * encryption, a public-access block (05 §4) and the browser CORS rule
    * (G-80). Idempotent: a bucket that already exists is not recreated, and
@@ -101,6 +110,13 @@ export interface ScopedStorage {
 export interface Storage {
   forTenant(tenantId: string): ScopedStorage;
   forPlatform(): ScopedStorage;
+  /**
+   * S1-16 (G-11 (3)): removes everything a deleted tenant stored, whichever
+   * service wrote it: its bucket's objects and then the bucket
+   * (bucket-per-tenant), or everything under its prefix of the shared bucket.
+   * Answers how many objects were deleted. Safe to repeat.
+   */
+  purgeTenant(tenantId: string): Promise<number>;
 }
 
 /** True once `bucket` has been provisioned this process — avoids re-issuing the same calls on every request. */
@@ -381,6 +397,10 @@ export function createStorage(options: CreateStorageOptions): Storage {
         const { bucket, key: realKey } = locate(key);
         await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: realKey }));
       },
+      async deleteUnder(prefix) {
+        const { bucket, key: realPrefix } = locate(prefix);
+        return deleteUnder(bucket, realPrefix);
+      },
       async provisionBucket() {
         await ensureBucket(locate('').bucket);
       },
@@ -396,11 +416,60 @@ export function createStorage(options: CreateStorageOptions): Storage {
     };
   }
 
+  /** Every object in `bucket` under `realPrefix`, deleted in pages of up to 1,000. */
+  async function deleteUnder(bucket: string, realPrefix: string): Promise<number> {
+    let deleted = 0;
+    for (;;) {
+      let page;
+      try {
+        page = await client.send(
+          new ListObjectsV2Command({ Bucket: bucket, Prefix: realPrefix, MaxKeys: 1000 }),
+        );
+      } catch (error) {
+        if (error instanceof S3ServiceException && error.name === 'NoSuchBucket') return deleted;
+        throw error;
+      }
+      const keys = (page.Contents ?? []).flatMap((o) => (o.Key === undefined ? [] : [o.Key]));
+      if (keys.length === 0) return deleted;
+      const result = await client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+      if ((result.Errors ?? []).length > 0) {
+        const first = result.Errors![0]!;
+        throw new Error(
+          `Could not delete ${String(result.Errors!.length)} objects in '${bucket}' (${first.Code ?? 'error'}: ${first.Key ?? ''})`,
+        );
+      }
+      deleted += keys.length;
+    }
+  }
+
   return {
     forTenant(tenantId) {
       return scopeFor((key) =>
         locateTenantObject(options.mode, options.bucketPrefix, tenantId, key),
       );
+    },
+    async purgeTenant(tenantId) {
+      const { bucket, key: realPrefix } = locateTenantObject(
+        options.mode,
+        options.bucketPrefix,
+        tenantId,
+        '',
+      );
+      const deleted = await deleteUnder(bucket, realPrefix);
+      if (options.mode === 'bucket-per-tenant') {
+        try {
+          await client.send(new DeleteBucketCommand({ Bucket: bucket }));
+        } catch (error) {
+          if (!(error instanceof S3ServiceException) || error.name !== 'NoSuchBucket') throw error;
+        }
+      }
+      logger.info({ tenantId, deleted }, "storage: a deleted tenant's objects removed");
+      return deleted;
     },
     forPlatform() {
       return scopeFor((key) => locatePlatformObject(options.bucketPrefix, key));

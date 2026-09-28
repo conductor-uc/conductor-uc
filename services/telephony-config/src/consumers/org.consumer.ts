@@ -7,6 +7,7 @@ import type { OrgClient } from '../org-client.js';
 import type { Projection } from '../projection.js';
 import type { ReadModelRepo } from '../repo/read-model.repo.js';
 import type { TelephonyConfigDb } from '../schema.js';
+import { purgeTenant } from '../tenant-purge.js';
 
 interface TenantCreatedData {
   readonly orgId: string;
@@ -51,12 +52,15 @@ export function createOrgConsumer(
     logger,
     registry: telephonyEvents,
     durable: 'telephony-config-org',
+    // S1-16: a deletion must not give up after the usual five tries.
+    maxDeliver: 50,
     subjects: [
       'org.tenant.created',
       'org.tenant.suspended',
       'org.tenant.resumed',
       'org.tenant.deletion_requested',
       'org.tenant.deletion_cancelled',
+      'org.tenant.deleted',
       'org.domain.added',
     ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
@@ -101,6 +105,17 @@ export function createOrgConsumer(
           await readModel.setTenantStatus(trx, data.orgId, 'active');
           const domain = await readModel.findDomain(trx, data.orgId);
           if (domain !== undefined) await projection.activateDomain(domain.fqdn, data.orgId);
+          return;
+        }
+
+        // S1-16 (G-11 (3)): gone from the SIP edge and the media nodes for good.
+        case 'org.tenant.deleted': {
+          const data = envelope.data as TenantStatusData;
+          await purgeTenant(trx, data.orgId, projection, readModel);
+          logger.info(
+            { tenantId: data.orgId },
+            'org deletion: tenant removed from the telephony projection',
+          );
           return;
         }
 

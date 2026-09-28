@@ -32,6 +32,7 @@ import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerOrgRoutes } from './routes/org.routes.js';
 import { createDeletionJob, DELETION_INTERVAL_MS } from './deletion-job.js';
 import type { OrgServiceDb } from './schema.js';
+import { createOrgDeletionConsumer } from './org-deletion.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -178,6 +179,12 @@ async function reconcileLoop(): Promise<void> {
 const reconcileDone = reconcileLoop();
 
 const storage = storageFromConfig(config, logger);
+
+// S1-16 (G-11 (3)): a deleted tenant's stored objects and domains, a deleted
+// reseller's brand, domains and certificates.
+const orgDeletion = createOrgDeletionConsumer(db, bus, logger, storage);
+await orgDeletion.ensure();
+const orgDeletionLoop = orgDeletion.run();
 // 02 §3's table: the master/unbranded console lives at console.{PLATFORM_BASE_DOMAIN}.
 registerBrandRoutes(
   app,
@@ -215,7 +222,9 @@ async function shutdown(signal: string): Promise<void> {
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
+  orgDeletion.stop();
   await relayLoop;
+  await orgDeletionLoop;
   void reconcileDone;
   void certificateWorkerDone;
   await bus.close();

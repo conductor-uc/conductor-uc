@@ -207,6 +207,36 @@ describe.skipIf(skipReason !== undefined)('@cuc/storage', () => {
         await expect(tenant.deleteObject('gone.bin')).resolves.toBeUndefined();
       });
 
+      it('S1-16: purges one tenant, and only that tenant, every object and (per tenant) the bucket', async () => {
+        const storage = makeStorage(mode);
+        const goneId = randomUUID();
+        const gone = storage.forTenant(goneId);
+        const kept = storage.forTenant(randomUUID());
+        await gone.provisionBucket();
+        await kept.provisionBucket();
+        for (const key of ['a.wav', 'voicemail/b.wav', 'recordings/2026/c.wav']) {
+          await gone.putObject(key, Buffer.from(key));
+        }
+        await kept.putObject('a.wav', Buffer.from('kept'));
+
+        expect(await storage.purgeTenant(goneId)).toBe(3);
+        expect(await gone.headObject('voicemail/b.wav')).toBeUndefined();
+        expect((await kept.getObject('a.wav')).toString()).toBe('kept');
+        // Again: nothing left, and no error, bucket or not.
+        expect(await storage.purgeTenant(goneId)).toBe(0);
+      });
+
+      it('deletes every object under a prefix, and nothing else', async () => {
+        const storage = makeStorage(mode);
+        const tenant = storage.forTenant(randomUUID());
+        await tenant.provisionBucket();
+        await tenant.putObject('brands/r1/logo.png', Buffer.from('1'));
+        await tenant.putObject('brands/r1/icon.png', Buffer.from('2'));
+        await tenant.putObject('brands/r2/logo.png', Buffer.from('3'));
+        expect(await tenant.deleteUnder('brands/r1/')).toBe(2);
+        expect(await tenant.headObject('brands/r2/logo.png')).toBeDefined();
+      });
+
       it('adds a second lifecycle rule without dropping the first, and replaces one by id', async () => {
         const storage = makeStorage(mode);
         const tenant = storage.forTenant(randomUUID());

@@ -12,6 +12,7 @@ import { createMailer } from './mailer.js';
 import { createOrgClient } from './org-client.js';
 import type { NotificationServiceDb } from './schema.js';
 import { createVoicemailClient } from './voicemail-client.js';
+import { createOrgDeletionConsumer } from './org-deletion.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -98,6 +99,11 @@ await consumer.ensure();
 await voicemailConsumer.ensure();
 const consumerLoop = Promise.all([consumer.run(), voicemailConsumer.run()]);
 
+// S1-16 (G-11): a deleted org's rows go when org-service says so.
+const orgDeletion = createOrgDeletionConsumer(db, bus, logger);
+await orgDeletion.ensure();
+const orgDeletionLoop = orgDeletion.run();
+
 // No routes of its own: this service only consumes events. The server exists
 // for the health and readiness endpoints.
 const app = await createServer({
@@ -121,7 +127,9 @@ async function shutdown(signal: string): Promise<void> {
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
+  orgDeletion.stop();
   await consumerLoop;
+  await orgDeletionLoop;
   mailer.close();
   await bus.close();
   await db.destroy();

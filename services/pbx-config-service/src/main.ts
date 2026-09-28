@@ -9,6 +9,7 @@ import { storageFromConfig } from '@cuc/storage';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createKekRewrapJob } from './kek-rewrap.js';
 import { createDomainConsumer } from './consumers/domain.consumer.js';
+import { createOrgDeletionConsumer } from './org-deletion.js';
 import { createInvitationConsumer } from './consumers/invitation.consumer.js';
 import { createOrgClient } from './org-client.js';
 import { createDidRepo } from './repo/did.repo.js';
@@ -129,6 +130,11 @@ const conferenceRoomRepo = createConferenceRoomRepo(db, kek);
 const domainConsumer = createDomainConsumer(db, bus, logger, extensionRepo);
 await domainConsumer.ensure();
 const domainConsumerLoop = domainConsumer.run();
+
+// S1-16 (G-11): a deleted tenant's configuration goes when org-service says so.
+const orgDeletion = createOrgDeletionConsumer(db, bus, logger);
+await orgDeletion.ensure();
+const orgDeletionLoop = orgDeletion.run();
 // S9-07: a person who accepts an invitation gets the extension waiting for them.
 const invitationConsumer = createInvitationConsumer(db, bus, logger, extensionRepo);
 await invitationConsumer.ensure();
@@ -246,6 +252,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   relay.stop();
   domainConsumer.stop();
+  orgDeletion.stop();
   invitationConsumer.stop();
   await Promise.race([
     app.close(),
@@ -253,6 +260,7 @@ async function shutdown(signal: string): Promise<void> {
   ]);
   await relayLoop;
   await domainConsumerLoop;
+  await orgDeletionLoop;
   await invitationConsumerLoop;
   await bus.close();
   await kekRewrap.stop();
