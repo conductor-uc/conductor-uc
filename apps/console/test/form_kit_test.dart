@@ -186,8 +186,8 @@ void main() {
     final parking = resourceByKey('parking-lots');
     final sent = await fillAndSave(tester, parking, () async {
       await tester.enterText(field('Name *'), 'Lobby');
-      await tester.enterText(field('First slot *'), '720');
-      await tester.enterText(field('Last slot *'), '701');
+      await tester.enterText(field('First parking number *'), '720');
+      await tester.enterText(field('Last parking number *'), '701');
     });
     expect(sent, isNull);
     expect(
@@ -204,13 +204,13 @@ void main() {
     await openSection(tester, 'Extensions');
     await tester.tap(find.text('New extension'));
     await tester.pumpAndSettle();
-    await pickFromDropdown(tester, 'Emergency location *', 'Create new…');
+    await pickFromDropdown(tester, 'Emergency address *', 'Create new…');
     expect(find.text('New emergency location'), findsOneWidget);
     await tester.enterText(field('Name *').last, 'Warehouse');
-    await tester.enterText(field('Address *'), '1 Dock Road');
+    await tester.enterText(field('Street address *'), '1 Dock Road');
     await tester.enterText(field('City *'), 'Oakland');
-    await tester.enterText(field('State *'), 'CA');
-    await tester.enterText(field('Postal code *'), '94607');
+    await tester.enterText(field('State or province *'), 'CA');
+    await tester.enterText(field('ZIP or postal code *'), '94607');
     await tester.tap(find.text('Save').last);
     await tester.pumpAndSettle();
     // Back in the extension form, with the new location chosen.
@@ -219,7 +219,7 @@ void main() {
       find.descendant(
         of: find.widgetWithText(
           DropdownButtonFormField<String?>,
-          'Emergency location *',
+          'Emergency address *',
         ),
         matching: find.text('Warehouse'),
       ),

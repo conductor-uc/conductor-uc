@@ -557,10 +557,10 @@ void main() {
       await open(tester, 'Extensions');
       tester.view.physicalSize = const Size(1280, 2000);
       await tapIn(tester, '103', find.byTooltip('Edit'));
-      expect(find.text('Person'), findsOneWidget);
+      expect(find.text('Belongs to'), findsOneWidget);
 
       await tester.tap(
-        find.widgetWithText(DropdownButtonFormField<String?>, 'Person'),
+        find.widgetWithText(DropdownButtonFormField<String?>, 'Belongs to'),
       );
       await tester.pumpAndSettle();
       expect(find.text('Alex Admin (admin@example.test)'), findsOneWidget);
@@ -569,7 +569,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
       expect(find.text('Sam Support (sam@example.test)'), findsNothing);
-      expect(find.text('Person'), findsNothing);
+      expect(find.text('Belongs to'), findsNothing);
 
       // It stuck.
       await tapIn(tester, '103', find.byTooltip('Edit'));
@@ -587,7 +587,7 @@ void main() {
       tester.view.physicalSize = const Size(1280, 2000);
       await tapIn(tester, '103', find.byTooltip('Edit'));
       expect(field('Name *'), findsOneWidget);
-      expect(find.text('Person'), findsNothing);
+      expect(find.text('Belongs to'), findsNothing);
     });
 
     testWidgets('nor is someone who cannot read the people', (tester) async {
@@ -596,7 +596,7 @@ void main() {
       tester.view.physicalSize = const Size(1280, 2000);
       await tapIn(tester, '103', find.byTooltip('Edit'));
       expect(field('Name *'), findsOneWidget);
-      expect(find.text('Person'), findsNothing);
+      expect(find.text('Belongs to'), findsNothing);
     });
   });
 }

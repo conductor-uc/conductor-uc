@@ -5,6 +5,8 @@ import 'pbx_test.dart' show openSection;
 
 Future<void> openTiers(WidgetTester tester) async {
   await openSection(tester, 'Queues');
+  await tester.ensureVisible(find.byTooltip('Agents and tiers'));
+  await tester.pumpAndSettle();
   await tester.tap(find.byTooltip('Agents and tiers'));
   await tester.pumpAndSettle();
 }
@@ -90,7 +92,7 @@ void main() {
 
   testWidgets('phone numbers show which trunk they arrive on', (tester) async {
     await openSection(tester, 'Phone numbers');
-    expect(find.text('Trunk'), findsOneWidget);
+    expect(find.text('Carrier line'), findsOneWidget);
     expect(find.text('Primary trunk'), findsOneWidget);
   });
 }

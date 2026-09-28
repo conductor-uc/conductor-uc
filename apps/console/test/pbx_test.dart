@@ -167,7 +167,7 @@ void main() {
     expect(find.text('This is required.'), findsWidgets);
 
     await tester.enterText(field('MAC address *'), '00:15:65:aa:bb:dd');
-    await pickFromDropdown(tester, 'Extension *', '102 · Bob Osei');
+    await pickFromDropdown(tester, 'Signs in as *', '102 · Bob Osei');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
     expect(find.text('00:15:65:AA:BB:DD'), findsOneWidget);
@@ -177,7 +177,11 @@ void main() {
     'setting up a phone needs a reason, then shows the address and password once',
     (tester) async {
       await openSection(tester, 'Phones');
-      await tapIn(tester, '00:15:65:AA:BB:CC', find.byTooltip('Set up this phone'));
+      await tapIn(
+        tester,
+        '00:15:65:AA:BB:CC',
+        find.byTooltip('Set up this phone'),
+      );
 
       expect(find.text('Set up this phone'), findsOneWidget);
       expect(
@@ -218,7 +222,11 @@ void main() {
     await completeSignIn(tester, 'limited@example.test');
     await tapNav(tester, 'Phones');
     await tester.pumpAndSettle();
-    await tapIn(tester, '00:15:65:AA:BB:CC', find.byTooltip('Set up this phone'));
+    await tapIn(
+      tester,
+      '00:15:65:AA:BB:CC',
+      find.byTooltip('Set up this phone'),
+    );
 
     expect(
       find.text(
@@ -236,9 +244,9 @@ void main() {
     await openSection(tester, 'Extensions');
     await tester.tap(find.text('New extension'));
     await tester.pumpAndSettle();
-    await tester.enterText(field('Number *'), '104');
+    await tester.enterText(field('Extension number *'), '104');
     await tester.enterText(field('Name *'), 'Dan Ito');
-    await pickFromDropdown(tester, 'Emergency location *', 'Head office');
+    await pickFromDropdown(tester, 'Emergency address *', 'Head office');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -262,9 +270,9 @@ void main() {
     await openSection(tester, 'Extensions');
     await tester.tap(find.text('New extension'));
     await tester.pumpAndSettle();
-    await tester.enterText(field('Number *'), '101'); // already taken
+    await tester.enterText(field('Extension number *'), '101'); // already taken
     await tester.enterText(field('Name *'), 'Duplicate');
-    await pickFromDropdown(tester, 'Emergency location *', 'Head office');
+    await pickFromDropdown(tester, 'Emergency address *', 'Head office');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
@@ -294,7 +302,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Delete').last);
     await tester.pumpAndSettle();
-    expect(find.text('Delete extension?'), findsOneWidget);
+    expect(find.text('Delete this extension?'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
@@ -324,7 +332,7 @@ void main() {
 
   testWidgets('a phone number shows what it rings by name', (tester) async {
     await openSection(tester, 'Phone numbers');
-    expect(find.text('+14155550100'), findsOneWidget);
+    expect(find.text('(415) 555-0100'), findsOneWidget);
     expect(
       find.text('Main menu'),
       findsOneWidget,
@@ -340,7 +348,7 @@ void main() {
   });
 
   testWidgets('media is read-only but can be deleted', (tester) async {
-    await openSection(tester, 'Media');
+    await openSection(tester, 'Greetings and music');
     expect(find.text('Hold music'), findsOneWidget);
     expect(find.byTooltip('Edit'), findsNothing);
     expect(find.byTooltip('Delete'), findsWidgets);

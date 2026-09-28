@@ -13,6 +13,7 @@ import 'pbx_api.dart';
 import 'provisioning_dialog.dart';
 import 'resource.dart';
 import 'resource_form.dart';
+import 'used_by.dart';
 import '../queues/tiers_dialog.dart';
 import 'schedule_fields.dart';
 
@@ -58,7 +59,7 @@ class ResourceView extends ConsumerWidget {
               FilledButton.icon(
                 onPressed: () => _openForm(context, ref),
                 icon: const Icon(Icons.add),
-                label: Text('New ${def.singular.toLowerCase()}'),
+                label: Text(context.l10n.resNew(def.selectKey)),
               ),
           ],
         ),
@@ -69,13 +70,13 @@ class ResourceView extends ConsumerWidget {
             value: rows,
             empty: EmptyState(
               icon: def.icon,
-              title: 'No ${def.plural.toLowerCase()} yet.',
+              title: context.l10n.resEmpty(def.selectKey),
               message: def.blurb,
               action: !def.readOnly && canChange
                   ? FilledButton.icon(
                       onPressed: () => _openForm(context, ref),
                       icon: const Icon(Icons.add),
-                      label: Text('New ${def.singular.toLowerCase()}'),
+                      label: Text(context.l10n.resNew(def.selectKey)),
                     )
                   : null,
             ),
@@ -138,10 +139,10 @@ class ResourceView extends ConsumerWidget {
   ];
 
   static String _statusLabel(Object? value) => switch (value) {
-    'pending' => 'Waiting for upload',
-    'processing' => 'Processing…',
-    'ready' => 'Ready',
-    'failed' => 'Failed',
+    'pending' => currentL10n.mediaPending,
+    'processing' => currentL10n.mediaProcessing,
+    'ready' => currentL10n.mediaReady,
+    'failed' => currentL10n.mediaFailed,
     _ => '$value',
   };
 
@@ -191,6 +192,9 @@ class ResourceView extends ConsumerWidget {
     switch (f.kind) {
       case FieldKind.toggle:
         return value == true ? f.label : '';
+      case FieldKind.choice:
+        // S9-08: a choice reads as its label ("A call flow"), not its value.
+        return value == null ? '—' : f.choiceLabels['$value'] ?? '$value';
       case FieldKind.ref:
         return _lookup(ref, f.ref!, value);
       case FieldKind.dynamicRef:
@@ -211,8 +215,15 @@ class ResourceView extends ConsumerWidget {
         return summarizeHolidays(value);
       default:
         if (value == null || value == '') return f.emptyLabel ?? '—';
-        // S9-07: a MAC reads as printed on the phone.
+        // S9-07, S9-08: a MAC reads as printed on the phone, and a phone
+        // number the way people write it here.
         if (f.format == FieldFormat.mac) return formatMac('$value');
+        if (f.format == FieldFormat.phone) {
+          return formatPhone(
+            '$value',
+            country: ref.watch(tenantCountryProvider),
+          );
+        }
         return '$value';
     }
   }
@@ -249,11 +260,19 @@ class ResourceView extends ConsumerWidget {
   ) async {
     final api = ref.read(pbxApiProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    // S9-08: what points at it, so nothing breaks silently.
+    final uses = await usedBy(ref, def.key, '${row['id']}');
+    if (!context.mounted) return;
     final confirmed = await confirmAction(
       context,
-      title: 'Delete ${def.singular.toLowerCase()}?',
+      title: l10n.resDeleteTitle(def.selectKey),
       message: def.titleOf(row),
-      confirmLabel: context.l10n.commonDelete,
+      impact: [
+        ...uses.take(10),
+        if (uses.length > 10) l10n.resUsedByMore(uses.length - 10),
+      ],
+      confirmLabel: l10n.commonDelete,
     );
     if (!confirmed || api == null) return;
     try {
