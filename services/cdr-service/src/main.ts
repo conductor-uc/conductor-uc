@@ -1,5 +1,10 @@
 import { redactConfig } from '@cuc/config';
-import { createDatabase, migrateToLatest } from '@cuc/db';
+import {
+  createDatabase,
+  createPartitionJob,
+  migrateToLatest,
+  PARTITION_INTERVAL_MS,
+} from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createRemotePermissionResolver, createServer, observeOutbox } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
@@ -111,6 +116,14 @@ const pbxClient = createPbxClient({
 });
 registerMeRoutes(app, cdrRepo, pbxClient.userExtension);
 
+// S2-21 (G-52): months ahead added to `cdrs`, months past CDR_RETENTION_MONTHS dropped.
+const partitions = createPartitionJob({
+  db: db.unscoped({}, 'Partition maintenance: call records past retention (S2-21, G-52)'),
+  targets: [{ table: 'cdrs', retentionMonths: config.CDR_RETENTION_MONTHS }],
+  logger,
+});
+partitions.start(PARTITION_INTERVAL_MS);
+
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
 
@@ -130,6 +143,7 @@ async function shutdown(signal: string): Promise<void> {
   await relayLoop;
   await exportConsumerLoop;
   await bus.close();
+  await partitions.stop();
   await db.destroy();
   logger.info('shutdown complete');
   process.exit(0);

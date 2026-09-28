@@ -104,7 +104,7 @@ The following are written to `audit_events` via `@cuc/audit`, which publishes to
 - all authentication events
 - all monitoring actions
 
-Audit is append-only, and retention is configurable (default 1 year). Tenants can read their own audit trail. They can see master access to their private data, which gives them transparency, but not master-internal details. A reseller reading a trail (one of its tenants', or its own) never sees rows of the `private` class: the query leaves them out when the reader's org is a reseller (H1, G-13), while configuration changes stay visible. The master sees every row it may reach.
+Audit is append-only, and retention is configurable (default 1 year: identity-service's `AUDIT_RETENTION_MONTHS`, 12, drops each monthly partition of `audit_events` once it is past; S2-21, G-12). Tenants can read their own audit trail. They can see master access to their private data, which gives them transparency, but not master-internal details. A reseller reading a trail (one of its tenants', or its own) never sees rows of the `private` class: the query leaves them out when the reader's org is a reseller (H1, G-13), while configuration changes stay visible. The master sees every row it may reach.
 
 ## 5. Secrets & crypto
 
