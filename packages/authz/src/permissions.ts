@@ -157,7 +157,8 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
  * `monitor.calls` is passive watching (support holds it, and support never writes),
  * `monitor.barge` joins a call rather than moving it, and `recording.control` is only a call's
  * recording. It acts on live calls, whose parties and numbers are private, so it is `private`: H1
- * keeps every reseller out, it has no read twin and nothing implies it.
+ * keeps every reseller out, it has no read twin and nothing implies it. S9-13 (G-126): it also signs an
+ * agent in, out or on a break: operating the live call centre, as moving its calls is.
  */
 /**
  * `self.settings`, `self.voicemail` and `self.history` are not in 07 §3.3

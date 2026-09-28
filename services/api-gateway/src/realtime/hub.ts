@@ -24,6 +24,7 @@ import {
 import {
   extensionStatusOf,
   type LiveCallsSource,
+  type LiveQueuesSource,
   type PresenceStatusSource,
   type SupervisionScopeSource,
   type UserExtensionSource,
@@ -69,6 +70,13 @@ export interface RealtimeHubOptions {
    * that topic is refused as `unavailable`.
    */
   readonly supervision?: SupervisionScopeSource;
+  /**
+   * S9-13: the tenant's queues (call-control), for the `queues` topic. Without it that topic is
+   * refused as `unavailable`.
+   */
+  readonly liveQueues?: LiveQueuesSource;
+  /** S9-13: how often a watched tenant's queues are read again, events or not. Default 3 s. */
+  readonly queueRefreshMs?: number;
   readonly logger: Logger;
   readonly limits: RealtimeLimits;
   /**
@@ -113,6 +121,8 @@ interface Subscription {
   tracker?: PresenceTracker;
   /** S5-15: a person's own calls (`mycalls` topics only): the tenant's legs, and which of them this subscriber is shown. */
   own?: { readonly calls: CallsTracker; view: CallsView | undefined };
+  /** S9-13: the queues tracker this subscription holds a share of (`queues` topics only). */
+  queues?: QueuesTracker;
 }
 
 interface Connection {
@@ -160,6 +170,26 @@ interface CallsTracker {
   subscribers: number;
 }
 
+/**
+ * S9-13: a tenant's queues, kept while someone on this gateway watches them. `mod_callcenter`'s
+ * state is on the nodes and not every change raises an event (a caller hanging up while waiting
+ * does not), so the queues are read again whenever a call or queue event for the tenant arrives,
+ * and every `queueRefreshMs` regardless; a read that differs from the last is sent to everyone.
+ */
+interface QueuesTracker {
+  /** The last read, as JSON, to tell a change from the same again. */
+  last: string | undefined;
+  queues: unknown[];
+  readonly ready: Promise<boolean>;
+  subscribers: number;
+  timer: NodeJS.Timeout | undefined;
+  /** An event-driven read waiting to run (events come in bursts). */
+  soon: NodeJS.Timeout | undefined;
+  reading: boolean;
+  /** Something asked for a read while one was running: read once more after it. */
+  again: boolean;
+}
+
 /** What {@link ownNumber} answers instead of a number: an extension number is digits, so neither can be one. */
 const UNAVAILABLE = 'unavailable';
 const NO_EXTENSION = 'no_linked_extension';
@@ -194,6 +224,8 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
   const subscribers = new Map<string, Set<Connection>>();
   const presenceTrackers = new Map<string, PresenceTracker>();
   const callsTrackers = new Map<string, CallsTracker>();
+  const queuesTrackers = new Map<string, QueuesTracker>();
+  const queueRefreshMs = options.queueRefreshMs ?? 3_000;
   /** S5-15: tenant to the `mycalls` topic names subscribed to on this gateway. */
   const userTopics = new Map<string, Set<string>>();
   let bus: Bus | undefined;
@@ -318,6 +350,9 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
     if (subscription.tracker !== undefined) {
       releasePresence(subscription.topic.tenantId, subscription.tracker);
     }
+    if (subscription.queues !== undefined) {
+      releaseQueues(subscription.topic.tenantId, subscription.queues);
+    }
     if (subscription.own !== undefined) {
       releaseCalls(subscription.topic.tenantId, subscription.own.calls);
       if (set === undefined || set.size === 0) {
@@ -414,6 +449,92 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
     };
     callsTrackers.set(tenantId, tracker);
     return tracker;
+  }
+
+  function releaseQueues(tenantId: string, tracker: QueuesTracker): void {
+    tracker.subscribers -= 1;
+    if (tracker.subscribers <= 0) {
+      clearInterval(tracker.timer);
+      clearTimeout(tracker.soon);
+      if (queuesTrackers.get(tenantId) === tracker) queuesTrackers.delete(tenantId);
+    }
+  }
+
+  /** Reads the tenant's queues again, and sends them to everyone watching if they changed. */
+  function refreshQueues(tenantId: string, tracker: QueuesTracker): void {
+    if (options.liveQueues === undefined || queuesTrackers.get(tenantId) !== tracker) return;
+    if (tracker.reading) {
+      tracker.again = true;
+      return;
+    }
+    tracker.reading = true;
+    options
+      .liveQueues(tenantId)
+      .then((queues) => {
+        const json = JSON.stringify(queues);
+        if (json === tracker.last) return;
+        tracker.last = json;
+        tracker.queues = queues;
+        deliver(topicName(tenantId, 'queues'), { type: 'queues.changed', queues });
+      })
+      .catch((error: unknown) => {
+        // Kept as they were; the next read may work.
+        logger.warn({ err: error, tenantId }, 'queues unavailable');
+      })
+      .finally(() => {
+        tracker.reading = false;
+        if (tracker.again) {
+          tracker.again = false;
+          refreshQueues(tenantId, tracker);
+        }
+      });
+  }
+
+  function acquireQueues(tenantId: string): QueuesTracker | undefined {
+    const source = options.liveQueues;
+    if (source === undefined) return undefined;
+    const existing = queuesTrackers.get(tenantId);
+    if (existing !== undefined) {
+      existing.subscribers += 1;
+      return existing;
+    }
+    const tracker: QueuesTracker = {
+      last: undefined,
+      queues: [],
+      subscribers: 1,
+      timer: undefined,
+      soon: undefined,
+      reading: false,
+      again: false,
+      ready: source(tenantId)
+        .then((queues) => {
+          tracker.queues = queues;
+          tracker.last = JSON.stringify(queues);
+          if (queuesTrackers.get(tenantId) === tracker && tracker.subscribers > 0) {
+            tracker.timer = setInterval(() => refreshQueues(tenantId, tracker), queueRefreshMs);
+            tracker.timer.unref();
+          }
+          return true;
+        })
+        .catch((error: unknown) => {
+          logger.warn({ err: error, tenantId }, 'queues snapshot unavailable');
+          if (queuesTrackers.get(tenantId) === tracker) queuesTrackers.delete(tenantId);
+          return false;
+        }),
+    };
+    queuesTrackers.set(tenantId, tracker);
+    return tracker;
+  }
+
+  /** A call or queue event for the tenant: its queues may have changed. */
+  function dispatchQueues(tenantId: string): void {
+    const tracker = queuesTrackers.get(tenantId);
+    if (tracker === undefined || tracker.soon !== undefined) return;
+    tracker.soon = setTimeout(() => {
+      tracker.soon = undefined;
+      refreshQueues(tenantId, tracker);
+    }, 250);
+    tracker.soon.unref();
   }
 
   /** A person's own extension number, or the error to refuse their topic with. */
@@ -596,9 +717,24 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
         snapshot = { extensions: tracker.presence.snapshot() };
         break;
       }
-      case 'queues':
-        // Nothing to start from yet (see topics.ts).
+      case 'queues': {
+        const tracker = acquireQueues(topic.tenantId);
+        if (tracker === undefined) {
+          removeSubscription(connection, name);
+          sendError(connection, 'unavailable', { topic: name, id });
+          return;
+        }
+        subscription.queues = tracker;
+        const loaded = await tracker.ready;
+        if (connection.subscriptions.get(name) !== subscription) return;
+        if (!loaded) {
+          removeSubscription(connection, name);
+          sendError(connection, 'unavailable', { topic: name, id });
+          return;
+        }
+        snapshot = { queues: tracker.queues };
         break;
+      }
       case 'mycalls': {
         // S5-15: the person's own extension, then the tenant's legs, then theirs among them.
         let names = userTopics.get(topic.tenantId);
@@ -839,6 +975,14 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
       }
       return;
     }
+    // S9-13: queue and call events may change what the tenant's queues show.
+    const eventTenant = envelope.orgContext.tenantId;
+    if (
+      eventTenant !== undefined &&
+      (envelope.type.startsWith('call.queue.') || envelope.type.startsWith('call.channel.'))
+    ) {
+      dispatchQueues(eventTenant);
+    }
     const mapped = callEventFromEnvelope(envelope);
     if (mapped === undefined) return;
     const { tenantId, event } = mapped;
@@ -913,6 +1057,11 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
       clearInterval(heartbeat);
       clearInterval(recheck);
       clearInterval(feedWatch);
+      for (const tracker of queuesTrackers.values()) {
+        clearInterval(tracker.timer);
+        clearTimeout(tracker.soon);
+      }
+      queuesTrackers.clear();
       for (const connection of connections) closeConnection(connection, CLOSE.goingAway);
       await feed?.stop();
     },

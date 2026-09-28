@@ -25,6 +25,7 @@ import { REALTIME_PATH, registerRealtimeRoute } from './realtime/route.js';
 import {
   createLineageLookup,
   createLiveCallsSource,
+  createLiveQueuesSource,
   createPresenceStatusSource,
   createSupervisionScopeSource,
   createUserExtensionSource,
@@ -253,6 +254,8 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
         lineage: createLineageLookup({ baseUrl: config.ORG_SERVICE_URL, internalServiceToken }),
       }),
       liveCalls: createLiveCallsSource({ baseUrl: callControlUrl, internalServiceToken }),
+      // S9-13: the tenant's queues, for the `queues` topic.
+      liveQueues: createLiveQueuesSource({ baseUrl: callControlUrl, internalServiceToken }),
       // S5-10: registration and do not disturb for presence, when telephony-config is configured.
       ...(config.TELEPHONY_CONFIG_URL === undefined
         ? {}
