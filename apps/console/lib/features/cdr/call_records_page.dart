@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource.dart';
@@ -18,20 +19,36 @@ final urlOpenerProvider = Provider<Future<void> Function(String url)>(
       (url) => launchUrl(Uri.parse(url), webOnlyWindowName: '_blank'),
 );
 
-const directionLabels = {
-  'inbound': 'Inbound',
-  'outbound': 'Outbound',
-  'internal': 'Internal',
+/// Call directions by wire value, in the viewer's language.
+Map<String, String> directionLabelsOf(AppLocalizations l) => {
+  'inbound': l.cdrDirInbound,
+  'outbound': l.cdrDirOutbound,
+  'internal': l.cdrDirInternal,
 };
 
-const dispositionLabels = {
-  'answered': 'Answered',
-  'no_answer': 'No answer',
-  'busy': 'Busy',
-  'failed': 'Failed',
-  'cancelled': 'Cancelled',
-  'node_failure': 'Failed (platform)',
+/// How calls ended, by wire value, in the viewer's language.
+Map<String, String> dispositionLabelsOf(AppLocalizations l) => {
+  'answered': l.cdrDispAnswered,
+  'no_answer': l.cdrDispNoAnswer,
+  'busy': l.cdrDispBusy,
+  'failed': l.cdrDispFailed,
+  'cancelled': l.cdrDispCancelled,
+  'node_failure': l.cdrDispNodeFailure,
 };
+
+/// [directionLabelsOf] for code with no [BuildContext].
+Map<String, String> get directionLabels => directionLabelsOf(currentL10n);
+
+/// [dispositionLabelsOf] for code with no [BuildContext].
+Map<String, String> get dispositionLabels => dispositionLabelsOf(currentL10n);
+
+/// The label of a call direction; an unknown one is shown as sent.
+String directionLabel(AppLocalizations l, String code) =>
+    directionLabelsOf(l)[code] ?? code;
+
+/// The label of how a call ended; an unknown one is shown as sent.
+String dispositionLabel(AppLocalizations l, String code) =>
+    dispositionLabelsOf(l)[code] ?? code;
 
 /// A whole-day date typed as `YYYY-MM-DD`, or null when it is not one.
 DateTime? parseDate(String text) {
@@ -53,18 +70,19 @@ class CallRecordsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     if (ref.watch(tenantIdProvider) == null) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Text('Choose a tenant to see its call records.'),
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(l10n.cdrChooseTenant),
       );
     }
     if (!ref.watch(canProvider('cdr.read'))) {
-      return const PageFrame(
+      return PageFrame(
         children: [
           PageHeader(
-            title: 'Not available to you',
-            subtitle: "Your role doesn't include call records.",
+            title: l10n.shellForbiddenTitle,
+            subtitle: l10n.cdrForbiddenBody,
           ),
         ],
       );
@@ -74,8 +92,8 @@ class CallRecordsPage extends ConsumerWidget {
     return PageFrame(
       children: [
         PageHeader(
-          title: 'Call records',
-          subtitle: 'Every call to, from and inside this tenant, newest first.',
+          title: l10n.cdrTitle,
+          subtitle: l10n.cdrSubtitle,
           actions: [
             if (canExport)
               OutlinedButton.icon(
@@ -84,7 +102,7 @@ class CallRecordsPage extends ConsumerWidget {
                   builder: (_) => const ExportDialog(),
                 ),
                 icon: const Icon(Icons.download_outlined),
-                label: const Text('Export CSV'),
+                label: Text(l10n.cdrExportCsv),
               ),
           ],
         ),
@@ -95,7 +113,7 @@ class CallRecordsPage extends ConsumerWidget {
         Expanded(
           child: AsyncBody<CdrPage>(
             value: list,
-            emptyText: 'No calls match.',
+            emptyText: l10n.cdrNoMatches,
             isEmpty: (page) => page.rows.isEmpty,
             builder: (page) => _CallTable(page: page),
           ),
@@ -130,19 +148,20 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
   }
 
   void _apply() {
-    DateTime? day(TextEditingController c, String label) {
+    final l10n = context.l10n;
+    DateTime? day(TextEditingController c, String notADate) {
       final text = c.text.trim();
       if (text.isEmpty) return null;
       final parsed = parseDate(text);
-      if (parsed == null) _error = '$label must be a date such as 2026-09-24.';
+      if (parsed == null) _error = notADate;
       return parsed;
     }
 
     _error = null;
-    final from = day(_from, 'From');
-    final to = _error == null ? day(_to, 'To') : null;
+    final from = day(_from, l10n.cdrFromNotDate);
+    final to = _error == null ? day(_to, l10n.cdrToNotDate) : null;
     if (_error == null && from != null && to != null && to.isBefore(from)) {
-      _error = 'To must not be before From.';
+      _error = l10n.cdrToBeforeFrom;
     }
     if (_error != null) {
       setState(() {});
@@ -176,6 +195,7 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final extensions =
         ref.watch(rowsProvider('extensions')).asData?.value ?? const <Json>[];
     Widget box(Widget child, [double width = 150]) =>
@@ -192,9 +212,9 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
               TextField(
                 key: const ValueKey('cdr-from'),
                 controller: _from,
-                decoration: const InputDecoration(
-                  labelText: 'From date',
-                  hintText: 'YYYY-MM-DD',
+                decoration: InputDecoration(
+                  labelText: l10n.cdrFromDate,
+                  hintText: context.l10n.commonDateHint,
                 ),
                 onSubmitted: (_) => _apply(),
               ),
@@ -203,9 +223,9 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
               TextField(
                 key: const ValueKey('cdr-to'),
                 controller: _to,
-                decoration: const InputDecoration(
-                  labelText: 'To date',
-                  hintText: 'YYYY-MM-DD',
+                decoration: InputDecoration(
+                  labelText: l10n.cdrToDate,
+                  hintText: context.l10n.commonDateHint,
                 ),
                 onSubmitted: (_) => _apply(),
               ),
@@ -215,10 +235,10 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                 key: const ValueKey('cdr-direction'),
                 initialValue: _direction,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Direction'),
+                decoration: InputDecoration(labelText: l10n.cdrDirection),
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('All')),
-                  for (final e in directionLabels.entries)
+                  DropdownMenuItem(value: null, child: Text(l10n.cdrAll)),
+                  for (final e in directionLabelsOf(l10n).entries)
                     DropdownMenuItem(value: e.key, child: Text(e.value)),
                 ],
                 onChanged: (v) => setState(() => _direction = v),
@@ -228,9 +248,9 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
               TextField(
                 key: const ValueKey('cdr-number'),
                 controller: _number,
-                decoration: const InputDecoration(
-                  labelText: 'Number',
-                  helperText: 'Caller, callee or dialed',
+                decoration: InputDecoration(
+                  labelText: l10n.cdrNumber,
+                  helperText: l10n.cdrNumberHelp,
                 ),
                 onSubmitted: (_) => _apply(),
               ),
@@ -242,12 +262,12 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                   key: const ValueKey('cdr-extension'),
                   initialValue: null,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Extension',
-                    helperText: 'Fills in its number',
+                  decoration: InputDecoration(
+                    labelText: l10n.cdrExtension,
+                    helperText: l10n.cdrExtensionHelp,
                   ),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('Any')),
+                    DropdownMenuItem(value: null, child: Text(l10n.cdrAny)),
                     for (final e in extensions)
                       DropdownMenuItem(
                         value: '${e['number']}',
@@ -262,16 +282,16 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
               TextField(
                 key: const ValueKey('cdr-did'),
                 controller: _did,
-                decoration: const InputDecoration(
-                  labelText: 'Phone number called',
+                decoration: InputDecoration(
+                  labelText: l10n.cdrDidFilter,
                   hintText: '+14155550100',
                 ),
                 onSubmitted: (_) => _apply(),
               ),
               190,
             ),
-            FilledButton(onPressed: _apply, child: const Text('Search')),
-            TextButton(onPressed: _clear, child: const Text('Clear')),
+            FilledButton(onPressed: _apply, child: Text(l10n.cdrSearch)),
+            TextButton(onPressed: _clear, child: Text(l10n.cdrClear)),
           ],
         ),
         if (_error != null) ErrorText(_error!),
@@ -306,6 +326,7 @@ class _CallTableState extends ConsumerState<_CallTable> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final page = widget.page;
     return SingleChildScrollView(
       child: Column(
@@ -319,13 +340,13 @@ class _CallTableState extends ConsumerState<_CallTable> {
               ),
               child: DataTable(
                 showCheckboxColumn: false,
-                columns: const [
-                  DataColumn(label: Text('Started')),
-                  DataColumn(label: Text('Direction')),
-                  DataColumn(label: Text('From')),
-                  DataColumn(label: Text('To')),
-                  DataColumn(label: Text('Duration')),
-                  DataColumn(label: Text('Result')),
+                columns: [
+                  DataColumn(label: Text(l10n.cdrStarted)),
+                  DataColumn(label: Text(l10n.cdrDirection)),
+                  DataColumn(label: Text(l10n.cdrFrom)),
+                  DataColumn(label: Text(l10n.cdrTo)),
+                  DataColumn(label: Text(l10n.cdrDuration)),
+                  DataColumn(label: Text(l10n.cdrResult)),
                 ],
                 rows: [
                   for (final r in page.rows)
@@ -338,10 +359,7 @@ class _CallTableState extends ConsumerState<_CallTable> {
                       cells: [
                         DataCell(Text(formatDateTime(r['startAt']))),
                         DataCell(
-                          Text(
-                            directionLabels['${r['direction']}'] ??
-                                '${r['direction']}',
-                          ),
+                          Text(directionLabel(l10n, '${r['direction']}')),
                         ),
                         DataCell(
                           Text(partyLabel(r['fromNumber'], r['fromName'])),
@@ -349,10 +367,7 @@ class _CallTableState extends ConsumerState<_CallTable> {
                         DataCell(Text('${r['toNumber']}')),
                         DataCell(Text(formatClock(r['durationSec']))),
                         DataCell(
-                          Text(
-                            dispositionLabels['${r['disposition']}'] ??
-                                '${r['disposition']}',
-                          ),
+                          Text(dispositionLabel(l10n, '${r['disposition']}')),
                         ),
                       ],
                     ),
@@ -365,7 +380,7 @@ class _CallTableState extends ConsumerState<_CallTable> {
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: OutlinedButton(
                 onPressed: _loading ? null : _more,
-                child: const Text('Load more'),
+                child: Text(l10n.cdrLoadMore),
               ),
             ),
         ],
@@ -393,9 +408,10 @@ class CallDetailDialog extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final call = ref.watch(cdrDetailProvider(id));
     return AlertDialog(
-      title: const Text('Call details'),
+      title: Text(l10n.cdrDetailsTitle),
       content: SizedBox(
         width: 460,
         child: call.when(
@@ -405,40 +421,33 @@ class CallDetailDialog extends ConsumerWidget {
             final extensions = [...?(c['extensionIds'] as List?)];
             final recordings = [...?(c['recordingIds'] as List?)];
             final rows = <(String, String)>[
+              (l10n.cdrDirection, directionLabel(l10n, '${c['direction']}')),
+              (l10n.cdrResult, dispositionLabel(l10n, '${c['disposition']}')),
+              (l10n.cdrStarted, formatDateTime(c['startAt'])),
+              (l10n.cdrAnsweredAt, formatDateTime(c['answerAt'])),
+              (l10n.cdrEnded, formatDateTime(c['endAt'])),
+              (l10n.cdrDuration, formatClock(c['durationSec'])),
+              (l10n.cdrBillable, formatClock(c['billableSec'])),
+              (l10n.cdrFrom, partyLabel(c['fromNumber'], c['fromName'])),
+              (l10n.cdrTo, '${c['toNumber']}'),
+              (l10n.cdrDialed, '${c['dialedNumber']}'),
+              (l10n.cdrPhoneNumber, '${c['did'] ?? '—'}'),
+              (l10n.cdrTrunk, _named(ref, 'trunks', c['trunkId'])),
               (
-                'Direction',
-                directionLabels['${c['direction']}'] ?? '${c['direction']}',
-              ),
-              (
-                'Result',
-                dispositionLabels['${c['disposition']}'] ??
-                    '${c['disposition']}',
-              ),
-              ('Started', formatDateTime(c['startAt'])),
-              ('Answered', formatDateTime(c['answerAt'])),
-              ('Ended', formatDateTime(c['endAt'])),
-              ('Duration', formatClock(c['durationSec'])),
-              ('Billable time', formatClock(c['billableSec'])),
-              ('From', partyLabel(c['fromNumber'], c['fromName'])),
-              ('To', '${c['toNumber']}'),
-              ('Dialed', '${c['dialedNumber']}'),
-              ('Phone number', '${c['did'] ?? '—'}'),
-              ('Trunk', _named(ref, 'trunks', c['trunkId'])),
-              (
-                'Extensions',
+                l10n.cdrExtensions,
                 extensions.isEmpty
                     ? '—'
                     : extensions
                           .map((e) => _named(ref, 'extensions', e))
                           .join(', '),
               ),
-              ('Queue', _named(ref, 'queues', c['queueId'])),
-              ('Call flow', _named(ref, 'flows', c['flowId'])),
-              ('Ended because', '${c['hangupCause']}'),
-              ('Hung up by', '${c['hangupBy']}'),
+              (l10n.cdrQueue, _named(ref, 'queues', c['queueId'])),
+              (l10n.cdrCallFlow, _named(ref, 'flows', c['flowId'])),
+              (l10n.cdrEndedBecause, '${c['hangupCause']}'),
+              (l10n.cdrHungUpBy, '${c['hangupBy']}'),
               (
-                'Recordings',
-                recordings.isEmpty ? 'None' : '${recordings.length}',
+                l10n.cdrRecordings,
+                recordings.isEmpty ? l10n.cdrNone : '${recordings.length}',
               ),
             ];
             return SingleChildScrollView(
@@ -470,7 +479,7 @@ class CallDetailDialog extends ConsumerWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(l10n.commonClose),
         ),
       ],
     );
@@ -522,7 +531,7 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
     final from = parseDate(_from.text);
     final to = parseDate(_to.text);
     if (from == null || to == null) {
-      setState(() => _error = 'Enter both dates as YYYY-MM-DD.');
+      setState(() => _error = context.l10n.cdrExportBothDates);
       return;
     }
     final api = ref.read(cdrApiProvider);
@@ -548,31 +557,28 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Export call records'),
+    title: Text(context.l10n.cdrExportTitle),
     content: SizedBox(
       width: 380,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'A CSV of every call in the period, up to a year. It is prepared '
-            'in the background; the download appears on this page when ready.',
-          ),
+          Text(context.l10n.cdrExportBody),
           TextField(
             key: const ValueKey('export-from'),
             controller: _from,
-            decoration: const InputDecoration(
-              labelText: 'From date',
-              hintText: 'YYYY-MM-DD',
+            decoration: InputDecoration(
+              labelText: context.l10n.cdrFromDate,
+              hintText: context.l10n.commonDateHint,
             ),
           ),
           TextField(
             key: const ValueKey('export-to'),
             controller: _to,
-            decoration: const InputDecoration(
-              labelText: 'To date (included)',
-              hintText: 'YYYY-MM-DD',
+            decoration: InputDecoration(
+              labelText: context.l10n.cdrToDateIncluded,
+              hintText: context.l10n.commonDateHint,
             ),
           ),
           if (_error != null)
@@ -586,11 +592,11 @@ class _ExportDialogState extends ConsumerState<ExportDialog> {
     actions: [
       TextButton(
         onPressed: _busy ? null : () => Navigator.of(context).pop(),
-        child: const Text('Cancel'),
+        child: Text(context.l10n.commonCancel),
       ),
       FilledButton(
         onPressed: _busy ? null : _start,
-        child: const Text('Start export'),
+        child: Text(context.l10n.cdrStartExport),
       ),
     ],
   );
@@ -675,11 +681,17 @@ class _ExportTileState extends ConsumerState<ExportTile> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final status = '${_export['status']}';
     final url = _export['downloadUrl'];
-    final period =
-        '${formatDate(DateTime.parse('${_export['fromAt']}').toLocal())} to '
-        '${formatDate(DateTime.parse('${_export['toAt']}').toLocal().subtract(const Duration(milliseconds: 1)))}';
+    final firstDay = formatDate(
+      DateTime.parse('${_export['fromAt']}').toLocal(),
+    );
+    final lastDay = formatDate(
+      DateTime.parse('${_export['toAt']}')
+          .toLocal()
+          .subtract(const Duration(milliseconds: 1)),
+    );
     return ListTile(
       dense: true,
       leading: switch (status) {
@@ -694,15 +706,16 @@ class _ExportTileState extends ConsumerState<ExportTile> {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       },
-      title: Text('Export, $period'),
+      title: Text(l10n.cdrExportRow(firstDay, lastDay)),
       subtitle: Text(
         _error ??
             switch (status) {
-              'pending' => 'Waiting to start…',
-              'processing' => 'Preparing the file…',
-              'ready' => 'Ready',
-              'failed' =>
-                'Failed: ${_export['errorMessage'] ?? 'the export could not be completed.'}',
+              'pending' => l10n.cdrExportPending,
+              'processing' => l10n.cdrExportProcessing,
+              'ready' => l10n.cdrExportReady,
+              'failed' => l10n.cdrExportFailed(
+                '${_export['errorMessage'] ?? l10n.cdrExportFailedUnknown}',
+              ),
               _ => status,
             },
       ),
@@ -710,7 +723,7 @@ class _ExportTileState extends ConsumerState<ExportTile> {
           ? FilledButton.icon(
               onPressed: () => ref.read(urlOpenerProvider)(url),
               icon: const Icon(Icons.download),
-              label: const Text('Download'),
+              label: Text(l10n.cdrDownload),
             )
           : null,
     );

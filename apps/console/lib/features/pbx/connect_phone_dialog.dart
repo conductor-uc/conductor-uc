@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import 'pbx_api.dart';
 
 /// What a person types into a desk phone or a softphone to make it this
@@ -34,7 +35,7 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
     super.initState();
     final api = ref.read(pbxApiProvider);
     _endpoint = api == null
-        ? Future.error('Sign in again to continue.')
+        ? Future.error(currentL10n.chSignInAgain)
         : api.sipEndpoint();
   }
 
@@ -73,6 +74,7 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
     final api = ref.read(pbxApiProvider);
     if (api == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
     try {
       final got = await api.resetSipPassword('${widget.extension['id']}', why);
       if (!mounted) return;
@@ -80,11 +82,7 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
         _revealed = got;
         _error = null;
       });
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text('Password reset. Enter the new one in the phone.'),
-        ),
-      );
+      messenger.showSnackBar(SnackBar(content: Text(l.phonePasswordReset)));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
     }
@@ -92,10 +90,11 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final canReveal = ref.watch(canProvider('secret.reveal'));
     final number = '${widget.extension['number']}';
     return AlertDialog(
-      title: Text('Connect a phone to $number'),
+      title: Text(l.phoneTitle(number)),
       content: SizedBox(
         width: 480,
         child: FutureBuilder<Json>(
@@ -119,28 +118,28 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Enter these in the phone or softphone. On a desk phone, '
-                    'open its web page and look for the account or SIP settings.',
-                  ),
+                  Text(l.phoneIntro),
                   const SizedBox(height: 16),
                   if (e['outboundProxy'] != null) ...[
                     // Phones connect to the proxy, which has a certificate they
                     // can verify, and still register to and log in as the domain.
-                    _Line('Outbound proxy', '${e['outboundProxy']}'),
-                    _Line('Server / registrar', '${e['server']}'),
+                    _Line(l.phoneOutboundProxy, '${e['outboundProxy']}'),
+                    _Line(l.phoneServerRegistrar, '${e['server']}'),
                   ] else
-                    _Line('Server', '${e['server']}'),
-                  _Line('Port', '${e['port']}'),
+                    _Line(l.myHomeServer, '${e['server']}'),
+                  _Line(l.myHomePort, '${e['port']}'),
                   if (e['tlsPort'] != null)
-                    _Line('TLS port', '${e['tlsPort']}'),
+                    _Line(l.phoneTlsPort, '${e['tlsPort']}'),
                   _Line(
-                    'Transport',
-                    transports.join(' or '),
+                    l.phoneTransport,
+                    transports.join(l.phoneOrSeparator),
                     copyValue: transports.first,
                   ),
-                  _Line('Username', '${_revealed?['username'] ?? number}'),
-                  _Line('Domain / realm', '${e['realm']}'),
+                  _Line(
+                    l.myHomeUsername,
+                    '${_revealed?['username'] ?? number}',
+                  ),
+                  _Line(l.phoneDomainRealm, '${e['realm']}'),
                   _password(canReveal),
                 ],
               ),
@@ -151,33 +150,32 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(l.commonClose),
         ),
       ],
     );
   }
 
   Widget _password(bool canReveal) {
+    final l = context.l10n;
     final revealed = _revealed;
     if (revealed != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Line('Password', '${revealed['password']}', secret: true),
+          _Line(l.phonePassword, '${revealed['password']}', secret: true),
           TextButton.icon(
             onPressed: _confirmReset,
             icon: const Icon(Icons.autorenew),
-            label: const Text('Reset password'),
+            label: Text(l.phoneResetPassword),
           ),
         ],
       );
     }
     if (!canReveal) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 8),
-        child: Text(
-          'The password is shown only to people allowed to reveal it.',
-        ),
+      return Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(l.phonePasswordHidden),
       );
     }
     if (!_asking) {
@@ -191,12 +189,12 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
               OutlinedButton.icon(
                 onPressed: () => setState(() => _asking = true),
                 icon: const Icon(Icons.visibility_outlined),
-                label: const Text('Reveal password'),
+                label: Text(l.phoneRevealPassword),
               ),
               TextButton.icon(
                 onPressed: _confirmReset,
                 icon: const Icon(Icons.autorenew),
-                label: const Text('Reset password'),
+                label: Text(l.phoneResetPassword),
               ),
             ],
           ),
@@ -211,9 +209,9 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
           TextField(
             controller: _reason,
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Why do you need it?',
-              helperText: 'Recorded in the audit log along with your name.',
+            decoration: InputDecoration(
+              labelText: l.phoneWhyReveal,
+              helperText: l.phoneAuditNote,
             ),
             onChanged: (_) => setState(() {}),
           ),
@@ -230,7 +228,7 @@ class _ConnectPhoneDialogState extends ConsumerState<ConnectPhoneDialog> {
             onPressed: _revealing || _reason.text.trim().isEmpty
                 ? null
                 : _reveal,
-            child: const Text('Reveal'),
+            child: Text(l.phoneReveal),
           ),
         ],
       ),
@@ -261,14 +259,18 @@ class _Line extends StatelessWidget {
           ),
           Expanded(child: SelectableText(value)),
           IconButton(
-            tooltip: 'Copy $label',
+            tooltip: context.l10n.phoneCopy(label),
             icon: const Icon(Icons.copy_outlined, size: 18),
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: copyValue ?? value));
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(secret ? 'Password copied.' : '$label copied.'),
+                  content: Text(
+                    secret
+                        ? context.l10n.phonePasswordCopied
+                        : context.l10n.phoneCopied(label),
+                  ),
                 ),
               );
             },
@@ -299,23 +301,21 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return AlertDialog(
-      title: const Text('Reset this password?'),
+      title: Text(l.phoneResetTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'The extension gets a new password. The phone using it stops '
-            'working until you enter the new one.',
-          ),
+          Text(l.phoneResetBody),
           const SizedBox(height: 12),
           TextField(
             controller: _reason,
             autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Why are you resetting it?',
-              helperText: 'Recorded in the audit log along with your name.',
+            decoration: InputDecoration(
+              labelText: l.phoneWhyReset,
+              helperText: l.phoneAuditNote,
             ),
             onChanged: (_) => setState(() {}),
           ),
@@ -324,13 +324,13 @@ class _ResetPasswordDialogState extends State<_ResetPasswordDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l.commonCancel),
         ),
         FilledButton(
           onPressed: _reason.text.trim().isEmpty
               ? null
               : () => Navigator.of(context).pop(_reason.text.trim()),
-          child: const Text('Reset'),
+          child: Text(l.phoneReset),
         ),
       ],
     );

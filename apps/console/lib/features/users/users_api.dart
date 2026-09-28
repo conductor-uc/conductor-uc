@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/acting.dart';
 import '../../core/api_client.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource.dart';
 
@@ -17,54 +18,66 @@ const rolesByOrgType = <OrgType, List<String>>{
   OrgType.tenant: ['tenant_admin', 'tenant_supervisor', 'tenant_user'],
 };
 
-const roleLabels = {
-  'master_admin': 'Administrator',
-  'master_support': 'Support',
-  'reseller_admin': 'Administrator',
-  'reseller_support': 'Support',
-  'tenant_admin': 'Administrator',
-  'tenant_supervisor': 'Supervisor',
-  'tenant_user': 'User',
-};
+Map<String, String> get roleLabels {
+  final l = currentL10n;
+  return {
+    'master_admin': l.usrRoleAdministrator,
+    'master_support': l.usrRoleSupport,
+    'reseller_admin': l.usrRoleAdministrator,
+    'reseller_support': l.usrRoleSupport,
+    'tenant_admin': l.usrRoleAdministrator,
+    'tenant_supervisor': l.usrRoleSupervisor,
+    'tenant_user': l.usrRoleUser,
+  };
+}
 
 /// The edit form for a person: their name, role, and whether they can sign in.
-ResourceDef userEditDef(OrgType orgType) => ResourceDef(
-  key: 'users',
-  singular: 'User',
-  plural: 'Users',
-  icon: Icons.people_outline,
-  fields: [
-    const Field('displayName', 'Name', FieldKind.text, required: true),
-    Field(
-      'role',
-      'Role',
-      FieldKind.choice,
-      choices: rolesByOrgType[orgType]!,
-      choiceLabels: roleLabels,
-      help: 'What they can do. Without a role they can sign in but not much else.',
-    ),
-    const Field(
-      'status',
-      'Access',
-      FieldKind.choice,
-      required: true,
-      choices: ['active', 'disabled'],
-      choiceLabels: {'active': 'Can sign in', 'disabled': 'Disabled'},
-    ),
-  ],
-);
+ResourceDef userEditDef(OrgType orgType) {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'users',
+    singular: l.usrSingular,
+    plural: l.usrPlural,
+    icon: Icons.people_outline,
+    fields: [
+      Field('displayName', l.fieldName, FieldKind.text, required: true),
+      Field(
+        'role',
+        l.usrRole,
+        FieldKind.choice,
+        choices: rolesByOrgType[orgType]!,
+        choiceLabels: roleLabels,
+        help: l.usrRoleHelp,
+      ),
+      Field(
+        'status',
+        l.usrAccess,
+        FieldKind.choice,
+        required: true,
+        choices: const ['active', 'disabled'],
+        choiceLabels: {
+          'active': l.usrStatusActive,
+          'disabled': l.usrStatusDisabled,
+        },
+      ),
+    ],
+  );
+}
 
 /// The invite form. The person chooses their own password when they accept.
-const userInviteDef = ResourceDef(
-  key: 'invitations',
-  singular: 'Invitation',
-  plural: 'Invitations',
-  icon: Icons.people_outline,
-  fields: [
-    Field('email', 'Email', FieldKind.text, required: true),
-    Field('displayName', 'Name', FieldKind.text, required: true),
-  ],
-);
+ResourceDef get userInviteDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'invitations',
+    singular: l.usrInvitationSingular,
+    plural: l.usrInvitationPlural,
+    icon: Icons.people_outline,
+    fields: [
+      Field('email', l.authEmail, FieldKind.text, required: true),
+      Field('displayName', l.fieldName, FieldKind.text, required: true),
+    ],
+  );
+}
 
 /// The people of one organization (`/v1/orgs/{id}/users`), their invitations,
 /// and the role assignments. That is the signed-in user's own organization, or,

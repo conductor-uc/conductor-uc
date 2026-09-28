@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../canvas/canvas.dart';
+import '../../../l10n/l10n.dart';
 import '../../../widgets/page.dart';
 import '../../pbx/pbx_api.dart';
 import 'flow_graph.dart';
@@ -37,15 +38,13 @@ class FlowPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = context.l10n;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Where calls start', style: theme.textTheme.titleSmall),
+        Text(l.flowWhereCallsStart, style: theme.textTheme.titleSmall),
         const SizedBox(height: 4),
-        Text(
-          'A number or another flow enters this one at a named start.',
-          style: theme.textTheme.bodySmall,
-        ),
+        Text(l.flowWhereCallsStartHelp, style: theme.textTheme.bodySmall),
         const SizedBox(height: 8),
         for (final e in entryPoints.entries)
           Padding(
@@ -56,7 +55,7 @@ class FlowPanel extends StatelessWidget {
                 SizedBox(
                   width: 100,
                   child: CommitField(
-                    label: 'Name',
+                    label: l.fieldName,
                     value: e.key,
                     onCommit: (name) {
                       final n = name.trim();
@@ -76,7 +75,7 @@ class FlowPanel extends StatelessWidget {
                   child: DropdownButtonFormField<String>(
                     initialValue: e.value,
                     isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Starts at'),
+                    decoration: InputDecoration(labelText: l.flowStartsAt),
                     items: [
                       for (final n in nodes.values)
                         DropdownMenuItem(
@@ -86,7 +85,7 @@ class FlowPanel extends StatelessWidget {
                       if (!nodes.containsKey(e.value))
                         DropdownMenuItem(
                           value: e.value,
-                          child: Text('Missing (${e.value})'),
+                          child: Text(l.flowRefMissing(e.value)),
                         ),
                     ],
                     onChanged: (v) => v == null
@@ -95,7 +94,7 @@ class FlowPanel extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Remove this start',
+                  tooltip: l.flowRemoveStart,
                   icon: const Icon(Icons.close),
                   onPressed: () =>
                       onEntryPoints({...entryPoints}..remove(e.key)),
@@ -104,9 +103,9 @@ class FlowPanel extends StatelessWidget {
             ),
           ),
         if (entryPoints.isEmpty)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 8),
-            child: Text('No start yet. A call has nowhere to go.'),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(l.flowNoStart),
           ),
         OutlinedButton.icon(
           onPressed: nodes.isEmpty
@@ -119,15 +118,15 @@ class FlowPanel extends StatelessWidget {
                   onEntryPoints({...entryPoints, name: nodes.keys.first});
                 },
           icon: const Icon(Icons.add),
-          label: const Text('Add a start'),
+          label: Text(l.flowAddStart),
         ),
         const Divider(height: 32),
         Text(
-          checkedByService ? 'Problems (checked by the service)' : 'Problems',
+          checkedByService ? l.flowProblemsByService : l.flowProblems,
           style: theme.textTheme.titleSmall,
         ),
         const SizedBox(height: 4),
-        if (issues.isEmpty) const Text('None found.'),
+        if (issues.isEmpty) Text(l.flowNoProblems),
         for (final i in issues)
           ListTile(
             key: ValueKey('issue-${i.kind}-${i.nodeId}-${i.message.hashCode}'),
@@ -171,13 +170,14 @@ class HistoryPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = context.l10n;
     final newestFirst = versions.reversed.toList();
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text('Published versions', style: theme.textTheme.titleSmall),
+        Text(l.flowPublishedVersions, style: theme.textTheme.titleSmall),
         const SizedBox(height: 4),
-        if (versions.isEmpty) const Text('None yet.'),
+        if (versions.isEmpty) Text(l.flowNoVersions),
         for (final v in newestFirst)
           Card(
             key: ValueKey('version-${v['versionNumber']}'),
@@ -189,13 +189,13 @@ class HistoryPanel extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        'Version ${v['versionNumber']}',
+                        l.flowVersion(v['versionNumber'] as int),
                         style: theme.textTheme.titleSmall,
                       ),
                       const SizedBox(width: 8),
                       if (v['id'] == currentVersionId)
-                        const Chip(
-                          label: Text('Live'),
+                        Chip(
+                          label: Text(l.flowsPublished),
                           visualDensity: VisualDensity.compact,
                         ),
                     ],
@@ -208,12 +208,12 @@ class HistoryPanel extends StatelessWidget {
                         TextButton(
                           onPressed: () =>
                               onRollback(v['versionNumber'] as int),
-                          child: const Text('Roll back to this'),
+                          child: Text(l.flowRollBackToThis),
                         ),
                       TextButton(
                         onPressed: () =>
                             onOpenAsDraft(v['versionNumber'] as int),
-                        child: const Text('Open as draft'),
+                        child: Text(l.flowOpenAsDraft),
                       ),
                     ],
                   ),
@@ -246,6 +246,7 @@ class PublishDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final blocked = issues.isNotEmpty;
+    final l10n = context.l10n;
     Widget group(String title, Iterable<String> lines) => lines.isEmpty
         ? const SizedBox.shrink()
         : Padding(
@@ -260,7 +261,7 @@ class PublishDialog extends StatelessWidget {
           );
     return AlertDialog(
       title: Text(
-        blocked ? 'Fix these before publishing' : 'Publish this flow?',
+        blocked ? l10n.flowFixBeforePublishing : l10n.flowPublishQuestion,
       ),
       content: SizedBox(
         width: 460,
@@ -274,21 +275,23 @@ class PublishDialog extends StatelessWidget {
               else ...[
                 Text(
                   liveVersion == null
-                      ? 'This is the first published version. Calls will use it straight away.'
+                      ? l10n.flowFirstVersion
                       : diff.isEmpty
-                      ? 'Nothing has changed since version $liveVersion.'
-                      : 'Changes since version $liveVersion, which is live now:',
+                      ? l10n.flowNothingChanged(liveVersion!)
+                      : l10n.flowChangesSince(liveVersion!),
                 ),
-                group('Added', diff.added.map(label)),
-                group('Removed', diff.removed.map(label)),
-                group('Changed', diff.changed.map(label)),
-                group('Connections', [
+                group(l10n.flowDiffAdded, diff.added.map(label)),
+                group(l10n.flowDiffRemoved, diff.removed.map(label)),
+                group(l10n.flowDiffChanged, diff.changed.map(label)),
+                group(l10n.flowDiffConnections, [
                   if (diff.connectionsAdded > 0)
-                    '${diff.connectionsAdded} added',
+                    l10n.flowDiffConnectionsAdded(diff.connectionsAdded),
                   if (diff.connectionsRemoved > 0)
-                    '${diff.connectionsRemoved} removed',
+                    l10n.flowDiffConnectionsRemoved(diff.connectionsRemoved),
                 ]),
-                group('Starts', [if (diff.entryPointsChanged) 'Changed']),
+                group(l10n.flowDiffStarts, [
+                  if (diff.entryPointsChanged) l10n.flowDiffChanged,
+                ]),
               ],
             ],
           ),
@@ -297,12 +300,12 @@ class PublishDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: Text(blocked ? 'Close' : 'Cancel'),
+          child: Text(blocked ? l10n.commonClose : l10n.commonCancel),
         ),
         if (!blocked)
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Publish'),
+            child: Text(l10n.flowPublish),
           ),
       ],
     );
@@ -324,7 +327,7 @@ Future<bool> confirm(
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
@@ -367,28 +370,31 @@ class _NameDialogState extends State<_NameDialog> {
 
   void _submit() {
     final n = _name.text.trim();
-    if (n.isEmpty) return setState(() => _error = 'Enter a name');
+    if (n.isEmpty) return setState(() => _error = context.l10n.flowEnterName);
     if (widget.taken.contains(n)) {
-      return setState(() => _error = 'That name is already a start');
+      return setState(() => _error = context.l10n.flowNameTaken);
     }
     Navigator.of(context).pop(n);
   }
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Name this start'),
+    title: Text(context.l10n.flowNameThisStart),
     content: TextField(
       controller: _name,
       autofocus: true,
-      decoration: InputDecoration(labelText: 'Name', errorText: _error),
+      decoration: InputDecoration(
+        labelText: context.l10n.fieldName,
+        errorText: _error,
+      ),
       onSubmitted: (_) => _submit(),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Cancel'),
+        child: Text(context.l10n.commonCancel),
       ),
-      FilledButton(onPressed: _submit, child: const Text('Add')),
+      FilledButton(onPressed: _submit, child: Text(context.l10n.flowAdd)),
     ],
   );
 }

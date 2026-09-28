@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/authed_get.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 
@@ -41,15 +42,16 @@ class _AuditPageState extends ConsumerState<AuditPage> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final events = ref.watch(auditEventsProvider);
     return PageFrame(
       children: [
         PageHeader(
-          title: 'Audit',
-          subtitle: 'What your people did, and what anyone did to your data. Newest first, times in UTC.',
+          title: l10n.audTitle,
+          subtitle: l10n.audSubtitle,
           actions: [
             IconButton(
-              tooltip: 'Refresh',
+              tooltip: l10n.audRefresh,
               icon: const Icon(Icons.refresh),
               onPressed: () => ref.invalidate(auditEventsProvider),
             ),
@@ -59,9 +61,9 @@ class _AuditPageState extends ConsumerState<AuditPage> {
         SizedBox(
           width: 320,
           child: TextField(
-            decoration: const InputDecoration(
-              labelText: 'Filter by action or resource',
-              prefixIcon: Icon(Icons.search),
+            decoration: InputDecoration(
+              labelText: l10n.audFilter,
+              prefixIcon: const Icon(Icons.search),
             ),
             onChanged: (v) => setState(() => _filter = v.trim().toLowerCase()),
           ),
@@ -70,7 +72,7 @@ class _AuditPageState extends ConsumerState<AuditPage> {
         Expanded(
           child: AsyncBody(
             value: events,
-            emptyText: 'Nothing has been recorded yet.',
+            emptyText: l10n.audEmpty,
             builder: (all) {
               final rows = [
                 for (final e in all)
@@ -80,26 +82,26 @@ class _AuditPageState extends ConsumerState<AuditPage> {
                     e,
               ];
               if (rows.isEmpty) {
-                return const Center(child: Text('No events match that.'));
+                return Center(child: Text(l10n.audNoMatches));
               }
               return SingleChildScrollView(
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('When')),
-                      DataColumn(label: Text('Who')),
-                      DataColumn(label: Text('Action')),
-                      DataColumn(label: Text('Resource')),
-                      DataColumn(label: Text('Data')),
-                      DataColumn(label: Text('Reason')),
+                    columns: [
+                      DataColumn(label: Text(l10n.audWhen)),
+                      DataColumn(label: Text(l10n.audWho)),
+                      DataColumn(label: Text(l10n.audAction)),
+                      DataColumn(label: Text(l10n.audResource)),
+                      DataColumn(label: Text(l10n.audData)),
+                      DataColumn(label: Text(l10n.audReason)),
                     ],
                     rows: [
                       for (final e in rows)
                         DataRow(
                           cells: [
                             DataCell(Text(shortTime(e['at']))),
-                            DataCell(Text(_who(e))),
+                            DataCell(Text(_who(l10n, e))),
                             DataCell(Text('${e['action']}')),
                             DataCell(Text('${e['resource']}')),
                             DataCell(Text('${e['dataClass']}')),
@@ -118,10 +120,13 @@ class _AuditPageState extends ConsumerState<AuditPage> {
   }
 
   /// "user 3f9a1c2b", plus where they are from when it is not this org.
-  String _who(Json e) {
+  String _who(AppLocalizations l10n, Json e) {
     final id = '${e['actorId']}';
     final short = id.length > 8 ? id.substring(0, 8) : id;
     final own = ref.read(sessionProvider)?.orgId;
-    return '${e['actorType']} $short${e['actorOrgId'] == own ? '' : ' (other org)'}';
+    final type = '${e['actorType']}';
+    return e['actorOrgId'] == own
+        ? l10n.audActor(type, short)
+        : l10n.audActorOtherOrg(type, short);
   }
 }

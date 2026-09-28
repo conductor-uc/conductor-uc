@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/config.dart';
+import '../../l10n/l10n.dart';
 import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
@@ -44,11 +45,14 @@ final filePickerProvider = Provider<Future<PickedFile?> Function()>(
   (ref) => pickAudioFile,
 );
 
-const mediaKinds = {
-  'prompt': 'Prompt (menus and announcements)',
-  'moh': 'Hold music',
-  'greeting': 'Voicemail greeting',
-};
+Map<String, String> get mediaKinds {
+  final l = currentL10n;
+  return {
+    'prompt': l.mediaKindPrompt,
+    'moh': l.mediaKindMoh,
+    'greeting': l.mediaKindGreeting,
+  };
+}
 
 /// The media library: the table of recordings, an upload button, and a
 /// refresh while any recording is still being checked and converted.
@@ -91,12 +95,13 @@ class _MediaPageState extends ConsumerState<MediaPage> {
     final api = ref.read(pbxApiProvider);
     final open = ref.read(openRecordingProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     if (api == null) return;
     try {
       await open(await api.mediaPlayUrl('${row['id']}'));
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not play it: ${problemMessage(e)}')),
+        SnackBar(content: Text(l10n.mediaCouldNotPlay(problemMessage(e)))),
       );
     }
   }
@@ -122,7 +127,7 @@ class _MediaPageState extends ConsumerState<MediaPage> {
       rowActions: (context, ref, row) => [
         if (row['status'] == 'ready')
           IconButton(
-            tooltip: 'Play',
+            tooltip: context.l10n.mediaPlay,
             icon: const Icon(Icons.play_arrow),
             onPressed: () => _play(row),
           ),
@@ -132,7 +137,7 @@ class _MediaPageState extends ConsumerState<MediaPage> {
           FilledButton.icon(
             onPressed: _upload,
             icon: const Icon(Icons.upload_file),
-            label: const Text('Upload recording'),
+            label: Text(context.l10n.mediaUploadRecording),
           ),
       ],
     );
@@ -172,9 +177,7 @@ class _UploadMediaDialogState extends ConsumerState<UploadMediaDialog> {
     setState(() {
       _file = file;
       _contentType = type;
-      _error = type == null
-          ? 'That does not look like an audio file. Use WAV, MP3, OGG, M4A, or FLAC.'
-          : null;
+      _error = type == null ? context.l10n.mediaNotAudio : null;
       if (_label.text.trim().isEmpty) {
         final dot = file.name.lastIndexOf('.');
         _label.text = dot > 0 ? file.name.substring(0, dot) : file.name;
@@ -188,17 +191,17 @@ class _UploadMediaDialogState extends ConsumerState<UploadMediaDialog> {
     final api = ref.read(pbxApiProvider);
     final label = _label.text.trim();
     if (file == null || type == null) {
-      setState(() => _error = 'Choose an audio file first.');
+      setState(() => _error = context.l10n.mediaChooseFirst);
       return;
     }
     if (label.isEmpty) {
-      setState(() => _error = 'Give the recording a name.');
+      setState(() => _error = context.l10n.mediaNameRequired);
       return;
     }
     if (api == null) return;
     setState(() {
       _error = null;
-      _step = 'Preparing…';
+      _step = context.l10n.mediaStepPreparing;
     });
     try {
       final created = await api.create('media-assets', {
@@ -207,20 +210,20 @@ class _UploadMediaDialogState extends ConsumerState<UploadMediaDialog> {
         'contentType': type,
       });
       final id = '${(created['asset'] as Map)['id']}';
-      if (mounted) setState(() => _step = 'Uploading…');
+      if (mounted) setState(() => _step = context.l10n.mediaStepUploading);
       await ref.read(uploadToStorageProvider)(
         '${created['uploadUrl']}',
         file.bytes,
         type,
       );
-      if (mounted) setState(() => _step = 'Finishing…');
+      if (mounted) setState(() => _step = context.l10n.mediaStepFinishing);
       await api.call('POST', 'media-assets', id, 'finalize');
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
         setState(() {
           _step = null;
-          _error = 'Could not upload: ${problemMessage(e)}';
+          _error = context.l10n.mediaCouldNotUpload(problemMessage(e));
         });
       }
     }
@@ -230,7 +233,7 @@ class _UploadMediaDialogState extends ConsumerState<UploadMediaDialog> {
   Widget build(BuildContext context) {
     final file = _file;
     return AlertDialog(
-      title: const Text('Upload recording'),
+      title: Text(context.l10n.mediaUploadRecording),
       content: SizedBox(
         width: 440,
         child: Column(
@@ -240,24 +243,28 @@ class _UploadMediaDialogState extends ConsumerState<UploadMediaDialog> {
             OutlinedButton.icon(
               onPressed: _busy ? null : _choose,
               icon: const Icon(Icons.folder_open),
-              label: Text(file == null ? 'Choose a file' : file.name),
+              label: Text(
+                file == null ? context.l10n.mediaChooseFile : file.name,
+              ),
             ),
             if (file != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text('${(file.bytes.length / 1024).ceil()} KB'),
+                child: Text(
+                  context.l10n.mediaFileSize((file.bytes.length / 1024).ceil()),
+                ),
               ),
             const SizedBox(height: 12),
             TextField(
               controller: _label,
               enabled: !_busy,
-              decoration: const InputDecoration(labelText: 'Name'),
+              decoration: InputDecoration(labelText: context.l10n.fieldName),
             ),
             const SizedBox(height: 8),
             DropdownButtonFormField<String>(
               initialValue: _kind,
               isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Used for'),
+              decoration: InputDecoration(labelText: context.l10n.mediaUsedFor),
               items: [
                 for (final e in mediaKinds.entries)
                   DropdownMenuItem(value: e.key, child: Text(e.value)),
@@ -288,11 +295,11 @@ class _UploadMediaDialogState extends ConsumerState<UploadMediaDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
         FilledButton(
           onPressed: _busy ? null : _send,
-          child: const Text('Upload'),
+          child: Text(context.l10n.mediaUpload),
         ),
       ],
     );

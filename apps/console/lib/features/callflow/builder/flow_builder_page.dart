@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../canvas/canvas.dart';
 import '../../../core/permissions.dart';
+import '../../../l10n/l10n.dart';
 import '../../../widgets/page.dart';
 import '../../pbx/pbx_api.dart';
 import 'flow_graph.dart';
@@ -184,7 +185,7 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
       if (!silent && mounted) {
         setState(() {
           _save = _SaveState.failed;
-          _error = 'Could not save: ${problemMessage(e)}';
+          _error = context.l10n.flowCouldNotSave(problemMessage(e));
         });
       }
       return false;
@@ -246,8 +247,8 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
       });
       _say(
         issues.isEmpty
-            ? 'The service says this flow is valid.'
-            : 'The service found ${issues.length} problem(s).',
+            ? context.l10n.flowServiceValid
+            : context.l10n.flowServiceProblems(issues.length),
       );
     } catch (e) {
       _say(problemMessage(e));
@@ -281,6 +282,7 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
   }
 
   Future<void> _publish() async {
+    final l = context.l10n;
     if (!await _saveNow()) return;
     try {
       final graph = graphOf(_c, _entryPoints);
@@ -303,7 +305,7 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
           await _client.call('POST', 'flows', widget.flowId, 'publish') as Map;
       ref.invalidate(rowsProvider('flows'));
       await _refreshFlow();
-      _say('Published version ${version['versionNumber']}.');
+      _say(l.flowPublishedVersion(version['versionNumber'] as int));
     } catch (e) {
       _say(problemMessage(e));
     }
@@ -321,11 +323,12 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
   }
 
   Future<void> _rollback(int number) async {
+    final l = context.l10n;
     final ok = await confirm(
       context,
-      title: 'Roll back to version $number?',
-      body: 'Calls will use version $number again. Your draft is not changed.',
-      action: 'Roll back',
+      title: l.flowRollbackTitle(number),
+      body: l.flowRollbackBody(number),
+      action: l.flowRollback,
     );
     if (!ok) return;
     try {
@@ -338,19 +341,19 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
       );
       ref.invalidate(rowsProvider('flows'));
       await _refreshFlow();
-      _say('Rolled back to version $number.');
+      _say(l.flowRolledBack(number));
     } catch (e) {
       _say(problemMessage(e));
     }
   }
 
   Future<void> _openAsDraft(int number) async {
+    final l = context.l10n;
     final ok = await confirm(
       context,
-      title: 'Open version $number as the draft?',
-      body:
-          'The draft is replaced by version $number. Changes you have not published are lost.',
-      action: 'Replace draft',
+      title: l.flowOpenAsDraftTitle(number),
+      body: l.flowOpenAsDraftBody(number),
+      action: l.flowReplaceDraft,
     );
     if (!ok) return;
     try {
@@ -359,7 +362,7 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
       _entryPoints = {...graph.entryPoints};
       _touch();
       _c.fitToView();
-      _say('Draft replaced with version $number.');
+      _say(l.flowDraftReplaced(number));
     } catch (e) {
       _say(problemMessage(e));
     }
@@ -392,7 +395,9 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
   Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     final flow = _flow;
-    if (flow == null) return LoadFailure(_error ?? 'Could not load this flow.');
+    if (flow == null) {
+      return LoadFailure(_error ?? context.l10n.flowCouldNotLoad);
+    }
     final byNode = _issuesByNode;
     return Padding(
       padding: const EdgeInsets.all(16),
@@ -441,19 +446,20 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
 
   Widget _toolbar(Json flow) {
     final theme = Theme.of(context);
+    final l = context.l10n;
     final canEdit = ref.watch(canProvider('callflow.edit'));
     final status = switch (_save) {
-      _ when !canEdit => 'Read only: changes are not saved',
-      _SaveState.saved => 'Saved',
-      _SaveState.dirty => 'Unsaved changes',
-      _SaveState.saving => 'Saving…',
-      _SaveState.failed => 'Not saved',
+      _ when !canEdit => l.flowReadOnly,
+      _SaveState.saved => l.flowSaved,
+      _SaveState.dirty => l.flowUnsaved,
+      _SaveState.saving => l.flowSaving,
+      _SaveState.failed => l.flowNotSaved,
     };
     final problems = (_serviceIssues ?? _issues).length;
     return Row(
       children: [
         IconButton(
-          tooltip: 'Back to call flows',
+          tooltip: l.flowBackToFlows,
           icon: const Icon(Icons.arrow_back),
           onPressed: () async {
             await _saveNow();
@@ -496,22 +502,22 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
           ),
         ),
         IconButton(
-          tooltip: 'Undo',
+          tooltip: l.commonUndo,
           icon: const Icon(Icons.undo),
           onPressed: _c.canUndo ? _c.undo : null,
         ),
         IconButton(
-          tooltip: 'Redo',
+          tooltip: l.flowRedo,
           icon: const Icon(Icons.redo),
           onPressed: _c.canRedo ? _c.redo : null,
         ),
         const SizedBox(width: 8),
         if (canEdit) ...[
-          OutlinedButton(onPressed: _validate, child: const Text('Validate')),
+          OutlinedButton(onPressed: _validate, child: Text(l.flowValidate)),
           const SizedBox(width: 8),
         ],
         if (ref.watch(canProvider('callflow.publish')))
-          FilledButton(onPressed: _publish, child: const Text('Publish')),
+          FilledButton(onPressed: _publish, child: Text(l.flowPublish)),
       ],
     );
   }
@@ -528,10 +534,19 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
           padding: const EdgeInsets.all(8),
           child: SegmentedButton<_Tab>(
             showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: _Tab.properties, label: Text('Step')),
-              ButtonSegment(value: _Tab.flow, label: Text('Flow')),
-              ButtonSegment(value: _Tab.history, label: Text('History')),
+            segments: [
+              ButtonSegment(
+                value: _Tab.properties,
+                label: Text(context.l10n.flowTabStep),
+              ),
+              ButtonSegment(
+                value: _Tab.flow,
+                label: Text(context.l10n.flowTabFlow),
+              ),
+              ButtonSegment(
+                value: _Tab.history,
+                label: Text(context.l10n.flowTabHistory),
+              ),
             ],
             selected: {tab},
             onSelectionChanged: (s) {
@@ -547,8 +562,8 @@ class _FlowBuilderPageState extends ConsumerState<FlowBuilderPage> {
               single == null
                   ? PanelNote(
                       _c.selection.isEmpty
-                          ? 'Select a step to edit it, or add one from the left.'
-                          : '${_c.selection.length} steps selected.',
+                          ? context.l10n.flowSelectStep
+                          : context.l10n.flowStepsSelected(_c.selection.length),
                     )
                   : NodeProperties(
                       key: ValueKey(single.id),

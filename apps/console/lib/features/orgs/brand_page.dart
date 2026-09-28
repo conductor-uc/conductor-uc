@@ -5,36 +5,28 @@ import '../../app/brand.dart';
 import '../../core/file_pick.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import 'orgs_api.dart';
 
 /// The brand fields typed into this editor, with labels and help. The three
 /// images are uploaded separately (see [brandImages]).
-const brandFields = <(String, String, String?)>[
-  (
-    'displayName',
-    'Display name',
-    'Shown in the console header and page title.',
-  ),
-  ('primaryColor', 'Primary color', 'Six-digit hex, like #4a148c.'),
-  ('accentColor', 'Accent color', 'Six-digit hex, like #ffe082.'),
-  ('supportEmail', 'Support email', null),
-  ('supportUrl', 'Support URL', null),
-  ('supportPhone', 'Support phone', null),
-  ('emailFromName', 'Email sender name', null),
-  (
-    'emailFromAddress',
-    'Email sender address',
-    'Its domain must pass SPF and DKIM before use.',
-  ),
-  (
-    'sipUserAgent',
-    'SIP user agent',
-    'Optional override for the SIP User-Agent header.',
-  ),
-  ('legalFooter', 'Legal footer', 'Shown at the bottom of sign-in and emails.'),
-];
+List<(String, String, String?)> get brandFields {
+  final l = currentL10n;
+  return [
+    ('displayName', l.brandDisplayName, l.brandDisplayNameHelp),
+    ('primaryColor', l.brandPrimaryColor, l.brandPrimaryColorHelp),
+    ('accentColor', l.brandAccentColor, l.brandAccentColorHelp),
+    ('supportEmail', l.brandSupportEmail, null),
+    ('supportUrl', l.brandSupportUrl, null),
+    ('supportPhone', l.brandSupportPhone, null),
+    ('emailFromName', l.brandEmailFromName, null),
+    ('emailFromAddress', l.brandEmailFromAddress, l.brandEmailFromAddressHelp),
+    ('sipUserAgent', l.brandSipUserAgent, l.brandSipUserAgentHelp),
+    ('legalFooter', l.brandLegalFooter, l.brandLegalFooterHelp),
+  ];
+}
 
 /// Opens the browser's file chooser for an image. A provider so tests can
 /// choose a file without a browser.
@@ -44,11 +36,14 @@ final imagePickerProvider = Provider<Future<PickedFile?> Function()>(
 
 /// The brand's images: the key each is saved under, its upload kind, and its
 /// label.
-const brandImages = <(String, String, String)>[
-  ('logoLightKey', 'logoLight', 'Logo (for light backgrounds)'),
-  ('logoDarkKey', 'logoDark', 'Logo (for dark backgrounds)'),
-  ('faviconKey', 'favicon', 'Favicon'),
-];
+List<(String, String, String)> get brandImages {
+  final l = currentL10n;
+  return [
+    ('logoLightKey', 'logoLight', l.brandLogoLight),
+    ('logoDarkKey', 'logoDark', l.brandLogoDark),
+    ('faviconKey', 'favicon', l.brandFavicon),
+  ];
+}
 
 /// A reseller's brand (02 §5.4) and its console hostnames. A reseller edits
 /// its own; the master opens one reseller's through [resellerId].
@@ -104,9 +99,7 @@ class _BrandPageState extends ConsumerState<BrandPage> {
     for (final key in const ['primaryColor', 'accentColor']) {
       final value = _text(key);
       if (value != null && parseHex(value) == null) {
-        setState(
-          () => _error = 'Colors are six-digit hex values, like #4a148c.',
-        );
+        setState(() => _error = context.l10n.brandColorInvalid);
         return;
       }
     }
@@ -121,7 +114,7 @@ class _BrandPageState extends ConsumerState<BrandPage> {
         ..._assetKeys,
       });
       ref.invalidate(brandProviderFor(_resellerId));
-      if (mounted) setState(() => _status = 'Brand saved.');
+      if (mounted) setState(() => _status = context.l10n.brandSaved);
     } catch (e) {
       if (mounted) setState(() => _error = problemMessage(e));
     } finally {
@@ -149,7 +142,7 @@ class _BrandPageState extends ConsumerState<BrandPage> {
       if (mounted) {
         setState(() {
           _assetKeys[key] = stored;
-          _status = 'Uploaded ${file.name}. Save the brand to use it.';
+          _status = context.l10n.brandUploaded(file.name);
         });
       }
     } catch (e) {
@@ -185,9 +178,9 @@ class _BrandPageState extends ConsumerState<BrandPage> {
     if (session == null ||
         !(session.orgType == OrgType.reseller ||
             (master && widget.resellerId != null))) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Text('Only a reseller has a brand to edit.'),
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(context.l10n.brandOnlyReseller),
       );
     }
     final id = widget.resellerId ?? session.orgId;
@@ -221,12 +214,9 @@ class _BrandPageState extends ConsumerState<BrandPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Brand', style: textTheme.headlineSmall),
+          Text(context.l10n.navBrand, style: textTheme.headlineSmall),
           const SizedBox(height: 4),
-          const Text(
-            'What your customers see: the console header, sign-in page, and emails. '
-            'Leave everything blank for the neutral look.',
-          ),
+          Text(context.l10n.brandIntro),
           const SizedBox(height: 16),
           Wrap(
             spacing: 32,
@@ -258,7 +248,7 @@ class _BrandPageState extends ConsumerState<BrandPage> {
                         title: Text(i.$3),
                         subtitle: Text(
                           _assetKeys[i.$1] == null
-                              ? 'None'
+                              ? context.l10n.brandImageNone
                               : _assetKeys[i.$1]!.split('/').last,
                         ),
                         trailing: !canChange
@@ -270,11 +260,13 @@ class _BrandPageState extends ConsumerState<BrandPage> {
                                     onPressed: _busy
                                         ? null
                                         : () => _upload(i.$1, i.$2),
-                                    child: const Text('Upload'),
+                                    child: Text(context.l10n.brandUpload),
                                   ),
                                   if (_assetKeys[i.$1] != null)
                                     IconButton(
-                                      tooltip: 'Remove ${i.$3}',
+                                      tooltip: context.l10n.brandRemoveImage(
+                                        i.$3,
+                                      ),
                                       icon: const Icon(Icons.close),
                                       onPressed: () => setState(
                                         () => _assetKeys[i.$1] = null,
@@ -299,7 +291,7 @@ class _BrandPageState extends ConsumerState<BrandPage> {
                         alignment: Alignment.centerLeft,
                         child: FilledButton(
                           onPressed: _busy ? null : _save,
-                          child: const Text('Save brand'),
+                          child: Text(context.l10n.brandSave),
                         ),
                       ),
                   ],
@@ -312,26 +304,27 @@ class _BrandPageState extends ConsumerState<BrandPage> {
           Row(
             children: [
               Expanded(
-                child: Text('Console hostnames', style: textTheme.titleMedium),
+                child: Text(
+                  context.l10n.brandHostnames,
+                  style: textTheme.titleMedium,
+                ),
               ),
               if (canChange)
                 OutlinedButton.icon(
                   onPressed: _addHostname,
                   icon: const Icon(Icons.add),
-                  label: const Text('Add hostname'),
+                  label: Text(context.l10n.brandAddHostname),
                 ),
             ],
           ),
-          const Text(
-            'Point each name at the console with a DNS record; sign-in there shows this brand.',
-          ),
+          Text(context.l10n.brandHostnamesHelp),
           hostnames.when(
             loading: () => const LinearProgressIndicator(),
             error: (e, _) => Text(problemMessage(e)),
             data: (rows) => rows.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: Text('None yet.'),
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(context.l10n.brandHostnamesEmpty),
                   )
                 : Column(
                     children: [
@@ -340,7 +333,9 @@ class _BrandPageState extends ConsumerState<BrandPage> {
                           contentPadding: EdgeInsets.zero,
                           leading: const Icon(Icons.language),
                           title: Text('${h['fqdn']}'),
-                          subtitle: Text('TLS: ${h['tlsStatus']}'),
+                          subtitle: Text(
+                            context.l10n.brandHostnameTls('${h['tlsStatus']}'),
+                          ),
                         ),
                     ],
                   ),
@@ -384,13 +379,16 @@ class _Preview extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Preview'),
+                  Text(context.l10n.brandPreview),
                   const SizedBox(height: 12),
-                  FilledButton(onPressed: () {}, child: const Text('Sign in')),
+                  FilledButton(
+                    onPressed: () {},
+                    child: Text(context.l10n.authSignInButton),
+                  ),
                   const SizedBox(height: 8),
                   Chip(
                     label: Text(
-                      'Accent',
+                      context.l10n.brandPreviewAccent,
                       style: TextStyle(color: theme.colorScheme.onSecondary),
                     ),
                     backgroundColor: theme.colorScheme.secondary,
@@ -436,22 +434,25 @@ class _HostnameDialogState extends State<_HostnameDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Add hostname'),
+      title: Text(context.l10n.brandAddHostname),
       content: TextField(
         controller: _fqdn,
         autofocus: true,
-        decoration: const InputDecoration(
-          labelText: 'Hostname',
-          helperText: 'For example portal.example.com',
+        decoration: InputDecoration(
+          labelText: context.l10n.brandHostnameField,
+          helperText: context.l10n.brandHostnameFieldHelp,
         ),
         onSubmitted: (_) => _submit(),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
-        FilledButton(onPressed: _submit, child: const Text('Add')),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(context.l10n.brandAddHostnameButton),
+        ),
       ],
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/session.dart';
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../orgs/orgs_api.dart';
 import '../pbx/pbx_api.dart';
@@ -32,7 +33,7 @@ class TrunksPage extends ConsumerWidget {
           const SizedBox(height: 16),
           picker,
           const SizedBox(height: 16),
-          const Text('Choose a tenant to see and manage its trunks.'),
+          Text(context.l10n.trunkChooseTenant),
         ],
       );
     }
@@ -42,7 +43,7 @@ class TrunksPage extends ConsumerWidget {
       header: Padding(padding: const EdgeInsets.only(top: 12), child: picker),
       rowActions: (context, ref, row) => [
         IconButton(
-          tooltip: 'IP addresses and status',
+          tooltip: context.l10n.trunkIpsTooltip,
           icon: const Icon(Icons.lan_outlined),
           onPressed: () => showDialog<void>(
             context: context,
@@ -74,9 +75,9 @@ class _TenantPicker extends ConsumerWidget {
             key: const ValueKey('trunk-tenant'),
             initialValue: rows.any((r) => r['id'] == picked) ? picked : null,
             isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Tenant',
-              helperText: 'Trunks belong to the tenant they serve.',
+            decoration: InputDecoration(
+              labelText: context.l10n.trunkTenant,
+              helperText: context.l10n.trunkTenantHelp,
             ),
             items: [
               for (final t in rows)
@@ -164,19 +165,22 @@ class _TrunkIpsDialogState extends ConsumerState<TrunkIpsDialog> {
     }
   }
 
-  static const _statusText = {
-    'registered': 'Registered',
-    'registering': 'Registering…',
-    'failed': 'Registration failed',
-    'not_registered': 'Not registered',
-    'not_applicable': 'Not applicable (IP authentication)',
-  };
+  static String? _statusText(AppLocalizations l, String? status) =>
+      switch (status) {
+        'registered' => l.trunkRegistered,
+        'registering' => l.trunkRegistering,
+        'failed' => l.trunkRegistrationFailed,
+        'not_registered' => l.trunkNotRegistered,
+        'not_applicable' => l.trunkNotApplicable,
+        _ => null,
+      };
 
   @override
   Widget build(BuildContext context) {
     final ips = _ips;
     // Someone who can read trunks but not change them sees the list only.
     final canChange = ref.watch(canProvider('trunk.manage'));
+    final l = context.l10n;
     return AlertDialog(
       title: Text('${widget.trunk['name']}'),
       content: SizedBox(
@@ -186,14 +190,14 @@ class _TrunkIpsDialogState extends ConsumerState<TrunkIpsDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_status != null)
-              Text('Status: ${_statusText[_status] ?? _status}'),
+              Text(l.trunkStatus(_statusText(l, _status) ?? '$_status')),
             const SizedBox(height: 12),
             Text(
-              'Allowed carrier addresses',
+              l.trunkAllowedAddresses,
               style: Theme.of(context).textTheme.titleSmall,
             ),
             if (ips == null && _error == null) const LinearProgressIndicator(),
-            if (ips != null && ips.isEmpty) const Text('None yet.'),
+            if (ips != null && ips.isEmpty) Text(l.trunkNoneYet),
             for (final ip in ips ?? const <Json>[])
               ListTile(
                 key: ValueKey('ip-${ip['id']}'),
@@ -202,7 +206,7 @@ class _TrunkIpsDialogState extends ConsumerState<TrunkIpsDialog> {
                 title: Text('${ip['cidr']}'),
                 trailing: canChange
                     ? IconButton(
-                        tooltip: 'Remove ${ip['cidr']}',
+                        tooltip: l.trunkRemoveAddress('${ip['cidr']}'),
                         icon: const Icon(Icons.close),
                         onPressed: () => _remove('${ip['id']}'),
                       )
@@ -214,15 +218,15 @@ class _TrunkIpsDialogState extends ConsumerState<TrunkIpsDialog> {
                   Expanded(
                     child: TextField(
                       controller: _cidr,
-                      decoration: const InputDecoration(
-                        labelText: 'Address or range',
-                        helperText: 'For example 203.0.113.0/24',
+                      decoration: InputDecoration(
+                        labelText: l.trunkAddressOrRange,
+                        helperText: l.trunkAddressExample,
                       ),
                       onSubmitted: (_) => _add(),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  FilledButton(onPressed: _add, child: const Text('Add')),
+                  FilledButton(onPressed: _add, child: Text(l.trunkAdd)),
                 ],
               ),
             if (_error != null) ErrorText(_error!),
@@ -232,7 +236,7 @@ class _TrunkIpsDialogState extends ConsumerState<TrunkIpsDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(l.commonClose),
         ),
       ],
     );

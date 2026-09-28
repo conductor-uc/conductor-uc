@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../canvas/canvas.dart';
+import '../../../l10n/l10n.dart';
 import 'local_validation.dart';
 import 'lookups.dart';
 import 'node_types.dart';
@@ -25,7 +26,7 @@ class NodeHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final type = flowNodeType(node.type);
-    final summary = _summary(ref, type);
+    final summary = _summary(context.l10n, ref, type);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       child: Row(
@@ -57,7 +58,7 @@ class NodeHeader extends ConsumerWidget {
           ),
           if (startNames.isNotEmpty)
             Tooltip(
-              message: 'Calls start here: ${startNames.join(', ')}',
+              message: context.l10n.flowCallsStartHere(startNames.join(', ')),
               child: const Icon(Icons.flag_outlined, size: 18),
             ),
           if (issues.isNotEmpty)
@@ -75,16 +76,20 @@ class NodeHeader extends ConsumerWidget {
   }
 
   /// The line under the name, and whether it is a "not set" warning.
-  (String, bool)? _summary(WidgetRef ref, FlowNodeType? type) {
+  (String, bool)? _summary(
+    AppLocalizations l,
+    WidgetRef ref,
+    FlowNodeType? type,
+  ) {
     final key = type?.summaryKey;
     if (type == null || key == null) return null;
     final value = node.config[key];
-    if (value == null || '$value'.isEmpty) return ('Not set', true);
+    if (value == null || '$value'.isEmpty) return (l.flowNotSet, true);
     final field = type.fields.firstWhere((f) => f.key == key);
     if (field.kind != ConfigKind.ref) return ('$value', false);
     final options = ref.watch(optionsProvider(field.resource!)).value;
     if (options == null) return ('…', false);
     final title = options['$value'];
-    return title == null ? ('Missing', true) : (title, false);
+    return title == null ? (l.flowMissing, true) : (title, false);
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/permissions.dart';
 import '../../core/realtime.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 import '../monitoring/live_calls.dart';
 import '../monitoring/monitoring_page.dart' show liveDuration;
 import '../monitoring/recording_controls.dart';
@@ -101,10 +102,11 @@ class _MyCallCard extends StatelessWidget {
     final mine = _mine;
     // A leg that called in is mine calling out; one the system placed rang me.
     final other = mine.direction == 'inbound' ? mine.to : mine.from;
+    final l = context.l10n;
     final state = switch (row.state) {
-      'ringing' => 'Ringing',
-      'held' => 'On hold',
-      _ => 'On a call',
+      'ringing' => l.monRinging,
+      'held' => l.monOnHold,
+      _ => l.myLiveOnACall,
     };
     final recording = row.recordingState;
     return Card(
@@ -117,7 +119,10 @@ class _MyCallCard extends StatelessWidget {
           children: [
             const Icon(Icons.phone_in_talk_outlined),
             Text(
-              '$state with ${other.isEmpty ? 'an unknown number' : other}',
+              l.myLiveWith(
+                state,
+                other.isEmpty ? l.myLiveUnknownNumber : other,
+              ),
               style: Theme.of(context).textTheme.titleSmall,
             ),
             Text(liveDuration(row.answeredAt ?? row.startedAt, now)),
@@ -130,7 +135,9 @@ class _MyCallCard extends StatelessWidget {
                   size: 16,
                 ),
                 label: Text(
-                  recording == 'paused' ? 'Recording paused' : 'Recording',
+                  recording == 'paused'
+                      ? l.myLiveRecordingPaused
+                      : l.monRecordingOn,
                 ),
               ),
             if (canControl)

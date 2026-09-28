@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../canvas/canvas.dart';
+import '../../../l10n/l10n.dart';
 import '../../pbx/pbx_api.dart' show Json;
 
 enum ConfigKind { ref, integer, text, flowEntry }
@@ -65,160 +66,178 @@ class FlowNodeType {
 
 const menuDigits = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
-const flowNodeTypes = <FlowNodeType>[
-  FlowNodeType(
-    type: 'play',
-    label: 'Play',
-    icon: Icons.volume_up_outlined,
-    description: 'Play a recording, then continue.',
-    summaryKey: 'mediaAssetId',
-    ports: [CanvasPort('next', 'Next')],
-    fields: [
-      ConfigField(
-        'mediaAssetId',
-        'Recording',
-        ConfigKind.ref,
-        resource: 'media-assets',
-      ),
-    ],
-  ),
-  FlowNodeType(
-    type: 'menu',
-    label: 'Menu',
-    icon: Icons.dialpad,
-    description: 'Play a prompt and route by the digit pressed.',
-    summaryKey: 'promptMediaAssetId',
-    ports: [
-      CanvasPort('timeout', 'No input'),
-      CanvasPort('invalid', 'Invalid'),
-    ],
-    fields: [
-      ConfigField(
-        'promptMediaAssetId',
-        'Prompt',
-        ConfigKind.ref,
-        resource: 'media-assets',
-      ),
-      ConfigField(
-        'timeoutSeconds',
-        'Wait for a digit (seconds)',
-        ConfigKind.integer,
-        min: 1,
-        initial: 5,
-      ),
-      ConfigField(
-        'maxInvalidAttempts',
-        'Invalid tries allowed',
-        ConfigKind.integer,
-        min: 1,
-        initial: 3,
-      ),
-    ],
-  ),
-  FlowNodeType(
-    type: 'time_condition',
-    label: 'Time condition',
-    icon: Icons.schedule,
-    description: 'Route by whether a schedule is open right now.',
-    summaryKey: 'scheduleId',
-    ports: [CanvasPort('match', 'Open'), CanvasPort('noMatch', 'Closed')],
-    fields: [
-      ConfigField(
-        'scheduleId',
-        'Schedule',
-        ConfigKind.ref,
-        resource: 'schedules',
-        help: 'Checked when each call arrives, so changing the schedule needs no republish.',
-      ),
-    ],
-  ),
-  FlowNodeType(
-    type: 'extension',
-    label: 'Extension',
-    icon: Icons.phone_in_talk_outlined,
-    description: 'Ring one extension.',
-    summaryKey: 'extensionId',
-    ports: [CanvasPort('noAnswer', 'No answer')],
-    fields: [
-      ConfigField(
-        'extensionId',
-        'Extension',
-        ConfigKind.ref,
-        resource: 'extensions',
-      ),
-      ConfigField(
-        'ringSeconds',
-        'Ring for (seconds)',
-        ConfigKind.integer,
-        min: 1,
-        initial: 20,
-      ),
-    ],
-  ),
-  FlowNodeType(
-    type: 'ring_group',
-    label: 'Ring group',
-    icon: Icons.groups_outlined,
-    description: 'Ring a group of extensions.',
-    summaryKey: 'ringGroupId',
-    ports: [CanvasPort('noAnswer', 'No answer')],
-    fields: [
-      ConfigField(
-        'ringGroupId',
-        'Ring group',
-        ConfigKind.ref,
-        resource: 'ring-groups',
-      ),
-    ],
-  ),
-  FlowNodeType(
-    type: 'queue',
-    label: 'Queue',
-    icon: Icons.queue_outlined,
-    description: 'Hold the caller until an agent is free.',
-    summaryKey: 'queueId',
-    ports: [CanvasPort('next', 'Next')],
-    fields: [
-      ConfigField('queueId', 'Queue', ConfigKind.ref, resource: 'queues'),
-    ],
-  ),
-  FlowNodeType(
-    type: 'voicemail',
-    label: 'Voicemail',
-    icon: Icons.voicemail,
-    description: 'Take a message.',
-    summaryKey: 'mailboxId',
-    ports: [CanvasPort('next', 'Next')],
-    fields: [
-      ConfigField(
-        'mailboxId',
-        'Mailbox',
-        ConfigKind.ref,
-        resource: 'voicemail/mailboxes',
-      ),
-    ],
-  ),
-  FlowNodeType(
-    type: 'goto_flow',
-    label: 'Go to flow',
-    icon: Icons.subdirectory_arrow_right,
-    description: 'Continue in another call flow.',
-    terminal: true,
-    summaryKey: 'flowId',
-    fields: [
-      ConfigField('flowId', 'Call flow', ConfigKind.ref, resource: 'flows'),
-      ConfigField('entryPoint', 'Start at', ConfigKind.flowEntry),
-    ],
-  ),
-  FlowNodeType(
-    type: 'hangup',
-    label: 'Hang up',
-    icon: Icons.call_end_outlined,
-    description: 'End the call.',
-    terminal: true,
-    fields: [],
-  ),
-];
+/// The MVP node types. A getter, not a constant: their words come from the
+/// ARB in the viewer's language (D-018), so they are built when asked for.
+List<FlowNodeType> get flowNodeTypes {
+  final l = currentL10n;
+  return [
+    FlowNodeType(
+      type: 'play',
+      label: l.nodePlay,
+      icon: Icons.volume_up_outlined,
+      description: l.nodePlayDescription,
+      summaryKey: 'mediaAssetId',
+      ports: [CanvasPort('next', l.nodePortNext)],
+      fields: [
+        ConfigField(
+          'mediaAssetId',
+          l.nodeFieldRecording,
+          ConfigKind.ref,
+          resource: 'media-assets',
+        ),
+      ],
+    ),
+    FlowNodeType(
+      type: 'menu',
+      label: l.nodeMenu,
+      icon: Icons.dialpad,
+      description: l.nodeMenuDescription,
+      summaryKey: 'promptMediaAssetId',
+      ports: [
+        CanvasPort('timeout', l.nodePortNoInput),
+        CanvasPort('invalid', l.nodePortInvalid),
+      ],
+      fields: [
+        ConfigField(
+          'promptMediaAssetId',
+          l.nodeFieldPrompt,
+          ConfigKind.ref,
+          resource: 'media-assets',
+        ),
+        ConfigField(
+          'timeoutSeconds',
+          l.nodeFieldTimeoutSeconds,
+          ConfigKind.integer,
+          min: 1,
+          initial: 5,
+        ),
+        ConfigField(
+          'maxInvalidAttempts',
+          l.nodeFieldMaxInvalidAttempts,
+          ConfigKind.integer,
+          min: 1,
+          initial: 3,
+        ),
+      ],
+    ),
+    FlowNodeType(
+      type: 'time_condition',
+      label: l.nodeTimeCondition,
+      icon: Icons.schedule,
+      description: l.nodeTimeConditionDescription,
+      summaryKey: 'scheduleId',
+      ports: [
+        CanvasPort('match', l.nodePortOpen),
+        CanvasPort('noMatch', l.nodePortClosed),
+      ],
+      fields: [
+        ConfigField(
+          'scheduleId',
+          l.nodeFieldSchedule,
+          ConfigKind.ref,
+          resource: 'schedules',
+          help: l.nodeFieldScheduleHelp,
+        ),
+      ],
+    ),
+    FlowNodeType(
+      type: 'extension',
+      label: l.nodeExtension,
+      icon: Icons.phone_in_talk_outlined,
+      description: l.nodeExtensionDescription,
+      summaryKey: 'extensionId',
+      ports: [CanvasPort('noAnswer', l.nodePortNoAnswer)],
+      fields: [
+        ConfigField(
+          'extensionId',
+          l.nodeFieldExtension,
+          ConfigKind.ref,
+          resource: 'extensions',
+        ),
+        ConfigField(
+          'ringSeconds',
+          l.nodeFieldRingSeconds,
+          ConfigKind.integer,
+          min: 1,
+          initial: 20,
+        ),
+      ],
+    ),
+    FlowNodeType(
+      type: 'ring_group',
+      label: l.nodeRingGroup,
+      icon: Icons.groups_outlined,
+      description: l.nodeRingGroupDescription,
+      summaryKey: 'ringGroupId',
+      ports: [CanvasPort('noAnswer', l.nodePortNoAnswer)],
+      fields: [
+        ConfigField(
+          'ringGroupId',
+          l.nodeFieldRingGroup,
+          ConfigKind.ref,
+          resource: 'ring-groups',
+        ),
+      ],
+    ),
+    FlowNodeType(
+      type: 'queue',
+      label: l.nodeQueue,
+      icon: Icons.queue_outlined,
+      description: l.nodeQueueDescription,
+      summaryKey: 'queueId',
+      ports: [CanvasPort('next', l.nodePortNext)],
+      fields: [
+        ConfigField(
+          'queueId',
+          l.nodeFieldQueue,
+          ConfigKind.ref,
+          resource: 'queues',
+        ),
+      ],
+    ),
+    FlowNodeType(
+      type: 'voicemail',
+      label: l.nodeVoicemail,
+      icon: Icons.voicemail,
+      description: l.nodeVoicemailDescription,
+      summaryKey: 'mailboxId',
+      ports: [CanvasPort('next', l.nodePortNext)],
+      fields: [
+        ConfigField(
+          'mailboxId',
+          l.nodeFieldMailbox,
+          ConfigKind.ref,
+          resource: 'voicemail/mailboxes',
+        ),
+      ],
+    ),
+    FlowNodeType(
+      type: 'goto_flow',
+      label: l.nodeGotoFlow,
+      icon: Icons.subdirectory_arrow_right,
+      description: l.nodeGotoFlowDescription,
+      terminal: true,
+      summaryKey: 'flowId',
+      fields: [
+        ConfigField(
+          'flowId',
+          l.nodeFieldCallFlow,
+          ConfigKind.ref,
+          resource: 'flows',
+        ),
+        ConfigField('entryPoint', l.nodeFieldStartAt, ConfigKind.flowEntry),
+      ],
+    ),
+    FlowNodeType(
+      type: 'hangup',
+      label: l.nodeHangup,
+      icon: Icons.call_end_outlined,
+      description: l.nodeHangupDescription,
+      terminal: true,
+      fields: const [],
+    ),
+  ];
+}
 
 FlowNodeType? flowNodeType(String type) {
   for (final t in flowNodeTypes) {
@@ -227,17 +246,18 @@ FlowNodeType? flowNodeType(String type) {
   return null;
 }
 
-String portLabel(String id) => switch (id) {
-  'timeout' => 'No input',
-  'invalid' => 'Invalid',
-  'next' => 'Next',
-  'noAnswer' => 'No answer',
-  'match' => 'Match',
-  'noMatch' => 'No match',
-  '*' => 'Press *',
-  '#' => 'Press #',
-  _ => 'Press $id',
-};
+String portLabel(String id) {
+  final l = currentL10n;
+  return switch (id) {
+    'timeout' => l.nodePortNoInput,
+    'invalid' => l.nodePortInvalid,
+    'next' => l.nodePortNext,
+    'noAnswer' => l.nodePortNoAnswer,
+    'match' => l.nodePortMatch,
+    'noMatch' => l.nodePortNoMatch,
+    _ => l.nodePortPress(id),
+  };
+}
 
 /// What the canvas holds in a node's `data`: the node's IR config, plus the
 /// editor-only ports a menu shows before anything is wired to them.

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../l10n/l10n.dart';
 import 'node_types.dart';
 
 /// The node types to build with. Drag one onto the canvas, or click it to add
@@ -21,7 +22,10 @@ class NodePalette extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-              child: Text('Add a step', style: theme.textTheme.titleSmall),
+              child: Text(
+                context.l10n.flowAddStep,
+                style: theme.textTheme.titleSmall,
+              ),
             ),
             for (final t in flowNodeTypes)
               Draggable<FlowNodeType>(

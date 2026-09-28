@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import 'certificates_api.dart';
@@ -19,11 +20,9 @@ class CertificatesPage extends ConsumerWidget {
     final certificates = ref.watch(platformCertificatesProvider);
     return PageFrame(
       children: [
-        const PageHeader(
-          title: 'Certificates',
-          subtitle:
-              'The certificates that secure phone connections and consoles are '
-              'requested and renewed automatically.',
+        PageHeader(
+          title: context.l10n.navCertificates,
+          subtitle: context.l10n.certSubtitle,
         ),
         const SizedBox(height: 16),
         Expanded(
@@ -54,13 +53,13 @@ class CertificatesPage extends ConsumerWidget {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Platform certificates',
+                  context.l10n.certPlatformHeading,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
                 AsyncBody<List<Json>>(
                   value: certificates,
-                  emptyText: 'No certificates are wanted yet.',
+                  emptyText: context.l10n.certEmptyPlatform,
                   builder: (rows) => CertificateTable(rows: rows),
                 ),
               ],
@@ -143,14 +142,11 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              "Let's Encrypt",
+              context.l10n.certLetsEncrypt,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
-            const Text(
-              'One account for the whole platform. Let’s Encrypt writes to this '
-              'address before a certificate expires.',
-            ),
+            Text(context.l10n.certLetsEncryptIntro),
             const SizedBox(height: 12),
             Container(
               key: const ValueKey('acme-status'),
@@ -163,9 +159,8 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
               ),
               child: Text(
                 ready
-                    ? 'Ready. Certificates are requested and renewed automatically.'
-                    : 'Not set up. No certificates are requested until an email '
-                          'address is saved and the agreement is accepted.',
+                    ? context.l10n.certAcmeReady
+                    : context.l10n.certAcmeNotSetUp,
               ),
             ),
             const SizedBox(height: 16),
@@ -173,20 +168,23 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
               controller: _email,
               readOnly: !canChange,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(
-                labelText: 'Contact email',
-                helperText: 'A mailbox someone reads.',
+              decoration: InputDecoration(
+                labelText: context.l10n.certContactEmail,
+                helperText: context.l10n.certContactEmailHelp,
               ),
             ),
             const SizedBox(height: 16),
-            const Text('Environment'),
+            Text(context.l10n.certEnvironment),
             const SizedBox(height: 4),
             SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'production', label: Text('Production')),
+              segments: [
+                ButtonSegment(
+                  value: 'production',
+                  label: Text(context.l10n.certProduction),
+                ),
                 ButtonSegment(
                   value: 'staging',
-                  label: Text('Staging (testing)'),
+                  label: Text(context.l10n.certStaging),
                 ),
               ],
               selected: {_directory},
@@ -199,12 +197,9 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
                     }),
             ),
             if (_directory == 'staging')
-              const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text(
-                  'Staging certificates are not trusted by any phone or browser. '
-                  'Use it to try the setup, then switch to Production.',
-                ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(context.l10n.certStagingNote),
               ),
             const SizedBox(height: 12),
             CheckboxListTile(
@@ -214,13 +209,13 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
               onChanged: canChange
                   ? (v) => setState(() => _agree = v ?? false)
                   : null,
-              title: const Text(
-                'I agree to the Let’s Encrypt Subscriber Agreement',
-              ),
+              title: Text(context.l10n.certAgree),
               subtitle: widget.settings['termsAgreedAt'] == null
                   ? null
                   : Text(
-                      'Agreed ${formatDate(widget.settings['termsAgreedAt'])}',
+                      context.l10n.certAgreed(
+                        formatDate(widget.settings['termsAgreedAt']),
+                      ),
                     ),
             ),
             Align(
@@ -229,7 +224,7 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
                 onPressed: () =>
                     launchUrl(Uri.parse(termsUrl), webOnlyWindowName: '_blank'),
                 icon: const Icon(Icons.open_in_new, size: 16),
-                label: const Text('Read the agreement'),
+                label: Text(context.l10n.certReadAgreement),
               ),
             ),
             if (_error != null)
@@ -241,7 +236,7 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
             if (canChange)
               FilledButton(
                 onPressed: _saving ? null : _save,
-                child: const Text('Save'),
+                child: Text(context.l10n.commonSave),
               ),
           ],
         ),
@@ -309,22 +304,18 @@ class _PublicAddressCardState extends ConsumerState<PublicAddressCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Public address',
+              context.l10n.certPublicAddress,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
-            const Text(
-              'Where phones and browsers reach the platform. Resellers are '
-              'shown DNS records that point their names here, and the '
-              'certificate authority checks the names on port 80.',
-            ),
+            Text(context.l10n.certPublicAddressIntro),
             const SizedBox(height: 12),
             TextField(
               controller: _address,
               readOnly: !canChange,
-              decoration: const InputDecoration(
-                labelText: 'Public address',
-                helperText: 'An IP address, or a hostname to point names at with a CNAME.',
+              decoration: InputDecoration(
+                labelText: context.l10n.certPublicAddress,
+                helperText: context.l10n.certPublicAddressHelp,
               ),
               onSubmitted: (_) => _save(),
             ),
@@ -338,7 +329,7 @@ class _PublicAddressCardState extends ConsumerState<PublicAddressCard> {
               FilledButton(
                 key: const ValueKey('save-public-address'),
                 onPressed: _saving ? null : _save,
-                child: const Text('Save address'),
+                child: Text(context.l10n.certSaveAddress),
               ),
           ],
         ),
@@ -353,24 +344,24 @@ class CertificateTable extends StatelessWidget {
 
   final List<Json> rows;
 
-  static const _status = {
-    'active': 'Active',
-    'pending': 'Waiting',
-    'failed': 'Failing',
-  };
-
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final status = {
+      'active': l10n.certStatusActive,
+      'pending': l10n.certStatusPending,
+      'failed': l10n.certStatusFailed,
+    };
     final scheme = Theme.of(context).colorScheme;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
-        columns: const [
-          DataColumn(label: Text('Name')),
-          DataColumn(label: Text('Used for')),
-          DataColumn(label: Text('Status')),
-          DataColumn(label: Text('Expires')),
-          DataColumn(label: Text('Notes')),
+        columns: [
+          DataColumn(label: Text(l10n.fieldName)),
+          DataColumn(label: Text(l10n.certUsedFor)),
+          DataColumn(label: Text(l10n.certColumnStatus)),
+          DataColumn(label: Text(l10n.certColumnExpires)),
+          DataColumn(label: Text(l10n.certColumnNotes)),
         ],
         rows: [
           for (final c in rows)
@@ -379,11 +370,15 @@ class CertificateTable extends StatelessWidget {
               cells: [
                 DataCell(Text('${c['fqdn']}')),
                 DataCell(
-                  Text(c['purpose'] == 'sip' ? 'Phones (SIP)' : 'Console'),
+                  Text(
+                    c['purpose'] == 'sip'
+                        ? l10n.certPurposeSip
+                        : l10n.certPurposeConsole,
+                  ),
                 ),
                 DataCell(
                   Chip(
-                    label: Text(_status['${c['status']}'] ?? '${c['status']}'),
+                    label: Text(status['${c['status']}'] ?? '${c['status']}'),
                     backgroundColor: c['status'] == 'failed'
                         ? scheme.errorContainer
                         : c['status'] == 'active'
@@ -397,8 +392,13 @@ class CertificateTable extends StatelessWidget {
                     constraints: const BoxConstraints(maxWidth: 360),
                     child: Text(
                       c['lastError'] == null
-                          ? (c['status'] == 'pending' ? 'Being requested.' : '')
-                          : '${c['lastError']} Trying again ${formatDate(c['nextAttemptAt'])}.',
+                          ? (c['status'] == 'pending'
+                                ? l10n.certBeingRequested
+                                : '')
+                          : l10n.certLastError(
+                              '${c['lastError']}',
+                              formatDate(c['nextAttemptAt']),
+                            ),
                     ),
                   ),
                 ),
@@ -425,11 +425,7 @@ class CertificatesPanel extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Phones connect to sip.<your base domain> and sign in with their '
-              'own domain. Each verified base domain gets a certificate for '
-              'that name automatically, once its name points at the platform.',
-            ),
+            Text(context.l10n.certResellerIntro),
             const SizedBox(height: 12),
             AsyncBody<Json>(
               value: ref.watch(resellerDnsRecordsProvider(resellerId)),
@@ -440,7 +436,7 @@ class CertificatesPanel extends ConsumerWidget {
             const SizedBox(height: 12),
             AsyncBody<List<Json>>(
               value: rows,
-              emptyText: 'No certificates yet. They appear once a base domain is verified.',
+              emptyText: context.l10n.certResellerEmpty,
               builder: (data) => CertificateTable(rows: data),
             ),
           ],
@@ -464,10 +460,9 @@ class DnsRecordsTable extends StatelessWidget {
     ];
     final theme = Theme.of(context);
     if (records['publicAddress'] == null) {
-      return const Text(
-        'The platform operator has not said where the platform is reached '
-        'yet, so there is nothing to point your names at. Ask them.',
-        key: ValueKey('dns-no-address'),
+      return Text(
+        context.l10n.certDnsNoAddress,
+        key: const ValueKey('dns-no-address'),
       );
     }
     if (rows.isEmpty) return const SizedBox.shrink();
@@ -475,21 +470,19 @@ class DnsRecordsTable extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('DNS records to publish', style: theme.textTheme.titleMedium),
+        Text(context.l10n.certDnsHeading, style: theme.textTheme.titleMedium),
         const SizedBox(height: 4),
-        const Text(
-          'Add one record for each name, at wherever your domain’s DNS is kept.',
-        ),
+        Text(context.l10n.certDnsIntro),
         const SizedBox(height: 8),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: DataTable(
             key: const ValueKey('dns-records'),
-            columns: const [
-              DataColumn(label: Text('Name')),
-              DataColumn(label: Text('Type')),
-              DataColumn(label: Text('Value')),
-              DataColumn(label: Text('Used for')),
+            columns: [
+              DataColumn(label: Text(context.l10n.fieldName)),
+              DataColumn(label: Text(context.l10n.certColumnType)),
+              DataColumn(label: Text(context.l10n.certColumnValue)),
+              DataColumn(label: Text(context.l10n.certUsedFor)),
             ],
             rows: [
               for (final r in rows)
@@ -499,7 +492,11 @@ class DnsRecordsTable extends StatelessWidget {
                     DataCell(Text('${r['type']}')),
                     DataCell(SelectableText('${r['value']}', style: mono)),
                     DataCell(
-                      Text(r['purpose'] == 'sip' ? 'Phones (SIP)' : 'Console'),
+                      Text(
+                        r['purpose'] == 'sip'
+                            ? context.l10n.certPurposeSip
+                            : context.l10n.certPurposeConsole,
+                      ),
                     ),
                   ],
                 ),
@@ -507,7 +504,7 @@ class DnsRecordsTable extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Text('Certificates', style: theme.textTheme.titleMedium),
+        Text(context.l10n.navCertificates, style: theme.textTheme.titleMedium),
         const SizedBox(height: 8),
       ],
     );

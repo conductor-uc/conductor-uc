@@ -119,52 +119,58 @@ Widget _bodyFor<T>(AsyncValue<T> value, Widget Function(T data) builder) =>
     );
 
 /// "Do not disturb: off", "Forward all calls to 102 · Bob Osei"...
-List<(String, String)> describeCallHandling(Json handling, List<Json> people) {
+List<(String, String)> describeCallHandling(
+  Json handling,
+  List<Json> people, [
+  AppLocalizations? l10n,
+]) {
+  final l = l10n ?? currentL10n;
   String where(Object? d) {
-    if (d is! Map) return 'Not set';
+    if (d is! Map) return l.myNotSet;
     switch (d['type']) {
       case 'extension':
         final match = people.where((p) => p['id'] == d['extensionId']);
         return match.isEmpty
-            ? 'An extension'
+            ? l.myAnExtension
             : '${match.first['number']} · ${match.first['displayName']}';
       case 'voicemail':
         final own = d['extensionId'];
-        if (own == null) return 'Your voicemail';
+        if (own == null) return l.myYourVoicemail;
         final match = people.where((p) => p['id'] == own);
         return match.isEmpty
-            ? 'A voicemail'
-            : 'Voicemail of ${match.first['number']} · ${match.first['displayName']}';
+            ? l.myAVoicemail
+            : l.myVoicemailOf(
+                '${match.first['number']}',
+                '${match.first['displayName']}',
+              );
       case 'external':
         return '${d['e164']}';
     }
-    return 'Not set';
+    return l.myNotSet;
   }
 
   final ring = [...?(handling['simultaneousRing'] as List?)];
   final dnd = handling['dnd'] == true;
   return [
     (
-      'Do not disturb',
+      l.myDoNotDisturb,
       dnd
-          ? 'On: callers go to '
-                '${handling['dndAction'] == 'busy' ? 'a busy signal' : 'voicemail'}'
-          : 'Off',
+          ? l.myDndOn(handling['dndAction'] == 'busy' ? 'busy' : 'voicemail')
+          : l.myOff,
     ),
-    ('Forward all calls', where(handling['forwardAlways'])),
-    ('Forward when busy', where(handling['forwardBusy'])),
+    (l.myForwardAll, where(handling['forwardAlways'])),
+    (l.myForwardBusy, where(handling['forwardBusy'])),
     (
-      'Forward when there is no answer',
+      l.myForwardNoAnswer,
       handling['forwardNoAnswer'] == null
-          ? 'Not set'
-          : '${where(handling['forwardNoAnswer'])} after '
-                '${handling['noAnswerSeconds']} seconds',
+          ? l.myNotSet
+          : l.myForwardAfter(
+              where(handling['forwardNoAnswer']),
+              '${handling['noAnswerSeconds']}',
+            ),
     ),
-    ('Forward when unreachable', where(handling['forwardUnreachable'])),
-    (
-      'Also ring at the same time',
-      ring.isEmpty ? 'Nobody' : ring.map(where).join(', '),
-    ),
+    (l.myForwardUnreachable, where(handling['forwardUnreachable'])),
+    (l.myAlsoRing, ring.isEmpty ? l.myNobody : ring.map(where).join(', ')),
   ];
 }
 
@@ -179,13 +185,16 @@ class MyCallHandlingPage extends ConsumerWidget {
     final handling = ref.watch(myCallHandlingProvider);
     final people = ref.watch(myDirectoryProvider).asData?.value ?? const [];
     final ext = extension.asData?.value;
+    final l = context.l10n;
     return _MyPhoneFrame(
       current: '/my-phone/call-handling',
-      title: 'My call handling',
+      title: l.navMyCallHandling,
       subtitle: ext == null
-          ? 'What happens to calls to your phone.'
-          : 'What happens to calls to extension ${ext['number']} '
-                '(${ext['displayName']}).',
+          ? l.myCallHandlingSubtitle
+          : l.myCallHandlingSubtitleExt(
+              '${ext['number']}',
+              '${ext['displayName']}',
+            ),
       actions: [
         if (ext != null)
           FilledButton.icon(
@@ -197,7 +206,7 @@ class MyCallHandlingPage extends ConsumerWidget {
               if (saved == true) ref.invalidate(myCallHandlingProvider);
             },
             icon: const Icon(Icons.edit_outlined),
-            label: const Text('Change'),
+            label: Text(l.myChange),
           ),
       ],
       children: [
@@ -214,6 +223,7 @@ class MyCallHandlingPage extends ConsumerWidget {
                         for (final (label, value) in describeCallHandling(
                           h,
                           people,
+                          l,
                         ))
                           ListTile(
                             dense: true,
@@ -243,7 +253,7 @@ class MyVoicemailPage extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => _MyPhoneFrame(
         current: '/my-phone/voicemail',
-        title: 'My voicemail',
+        title: context.l10n.navMyVoicemail,
         children: [
           Expanded(
             child: isNoLinkedExtension(e)
@@ -341,10 +351,11 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
   @override
   Widget build(BuildContext context) {
     final error = _error;
+    final l = context.l10n;
     return _MyPhoneFrame(
       current: '/my-phone/history',
-      title: 'My call history',
-      subtitle: 'Calls to and from your extension, newest first.',
+      title: l.navMyCallHistory,
+      subtitle: l.myHistorySubtitle,
       children: [
         Wrap(
           spacing: 12,
@@ -374,9 +385,9 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
                 key: const ValueKey('my-calls-direction'),
                 initialValue: _direction,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Direction'),
+                decoration: InputDecoration(labelText: l.myHistoryDirection),
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('All')),
+                  DropdownMenuItem(value: null, child: Text(l.myHistoryAll)),
                   for (final e in directionLabels.entries)
                     DropdownMenuItem(value: e.key, child: Text(e.value)),
                 ],
@@ -411,13 +422,13 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('When')),
-                            DataColumn(label: Text('Direction')),
-                            DataColumn(label: Text('From')),
-                            DataColumn(label: Text('To')),
-                            DataColumn(label: Text('Length')),
-                            DataColumn(label: Text('Result')),
+                          columns: [
+                            DataColumn(label: Text(l.myHistoryWhen)),
+                            DataColumn(label: Text(l.myHistoryDirection)),
+                            DataColumn(label: Text(l.monFrom)),
+                            DataColumn(label: Text(l.monTo)),
+                            DataColumn(label: Text(l.myHistoryLength)),
+                            DataColumn(label: Text(l.myHistoryResult)),
                           ],
                           rows: [
                             for (final r in _rows)
@@ -457,7 +468,7 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
                           padding: const EdgeInsets.symmetric(vertical: 12),
                           child: OutlinedButton(
                             onPressed: _loading ? null : () => _load(),
-                            child: const Text('Load more'),
+                            child: Text(l.myHistoryLoadMore),
                           ),
                         ),
                     ],

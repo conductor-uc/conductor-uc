@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../myphone/my_phone_api.dart';
@@ -51,32 +52,28 @@ class MailboxesView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final boxes = ref.watch(mailboxesProvider);
     return PageFrame(
       children: [
-        const PageHeader(
-          title: 'Voicemail',
-          subtitle:
-              'Each extension with voicemail has a mailbox. Open one to hear its '
-              'messages, or set where new messages are emailed.',
-        ),
+        PageHeader(title: l10n.vmTitle, subtitle: l10n.vmSubtitle),
         const SizedBox(height: 16),
         Expanded(
           child: AsyncBody(
             value: boxes,
-            emptyText: 'No mailboxes yet.',
+            emptyText: l10n.vmNoMailboxes,
             builder: (data) => SingleChildScrollView(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   columnSpacing: 24,
                   horizontalMargin: 16,
-                  columns: const [
-                    DataColumn(label: Text('Mailbox')),
-                    DataColumn(label: Text('New messages'), numeric: true),
-                    DataColumn(label: Text('Greeting')),
-                    DataColumn(label: Text('Email to')),
-                    DataColumn(label: Text('')),
+                  columns: [
+                    DataColumn(label: Text(l10n.vmMailbox)),
+                    DataColumn(label: Text(l10n.vmNewMessages), numeric: true),
+                    DataColumn(label: Text(l10n.vmGreeting)),
+                    DataColumn(label: Text(l10n.vmEmailTo)),
+                    const DataColumn(label: Text('')),
                   ],
                   rows: [for (final m in data) _row(context, ref, m)],
                 ),
@@ -89,6 +86,7 @@ class MailboxesView extends ConsumerWidget {
   }
 
   DataRow _row(BuildContext context, WidgetRef ref, Json m) {
+    final l10n = context.l10n;
     final address = m['notifyEmail'] as String?;
     final unread = (m['unreadCount'] as num?)?.toInt() ?? 0;
     return DataRow(
@@ -102,19 +100,25 @@ class MailboxesView extends ConsumerWidget {
                 : null,
           ),
         ),
-        DataCell(Text(m['greetingStatus'] == 'ready' ? 'Custom' : 'Default')),
-        DataCell(Text(address ?? 'Off')),
+        DataCell(
+          Text(
+            m['greetingStatus'] == 'ready'
+                ? l10n.vmGreetingCustom
+                : l10n.vmGreetingDefault,
+          ),
+        ),
+        DataCell(Text(address ?? l10n.vmEmailOff)),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: 'Messages',
+                tooltip: l10n.vmMessages,
                 icon: const Icon(Icons.inbox_outlined),
                 onPressed: () => onOpen(m),
               ),
               IconButton(
-                tooltip: 'Email settings',
+                tooltip: l10n.vmEmailSettings,
                 icon: const Icon(Icons.forward_to_inbox_outlined),
                 onPressed: () async {
                   final saved = await showDialog<bool>(
@@ -125,7 +129,7 @@ class MailboxesView extends ConsumerWidget {
                 },
               ),
               IconButton(
-                tooltip: 'Reset PIN',
+                tooltip: l10n.vmResetPin,
                 icon: const Icon(Icons.password_outlined),
                 onPressed: () => showDialog<bool>(
                   context: context,
@@ -169,6 +173,7 @@ class MessagesView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final messages = mine
         ? ref.watch(myMessagesProvider)
         : ref.watch(messagesProvider(_id));
@@ -176,18 +181,21 @@ class MessagesView extends ConsumerWidget {
       children: [
         PageHeader(
           title: mine
-              ? 'My voicemail'
-              : 'Voicemail: ${mailboxTitle(ref, mailbox)}',
+              ? l10n.vmMyTitle
+              : l10n.vmMailboxTitle(mailboxTitle(ref, mailbox)),
           subtitle: mine
-              ? '${(mailbox['unreadCount'] as num?)?.toInt() ?? 0} new. '
-                    'Your greeting: '
-                    '${mailbox['greetingStatus'] == 'ready' ? 'custom' : 'default'}. '
-                    'Emailed to: ${mailbox['notifyEmail'] ?? 'nobody'}.'
+              ? l10n.vmMySubtitle(
+                  (mailbox['unreadCount'] as num?)?.toInt() ?? 0,
+                  mailbox['greetingStatus'] == 'ready'
+                      ? l10n.vmMyGreetingCustom
+                      : l10n.vmMyGreetingDefault,
+                  '${mailbox['notifyEmail'] ?? l10n.vmMyEmailNobody}',
+                )
               : null,
           leading: onBack == null
               ? null
               : IconButton(
-                  tooltip: 'Back to mailboxes',
+                  tooltip: l10n.vmBack,
                   icon: const Icon(Icons.arrow_back),
                   onPressed: onBack,
                 ),
@@ -203,7 +211,7 @@ class MessagesView extends ConsumerWidget {
                   if (saved == true) ref.invalidate(myMailboxProvider);
                 },
                 icon: const Icon(Icons.forward_to_inbox_outlined),
-                label: const Text('Email settings'),
+                label: Text(l10n.vmEmailSettings),
               ),
               OutlinedButton.icon(
                 onPressed: () => showDialog<bool>(
@@ -211,7 +219,7 @@ class MessagesView extends ConsumerWidget {
                   builder: (_) => ResetPinDialog(mailbox: mailbox, mine: true),
                 ),
                 icon: const Icon(Icons.password_outlined),
-                label: const Text('Change PIN'),
+                label: Text(l10n.vmChangePin),
               ),
             ],
           ],
@@ -220,19 +228,19 @@ class MessagesView extends ConsumerWidget {
         Expanded(
           child: AsyncBody(
             value: messages,
-            emptyText: 'No messages.',
+            emptyText: l10n.vmNoMessages,
             builder: (data) => SingleChildScrollView(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
                   columnSpacing: 24,
                   horizontalMargin: 16,
-                  columns: const [
-                    DataColumn(label: Text('From')),
-                    DataColumn(label: Text('Received')),
-                    DataColumn(label: Text('Length'), numeric: true),
-                    DataColumn(label: Text('')),
-                    DataColumn(label: Text('')),
+                  columns: [
+                    DataColumn(label: Text(l10n.vmFrom)),
+                    DataColumn(label: Text(l10n.vmReceived)),
+                    DataColumn(label: Text(l10n.vmLength), numeric: true),
+                    const DataColumn(label: Text('')),
+                    const DataColumn(label: Text('')),
                   ],
                   rows: [for (final m in data) _row(context, ref, m)],
                 ),
@@ -245,6 +253,7 @@ class MessagesView extends ConsumerWidget {
   }
 
   DataRow _row(BuildContext context, WidgetRef ref, Json m) {
+    final l10n = context.l10n;
     final name = m['callerIdName'] as String?;
     final number = m['callerIdNumber'] as String?;
     final from = [?name, ?number].join(' · ');
@@ -254,24 +263,24 @@ class MessagesView extends ConsumerWidget {
       cells: [
         DataCell(
           Text(
-            from.isEmpty ? 'Unknown caller' : from,
+            from.isEmpty ? l10n.vmUnknownCaller : from,
             style: read ? null : const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
         DataCell(Text(formatDateTime(when))),
         DataCell(Text(formatClockMs(m['durationMs'] as num?))),
-        DataCell(Chip(label: Text(read ? 'Read' : 'New'))),
+        DataCell(Chip(label: Text(read ? l10n.vmRead : l10n.vmNew))),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
-                tooltip: 'Play',
+                tooltip: l10n.vmPlay,
                 icon: const Icon(Icons.play_arrow),
                 onPressed: () => _play(context, ref, m),
               ),
               IconButton(
-                tooltip: 'Delete',
+                tooltip: l10n.commonDelete,
                 icon: const Icon(Icons.delete_outline),
                 onPressed: () => _delete(context, ref, m),
               ),
@@ -286,6 +295,7 @@ class MessagesView extends ConsumerWidget {
     final api = _ops(ref);
     final open = ref.read(openRecordingProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     if (api == null) return;
     try {
       await open(await api.playUrl(_id, '${m['id']}'));
@@ -297,7 +307,7 @@ class MessagesView extends ConsumerWidget {
       }
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not play it: ${problemMessage(e)}')),
+        SnackBar(content: Text(l10n.vmCouldNotPlay(problemMessage(e)))),
       );
     }
   }
@@ -305,21 +315,20 @@ class MessagesView extends ConsumerWidget {
   Future<void> _delete(BuildContext context, WidgetRef ref, Json m) async {
     final api = _ops(ref);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete message?'),
-        content: const Text(
-          'The recording is removed and cannot be recovered.',
-        ),
+        title: Text(l10n.vmDeleteTitle),
+        content: Text(l10n.vmDeleteBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: Text(l10n.commonDelete),
           ),
         ],
       ),
@@ -331,7 +340,7 @@ class MessagesView extends ConsumerWidget {
       if (mine) ref.invalidate(myMailboxProvider);
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not delete it: ${problemMessage(e)}')),
+        SnackBar(content: Text(l10n.vmCouldNotDelete(problemMessage(e)))),
       );
     }
   }
@@ -387,7 +396,7 @@ class _EmailSettingsDialogState extends ConsumerState<EmailSettingsDialog> {
     final address = _address.text.trim();
     if (_enabled &&
         !RegExp(r'^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$').hasMatch(address)) {
-      setState(() => _error = 'Enter one email address.');
+      setState(() => _error = context.l10n.vmEnterOneEmail);
       return;
     }
     if (api == null) return;
@@ -417,9 +426,10 @@ class _EmailSettingsDialogState extends ConsumerState<EmailSettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final onlyKeepOrRead = !_attach;
     return AlertDialog(
-      title: const Text('Email settings'),
+      title: Text(l10n.vmEmailSettings),
       content: SizedBox(
         width: 460,
         child: Column(
@@ -428,7 +438,7 @@ class _EmailSettingsDialogState extends ConsumerState<EmailSettingsDialog> {
           children: [
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Email new messages'),
+              title: Text(l10n.vmEmailNew),
               value: _enabled,
               onChanged: _busy ? null : (v) => setState(() => _enabled = v),
             ),
@@ -436,14 +446,12 @@ class _EmailSettingsDialogState extends ConsumerState<EmailSettingsDialog> {
               controller: _address,
               enabled: _enabled && !_busy,
               keyboardType: TextInputType.emailAddress,
-              decoration: const InputDecoration(labelText: 'Email address'),
+              decoration: InputDecoration(labelText: l10n.vmEmailAddress),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Attach the recording'),
-              subtitle: const Text(
-                'A very long message is sent without it, and says so.',
-              ),
+              title: Text(l10n.vmAttach),
+              subtitle: Text(l10n.vmAttachHelp),
               value: _attach,
               onChanged: _enabled && !_busy
                   ? (v) => setState(() {
@@ -455,11 +463,9 @@ class _EmailSettingsDialogState extends ConsumerState<EmailSettingsDialog> {
             DropdownButtonFormField<String>(
               initialValue: _after,
               isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'After it is emailed',
-              ),
+              decoration: InputDecoration(labelText: l10n.vmAfterEmail),
               items: [
-                for (final e in emailAfterChoices.entries)
+                for (final e in emailAfterChoicesOf(l10n).entries)
                   DropdownMenuItem(
                     value: e.key,
                     enabled: !(e.key == 'delete' && onlyKeepOrRead),
@@ -471,9 +477,9 @@ class _EmailSettingsDialogState extends ConsumerState<EmailSettingsDialog> {
                   : null,
             ),
             if (_enabled && onlyKeepOrRead)
-              const Padding(
-                padding: EdgeInsets.only(top: 4),
-                child: Text('Deleting needs the recording attached.'),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(l10n.vmDeleteNeedsAttach),
               ),
             if (_error != null) ...[
               const SizedBox(height: 12),
@@ -485,11 +491,11 @@ class _EmailSettingsDialogState extends ConsumerState<EmailSettingsDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(l10n.commonCancel),
         ),
         FilledButton(
           onPressed: _busy ? null : _save,
-          child: const Text('Save'),
+          child: Text(l10n.commonSave),
         ),
       ],
     );
@@ -523,7 +529,7 @@ class _ResetPinDialogState extends ConsumerState<ResetPinDialog> {
   Future<void> _save() async {
     final pin = _pin.text.trim();
     if (!RegExp(r'^\d{4,8}$').hasMatch(pin)) {
-      setState(() => _error = 'The PIN must be 4 to 8 digits.');
+      setState(() => _error = context.l10n.vmPinInvalid);
       return;
     }
     final api = widget.mine
@@ -531,6 +537,7 @@ class _ResetPinDialogState extends ConsumerState<ResetPinDialog> {
         : ref.read(voicemailApiProvider);
     if (api == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final pinChanged = context.l10n.vmPinChanged;
     setState(() {
       _busy = true;
       _error = null;
@@ -539,7 +546,7 @@ class _ResetPinDialogState extends ConsumerState<ResetPinDialog> {
       await api.resetPin('${widget.mailbox['id']}', pin);
       if (!mounted) return;
       Navigator.of(context).pop(true);
-      messenger.showSnackBar(const SnackBar(content: Text('PIN changed.')));
+      messenger.showSnackBar(SnackBar(content: Text(pinChanged)));
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -552,25 +559,21 @@ class _ResetPinDialogState extends ConsumerState<ResetPinDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Reset PIN'),
+    title: Text(context.l10n.vmResetPin),
     content: SizedBox(
       width: 360,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            widget.mine
-                ? 'The PIN you enter on your phone to hear your messages.'
-                : 'The PIN the mailbox owner enters on a phone.',
-          ),
+          Text(widget.mine ? context.l10n.vmPinMine : context.l10n.vmPinOwner),
           const SizedBox(height: 8),
           TextField(
             controller: _pin,
             enabled: !_busy,
             obscureText: true,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'New PIN'),
+            decoration: InputDecoration(labelText: context.l10n.vmNewPin),
           ),
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -582,9 +585,12 @@ class _ResetPinDialogState extends ConsumerState<ResetPinDialog> {
     actions: [
       TextButton(
         onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-        child: const Text('Cancel'),
+        child: Text(context.l10n.commonCancel),
       ),
-      FilledButton(onPressed: _busy ? null : _save, child: const Text('Save')),
+      FilledButton(
+        onPressed: _busy ? null : _save,
+        child: Text(context.l10n.commonSave),
+      ),
     ],
   );
 }

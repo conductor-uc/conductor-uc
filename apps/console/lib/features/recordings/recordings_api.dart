@@ -3,42 +3,65 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/api_client.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 import '../pbx/pbx_api.dart';
 
 /// How many recordings one page asks for.
 const recordingsPageSize = 25;
 
-const recordingDirections = {
-  'inbound': 'Incoming',
-  'outbound': 'Outgoing',
-  'internal': 'Between extensions',
+/// Which way a recorded call went, by wire value.
+Map<String, String> recordingDirectionsOf(AppLocalizations l) => {
+  'inbound': l.recDirInbound,
+  'outbound': l.recDirOutbound,
+  'internal': l.recDirInternal,
 };
 
-const recordingStatuses = {
-  'pending': 'Uploading',
-  'ready': 'Ready',
-  'failed': 'Failed',
-  'expired': 'Expired',
+/// Where a recording is in its life, by wire value.
+Map<String, String> recordingStatusesOf(AppLocalizations l) => {
+  'pending': l.recStatusPending,
+  'ready': l.recStatusReady,
+  'failed': l.recStatusFailed,
+  'expired': l.recStatusExpired,
 };
 
 /// What a policy is attached to. `tenant` is the default for the whole organization.
-const policyScopes = {
-  'tenant': 'Whole organization',
-  'extension': 'Extension',
-  'agent': 'Queue agent',
-  'queue': 'Queue',
-  'did': 'Phone number',
+Map<String, String> policyScopesOf(AppLocalizations l) => {
+  'tenant': l.polScopeTenant,
+  'extension': l.polScopeExtension,
+  'agent': l.polScopeAgent,
+  'queue': l.polScopeQueue,
+  'did': l.polScopeDid,
 };
 
 /// Which calls a policy covers. `any` is every direction.
-const policyDirections = {
-  'any': 'Every call',
-  'inbound': 'Incoming calls',
-  'outbound': 'Outgoing calls',
-  'internal': 'Calls between extensions',
+Map<String, String> policyDirectionsOf(AppLocalizations l) => {
+  'any': l.polDirAny,
+  'inbound': l.polDirInbound,
+  'outbound': l.polDirOutbound,
+  'internal': l.polDirInternal,
 };
 
-const policyActions = {'record': 'Record', 'no_record': 'Do not record'};
+/// What a policy does to the calls it covers.
+Map<String, String> policyActionsOf(AppLocalizations l) => {
+  'record': l.polActionRecord,
+  'no_record': l.polActionNoRecord,
+};
+
+/// [recordingDirectionsOf] for code with no [BuildContext].
+Map<String, String> get recordingDirections =>
+    recordingDirectionsOf(currentL10n);
+
+/// [recordingStatusesOf] for code with no [BuildContext].
+Map<String, String> get recordingStatuses => recordingStatusesOf(currentL10n);
+
+/// [policyScopesOf] for code with no [BuildContext].
+Map<String, String> get policyScopes => policyScopesOf(currentL10n);
+
+/// [policyDirectionsOf] for code with no [BuildContext].
+Map<String, String> get policyDirections => policyDirectionsOf(currentL10n);
+
+/// [policyActionsOf] for code with no [BuildContext].
+Map<String, String> get policyActions => policyActionsOf(currentL10n);
 
 /// What the recordings list is narrowed to. Empty means no narrowing.
 class RecordingFilter {

@@ -5,6 +5,7 @@ import 'package:console/features/platform/operations_page.dart';
 import 'package:console/features/platform/operations_widgets.dart';
 import 'package:dio/dio.dart';
 import 'package:console/features/shell/shell_page.dart' show AppNavigation;
+import 'package:console/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -174,7 +175,11 @@ Future<void> pumpOperations(
         knownPermissionsProvider.overrideWithValue(permissions),
         if (api != null) operationsApiProvider.overrideWithValue(api),
       ],
-      child: const MaterialApp(home: Scaffold(body: OperationsPage())),
+      child: const MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: OperationsPage()),
+      ),
     ),
   );
   await tester.pumpAndSettle();

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import 'pbx_api.dart';
 import '../../core/format.dart';
 
@@ -53,27 +54,30 @@ class _ProvisioningDialogState extends ConsumerState<ProvisioningDialog> {
     }
   }
 
-  String _lastFetched() {
+  String _lastFetched(AppLocalizations l) {
     final at = widget.device['lastProvisionedAt'];
     if (at == null) {
       return widget.device['provisioningIssued'] == true
-          ? 'Set up, but the phone has not fetched its settings yet.'
-          : 'No setup details have been created yet.';
+          ? l.provNotFetched
+          : l.provNotIssued;
     }
     final text = formatDateTime(at);
     final ip = widget.device['lastSeenIp'];
     final agent = widget.device['lastUserAgent'];
-    return 'Last fetched its settings $text'
-        '${ip == null ? '' : ' from $ip'}'
-        '${agent == null ? '' : ' ($agent)'}.';
+    return l.provLastFetched(
+      text,
+      ip == null ? '' : l.provFromIp('$ip'),
+      agent == null ? '' : l.provUserAgent('$agent'),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final canIssue = ref.watch(canProvider('secret.reveal'));
     final issued = _issued;
     return AlertDialog(
-      title: const Text('Set up this phone'),
+      title: Text(l.provTitle),
       content: SizedBox(
         width: 520,
         child: SingleChildScrollView(
@@ -81,9 +85,9 @@ class _ProvisioningDialogState extends ConsumerState<ProvisioningDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_lastFetched()),
+              Text(_lastFetched(l)),
               const SizedBox(height: 16),
-              if (issued != null) ..._details(issued) else _ask(canIssue),
+              if (issued != null) ..._details(l, issued) else _ask(l, canIssue),
             ],
           ),
         ),
@@ -91,33 +95,27 @@ class _ProvisioningDialogState extends ConsumerState<ProvisioningDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close'),
+          child: Text(l.commonClose),
         ),
       ],
     );
   }
 
-  Widget _ask(bool canIssue) {
+  Widget _ask(AppLocalizations l, bool canIssue) {
     if (!canIssue) {
-      return const Text(
-        'Setup details are created only by people allowed to reveal passwords.',
-      );
+      return Text(l.provNotAllowed);
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'Create the address, user name and password to give this phone. '
-          'The password is shown once. Creating new details replaces any '
-          'earlier ones, and a phone still using them stops fetching its settings.',
-        ),
+        Text(l.provIntro),
         const SizedBox(height: 12),
         TextField(
           controller: _reason,
           autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Why do you need them?',
-            helperText: 'Recorded in the audit log along with your name.',
+          decoration: InputDecoration(
+            labelText: l.provWhy,
+            helperText: l.phoneAuditNote,
           ),
           onChanged: (_) => setState(() {}),
         ),
@@ -132,40 +130,33 @@ class _ProvisioningDialogState extends ConsumerState<ProvisioningDialog> {
         const SizedBox(height: 8),
         FilledButton(
           onPressed: _busy || _reason.text.trim().isEmpty ? null : _issue,
-          child: const Text('Create setup details'),
+          child: Text(l.provCreate),
         ),
       ],
     );
   }
 
-  List<Widget> _details(Json issued) {
+  List<Widget> _details(AppLocalizations l, Json issued) {
     final url = issued['url'] as String?;
     return [
-      const Text(
-        'On the phone, open its web page and find Auto Provision (the menu '
-        'name varies by model). Enter these, then start auto provision. '
-        'Or give the phone the address by DHCP option 66.',
-      ),
+      Text(l.provHowTo),
       const SizedBox(height: 12),
       if (url == null)
-        const Text(
-          "This platform's public address is not set, so the address is not "
-          'shown. Use your API address followed by /v1/public/provision/yealink/',
-        )
+        Text(l.provNoPublicAddress)
       else
-        _CopyLine('Server URL', url),
-      _CopyLine('User name', '${issued['username']}'),
-      _CopyLine('Password', '${issued['password']}', secret: true),
+        _CopyLine(l.provServerUrl, url),
+      _CopyLine(l.provUserName, '${issued['username']}'),
+      _CopyLine(l.phonePassword, '${issued['password']}', secret: true),
       if (issued['urlWithCredentials'] != null) ...[
         const SizedBox(height: 8),
         _CopyLine(
-          'DHCP option 66',
+          l.provDhcpOption66,
           '${issued['urlWithCredentials']}',
           secret: true,
         ),
       ],
       const SizedBox(height: 8),
-      const Text('This password is not shown again.'),
+      Text(l.provShownOnce),
     ];
   }
 }
@@ -189,15 +180,13 @@ class _CopyLine extends StatelessWidget {
           ),
           Expanded(child: SelectableText(value)),
           IconButton(
-            tooltip: 'Copy $label',
+            tooltip: context.l10n.phoneCopy(label),
             icon: const Icon(Icons.copy_outlined, size: 18),
             onPressed: () async {
               await Clipboard.setData(ClipboardData(text: value));
               if (!context.mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(secret ? '$label copied.' : '$label copied.'),
-                ),
+                SnackBar(content: Text(context.l10n.phoneCopied(label))),
               );
             },
           ),

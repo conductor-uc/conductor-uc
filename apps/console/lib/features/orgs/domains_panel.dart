@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import 'orgs_api.dart';
@@ -15,9 +16,7 @@ class DomainsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     if (session == null || session.orgType != OrgType.reseller) {
-      return const PageFrame(
-        children: [Text('Only a reseller has base domains.')],
-      );
+      return PageFrame(children: [Text(context.l10n.domOnlyReseller)]);
     }
     return PageFrame(children: [BaseDomainsPanel(resellerId: session.orgId)]);
   }
@@ -53,7 +52,9 @@ class BaseDomainsPanel extends ConsumerWidget {
     try {
       await api.verifyBaseDomain(resellerId, '${domain['id']}');
       ref.invalidate(baseDomainsProvider(resellerId));
-      if (context.mounted) _say(context, '${domain['fqdn']} is verified.');
+      if (context.mounted) {
+        _say(context, context.l10n.domVerified('${domain['fqdn']}'));
+      }
     } catch (e) {
       if (context.mounted) _say(context, problemMessage(e));
     }
@@ -72,14 +73,14 @@ class BaseDomainsPanel extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           PageHeader(
-            title: 'Domains',
-            subtitle: 'Base domains your tenants get their own names under. Prove you control one by publishing a DNS record, then verify it.',
+            title: context.l10n.navDomains,
+            subtitle: context.l10n.domSubtitle,
             actions: [
               if (canChange)
                 FilledButton.icon(
                   onPressed: () => _add(context, ref),
                   icon: const Icon(Icons.add),
-                  label: const Text('Add domain'),
+                  label: Text(context.l10n.domAdd),
                 ),
             ],
           ),
@@ -87,7 +88,7 @@ class BaseDomainsPanel extends ConsumerWidget {
           Expanded(
             child: AsyncBody(
               value: domains,
-              emptyText: 'No base domains yet.',
+              emptyText: context.l10n.domEmpty,
               builder: (rows) => ListView(
                 children: [
                   for (final d in rows)
@@ -109,8 +110,8 @@ class BaseDomainsPanel extends ConsumerWidget {
                                 Chip(
                                   label: Text(
                                     d['status'] == 'active'
-                                        ? 'Verified'
-                                        : 'Waiting for DNS',
+                                        ? context.l10n.domStatusVerified
+                                        : context.l10n.domStatusWaiting,
                                   ),
                                   visualDensity: VisualDensity.compact,
                                 ),
@@ -118,7 +119,7 @@ class BaseDomainsPanel extends ConsumerWidget {
                             ),
                             if (d['status'] != 'active') ...[
                               const SizedBox(height: 8),
-                              const Text('Publish this TXT record:'),
+                              Text(context.l10n.domPublishRecord),
                               SelectableText(
                                 '${d['verificationRecordName']}  →  ${d['verificationToken']}',
                                 style: const TextStyle(fontFamily: 'monospace'),
@@ -127,7 +128,7 @@ class BaseDomainsPanel extends ConsumerWidget {
                                 const SizedBox(height: 8),
                                 OutlinedButton(
                                   onPressed: () => _verify(context, ref, d),
-                                  child: const Text('Verify now'),
+                                  child: Text(context.l10n.domVerifyNow),
                                 ),
                               ],
                             ],
@@ -168,22 +169,22 @@ class _DomainDialogState extends State<_DomainDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Add domain'),
+    title: Text(context.l10n.domAdd),
     content: TextField(
       controller: _fqdn,
       autofocus: true,
-      decoration: const InputDecoration(
-        labelText: 'Domain',
-        helperText: 'For example voice.example.com',
+      decoration: InputDecoration(
+        labelText: context.l10n.domField,
+        helperText: context.l10n.domFieldHelp,
       ),
       onSubmitted: (_) => _submit(),
     ),
     actions: [
       TextButton(
         onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Cancel'),
+        child: Text(context.l10n.commonCancel),
       ),
-      FilledButton(onPressed: _submit, child: const Text('Add')),
+      FilledButton(onPressed: _submit, child: Text(context.l10n.domAddButton)),
     ],
   );
 }

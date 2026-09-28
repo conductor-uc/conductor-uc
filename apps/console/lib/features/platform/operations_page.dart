@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/problem.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import 'operations_api.dart';
 import 'operations_nodes.dart';
@@ -27,13 +28,13 @@ class OperationsPage extends ConsumerStatefulWidget {
 class _OperationsPageState extends ConsumerState<OperationsPage> {
   Timer? _timer;
 
-  static const _tabs = [
-    (Icons.space_dashboard_outlined, 'Overview'),
-    (Icons.dns_outlined, 'Services'),
-    (Icons.graphic_eq, 'Media nodes'),
-    (Icons.router_outlined, 'Signalling'),
-    (Icons.hub_outlined, 'Events'),
-    (Icons.storage_outlined, 'Data stores'),
+  static List<(IconData, String)> _tabs(AppLocalizations l) => [
+    (Icons.space_dashboard_outlined, l.opsTabOverview),
+    (Icons.dns_outlined, l.opsTabServices),
+    (Icons.graphic_eq, l.opsTabMediaNodes),
+    (Icons.router_outlined, l.opsTabSignalling),
+    (Icons.hub_outlined, l.opsTabEvents),
+    (Icons.storage_outlined, l.opsTabDataStores),
   ];
 
   @override
@@ -63,17 +64,21 @@ class _OperationsPageState extends ConsumerState<OperationsPage> {
     final overview = ref.watch(operationsOverviewProvider);
     final theme = Theme.of(context);
     final checked = overview.value?.checkedAt;
+    final l = context.l10n;
+    final tabs = _tabs(l);
 
     return DefaultTabController(
-      length: _tabs.length,
+      length: tabs.length,
       child: PageFrame(
         children: [
           PageHeader(
-            title: 'Operations',
+            title: l.navOperations,
             subtitle: checked == null
-                ? 'The services, media nodes, SIP edge, event bus and data stores.'
-                : 'Read at ${formatUtcClock(checked)} UTC. Refreshes every '
-                      '${operationsRefresh.inSeconds} seconds.',
+                ? l.opsSubtitle
+                : l.opsReadAt(
+                    formatUtcClock(checked),
+                    operationsRefresh.inSeconds,
+                  ),
             actions: [
               if (overview.isLoading && overview.hasValue)
                 const SizedBox(
@@ -82,7 +87,7 @@ class _OperationsPageState extends ConsumerState<OperationsPage> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               IconButton(
-                tooltip: 'Read now',
+                tooltip: l.opsReadNow,
                 icon: const Icon(Icons.refresh),
                 onPressed: () => ref.invalidate(operationsOverviewProvider),
               ),
@@ -91,10 +96,7 @@ class _OperationsPageState extends ConsumerState<OperationsPage> {
           if (overview.hasError && overview.hasValue) ...[
             const SizedBox(height: 8),
             // A failed reading keeps the last one on screen, and says so.
-            ErrorText(
-              'The last reading failed (${problemMessage(overview.error!)}). '
-              'Showing the one before.',
-            ),
+            ErrorText(l.opsLastReadingFailed(problemMessage(overview.error!))),
           ],
           const SizedBox(height: 8),
           TabBar(
@@ -102,7 +104,7 @@ class _OperationsPageState extends ConsumerState<OperationsPage> {
             tabAlignment: TabAlignment.start,
             dividerColor: theme.colorScheme.outlineVariant,
             tabs: [
-              for (final (icon, label) in _tabs)
+              for (final (icon, label) in tabs)
                 Tab(
                   height: 44,
                   child: Row(
@@ -120,7 +122,7 @@ class _OperationsPageState extends ConsumerState<OperationsPage> {
           Expanded(
             child: AsyncBody<Overview>(
               value: overview,
-              emptyText: 'Nothing to show.',
+              emptyText: l.opsNothingToShow,
               isEmpty: (_) => false,
               builder: (o) => TabBarView(
                 children: [

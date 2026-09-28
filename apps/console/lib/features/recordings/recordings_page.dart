@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../cdr/call_records_page.dart' show parseDate;
 import '../pbx/pbx_api.dart';
@@ -24,10 +25,11 @@ class RecordingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     if (ref.watch(tenantIdProvider) == null) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Text('Choose a tenant to see its recordings.'),
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(l10n.recChooseTenant),
       );
     }
     final canSee =
@@ -38,22 +40,20 @@ class RecordingsPage extends ConsumerWidget {
     // panel's own check (recording.policy.manage).
     final canManage = ref.watch(canProvider('recording.policy.read'));
     if (!canSee && !canManage) {
-      return const PageFrame(
+      return PageFrame(
         children: [
           PageHeader(
-            title: 'Not available to you',
-            subtitle: "Your role doesn't include recordings.",
+            title: l10n.shellForbiddenTitle,
+            subtitle: l10n.recForbiddenBody,
           ),
         ],
       );
     }
-    final tabs = [if (canSee) 'Recordings', if (canManage) 'Rules'];
-    final header = const PageHeader(
-      title: 'Recordings',
-      subtitle:
-          'Recorded calls, newest first, and the rules that decide which calls '
-          'are recorded.',
-    );
+    final tabs = [
+      if (canSee) l10n.recTabRecordings,
+      if (canManage) l10n.recTabRules,
+    ];
+    final header = PageHeader(title: l10n.recTitle, subtitle: l10n.recSubtitle);
     if (tabs.length == 1) {
       return PageFrame(
         children: [
@@ -95,7 +95,7 @@ class _RecordingsTab extends ConsumerWidget {
         Expanded(
           child: AsyncBody<RecordingsResult>(
             value: list,
-            emptyText: 'No recordings match.',
+            emptyText: context.l10n.recNoMatches,
             isEmpty: (page) => page.rows.isEmpty,
             builder: (page) => _RecordingTable(page: page),
           ),
@@ -128,19 +128,20 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
   }
 
   void _apply() {
-    DateTime? day(TextEditingController c, String label) {
+    final l10n = context.l10n;
+    DateTime? day(TextEditingController c, String notADate) {
       final text = c.text.trim();
       if (text.isEmpty) return null;
       final parsed = parseDate(text);
-      if (parsed == null) _error = '$label must be a date such as 2026-09-24.';
+      if (parsed == null) _error = notADate;
       return parsed;
     }
 
     _error = null;
-    final from = day(_from, 'From');
-    final to = _error == null ? day(_to, 'To') : null;
+    final from = day(_from, l10n.cdrFromNotDate);
+    final to = _error == null ? day(_to, l10n.cdrToNotDate) : null;
     if (_error == null && from != null && to != null && to.isBefore(from)) {
-      _error = 'To must not be before From.';
+      _error = l10n.cdrToBeforeFrom;
     }
     if (_error != null) {
       setState(() {});
@@ -173,6 +174,7 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final extensions =
         ref.watch(rowsProvider('extensions')).asData?.value ?? const <Json>[];
     final queues =
@@ -191,9 +193,9 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
               TextField(
                 key: const ValueKey('rec-from'),
                 controller: _from,
-                decoration: const InputDecoration(
-                  labelText: 'From date',
-                  hintText: 'YYYY-MM-DD',
+                decoration: InputDecoration(
+                  labelText: l10n.cdrFromDate,
+                  hintText: context.l10n.commonDateHint,
                 ),
                 onSubmitted: (_) => _apply(),
               ),
@@ -202,9 +204,9 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
               TextField(
                 key: const ValueKey('rec-to'),
                 controller: _to,
-                decoration: const InputDecoration(
-                  labelText: 'To date',
-                  hintText: 'YYYY-MM-DD',
+                decoration: InputDecoration(
+                  labelText: l10n.cdrToDate,
+                  hintText: context.l10n.commonDateHint,
                 ),
                 onSubmitted: (_) => _apply(),
               ),
@@ -214,10 +216,10 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                 key: const ValueKey('rec-direction'),
                 initialValue: _direction,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Calls'),
+                decoration: InputDecoration(labelText: l10n.recCalls),
                 items: [
-                  const DropdownMenuItem(value: null, child: Text('All')),
-                  for (final e in recordingDirections.entries)
+                  DropdownMenuItem(value: null, child: Text(l10n.cdrAll)),
+                  for (final e in recordingDirectionsOf(l10n).entries)
                     DropdownMenuItem(value: e.key, child: Text(e.value)),
                 ],
                 onChanged: (v) => setState(() => _direction = v),
@@ -230,9 +232,9 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                   key: const ValueKey('rec-extension'),
                   initialValue: _extensionId,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Extension'),
+                  decoration: InputDecoration(labelText: l10n.cdrExtension),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('Any')),
+                    DropdownMenuItem(value: null, child: Text(l10n.cdrAny)),
                     for (final e in extensions)
                       DropdownMenuItem(
                         value: '${e['id']}',
@@ -249,9 +251,9 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                   key: const ValueKey('rec-queue'),
                   initialValue: _queueId,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Queue'),
+                  decoration: InputDecoration(labelText: l10n.recQueue),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('Any')),
+                    DropdownMenuItem(value: null, child: Text(l10n.cdrAny)),
                     for (final q in queues)
                       DropdownMenuItem(
                         value: '${q['id']}',
@@ -262,8 +264,8 @@ class _FilterBarState extends ConsumerState<_FilterBar> {
                 ),
                 190,
               ),
-            FilledButton(onPressed: _apply, child: const Text('Search')),
-            TextButton(onPressed: _clear, child: const Text('Clear')),
+            FilledButton(onPressed: _apply, child: Text(l10n.cdrSearch)),
+            TextButton(onPressed: _clear, child: Text(l10n.cdrClear)),
           ],
         ),
         if (_error != null) ErrorText(_error!),
@@ -308,7 +310,7 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
   Future<void> _open(
     Json r,
     Future<String> Function(RecordingsApi api, String id) address,
-    String failure,
+    String Function(String reason) failure,
   ) async {
     final api = ref.read(recordingsApiProvider);
     final open = ref.read(openRecordingProvider);
@@ -318,7 +320,7 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
       await open(await address(api, '${r['id']}'));
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('$failure: ${problemMessage(e)}')),
+        SnackBar(content: Text(failure(problemMessage(e)))),
       );
     }
   }
@@ -326,22 +328,20 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
   Future<void> _delete(Json r) async {
     final api = ref.read(recordingsApiProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete recording?'),
-        content: const Text(
-          'The audio is removed and cannot be recovered. That it was deleted, '
-          'and by whom, is kept in the audit trail.',
-        ),
+        title: Text(l10n.recDeleteTitle),
+        content: Text(l10n.recDeleteBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: Text(l10n.commonDelete),
           ),
         ],
       ),
@@ -352,13 +352,14 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
       ref.invalidate(recordingListProvider);
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not delete it: ${problemMessage(e)}')),
+        SnackBar(content: Text(l10n.recCouldNotDelete(problemMessage(e)))),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final page = widget.page;
     final canListen = ref.watch(canProvider('recording.listen'));
     final canDownload = ref.watch(canProvider('recording.download'));
@@ -383,15 +384,15 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
               ),
               child: DataTable(
                 showCheckboxColumn: false,
-                columns: const [
-                  DataColumn(label: Text('Started')),
-                  DataColumn(label: Text('Calls')),
-                  DataColumn(label: Text('On')),
-                  DataColumn(label: Text('Length'), numeric: true),
-                  DataColumn(label: Text('Size'), numeric: true),
-                  DataColumn(label: Text('Status')),
-                  DataColumn(label: Text('Kept until')),
-                  DataColumn(label: Text('')),
+                columns: [
+                  DataColumn(label: Text(l10n.cdrStarted)),
+                  DataColumn(label: Text(l10n.recCalls)),
+                  DataColumn(label: Text(l10n.recOn)),
+                  DataColumn(label: Text(l10n.recLength), numeric: true),
+                  DataColumn(label: Text(l10n.recSize), numeric: true),
+                  DataColumn(label: Text(l10n.recStatus)),
+                  DataColumn(label: Text(l10n.recKeptUntil)),
+                  const DataColumn(label: Text('')),
                 ],
                 rows: [
                   for (final r in page.rows)
@@ -401,7 +402,7 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
                         DataCell(Text(formatDateTime(r['startedAt']))),
                         DataCell(
                           Text(
-                            recordingDirections['${r['direction']}'] ??
+                            recordingDirectionsOf(l10n)['${r['direction']}'] ??
                                 '${r['direction']}',
                           ),
                         ),
@@ -412,11 +413,11 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
                           Chip(
                             label: Text(
                               [
-                                recordingStatuses['${r['status']}'] ??
+                                recordingStatusesOf(l10n)['${r['status']}'] ??
                                     '${r['status']}',
-                                if (r['onDemand'] == true) 'on demand',
+                                if (r['onDemand'] == true) l10n.recOnDemand,
                                 if ((r['pauses'] as List?)?.isNotEmpty ?? false)
-                                  'paused',
+                                  l10n.recPaused,
                               ].join(' · '),
                             ),
                           ),
@@ -424,7 +425,7 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
                         DataCell(
                           Text(
                             r['retentionDate'] == null
-                                ? 'Until deleted'
+                                ? l10n.recUntilDeleted
                                 : formatDate(r['retentionDate']),
                           ),
                         ),
@@ -434,27 +435,27 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
                             children: [
                               if (canListen && r['status'] == 'ready')
                                 IconButton(
-                                  tooltip: 'Play',
+                                  tooltip: l10n.recPlay,
                                   icon: const Icon(Icons.play_arrow),
                                   onPressed: () => _open(
                                     r,
                                     (api, id) => api.playUrl(id),
-                                    'Could not play it',
+                                    l10n.recCouldNotPlay,
                                   ),
                                 ),
                               if (canDownload && r['status'] == 'ready')
                                 IconButton(
-                                  tooltip: 'Download',
+                                  tooltip: l10n.recDownload,
                                   icon: const Icon(Icons.download_outlined),
                                   onPressed: () => _open(
                                     r,
                                     (api, id) => api.downloadUrl(id),
-                                    'Could not download it',
+                                    l10n.recCouldNotDownload,
                                   ),
                                 ),
                               if (canDelete)
                                 IconButton(
-                                  tooltip: 'Delete',
+                                  tooltip: l10n.commonDelete,
                                   icon: const Icon(Icons.delete_outline),
                                   onPressed: () => _delete(r),
                                 ),
@@ -472,7 +473,7 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: OutlinedButton(
                 onPressed: _loading ? null : _more,
-                child: const Text('Load more'),
+                child: Text(l10n.cdrLoadMore),
               ),
             ),
         ],
