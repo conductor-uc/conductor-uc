@@ -108,6 +108,8 @@ A `LiveCall` is one channel (leg): `callUuid`, `direction` (`inbound`: the leg c
 
 **Owns:** orgs (master, reseller, tenant), domains, brands, console hostnames, org limits.
 
+**Whose org:** every `/v1/resellers/{id}/…` and `/v1/tenants/{id}/…` route answers only for the caller's own org and the orgs beneath it (`routes/ownership.ts`): the master and the platform's service token any, a reseller itself and its own tenants, a tenant itself; anyone else gets the same 404 as for a missing org. The route's permission is checked as before; this is the "whose" a permission cannot say (the shared tenant boundary, H2, reads only a `{tenantId}` parameter).
+
 **Public API (examples):**
 
 - `POST /v1/resellers` (master)
