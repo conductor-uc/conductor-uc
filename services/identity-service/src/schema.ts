@@ -118,7 +118,7 @@ export interface IdentityServiceDb extends EventTables {
   };
 
   /**
-   * Custom roles only. The seven built-in roles (07 §3.3) are `@cuc/authz`
+   * Custom roles only. The eight built-in roles (07 §3.3) are `@cuc/authz`
    * data (`BUILT_IN_ROLES`) — code, not rows — precisely because nothing
    * about them varies per deployment. A row only exists here once an org
    * defines its own role.

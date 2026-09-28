@@ -214,6 +214,10 @@ class _DemoAdapter implements HttpClientAdapter {
       r'^/v1/tenants/[^/]+/calls/([^/]+)/(hangup|transfer|park|pickup)$',
     ).firstMatch(path);
     final dial = RegExp(r'^/v1/tenants/[^/]+/me/dial$').hasMatch(path);
+    // S9-21: a transfer from the person's own phone, attended or not.
+    final mine = RegExp(
+      r'^/v1/tenants/[^/]+/me/live-calls/([^/]+)/transfer(?:/(complete|cancel))?$',
+    ).firstMatch(path);
     final agent = RegExp(r'^/v1/tenants/[^/]+/live-agents/([^/]+)/status$')
         .firstMatch(path);
     // Hang up and pick up have no body.
@@ -223,6 +227,14 @@ class _DemoAdapter implements HttpClientAdapter {
     final (int, Map<String, Object?>) result;
     if (call != null && options.method == 'POST') {
       result = demoCallAction(call.group(2)!, call.group(1), sent());
+    } else if (mine != null && options.method == 'POST') {
+      final step = mine.group(2);
+      final body = sent();
+      result = step != null
+          ? demoCallAction(step, mine.group(1), const {})
+          : body['attended'] == true
+          ? demoCallAction('consult', mine.group(1), body)
+          : demoCallAction('transfer', mine.group(1), body);
     } else if (dial && options.method == 'POST') {
       result = demoCallAction('dial', null, sent());
     } else if (agent != null && options.method == 'PUT') {

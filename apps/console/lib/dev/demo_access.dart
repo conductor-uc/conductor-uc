@@ -18,7 +18,11 @@ const demoSelfService = [
 /// The id the demo gives the signed-in person, by email: the one an extension
 /// can be linked to. Everyone else is the anonymous `demo-user`.
 String demoUserId(String email) {
-  if (email.startsWith('user') || email.startsWith('linked')) return 'user-4';
+  if (email.startsWith('user') ||
+      email.startsWith('linked') ||
+      email.startsWith('receptionist')) {
+    return 'user-4';
+  }
   if (email.startsWith('nophone')) return 'user-nophone';
   return 'demo-user';
 }
@@ -132,6 +136,16 @@ const _tenantSupervisor = [
   ...demoSelfService,
 ];
 
+/// `tenant_receptionist` in @cuc/authz (S9-21).
+const _tenantReceptionist = [
+  'org.view',
+  'queue.read',
+  'monitor.presence',
+  'monitor.calls',
+  'call.control',
+  ...demoSelfService,
+];
+
 /// Configuration reads (G-10) a tenant's own configuration screens need.
 const _tenantReads = [
   'user.read',
@@ -201,6 +215,8 @@ List<String> _support(String orgType) => switch (orgType) {
 /// - `nophone@...` is the same, but nobody has linked an extension to them.
 /// - `supervisor@...` is a tenant supervisor (the `tenant_supervisor` role):
 ///   they can listen to, whisper into and barge live calls.
+/// - `receptionist@...` is a tenant receptionist (the `tenant_receptionist`
+///   role, S9-21): the attendant console, and their own phone, 101.
 /// - `linked@...` is a tenant administrator who is also linked to extension
 ///   101, so is offered My phone as well.
 List<String>? demoPermissions(String orgType, String email) {
@@ -212,6 +228,7 @@ List<String>? demoPermissions(String orgType, String email) {
     return const ['org.view', 'extension.manage', 'monitor.presence'];
   }
   if (email.startsWith('supervisor')) return _tenantSupervisor;
+  if (email.startsWith('receptionist')) return _tenantReceptionist;
   if (email.startsWith('reader')) return const ['org.view', 'cdr.read'];
   if (email.startsWith('listener')) {
     return const ['org.view', 'recording.listen'];

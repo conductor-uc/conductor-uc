@@ -15,7 +15,12 @@ import '../pbx/resource.dart';
 const rolesByOrgType = <OrgType, List<String>>{
   OrgType.master: ['master_admin', 'master_support'],
   OrgType.reseller: ['reseller_admin', 'reseller_support'],
-  OrgType.tenant: ['tenant_admin', 'tenant_supervisor', 'tenant_user'],
+  OrgType.tenant: [
+    'tenant_admin',
+    'tenant_supervisor',
+    'tenant_receptionist',
+    'tenant_user',
+  ],
 };
 
 Map<String, String> get roleLabels {
@@ -27,6 +32,7 @@ Map<String, String> get roleLabels {
     'reseller_support': l.usrRoleSupport,
     'tenant_admin': l.usrRoleAdministrator,
     'tenant_supervisor': l.usrRoleSupervisor,
+    'tenant_receptionist': l.usrRoleReceptionist,
     'tenant_user': l.usrRoleUser,
   };
 }

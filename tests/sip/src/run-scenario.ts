@@ -438,7 +438,7 @@ export async function createSignInAdmin(
   tenantId: string,
   resellerId: string,
   /** S5-09: another built-in role, for a person who is not an administrator. */
-  role: 'tenant_admin' | 'tenant_user' = 'tenant_admin',
+  role: 'tenant_admin' | 'tenant_receptionist' | 'tenant_user' = 'tenant_admin',
 ): Promise<{ userId: string; email: string; password: string }> {
   const env = sipTestEnv();
   const { stdout } = await execFileAsync(

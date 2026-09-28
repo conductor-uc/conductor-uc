@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/format.dart';
+import '../../core/local_store.dart';
 import '../../core/permissions.dart';
 import '../../forms/validators.dart';
 import '../../l10n/l10n.dart';
@@ -28,6 +29,30 @@ class AttendantPage extends ConsumerStatefulWidget {
   @override
   ConsumerState<AttendantPage> createState() => _AttendantPageState();
 }
+
+const _dropKey = 'console.attendant.drop';
+
+/// S9-21 (G-127): what dropping a call on someone does, as each receptionist
+/// chooses and this browser remembers: send it at once (the default), or,
+/// for a call on their own phone, talk to that person first while the caller
+/// waits (an attended transfer). A call elsewhere is always sent at once:
+/// only a call the receptionist is on can wait for them.
+class AttendantTalkFirst extends Notifier<bool> {
+  @override
+  bool build() => readLocal(_dropKey) == 'talk';
+
+  void choose(bool talkFirst) {
+    state = talkFirst;
+    writeLocal(_dropKey, talkFirst ? 'talk' : null);
+  }
+}
+
+final attendantTalkFirstProvider = NotifierProvider<AttendantTalkFirst, bool>(
+  AttendantTalkFirst.new,
+);
+
+/// An attended transfer under way from the receptionist's own phone.
+typedef _Consult = ({String ownLeg, String caller, String to});
 
 /// The calls, sorted into what the receptionist does with each.
 class _Sorted {
@@ -62,6 +87,9 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
 
   /// Calls with a request on its way, so their buttons wait.
   final _busy = <String>{};
+
+  /// S9-21: the attended transfer under way, if any.
+  _Consult? _consult;
 
   @override
   void dispose() {
@@ -108,19 +136,94 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
     }
   }
 
-  void _transfer(LiveCallRow row, String to) => _run(
-    row,
-    (api) => api.transfer(row.first.callUuid, to),
-    currentL10n.attTransferred(_party(to)),
+  /// The receptionist's own leg of [row], when the call is on their phone.
+  LiveCall? _ownLeg(LiveCallRow row) {
+    final own = ref.read(myExtensionProvider).asData?.value?['number'];
+    if (own == null) return null;
+    return row.legs
+        .where((l) => l.extension == '$own' && l.state == 'answered')
+        .firstOrNull;
+  }
+
+  /// Sends the call to [to]: at once, or, when the receptionist chose to talk
+  /// first and the call is on their own phone, after they have (S9-21).
+  void _transfer(LiveCallRow row, String to) {
+    final own = _ownLeg(row);
+    if (own != null && ref.read(attendantTalkFirstProvider)) {
+      _talkFirst(row, own, to);
+      return;
+    }
+    // On their own phone, the other party is the one sent; the receptionist
+    // is let go.
+    final target = own == null
+        ? row.first
+        : row.legs.where((l) => l.callUuid != own.callUuid).firstOrNull ??
+              row.first;
+    _run(
+      row,
+      (api) => api.transfer(target.callUuid, to),
+      currentL10n.attTransferred(_party(to)),
+    );
+  }
+
+  /// S9-21: the other party waits (hold music) while the receptionist's phone
+  /// calls [to]; then they put them through, or go back to the caller.
+  void _talkFirst(LiveCallRow row, LiveCall own, String to) {
+    // Who waits: the other party's extension, or their number.
+    final other = row.legs.where((l) => l.callUuid != own.callUuid).firstOrNull;
+    final caller = other == null
+        ? row.from
+        : other.extension ??
+              (other.from != own.extension ? other.from : other.to);
+    _run(row, (api) async {
+      final answer = await api.consult(own.callUuid, to);
+      if (mounted) {
+        setState(
+          () => _consult = (ownLeg: own.callUuid, caller: caller, to: to),
+        );
+      }
+      return answer;
+    }, currentL10n.attConsultCalling(_party(to)));
+  }
+
+  Future<void> _finishConsult({required bool complete}) async {
+    final consult = _consult;
+    final api = ref.read(attendantApiProvider);
+    if (consult == null || api == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (complete) {
+        await api.completeTransfer(consult.ownLeg);
+        showToast(messenger, currentL10n.attConsultDone(_party(consult.to)));
+      } else {
+        await api.cancelTransfer(consult.ownLeg);
+        showToast(messenger, currentL10n.attConsultBack);
+      }
+    } catch (e) {
+      showToast(messenger, problemMessage(e));
+    }
+    if (mounted) setState(() => _consult = null);
+  }
+
+  Future<String?> _askWhere({bool talkFirst = false}) => showDialog<String>(
+    context: context,
+    builder: (_) => _TransferDialog(
+      names: _names,
+      initial: _firstMatch(_search.text),
+      talkFirst: talkFirst,
+    ),
   );
 
   Future<void> _askTransfer(LiveCallRow row) async {
-    final to = await showDialog<String>(
-      context: context,
-      builder: (_) =>
-          _TransferDialog(names: _names, initial: _firstMatch(_search.text)),
-    );
+    final to = await _askWhere();
     if (to != null && mounted) _transfer(row, to);
+  }
+
+  Future<void> _askTalkFirst(LiveCallRow row) async {
+    final own = _ownLeg(row);
+    if (own == null) return;
+    final to = await _askWhere(talkFirst: true);
+    if (to != null && mounted) _talkFirst(row, own, to);
   }
 
   void _park(LiveCallRow row, Json lot) => _run(
@@ -284,6 +387,8 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
       onSelect: (row) =>
           setState(() => _selected = _selected == row.id ? null : row.id),
       onTransfer: _askTransfer,
+      onTalkFirst: _consult == null ? _askTalkFirst : null,
+      isMine: (row) => _ownLeg(row) != null,
       onPark: _park,
       onPickUp: _pickUp,
       onHangUp: _hangUp,
@@ -350,6 +455,7 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
               title: l10n.navAttendant,
               subtitle: l10n.attSubtitle,
               actions: [
+                _DropSetting(),
                 IconButton(
                   tooltip: l10n.attShortcuts,
                   icon: const Icon(Icons.keyboard_outlined),
@@ -359,6 +465,16 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
             ),
             const SizedBox(height: 8),
             _OwnPhoneBanner(number: ownPhone?['number'] as String?),
+            if (_consult case final consult?
+                when (view?.calls ?? const []).any(
+                  (row) => row.legs.any((l) => l.callUuid == consult.ownLeg),
+                ))
+              _ConsultBanner(
+                caller: _party(consult.caller),
+                to: _party(consult.to),
+                onComplete: () => _finishConsult(complete: true),
+                onCancel: () => _finishConsult(complete: false),
+              ),
             const SizedBox(height: 12),
             Expanded(
               child: LayoutBuilder(
@@ -382,6 +498,83 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
                         ],
                       ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// S9-21: the receptionist's choice of what a drop does.
+class _DropSetting extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final talkFirst = ref.watch(attendantTalkFirstProvider);
+    return PopupMenuButton<bool>(
+      key: const ValueKey('attendant-drop-menu'),
+      tooltip: l10n.attDropSetting,
+      icon: const Icon(Icons.call_split_outlined),
+      onSelected: ref.read(attendantTalkFirstProvider.notifier).choose,
+      itemBuilder: (_) => [
+        CheckedPopupMenuItem(
+          key: const ValueKey('attendant-drop-now'),
+          value: false,
+          checked: !talkFirst,
+          child: Text(l10n.attDropNow),
+        ),
+        CheckedPopupMenuItem(
+          key: const ValueKey('attendant-drop-talk'),
+          value: true,
+          checked: talkFirst,
+          child: Text(l10n.attDropTalkFirst),
+        ),
+      ],
+    );
+  }
+}
+
+/// S9-21: an attended transfer under way: the caller waits while the
+/// receptionist talks to the person they asked for.
+class _ConsultBanner extends StatelessWidget {
+  const _ConsultBanner({
+    required this.caller,
+    required this.to,
+    required this.onComplete,
+    required this.onCancel,
+  });
+
+  final String caller;
+  final String to;
+  final VoidCallback onComplete;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Card(
+      key: const ValueKey('attendant-consult'),
+      margin: const EdgeInsets.only(top: 8),
+      color: Theme.of(context).colorScheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            const Icon(Icons.record_voice_over_outlined),
+            Text(l10n.attConsulting(to, caller)),
+            FilledButton(
+              key: const ValueKey('attendant-consult-complete'),
+              onPressed: onComplete,
+              child: Text(l10n.attConsultComplete),
+            ),
+            OutlinedButton(
+              key: const ValueKey('attendant-consult-cancel'),
+              onPressed: onCancel,
+              child: Text(l10n.attConsultCancel),
             ),
           ],
         ),
@@ -432,6 +625,8 @@ class _CallsColumn extends StatelessWidget {
     required this.loaded,
     required this.onSelect,
     required this.onTransfer,
+    required this.onTalkFirst,
+    required this.isMine,
     required this.onPark,
     required this.onPickUp,
     required this.onHangUp,
@@ -447,6 +642,10 @@ class _CallsColumn extends StatelessWidget {
   final bool loaded;
   final void Function(LiveCallRow row) onSelect;
   final void Function(LiveCallRow row) onTransfer;
+
+  /// Null while an attended transfer is already under way.
+  final void Function(LiveCallRow row)? onTalkFirst;
+  final bool Function(LiveCallRow row) isMine;
   final void Function(LiveCallRow row, Json lot) onPark;
   final void Function(LiveCallRow row) onPickUp;
   final void Function(LiveCallRow row) onHangUp;
@@ -497,6 +696,9 @@ class _CallsColumn extends StatelessWidget {
                 canPickUp: canPickUp,
                 onTap: () => onSelect(row),
                 onTransfer: () => onTransfer(row),
+                onTalkFirst: onTalkFirst != null && isMine(row)
+                    ? () => onTalkFirst!(row)
+                    : null,
                 onPark: (lot) => onPark(row, lot),
                 onPickUp: () => onPickUp(row),
                 onHangUp: () => onHangUp(row),
@@ -520,6 +722,7 @@ class _CallCard extends ConsumerWidget {
     required this.canPickUp,
     required this.onTap,
     required this.onTransfer,
+    required this.onTalkFirst,
     required this.onPark,
     required this.onPickUp,
     required this.onHangUp,
@@ -533,6 +736,9 @@ class _CallCard extends ConsumerWidget {
   final bool canPickUp;
   final VoidCallback onTap;
   final VoidCallback onTransfer;
+
+  /// Only for a call on the receptionist's own phone (S9-21).
+  final VoidCallback? onTalkFirst;
   final void Function(Json lot) onPark;
   final VoidCallback onPickUp;
   final VoidCallback onHangUp;
@@ -585,6 +791,13 @@ class _CallCard extends ConsumerWidget {
                       icon: const Icon(Icons.phone_forwarded_outlined),
                       onPressed: onTransfer,
                     ),
+                    if (onTalkFirst != null)
+                      IconButton(
+                        key: ValueKey('attendant-talk-first-${row.id}'),
+                        tooltip: l10n.attTalkFirst,
+                        icon: const Icon(Icons.record_voice_over_outlined),
+                        onPressed: onTalkFirst,
+                      ),
                     if (lots.isNotEmpty && parked == null)
                       PopupMenuButton<Json>(
                         tooltip: l10n.attPark,
@@ -853,10 +1066,17 @@ class _ParkingStrip extends StatelessWidget {
 
 /// Where to send a call: a number, with the directory's matches to pick from.
 class _TransferDialog extends StatefulWidget {
-  const _TransferDialog({required this.names, this.initial});
+  const _TransferDialog({
+    required this.names,
+    this.initial,
+    this.talkFirst = false,
+  });
 
   final Map<String, String> names;
   final String? initial;
+
+  /// S9-21: asking whom to talk to first, rather than where to send the call.
+  final bool talkFirst;
 
   @override
   State<_TransferDialog> createState() => _TransferDialogState();
@@ -892,7 +1112,9 @@ class _TransferDialogState extends State<_TransferDialog> {
           e,
     ]..sort((a, b) => compareExtensions(a.key, b.key));
     return AlertDialog(
-      title: Text(l10n.attTransferTitle),
+      title: Text(
+        widget.talkFirst ? l10n.attTalkFirstTitle : l10n.attTransferTitle,
+      ),
       content: SizedBox(
         width: 400,
         child: Column(
@@ -924,7 +1146,12 @@ class _TransferDialogState extends State<_TransferDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(l10n.commonCancel),
         ),
-        FilledButton(onPressed: _submit, child: Text(l10n.attTransfer)),
+        FilledButton(
+          onPressed: _submit,
+          child: Text(
+            widget.talkFirst ? l10n.attTalkFirstCall : l10n.attTransfer,
+          ),
+        ),
       ],
     );
   }

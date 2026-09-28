@@ -666,6 +666,7 @@ void main() {
         'reseller_support',
         'tenant_admin',
         'tenant_supervisor',
+        'tenant_receptionist',
         'tenant_user',
       };
       for (final roles in rolesByOrgType.values) {

@@ -40,7 +40,7 @@ overrides it:
   coarser variant with no resource at all — just the actor's org type and the route's
   declared `dataClass` — for `@cuc/http`'s framework-level hook, which runs before a
   service has resolved what it's serving. It is deliberately stricter than the real rule
-  (it denies a reseller reading its *own* `private`-classed config, which H1 proper
+  (it denies a reseller reading its _own_ `private`-classed config, which H1 proper
   allows), and that's the safe direction for an approximation to err in.
 - **H2** — an actor cannot act outside its own org's ancestry, full stop.
 - **H3** — `reseller.create`, `reseller.manage` and `reseller.read` are master-only, unconditionally, no
@@ -63,8 +63,9 @@ voicemail, one queue's monitoring, etc.).
 `PERMISSION_CATALOG` (`permissions.ts`) is transcribed from 07 §3.3: every permission and
 the `DataClass` (`config` / `private` / `usage` / `secret`) it touches — plus `domain.manage`
 (S1-03), added for reseller base-domain routes that 07 §3.3 does not itself name. `BUILT_IN_ROLES`
-(`roles.ts`) is the seven fixed roles — `master_admin`, `master_support`,
-`reseller_admin`, `reseller_support`, `tenant_admin`, `tenant_supervisor`, `tenant_user` —
+(`roles.ts`) is the eight fixed roles — `master_admin`, `master_support`,
+`reseller_admin`, `reseller_support`, `tenant_admin`, `tenant_supervisor`,
+`tenant_receptionist` (S9-21), `tenant_user` —
 as code, not rows, because nothing about them varies per deployment. `roleCatalog(custom)`
 merges those built-ins with an org's custom roles (identity-service's `roles` table) into
 the `RoleCatalog` `roleHas` reads.

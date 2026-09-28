@@ -18,6 +18,7 @@ export const BUILT_IN_ROLE_IDS = [
   'reseller_support',
   'tenant_admin',
   'tenant_supervisor',
+  'tenant_receptionist',
   'tenant_user',
 ] as const;
 export type BuiltInRoleId = (typeof BUILT_IN_ROLE_IDS)[number];
@@ -171,6 +172,24 @@ const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
 ];
 
 /**
+ * A receptionist (S9-21, G-127) answers the front desk: the attendant console
+ * watches every live call (`monitor.calls`) and everyone's presence, and moves
+ * calls (`call.control`: transfer, park, pick up, hang up), and sees the queues
+ * (`queue.read`). Nothing more: no configuration, no listening in, no
+ * recordings, no call history beyond their own, so an administrator can make
+ * someone the receptionist without giving them an administrator's or a
+ * supervisor's powers.
+ */
+const TENANT_RECEPTIONIST_PERMISSIONS: readonly Permission[] = [
+  'org.view',
+  'queue.read',
+  'monitor.presence',
+  'monitor.calls',
+  'call.control',
+  ...SELF_PERMISSIONS,
+];
+
+/**
  * Built-in roles (07 §3.3), as permission bundles.
  *
  * `monitor.listen`/`monitor.whisper`/`monitor.barge` are bundled into
@@ -188,6 +207,7 @@ export const BUILT_IN_ROLES: ReadonlyMap<BuiltInRoleId, Role> = new Map([
   ['reseller_support', role('reseller_support', RESELLER_SUPPORT_PERMISSIONS)],
   ['tenant_admin', role('tenant_admin', TENANT_ADMIN_PERMISSIONS)],
   ['tenant_supervisor', role('tenant_supervisor', TENANT_SUPERVISOR_PERMISSIONS)],
+  ['tenant_receptionist', role('tenant_receptionist', TENANT_RECEPTIONIST_PERMISSIONS)],
   // Voicemail and recording access for one's own extension/mailbox used to be
   // a per-scope grant (05 §3.2's "own extension, voicemail, and recordings
   // where granted"), and `voicemail.access` still is: a role has no scope of

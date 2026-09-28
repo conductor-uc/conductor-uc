@@ -576,7 +576,7 @@ export async function ensureTenantAdmin(
 export async function createSignInAdmin(
   tenantId: string,
   resellerId: string,
-  role: 'tenant_admin' | 'tenant_user' = 'tenant_admin',
+  role: 'tenant_admin' | 'tenant_receptionist' | 'tenant_user' = 'tenant_admin',
 ): Promise<{ readonly userId: string; readonly email: string; readonly password: string }> {
   const identityDb = createDatabase<IdentityServiceDb>({
     host: env('IDENTITY_DB_HOST'),
@@ -682,10 +682,10 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     if (
       tenantId === undefined ||
       resellerId === undefined ||
-      (role !== 'tenant_admin' && role !== 'tenant_user')
+      (role !== 'tenant_admin' && role !== 'tenant_receptionist' && role !== 'tenant_user')
     ) {
       throw new Error(
-        'usage: seed.js sign-in-admin <tenantId> <resellerId> [tenant_admin|tenant_user]',
+        'usage: seed.js sign-in-admin <tenantId> <resellerId> [tenant_admin|tenant_receptionist|tenant_user]',
       );
     }
     const admin = await createSignInAdmin(tenantId, resellerId, role);

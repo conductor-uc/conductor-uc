@@ -1,3 +1,4 @@
+import 'package:console/core/local_store.dart';
 import 'package:console/core/realtime.dart';
 import 'package:console/dev/demo_backend.dart';
 import 'package:console/dev/demo_realtime.dart';
@@ -227,6 +228,102 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Keyboard shortcuts'), findsWidgets);
     expect(find.text('Park the chosen call'), findsOneWidget);
+  });
+
+  group('talking to someone first (S9-21, G-127)', () {
+    testWidgets(
+      'a call on their own phone waits while they talk, then is put through',
+      (tester) async {
+        await openAttendant(tester);
+        // demo-a1 is 101 (their phone) talking to 102; others have no button.
+        expect(
+          find.byKey(const ValueKey('attendant-talk-first-demo-q1')),
+          findsNothing,
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('attendant-talk-first-demo-a1')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Who do you want to talk to first?'), findsOneWidget);
+        await tester.enterText(
+          find.byKey(const ValueKey('attendant-transfer-to')),
+          '103',
+        );
+        await tester.tap(find.widgetWithText(FilledButton, 'Call them'));
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Calling 103 · Carol Diaz. The caller is waiting.'),
+          findsOneWidget,
+        );
+        await settle(tester);
+        final banner = find.byKey(const ValueKey('attendant-consult'));
+        expect(
+          find.descendant(
+            of: banner,
+            matching: find.text(
+              'You are talking to 103 · Carol Diaz. 102 · Bob Osei is waiting and hears music.',
+            ),
+          ),
+          findsOneWidget,
+        );
+        // One transfer at a time.
+        expect(
+          find.byKey(const ValueKey('attendant-talk-first-demo-a1')),
+          findsNothing,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('attendant-consult-complete')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Put through to 103 · Carol Diaz.'), findsOneWidget);
+        await settle(tester);
+        expect(banner, findsNothing);
+      },
+    );
+
+    testWidgets(
+      'with "talk to them first" chosen, a drop talks first; going back resumes the caller',
+      (tester) async {
+        addTearDown(() => writeLocal('console.attendant.drop', null));
+        await openAttendant(tester);
+        await tester.tap(find.byKey(const ValueKey('attendant-drop-menu')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Talk to them first (calls on my phone)'));
+        await tester.pumpAndSettle();
+        expect(readLocal('console.attendant.drop'), 'talk');
+
+        await dragOnto(
+          tester,
+          call('demo-a1'),
+          find.byKey(const ValueKey('attendant-ext-105')),
+        );
+        await settle(tester);
+        expect(find.byKey(const ValueKey('attendant-consult')), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey('attendant-consult-cancel')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('You are back with the caller.'), findsOneWidget);
+        await settle(tester);
+        expect(find.byKey(const ValueKey('attendant-consult')), findsNothing);
+
+        // A call not on their phone is still sent at once.
+        await dragOnto(
+          tester,
+          call('demo-q1'),
+          find.byKey(const ValueKey('attendant-ext-105')),
+        );
+        expect(find.text('Sent to 105.'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a receptionist has the attendant console', (tester) async {
+      await pumpApp(tester, appWith(api: demoApi()));
+      await submitSignIn(tester, 'receptionist@example.test');
+      expect(navItem('Attendant'), findsOneWidget);
+    });
   });
 
   testWidgets(

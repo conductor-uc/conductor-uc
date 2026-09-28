@@ -290,12 +290,13 @@ void main() {
 
       await tapIn(tester, 'Jo Front Desk', find.byTooltip('Edit'));
       // The roles offered are a tenant's, whoever is signed in.
-      await pickFromDropdown(tester, 'Role', 'Supervisor');
+      // S9-21: the built-in receptionist role, for the front desk.
+      await pickFromDropdown(tester, 'Role', 'Receptionist');
       await tester.enterText(field('Name *'), 'Jo Reception');
       await tester.tap(find.text('Save'));
       await tester.pumpAndSettle();
       expect(find.text('Jo Reception'), findsOneWidget);
-      expect(find.text('Supervisor'), findsOneWidget);
+      expect(find.text('Receptionist'), findsOneWidget);
 
       await tapIn(tester, 'Riley Owner', find.byTooltip('Disable'));
       await tester.tap(find.widgetWithText(FilledButton, 'Disable'));
