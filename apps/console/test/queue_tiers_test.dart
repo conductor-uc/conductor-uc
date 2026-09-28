@@ -24,7 +24,7 @@ void main() {
     expect(find.text('Agents in Support'), findsOneWidget);
     expect(find.text('103 · Carol Diaz'), findsOneWidget);
     expect(find.byKey(const ValueKey('tier-tier-1')), findsOneWidget);
-    // The only agent is already in the queue.
+    // Both agents (Carol, and Alice since S9-20) are already in the queue.
     expect(find.text('Every agent is already in this queue.'), findsOneWidget);
   });
 
@@ -60,10 +60,16 @@ void main() {
     tester,
   ) async {
     await openTiers(tester);
-    await tester.tap(find.byTooltip('Remove from queue'));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('tier-tier-1')),
+        matching: find.byTooltip('Remove from queue'),
+      ),
+    );
     await tester.pumpAndSettle();
-    expect(find.text('No agents yet. Add one below.'), findsOneWidget);
     expect(find.byKey(const ValueKey('tier-tier-1')), findsNothing);
+    // Alice (101) still answers it.
+    expect(find.text('No agents yet. Add one below.'), findsNothing);
 
     await tester.tap(
       find.widgetWithText(DropdownButtonFormField<String>, 'Add an agent'),
@@ -73,14 +79,18 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Add'));
     await tester.pumpAndSettle();
-    expect(find.text('No agents yet. Add one below.'), findsNothing);
     expect(find.text('103 · Carol Diaz'), findsOneWidget);
     expect(find.text('Every agent is already in this queue.'), findsOneWidget);
   });
 
   testWidgets('Add needs an agent chosen first', (tester) async {
     await openTiers(tester);
-    await tester.tap(find.byTooltip('Remove from queue'));
+    await tester.tap(
+      find.descendant(
+        of: find.byKey(const ValueKey('tier-tier-1')),
+        matching: find.byTooltip('Remove from queue'),
+      ),
+    );
     await tester.pumpAndSettle();
     expect(
       tester

@@ -1,10 +1,14 @@
 import { timingSafeEqual } from 'node:crypto';
 
+import { allowed, type Actor, type Role } from '@cuc/authz';
 import {
+  AccessUnavailableError,
   clientIpOf,
   ProblemError,
   selfActor,
   Type,
+  type AccessClient,
+  type OrgType,
   type RequestContext,
   type Server,
 } from '@cuc/http';
@@ -57,13 +61,27 @@ const LiveQueueSchema = Type.Object({
   ),
 });
 
+const MyQueueSchema = Type.Object({
+  queueId: Type.String(),
+  label: Type.String(),
+  waiting: Type.Integer(),
+  longestWaitingSince: Type.Union([Type.String(), Type.Null()]),
+});
+
 interface SignedRequest {
   readonly context: RequestContext;
 }
 
-function person(request: SignedRequest): { id: string; orgId: string } {
-  const { actorId, actorType, orgId } = request.context;
-  if (actorId === undefined || orgId === undefined) {
+interface Person {
+  readonly id: string;
+  readonly orgId: string;
+  readonly orgType: OrgType;
+  readonly resellerId: string | null;
+}
+
+function person(request: SignedRequest): Person {
+  const { actorId, actorType, orgId, orgType } = request.context;
+  if (actorId === undefined || orgId === undefined || orgType === undefined) {
     throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
   }
   if (actorType !== 'user') {
@@ -71,7 +89,53 @@ function person(request: SignedRequest): { id: string; orgId: string } {
       code: 'people_only',
     });
   }
-  return { id: actorId, orgId };
+  return { id: actorId, orgId, orgType, resellerId: request.context.resellerId ?? null };
+}
+
+/**
+ * S9-20 (G-126): whether the person holds `queue.agent.manage` across the tenant (a role, or a grant
+ * on the whole org), or granted on one of the queues the agent answers: a queue lead manages the
+ * agents of their queue. An agent's status is theirs in every queue they answer (`mod_callcenter`
+ * has one status per agent), so a grant on any one of them is enough.
+ */
+async function mayManageAgent(
+  access: AccessClient,
+  who: Person,
+  tenantId: string,
+  queueIds: readonly string[],
+): Promise<boolean> {
+  let held;
+  try {
+    held = await access.resolve({ orgId: who.orgId, actorId: who.id });
+  } catch (error) {
+    if (error instanceof AccessUnavailableError) {
+      throw ProblemError.unavailable(
+        'Permissions could not be checked; nothing was done. Try again shortly.',
+        { code: 'permissions_unavailable' },
+      );
+    }
+    throw error;
+  }
+  const actor: Actor = {
+    id: who.id,
+    type: 'user',
+    org: { id: who.orgId, type: who.orgType, resellerId: who.resellerId },
+    roleIds: held.roles.map((role) => role.id),
+  };
+  const roles = new Map<string, Role>(
+    held.roles.map((role) => [role.id, { id: role.id, permissions: new Set(role.permissions) }]),
+  );
+  // The tenant's reseller is not needed: the org ancestry of a tenant person is their own tenant.
+  const org = { id: tenantId, type: 'tenant' as const, resellerId: null };
+  const check = (scope?: { type: 'queue'; id: string }) =>
+    allowed({
+      actor,
+      permission: 'queue.agent.manage',
+      resource: scope === undefined ? { org } : { org, scope },
+      roles,
+      grants: held.grants,
+    });
+  return check() || queueIds.some((id) => check({ type: 'queue', id }));
 }
 
 /**
@@ -80,17 +144,24 @@ function person(request: SignedRequest): { id: string; orgId: string } {
  *
  * - `GET` and `PUT /v1/tenants/{t}/me/agent-status` (`self.settings`, config): a person's own
  *   status as an agent, the same as the `*45`/`*46` feature codes, on every node.
- * - `PUT /v1/tenants/{t}/live-agents/{extension}/status` (`call.control`): a supervisor or
- *   administrator signs an agent in, out, or on a break.
+ * - `GET /v1/tenants/{t}/me/queues` (`self.settings`, config; S9-20): the queues a person answers
+ *   as an agent, with how many callers wait in each and since when; empty for someone who is no
+ *   agent. Counts only, as on the `queues` topic.
+ * - `PUT /v1/tenants/{t}/live-agents/{extension}/status` (`queue.agent.manage`; S9-20, G-126): a
+ *   supervisor, administrator or queue lead signs an agent in, out, or on a break. Checked against
+ *   the agent's queues (`scopedPermission`): held across the tenant it covers every agent, a grant
+ *   on a queue covers the agents of that queue.
  *
- * Answers: 200 with the agent; 404 `not_an_agent` (the extension answers no queue),
- * `no_linked_extension`; 503 `queue_status_unavailable`, `media_unavailable`, `media_node_failed`.
+ * Answers: 200 with the agent; 403 `insufficient_permission` (not for this agent), `people_only`;
+ * 404 `not_an_agent` (the extension answers no queue), `no_linked_extension`; 503
+ * `permissions_unavailable`, `queue_status_unavailable`, `media_unavailable`, `media_node_failed`.
  */
 export function registerQueueStatusRoutes(
   app: Server,
   deps: {
     readonly status: QueueStatus;
     readonly userExtension: UserExtensionLookup;
+    readonly access: AccessClient;
   },
 ): void {
   const { status } = deps;
@@ -128,6 +199,21 @@ export function registerQueueStatusRoutes(
     },
   );
 
+  app.get(
+    '/v1/tenants/:tenantId/me/queues',
+    {
+      config: { permission: 'self.settings', dataClass: 'config' },
+      schema: {
+        params: TenantParamsSchema,
+        response: { 200: Type.Object({ queues: Type.Array(MyQueueSchema) }) },
+      },
+    },
+    async (request) => {
+      const me = selfActor(request);
+      return { queues: await status.mine(me.tenantId, await ownExtension(me.tenantId, me.userId)) };
+    },
+  );
+
   app.put(
     '/v1/tenants/:tenantId/me/agent-status',
     {
@@ -156,7 +242,7 @@ export function registerQueueStatusRoutes(
   app.put(
     '/v1/tenants/:tenantId/live-agents/:extension/status',
     {
-      config: { permission: 'call.control', dataClass: 'config' },
+      config: { permission: 'queue.agent.manage', dataClass: 'config', scopedPermission: true },
       schema: {
         params: AgentParamsSchema,
         body: StatusBodySchema,
@@ -165,12 +251,22 @@ export function registerQueueStatusRoutes(
     },
     async (request) => {
       const ip = clientIpOf(request);
+      const who = person(request);
+      const { tenantId } = request.params;
       return status.setAgentStatus({
-        tenantId: request.params.tenantId,
+        tenantId,
         extension: request.params.extension,
         status: request.body.status,
-        actor: person(request),
+        actor: { id: who.id, orgId: who.orgId },
         own: false,
+        authorize: async (queueIds) => {
+          if (!(await mayManageAgent(deps.access, who, tenantId, queueIds))) {
+            throw ProblemError.forbidden(
+              'You do not have the queue.agent.manage permission for this agent.',
+              { code: 'insufficient_permission' },
+            );
+          }
+        },
         ...(ip === '' ? {} : { ip }),
         requestId: request.context.requestId,
       });

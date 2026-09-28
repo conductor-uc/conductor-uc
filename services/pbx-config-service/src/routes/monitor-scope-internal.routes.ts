@@ -3,6 +3,7 @@ import { ProblemError, Type, type Server } from '@cuc/http';
 
 import type { AgentRepo } from '../repo/agent.repo.js';
 import type { ExtensionRepo } from '../repo/extension.repo.js';
+import type { QueueRepo } from '../repo/queue.repo.js';
 import type { QueueTierRepo } from '../repo/queue-tier.repo.js';
 
 const ParamsSchema = Type.Object({
@@ -15,6 +16,8 @@ const ResponseSchema = Type.Object({
   number: Type.String(),
   /** The queues this extension answers as an agent (its tiers); empty when it is no agent. */
   agentQueueIds: Type.Array(Type.String()),
+  /** The same queues with their labels (S9-20: an agent's home names the queues they answer). */
+  agentQueues: Type.Array(Type.Object({ id: Type.String(), label: Type.String() })),
 });
 
 /**
@@ -31,10 +34,11 @@ export function registerMonitorScopeInternalRoutes(
     readonly extensions: ExtensionRepo;
     readonly agents: AgentRepo;
     readonly queueTiers: QueueTierRepo;
+    readonly queues: QueueRepo;
     readonly internalServiceToken: string;
   },
 ): void {
-  const { extensions, agents, queueTiers, internalServiceToken } = deps;
+  const { extensions, agents, queueTiers, queues, internalServiceToken } = deps;
   app.get(
     '/internal/v1/tenants/:tenantId/extensions/by-number/:number',
     {
@@ -62,11 +66,14 @@ export function registerMonitorScopeInternalRoutes(
       }
       const agent = await agents.findByExtensionId(ctx, extension.id);
       const tiers = agent === undefined ? [] : await queueTiers.listForAgent(ctx, agent.id);
-      return {
-        extensionId: extension.id,
-        number: extension.number,
-        agentQueueIds: [...new Set(tiers.map((tier) => tier.queueId))],
-      };
+      const agentQueueIds = [...new Set(tiers.map((tier) => tier.queueId))];
+      const agentQueues =
+        agentQueueIds.length === 0
+          ? []
+          : (await queues.list(ctx))
+              .filter((queue) => agentQueueIds.includes(queue.id))
+              .map((queue) => ({ id: queue.id, label: queue.label }));
+      return { extensionId: extension.id, number: extension.number, agentQueueIds, agentQueues };
     },
   );
 

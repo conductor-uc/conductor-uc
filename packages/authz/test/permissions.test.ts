@@ -153,6 +153,14 @@ describe('allPermissions', () => {
   });
 });
 
+describe('queue.agent.manage (S9-20, G-126)', () => {
+  it('is config-class, and implies reading the queue', () => {
+    expect(dataClassOf('queue.agent.manage')).toBe('config');
+    expect(READ_TWINS['queue.agent.manage']).toBe('queue.read');
+    expect(implies('queue.agent.manage', 'queue.read')).toBe(true);
+  });
+});
+
 describe('read twins (G-10, S1-15)', () => {
   const TWINNED = [
     'reseller',

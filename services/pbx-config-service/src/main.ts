@@ -223,6 +223,7 @@ registerMonitorScopeInternalRoutes(app, {
   extensions: extensionRepo,
   agents: agentRepo,
   queueTiers: queueTierRepo,
+  queues: queueRepo,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
 

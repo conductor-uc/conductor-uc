@@ -101,6 +101,7 @@ const readTwins = {
   'emergency_route.manage': 'emergency_route.read',
   'group.manage': 'group.read',
   'queue.manage': 'queue.read',
+  'queue.agent.manage': 'queue.read',
   'parking_lot.manage': 'parking_lot.read',
   'conference_room.manage': 'conference_room.read',
   'schedule.manage': 'schedule.read',

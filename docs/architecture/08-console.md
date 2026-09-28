@@ -110,7 +110,7 @@ Play · Menu (IVR) · Time condition · Extension · Ring group · Queue · Voic
 - **Calls**, sorted into Incoming, Waiting in a queue, Parked (from `mod_valet_parking`'s own events, so a call parked from a phone shows too) and In progress: **Send to…**, **Park**, **Pick up on my phone**, **Hang up** (after asking). A card can be dragged.
 - **Directory**: every extension with its state and name, searchable. Drop a call on one to send it there (at once, blind); with a call chosen, a tap does the same. **Call** places a call from the receptionist's phone.
 - **Parking lots**: drop a call on one to park it; **Take back** dials the slot.
-- **Queues**: as on Monitoring, with each agent's status changeable (sign in, a break, sign out).
+- **Queues**: as on Monitoring, with each agent's status changeable (sign in, a break, sign out) by a holder of `queue.agent.manage` (S9-20).
 - **Keyboard**: `/` search, `↑`/`↓` choose, `T` send to, `Enter` in the search sends to the first match, `P` park, `A` pick up, `H` hang up, `Esc`, `?` the list.
 - On a narrow screen the page scrolls as one column.
 
@@ -119,6 +119,7 @@ Play · Menu (IVR) · Time condition · Extension · Ring group · Queue · Voic
 The end-user portal (S9-11, `lib/features/myphone/`), everything a person with only `self.*` permissions sees:
 
 - **Home**: their number; one switch that forwards every call to their mobile (the rest of their call handling kept); new messages and their greeting (record it with the microphone, as WAV, or upload one); their last calls; **Connect a phone or app** (server, port, and their own username and password on request, audited).
+- **Your queues** (S9-20, G-126): for an agent, each queue they answer with who waits and the longest wait (read every 5 s), and their own status: taking calls, on a break, or not taking calls (as `*45`/`*46`). Not shown to someone who answers no queue.
 - **Calls you can pick up** (S9-18): a colleague's phone ringing within their pickup groups, with **Pick up**, refreshed when presence changes; or they dial `*8`.
 - **My call handling**, **My voicemail**, **My call history** (searchable by number or name).
 - A card for each call they are on now, with the recording buttons their permissions allow; transfer, park and click-to-call are available over `/me` (S9-12) for the screens to use.

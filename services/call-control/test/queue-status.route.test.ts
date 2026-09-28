@@ -1,4 +1,5 @@
 import type { AuditEventInput } from '@cuc/audit';
+import type { Grant } from '@cuc/authz';
 import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 import { silentLogger } from '@cuc/testing';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -69,6 +70,8 @@ describe('live queues and agents’ status (S9-13)', () => {
   const nodes = new Map<string, FakeCallcenter>();
   const audits: AuditEventInput[] = [];
   const held = new Map<string, string[]>();
+  /** Grants on single queues, by user id. */
+  const grants = new Map<string, Grant[]>();
   /** Extension number to the queues it answers. */
   const agentsOf = new Map<string, string[]>();
   const numbers = new Map<string, string>();
@@ -90,7 +93,12 @@ describe('live queues and agents’ status (S9-13)', () => {
         return Promise.resolve(
           queues === undefined
             ? undefined
-            : { extensionId: `EXT-${number}`, number, agentQueueIds: queues },
+            : {
+                extensionId: `EXT-${number}`,
+                number,
+                agentQueueIds: queues,
+                agentQueues: queues.map((id) => ({ id, label: `Queue ${id}` })),
+              },
         );
       },
       audit: (input) => {
@@ -108,6 +116,13 @@ describe('live queues and agents’ status (S9-13)', () => {
           number === undefined ? undefined : { extensionId: `EXT-${number}`, number },
         );
       },
+      access: {
+        resolve: ({ actorId }) =>
+          Promise.resolve({
+            roles: [{ id: 'role', permissions: held.get(actorId) ?? [] }],
+            grants: grants.get(actorId) ?? [],
+          }),
+      },
     });
     registerQueueStatusInternalRoutes(app, { status, internalServiceToken: TOKEN });
     await app.ready();
@@ -121,13 +136,23 @@ describe('live queues and agents’ status (S9-13)', () => {
     nodes.clear();
     audits.length = 0;
     held.clear();
+    grants.clear();
     agentsOf.clear();
     numbers.clear();
   });
 
-  function person(permissions: string[], number?: string) {
+  function person(permissions: string[], number?: string, queueGrants: string[] = []) {
     const userId = crypto.randomUUID();
     held.set(userId, permissions);
+    grants.set(
+      userId,
+      queueGrants.map((id) => ({
+        principalType: 'user' as const,
+        principalId: userId,
+        permission: 'queue.agent.manage',
+        scope: { type: 'queue' as const, id },
+      })),
+    );
     if (number !== undefined) numbers.set(userId, number);
     return signInternalHeaders(SECRET, {
       actorId: userId,
@@ -275,14 +300,14 @@ describe('live queues and agents’ status (S9-13)', () => {
     expect(unlinked.json()).toMatchObject({ code: 'no_linked_extension' });
   });
 
-  it('a supervisor signs an agent out; without call.control nobody else may', async () => {
+  it('a supervisor signs an agent out; without queue.agent.manage nobody else may (S9-20)', async () => {
     const one = new FakeCallcenter();
     nodes.set('fs-1', one);
     agentsOf.set('301', ['q1']);
     const done = await app.inject({
       method: 'PUT',
       url: `/v1/tenants/${TENANT}/live-agents/301/status`,
-      headers: person(['call.control']),
+      headers: person(['queue.agent.manage']),
       payload: { status: 'logged_out' },
     });
     expect(done.statusCode).toBe(200);
@@ -302,10 +327,93 @@ describe('live queues and agents’ status (S9-13)', () => {
     const bad = await app.inject({
       method: 'PUT',
       url: `/v1/tenants/${TENANT}/live-agents/301/status`,
-      headers: person(['call.control']),
+      headers: person(['queue.agent.manage']),
       payload: { status: 'busy' },
     });
     expect(bad.statusCode).toBe(400);
+  });
+
+  it('S9-20: call.control alone no longer signs an agent out', async () => {
+    nodes.set('fs-1', new FakeCallcenter());
+    agentsOf.set('301', ['q1']);
+    const refused = await app.inject({
+      method: 'PUT',
+      url: `/v1/tenants/${TENANT}/live-agents/301/status`,
+      headers: person(['call.control']),
+      payload: { status: 'logged_out' },
+    });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json()).toMatchObject({ code: 'insufficient_permission' });
+    expect(audits).toEqual([]);
+  });
+
+  it('S9-20: a queue lead manages the agents of their own queue only', async () => {
+    const one = new FakeCallcenter();
+    nodes.set('fs-1', one);
+    agentsOf.set('301', ['q1', 'q2']);
+    agentsOf.set('302', ['q3']);
+    const lead = person([], undefined, ['q2']);
+    const own = await app.inject({
+      method: 'PUT',
+      url: `/v1/tenants/${TENANT}/live-agents/301/status`,
+      headers: lead,
+      payload: { status: 'on_break' },
+    });
+    expect(own.statusCode).toBe(200);
+    expect(one.commands.at(-1)).toBe(
+      `callcenter_config agent set status '301@${DOMAIN}' 'On Break'`,
+    );
+
+    const commands = one.commands.length;
+    const other = await app.inject({
+      method: 'PUT',
+      url: `/v1/tenants/${TENANT}/live-agents/302/status`,
+      headers: lead,
+      payload: { status: 'on_break' },
+    });
+    expect(other.statusCode).toBe(403);
+    expect(other.json()).toMatchObject({ code: 'insufficient_permission' });
+    expect(one.commands).toHaveLength(commands);
+    expect(audits).toHaveLength(1);
+  });
+
+  it('S9-20: an agent sees who waits in their own queues, and nobody else’s', async () => {
+    const one = new FakeCallcenter();
+    nodes.set('fs-1', one);
+    one.queues.set(`q1@${DOMAIN}`, {
+      members: [member(`q1@${DOMAIN}`, 1_790_000_000, 'Waiting')],
+      agents: [],
+    });
+    one.queues.set(`q3@${DOMAIN}`, {
+      members: [member(`q3@${DOMAIN}`, 1_790_000_100, 'Waiting')],
+      agents: [],
+    });
+    agentsOf.set('301', ['q1', 'q2']);
+    const mine = await app.inject({
+      method: 'GET',
+      url: `/v1/tenants/${TENANT}/me/queues`,
+      headers: person(['self.settings'], '301'),
+    });
+    expect(mine.statusCode).toBe(200);
+    expect(mine.json()).toEqual({
+      queues: [
+        {
+          queueId: 'q1',
+          label: 'Queue q1',
+          waiting: 1,
+          longestWaitingSince: new Date(1_790_000_000_000).toISOString(),
+        },
+        // Loaded by no node yet: nobody waits.
+        { queueId: 'q2', label: 'Queue q2', waiting: 0, longestWaitingSince: null },
+      ],
+    });
+
+    const none = await app.inject({
+      method: 'GET',
+      url: `/v1/tenants/${TENANT}/me/queues`,
+      headers: person(['self.settings'], '205'),
+    });
+    expect(none.json()).toEqual({ queues: [] });
   });
 
   it('with no node to reach, nothing is audited or done', async () => {

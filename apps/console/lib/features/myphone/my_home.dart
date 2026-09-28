@@ -15,6 +15,7 @@ import '../media/media_page.dart'
     show filePickerProvider, uploadToStorageProvider;
 import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart' show tenantCountryProvider;
+import '../monitoring/live_calls.dart' show clockProvider;
 import '../monitoring/presence.dart' show presenceProvider;
 import 'my_live_calls.dart';
 import 'my_phone_api.dart';
@@ -38,6 +39,34 @@ final myPickupProvider = FutureProvider.autoDispose<List<Json>>((ref) async {
   } catch (_) {
     // Not offered, rather than an error on the home page.
     return const [];
+  }
+});
+
+/// S9-20: the queues I answer as an agent, and who waits in them. Read again
+/// every few seconds while my home is open: callers join and leave a queue
+/// without anyone's presence changing.
+final myQueuesProvider = FutureProvider.autoDispose<List<Json>>((ref) async {
+  final api = ref.watch(myPhoneApiProvider);
+  if (api == null || !ref.watch(canProvider('self.settings'))) return const [];
+  final timer = Timer(const Duration(seconds: 5), ref.invalidateSelf);
+  ref.onDispose(timer.cancel);
+  try {
+    return await api.myQueues();
+  } catch (_) {
+    // Not shown, rather than an error on the home page.
+    return const [];
+  }
+});
+
+/// My own status as an agent: `available`, `on_break`, `logged_out`, or null
+/// while unknown.
+final myAgentStatusProvider = FutureProvider.autoDispose<String?>((ref) async {
+  final api = ref.watch(myPhoneApiProvider);
+  if (api == null) return null;
+  try {
+    return (await api.agentStatus())['status'] as String?;
+  } catch (_) {
+    return null;
   }
 });
 
@@ -88,6 +117,7 @@ class MyHomePage extends ConsumerWidget {
                 spacing: 16,
                 runSpacing: 16,
                 children: [
+                  _QueuesCard(),
                   _ForwardCard(),
                   _VoicemailCard(),
                   _RecentCallsCard(),
@@ -198,6 +228,98 @@ class _PickupCard extends ConsumerWidget {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// S9-20: the queues I take calls for, how many callers wait in each and for
+/// how long, and whether I am taking calls, on a break, or not taking calls
+/// (the same as the `*45`/`*46` codes). Not shown to someone who answers no
+/// queue.
+class _QueuesCard extends ConsumerWidget {
+  const _QueuesCard();
+
+  static const _statuses = ['available', 'on_break', 'logged_out'];
+
+  Future<void> _choose(
+    BuildContext context,
+    WidgetRef ref,
+    String status,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(myPhoneApiProvider)?.setAgentStatus(status);
+      showToast(messenger, currentL10n.myAgentStatusSaved);
+    } catch (e) {
+      showToast(messenger, problemMessage(e));
+    }
+    ref.invalidate(myAgentStatusProvider);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final queues = ref.watch(myQueuesProvider).value ?? const [];
+    if (queues.isEmpty) return const SizedBox.shrink();
+    final now = ref.watch(clockProvider).value ?? DateTime.now();
+    final current = ref.watch(myAgentStatusProvider).value;
+    String waiting(Json queue) {
+      final count = (queue['waiting'] as num?)?.toInt() ?? 0;
+      final since = DateTime.tryParse('${queue['longestWaitingSince']}');
+      if (since == null) return l10n.attQueueWaiting(count);
+      return l10n.attQueueWaitingLongest(
+        count,
+        formatClock(now.difference(since).inSeconds.clamp(0, 1 << 30)),
+      );
+    }
+
+    return KeyedSubtree(
+      key: const ValueKey('my-queues'),
+      child: _Card(
+        icon: Icons.support_agent_outlined,
+        title: l10n.myQueuesTitle,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.myQueuesHelp),
+            for (final queue in queues)
+              ListTile(
+                key: ValueKey('my-queue-${queue['queueId']}'),
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.groups_outlined),
+                title: Text(
+                  '${queue['label'] ?? ''}'.isEmpty
+                      ? l10n.myQueueUnnamed
+                      : '${queue['label']}',
+                ),
+                subtitle: Text(waiting(queue)),
+              ),
+            const SizedBox(height: 8),
+            Text(
+              l10n.myAgentStatusLabel,
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final status in _statuses)
+                  ChoiceChip(
+                    key: ValueKey('my-agent-$status'),
+                    label: Text(switch (status) {
+                      'available' => l10n.myAgentAvailable,
+                      'on_break' => l10n.myAgentOnBreak,
+                      _ => l10n.myAgentSignedOut,
+                    }),
+                    selected: current == status,
+                    onSelected: (_) => _choose(context, ref, status),
+                  ),
+              ],
+            ),
+          ],
         ),
       ),
     );

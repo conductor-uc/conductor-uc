@@ -78,6 +78,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'group.read': 'config',
   'queue.manage': 'config',
   'queue.read': 'config',
+  'queue.agent.manage': 'config',
   'parking_lot.manage': 'config',
   'parking_lot.read': 'config',
   'conference_room.manage': 'config',
@@ -157,8 +158,14 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
  * `monitor.calls` is passive watching (support holds it, and support never writes),
  * `monitor.barge` joins a call rather than moving it, and `recording.control` is only a call's
  * recording. It acts on live calls, whose parties and numbers are private, so it is `private`: H1
- * keeps every reseller out, it has no read twin and nothing implies it. S9-13 (G-126): it also signs an
- * agent in, out or on a break: operating the live call centre, as moving its calls is.
+ * keeps every reseller out, it has no read twin and nothing implies it.
+ */
+/**
+ * `queue.agent.manage` (S9-20, docs/decisions.md G-126): sign someone else in, out or on a break
+ * as an agent. Held across the tenant by administrators and supervisors; granted on one queue, it
+ * lets a queue lead manage the agents who answer that queue. It is `config`, like the status it
+ * sets, and its read twin is `queue.read`: whoever manages a queue's agents reads that queue.
+ * (S9-13 had `call.control` do this; the owner gave it its own permission.)
  */
 /**
  * `self.settings`, `self.voicemail` and `self.history` are not in 07 §3.3
@@ -248,6 +255,7 @@ export const READ_TWINS: Readonly<Record<Permission, Permission>> = {
   'emergency_route.manage': 'emergency_route.read',
   'group.manage': 'group.read',
   'queue.manage': 'queue.read',
+  'queue.agent.manage': 'queue.read',
   'parking_lot.manage': 'parking_lot.read',
   'conference_room.manage': 'conference_room.read',
   'schedule.manage': 'schedule.read',

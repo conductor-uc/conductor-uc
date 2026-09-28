@@ -42,9 +42,10 @@ interface LiveQueue {
  *
  * A queue in the queue tenant with extension 301 as its agent, loaded on the node by a priming
  * carrier call (`queue.test.ts` explains why a queue is only ever loaded by a call), and the tier
- * added by hand (G-47). A tenant administrator (who holds `call.control`) signs 301 in through
+ * added by hand (G-47). A tenant administrator (who holds `queue.agent.manage`, S9-20) signs 301 in through
  * api-gateway: the node's agent is Available, and the live queues show 301 available. On a break,
  * then a carrier call into the queue: it waits, and the live queues count it, with no number.
+ * S9-20: linked to 301, the same person sees the waiting caller on their own home (`/me/queues`).
  */
 describe.skipIf(skipReason !== undefined)('S9-13 live queues and agent status (live SIPp)', () => {
   let seed: SeedResult;
@@ -236,6 +237,30 @@ describe.skipIf(skipReason !== undefined)('S9-13 live queues and agent status (l
         expect(waiting.longestWaitingSince).not.toBeNull();
         expect(JSON.stringify(waiting)).not.toContain('carrier');
 
+        // S9-20: as the agent (the administrator, linked to 301), their own queues show the caller.
+        const linked = await dockerCurlJson(
+          'PATCH',
+          `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/extensions/${id301}`,
+          { userId },
+          await tenantAdminHeaders(tenantId, seed.resellerId),
+        );
+        expect(linked.status, JSON.stringify(linked.json)).toBe(200);
+        const mine = await dockerCurlJson(
+          'GET',
+          `${GATEWAY_URL}/v1/tenants/${tenantId}/me/queues`,
+          undefined,
+          { authorization: `Bearer ${token}` },
+        );
+        expect(mine.status, JSON.stringify(mine.json)).toBe(200);
+        expect((mine.json as { queues: unknown[] }).queues).toEqual([
+          {
+            queueId: queue.id,
+            label: 'S9-13 queue',
+            waiting: 1,
+            longestWaitingSince: waiting.longestWaitingSince,
+          },
+        ]);
+
         // Both changes are in the tenant's audit trail, as the administrator's.
         await expect
           .poll(
@@ -254,6 +279,12 @@ describe.skipIf(skipReason !== undefined)('S9-13 live queues and agent status (l
           )
           .toBeGreaterThanOrEqual(2);
       } finally {
+        await dockerCurlJson(
+          'PATCH',
+          `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/extensions/${id301}`,
+          { userId: null },
+          await tenantAdminHeaders(tenantId, seed.resellerId),
+        );
         await setStatus('logged_out');
         if (trunk !== undefined) await removeTrunkAndDid(trunk);
         if (agentId !== undefined) {

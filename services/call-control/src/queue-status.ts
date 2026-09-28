@@ -2,7 +2,12 @@ import type { AuditEventInput } from '@cuc/audit';
 import { ProblemError } from '@cuc/http';
 import type { Logger } from '@cuc/logger';
 
-import { UpstreamError, type ExtensionScopeLookup, type TenantDomainLookup } from './clients.js';
+import {
+  UpstreamError,
+  type ExtensionScope,
+  type ExtensionScopeLookup,
+  type TenantDomainLookup,
+} from './clients.js';
 import type { EslApiResult } from './esl/client.js';
 
 /** The part of an ESL client this needs. */
@@ -98,8 +103,22 @@ export interface AgentStatusCommand {
   readonly actor: { readonly id: string; readonly orgId: string };
   /** Self-service: the person's own extension. */
   readonly own: boolean;
+  /**
+   * S9-20: decides, from the queues the agent answers, whether the person may change their status
+   * (`queue.agent.manage` on one of them); throws to refuse. Runs before anything is audited.
+   */
+  readonly authorize?: (queueIds: readonly string[]) => Promise<void>;
   readonly ip?: string;
   readonly requestId?: string;
+}
+
+/** One of an agent's own queues as their home shows it (S9-20): its name, and who waits. */
+export interface MyQueue {
+  readonly queueId: string;
+  /** Empty when pbx-config-service did not name it. */
+  readonly label: string;
+  readonly waiting: number;
+  readonly longestWaitingSince: string | null;
 }
 
 export interface AgentView {
@@ -114,6 +133,8 @@ export interface QueueStatus {
   /** Every queue of the tenant a node has loaded (one that has had a call), as it is now. */
   live(tenantId: string): Promise<LiveQueue[]>;
   agent(tenantId: string, extension: string): Promise<AgentView>;
+  /** The queues an extension answers, with how many wait in each; empty for no agent (S9-20). */
+  mine(tenantId: string, extension: string): Promise<MyQueue[]>;
   setAgentStatus(command: AgentStatusCommand): Promise<AgentView>;
 }
 
@@ -228,9 +249,13 @@ export function createQueueStatus(options: QueueStatusOptions): QueueStatus {
   }
 
   async function agentQueues(tenantId: string, extension: string): Promise<string[] | undefined> {
+    const scope = await scopeOf(tenantId, extension);
+    return scope === undefined ? undefined : [...scope.agentQueueIds];
+  }
+
+  async function scopeOf(tenantId: string, extension: string): Promise<ExtensionScope | undefined> {
     try {
-      const scope = await options.extensionScope(tenantId, extension);
-      return scope === undefined ? undefined : [...scope.agentQueueIds];
+      return await options.extensionScope(tenantId, extension);
     } catch (error) {
       if (error instanceof UpstreamError) {
         throw ProblemError.unavailable('Queues could not be read right now. Try again shortly.', {
@@ -263,7 +288,7 @@ export function createQueueStatus(options: QueueStatusOptions): QueueStatus {
     };
   }
 
-  return {
+  const queueStatus: QueueStatus = {
     async live(tenantId) {
       const domain = await domainOf(tenantId);
       const queues = new Map<
@@ -351,6 +376,25 @@ export function createQueueStatus(options: QueueStatusOptions): QueueStatus {
 
     agent,
 
+    async mine(tenantId, extension) {
+      if (!EXTENSION_NUMBER.test(extension)) return [];
+      const scope = await scopeOf(tenantId, extension);
+      if (scope === undefined || scope.agentQueueIds.length === 0) return [];
+      const labels = new Map((scope.agentQueues ?? []).map((queue) => [queue.id, queue.label]));
+      // A queue no node has loaded yet (G-47) has had no call, so nobody waits in it.
+      const live = new Map(
+        (await queueStatus.live(tenantId)).map((queue) => [queue.queueId, queue]),
+      );
+      return scope.agentQueueIds
+        .map((queueId) => ({
+          queueId,
+          label: labels.get(queueId) ?? '',
+          waiting: live.get(queueId)?.waiting ?? 0,
+          longestWaitingSince: live.get(queueId)?.longestWaitingSince ?? null,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label) || a.queueId.localeCompare(b.queueId));
+    },
+
     async setAgentStatus(command) {
       const { tenantId, extension, status } = command;
       if (!EXTENSION_NUMBER.test(extension)) {
@@ -360,6 +404,7 @@ export function createQueueStatus(options: QueueStatusOptions): QueueStatus {
       if (queueIds === undefined || queueIds.length === 0) {
         throw ProblemError.notFound('That extension answers no queue.', { code: 'not_an_agent' });
       }
+      await command.authorize?.(queueIds);
       const domain = await domainOf(tenantId);
       const targets = await nodes();
       if (targets.length === 0) {
@@ -421,4 +466,5 @@ export function createQueueStatus(options: QueueStatusOptions): QueueStatus {
       return { extension, status, queueIds };
     },
   };
+  return queueStatus;
 }

@@ -152,6 +152,21 @@ describe('BUILT_IN_ROLES', () => {
     expect(BUILT_IN_ROLES.get('tenant_user')?.permissions.has('self.calls')).toBe(true);
   });
 
+  it('queue.agent.manage (S9-20) belongs to tenant_admin and tenant_supervisor (and master_admin), never to support, a reseller or a plain user', () => {
+    for (const roleId of ['master_admin', 'tenant_admin', 'tenant_supervisor']) {
+      expect(
+        BUILT_IN_ROLES.get(roleId as never)?.permissions.has('queue.agent.manage'),
+        roleId,
+      ).toBe(true);
+    }
+    for (const roleId of ['master_support', 'reseller_admin', 'reseller_support', 'tenant_user']) {
+      expect(
+        BUILT_IN_ROLES.get(roleId as never)?.permissions.has('queue.agent.manage'),
+        roleId,
+      ).toBe(false);
+    }
+  });
+
   it('tenant_user holds only the self-service permissions plus the two every signed-in person needs', () => {
     const tenantUser = BUILT_IN_ROLES.get('tenant_user');
     expect([...(tenantUser?.permissions ?? [])].sort()).toEqual(
@@ -269,11 +284,12 @@ describe('support roles read configuration (G-10, S1-15)', () => {
     expect(role?.permissions.has('reseller.read')).toBe(false);
   });
 
-  it('tenant_supervisor reads queues and extensions but manages neither', () => {
+  it('tenant_supervisor reads queues and extensions but manages neither (their agents aside, S9-20)', () => {
     const role = BUILT_IN_ROLES.get('tenant_supervisor');
     expect(role?.permissions.has('queue.read')).toBe(true);
     expect(role?.permissions.has('extension.read')).toBe(true);
-    expect(writes('tenant_supervisor')).toEqual([]);
+    // Signing agents in and out is operating the call centre, not changing its configuration.
+    expect(writes('tenant_supervisor')).toEqual(['queue.agent.manage']);
   });
 
   it('the admin roles list .manage only; the reads come from the implication', () => {

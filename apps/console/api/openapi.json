@@ -21802,6 +21802,72 @@
         ]
       }
     },
+    "/v1/tenants/{tenantId}/me/queues": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "queues"
+                  ],
+                  "properties": {
+                    "queues": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "queueId",
+                          "label",
+                          "waiting",
+                          "longestWaitingSince"
+                        ],
+                        "properties": {
+                          "queueId": {
+                            "type": "string"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "waiting": {
+                            "type": "integer"
+                          },
+                          "longestWaitingSince": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getMyQueues",
+        "tags": [
+          "Me"
+        ]
+      }
+    },
     "/v1/tenants/{tenantId}/live-agents/{extension}/status": {
       "put": {
         "requestBody": {

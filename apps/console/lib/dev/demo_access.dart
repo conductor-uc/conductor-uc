@@ -48,6 +48,7 @@ const _tenantAdmin = [
   'recording.delete',
   'recording.control',
   'call.control',
+  'queue.agent.manage',
   'cdr.read',
   'cdr.export',
   'voicemail.access',
@@ -126,6 +127,7 @@ const _tenantSupervisor = [
   'monitor.barge',
   'recording.control',
   'call.control',
+  'queue.agent.manage',
   'analytics.view',
   ...demoSelfService,
 ];

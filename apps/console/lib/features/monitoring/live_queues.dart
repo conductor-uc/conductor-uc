@@ -84,7 +84,8 @@ final liveQueuesProvider = StreamProvider.autoDispose<List<LiveQueue>?>((ref) {
 });
 
 /// The queues (S9-13): how many wait and for how long, and each agent. A holder
-/// of `call.control` can sign an agent in, out or on a break from here. Shown
+/// of `queue.agent.manage` (S9-20) can sign an agent in, out or on a break from
+/// here; held on one queue only, the service refuses the other queues' agents. Shown
 /// on the attendant console and on Monitoring (S9-15).
 class QueuesPanel extends ConsumerWidget {
   const QueuesPanel({super.key});
@@ -163,8 +164,8 @@ class _AgentChip extends ConsumerWidget {
       _ => l10n.presenceUnknown,
     };
     final chip = Chip(label: Text('${agent.extension} · $label'));
-    // Signing an agent in or out is `call.control`'s (S9-13); others only see.
-    if (!ref.watch(canProvider('call.control'))) {
+    // Signing an agent in or out is `queue.agent.manage`'s (S9-20); others only see.
+    if (!ref.watch(canProvider('queue.agent.manage'))) {
       return KeyedSubtree(
         key: ValueKey('attendant-agent-${agent.extension}'),
         child: chip,

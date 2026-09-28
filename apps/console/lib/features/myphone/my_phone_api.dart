@@ -51,6 +51,26 @@ class MyPhoneApi implements MailboxOps {
   /// Where my phone or app signs in: server, port, transports (S9-11).
   Future<Json> sipEndpoint() => _get('sip-endpoint');
 
+  /// S9-20: the queues I answer as an agent, and how many callers wait in
+  /// each; empty when I answer none.
+  Future<List<Json>> myQueues() async => [
+    for (final q in ((await _get('queues'))['queues'] as List? ?? const []))
+      (q as Map).cast<String, dynamic>(),
+  ];
+
+  /// S9-13: my own status as an agent (`available`, `on_break`,
+  /// `logged_out`, or null until known), as the `*45`/`*46` codes set it.
+  Future<Json> agentStatus() => _get('agent-status');
+
+  Future<Json> setAgentStatus(String status) async {
+    final response = await _dio.put<Object?>(
+      _path('agent-status'),
+      data: {'status': status},
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   /// S9-18: the calls ringing within my pickup groups, oldest first.
   Future<List<Json>> pickupable() async => [
     for (final c in ((await _get('pickup'))['calls'] as List? ?? const []))

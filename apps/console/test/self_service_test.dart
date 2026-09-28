@@ -10,6 +10,7 @@ import 'package:console/features/shell/sections.dart';
 import 'package:console/features/voicemail/voicemail_api.dart';
 import 'package:console/l10n/l10n.dart';
 import 'package:console/features/shell/shell_page.dart' show AppNavigation;
+import 'package:console/features/myphone/my_phone_pages.dart' show MyPhoneTabs;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -281,7 +282,13 @@ void main() {
     testWidgets('sees no administrator tabs on their pages', (tester) async {
       await signInTo(tester, user);
       // The navigation has all three, so the pages do not repeat them as tabs.
-      expect(find.byType(ChoiceChip), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(MyPhoneTabs),
+          matching: find.byType(ChoiceChip),
+        ),
+        findsNothing,
+      );
     });
 
     testWidgets('sees the current call handling, and can change it', (
