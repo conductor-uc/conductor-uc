@@ -174,6 +174,43 @@ describe.skipIf(skipReason !== undefined)('affinity manager (S2-12; 04 §3.3)', 
     expect(await registry.getOwner({ tenantId, kind: 'conf', resourceId })).toBe('fs-0');
   });
 
+  it("S4-03: the node's owner keeps a lease alive after the replica that acquired it is gone", async () => {
+    await addLiveNode('fs-0', 0);
+    const tenantId = randomUUID();
+    const resourceId = randomUUID();
+    const acquirer = newManager();
+    await acquirer.acquire(tenantId, 'queue', resourceId);
+    acquirer.stop(); // Its replica dies: nothing it started renews the lease any more.
+
+    const owner = newManager();
+    const deadline = Date.now() + LEASE_TTL_MS * 3;
+    while (Date.now() < deadline) {
+      expect(await owner.renewHeldBy('fs-0')).toBe(1);
+      await new Promise((resolve) => setTimeout(resolve, RENEW_INTERVAL_MS));
+    }
+    const registry = createAffinityRegistry(redis, keyPrefix);
+    expect(await registry.getOwner({ tenantId, kind: 'queue', resourceId })).toBe('fs-0');
+    expect(await owner.renewHeldBy('fs-1')).toBe(0);
+  });
+
+  it('S4-03: answers from Redis, not its memory, once another replica has released the lease', async () => {
+    await addLiveNode('fs-0', 0);
+    await addLiveNode('fs-1', 0);
+    const tenantId = randomUUID();
+    const resourceId = randomUUID();
+    const acquirer = newManager();
+    expect(
+      await acquirer.acquire(tenantId, 'conf', resourceId, { preferredNodeId: 'fs-0' }),
+    ).toEqual({ nodeId: 'fs-0', acquired: true });
+
+    // Another replica handles fs-0's death and releases its leases.
+    await newManager().handOver('fs-0');
+
+    expect(
+      await acquirer.acquire(tenantId, 'conf', resourceId, { preferredNodeId: 'fs-1' }),
+    ).toEqual({ nodeId: 'fs-1', acquired: true });
+  });
+
   it("S4-02: hands a drained node's leases over, so the next acquire lands on a live node", async () => {
     await addLiveNode('fs-0', 0);
     await addLiveNode('fs-1', 5);

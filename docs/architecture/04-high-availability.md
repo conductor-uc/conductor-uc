@@ -20,6 +20,8 @@
 | NATS JetStream | 3-node cluster, R3 streams | None while quorum holds |
 | S3 | Provider-managed | Uploaders buffer on the spool and retry |
 
+**As built (S4-03).** Every call-control replica connects to every node, so any replica serves any request and sends any node its commands. Each node is owned by one replica through `nodeowner:{nodeId}` (the replica's id, `SET NX PX` 6 s, renewed every 2 s; `node-ownership.ts`). Only the owner handles the node's events (the registry and the outbox; the others drop them), writes its heartbeat, and renews every lease of the queues, parking lots and conference rooms on it, whichever replica acquired them. A replica whose socket to a node drops gives the node up at once; one that shuts down gives up all its nodes; one that dies stops renewing, and another replica takes its nodes within 8 s, inside the heartbeat's 10 s expiry, so the node is never declared dead for it. A new owner first catches up on the node in its event order: it adds the calls the registry lacks (as the rebuild of §5 does) and ends the ones the node no longer has. A lease's holder is always read from Redis, never from the acquiring replica's memory, which another replica's release makes stale. Ownership is first come, not balanced: one replica may own every node. Confirmed live with two replicas: each event of a call written once; the owner killed mid-call, the other took the node 5.5 to 6.2 s later, the call stayed up and in the live list, its hangup reached the live list, and no call record said node failure.
+
 ## 3. Redis data model
 
 All keys are prefixed with `cuc:{env}:`. Times are unix milliseconds.

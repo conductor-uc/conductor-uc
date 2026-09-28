@@ -12,14 +12,14 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
-| S4 HA and scale (11) | 5 | 1 | 5 |
+| S4 HA and scale (11) | 6 | 0 | 5 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **77** | **10** | **40** |
+| **Total (127)** | **78** | **9** | **40** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -109,7 +109,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 |---|---|---|
 | S4-01 | Done | [ADR 0001](../architecture/adr/0001-orchestrator.md) (O-1: Compose per server now, Kubernetes for the application tier later) and [10-production-topology.md](../architecture/10-production-topology.md) (roles, zones, per-component HA and stable endpoints, the S4 task that builds each). Two choices in it are Proposed for the owner: D-016 (MariaDB Galera, single writer) and D-017 (floating addresses and internal load balancers). `infra/deploy` stays empty until S4-11 |
 | S4-02 | Done | G-123: `OPENSIPS_FS_DESTINATION` entries carry the node id and a weight (`seed-dispatcher.py` syncs set 1, keeping a drained node's state); weighted round robin (`ds_select_dst(1, 4)`); OPTIONS probing every 2 s, down after 2 failures. call-control `GET /internal/v1/nodes`, `POST .../nodes/{id}/drain\|undrain`: draining set in Redis, leases handed over at once, `call.node.drain_changed`; telephony-config sets the dispatcher rows inactive and calls MI `ds_set_state`. Live tests `tests/sip/test/dispatcher.test.ts` (3:1 weights, drain and undrain). No console page; one OpenSIPs edge (S4-06) |
-| S4-03 | Partial | leases live in Redis via call-control; compose runs one call-control replica; no multi-replica test |
+| S4-03 | Done | Each FS node is owned by one call-control replica (`nodeowner:{id}`, 6 s lease renewed every 2 s, `node-ownership.ts`): only the owner handles its events, heartbeats it and renews the leases on it; every replica stays connected and serves any request. A dead replica's nodes are taken within 8 s, inside the 10 s heartbeat expiry, and the new owner catches up on the node's calls. Fixed on the way: a replica answered a lease's holder from memory after another replica had released it. Compose runs two replicas behind the `call-control` name. Confirmed live: each event written once, the owner killed mid-call and the node taken over in about 6 s with the call kept. Caveat: ownership is not balanced across replicas |
 | S4-04 | Done | Node death (04 §4): call-control's watcher announces each leg as `call.lost` and clears it, releases the node's leases; telephony-config ends each leg's dialog at the edge by Call-ID; cdr-service writes `node_failure` records; the live views drop the calls (live: both parties sent a BYE about 10.7 s after the node was killed). Redis loss (04 §5): a registry epoch; one replica rebuilds every live call from the nodes (`show channels`, `uuid_dump`), each replica restores the leases it renews (live: the call back 0.6 s after its keys were deleted). The 10 nodes × 1,000 calls target is for S4-09's benchmarks |
 | S4-05 | Done | G-128: a call to a queue, parking lot or conference room leased to another node is hairpinned there through OpenSIPs (`X-Affinity-Node`/`-Target`/`-Tenant`, trusted only from a media node), by `/fs/dialplan` for DIDs and internal dials and by the flow runner's queue node; the owning node serves it directly, never passes it on, and keeps no second call record. OpenSIPs does not read the lease (`cachedb_redis` stays unused). Fixed on the way: a node that came back and died again within 60 s was not handled the second time (S4-04's claim now clears on heartbeat). Confirmed live on two nodes: queue callers and conference callers reaching the resource's node from the other one, one record per call, a phone's forged headers ignored, and the next caller re-leasing on the surviving node after the owner is killed. Caveats: `*8` pickup across nodes is still a miss; the owner accepts G-128 |
 | S4-06 | Not started | no clusterer, dialog replication, or VIP config |

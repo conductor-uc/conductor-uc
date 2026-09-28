@@ -687,6 +687,41 @@ export async function telephonyConfigSql(sql: string): Promise<string> {
   return stdout.trim();
 }
 
+/**
+ * S4-03: runs a read-only query against call-control's own schema as its own DB user and returns
+ * the raw rows (tab-separated, no header). For counting the events it wrote to its outbox, which
+ * keeps them a while after they are published.
+ */
+export async function callControlSql(sql: string): Promise<string> {
+  const { stdout } = await execFileAsync('docker', [
+    'exec',
+    mariadbContainer(),
+    'mariadb',
+    '-u',
+    'call_control',
+    `-p${envOr('CALL_CONTROL_DB_PASSWORD', 'dev-call-control-password')}`,
+    'call_control',
+    '-N',
+    '-B',
+    '-e',
+    sql,
+  ]);
+  return stdout.trim();
+}
+
+/** A key in the stack's Redis (`redis-cli GET`), or undefined when it is not set. */
+export async function redisGet(key: string): Promise<string | undefined> {
+  const { stdout } = await execFileAsync('docker', [
+    'exec',
+    envOr('SIP_TEST_REDIS_CONTAINER', 'conductor-uc-redis-1'),
+    'redis-cli',
+    'GET',
+    key,
+  ]);
+  const value = stdout.trim();
+  return value === '' ? undefined : value;
+}
+
 /** The recording-service container, which S5-12's test stops to make recording decisions unavailable. */
 export function recordingServiceContainer(): string {
   return envOr('SIP_TEST_RECORDING_SERVICE_CONTAINER', 'conductor-uc-recording-service-1');
