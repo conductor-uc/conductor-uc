@@ -72,6 +72,25 @@ class OrgsApi {
     );
   }
 
+  /// S1-16 (G-11): asks for an org's deletion, which suspends it for 30 days
+  /// (`deleteAfter`); a reseller must have no tenants left.
+  Future<Json> requestDeletion({required bool reseller, required String id}) =>
+      _body(
+        _dio.post<Object?>(
+          '${reseller ? '/v1/resellers' : '/v1/tenants'}/$id/deletion',
+          options: _options,
+        ),
+      );
+
+  /// Calls a deletion off: the org is what it was before.
+  Future<Json> cancelDeletion({required bool reseller, required String id}) =>
+      _body(
+        _dio.delete<Object?>(
+          '${reseller ? '/v1/resellers' : '/v1/tenants'}/$id/deletion',
+          options: _options,
+        ),
+      );
+
   /// The reseller's brand, or null when none has been saved yet.
   Future<Json?> brand(String resellerId) async {
     try {

@@ -60,7 +60,13 @@ describe.skipIf(skipReason !== undefined)('org consumer', () => {
 
   /** Returns the published envelope's own id, for a dedupe check that names it exactly. */
   async function publish(
-    type: 'org.tenant.created' | 'org.tenant.suspended' | 'org.tenant.resumed' | 'org.domain.added',
+    type:
+      | 'org.tenant.created'
+      | 'org.tenant.suspended'
+      | 'org.tenant.resumed'
+      | 'org.tenant.deletion_requested'
+      | 'org.tenant.deletion_cancelled'
+      | 'org.domain.added',
     data: Record<string, unknown>,
   ): Promise<string> {
     const contract = telephonyEvents.contract(type);
@@ -217,6 +223,47 @@ describe.skipIf(skipReason !== undefined)('org consumer', () => {
     // Four sequential publish+handle round trips, each up to 3 x 5s pullTimeout
     // attempts under load — the shared 20s default is too tight here.
   }, 40000);
+
+  it('S1-16: asking to delete a tenant takes its domain off; cancelling puts back what it was', async () => {
+    const c = consumer();
+    await c.ensure();
+    const tenantId = crypto.randomUUID();
+    const fqdn = `del-${tenantId.slice(0, 8)}.platform.test`;
+
+    await publish('org.tenant.created', {
+      orgId: tenantId,
+      slug: 'del',
+      name: 'Deleting',
+      parentId: crypto.randomUUID(),
+    });
+    await runOnceUntilHandled(c);
+    await publish('org.domain.added', {
+      domainId: crypto.randomUUID(),
+      fqdn,
+      scope: 'tenant',
+      ownerId: tenantId,
+    });
+    await runOnceUntilHandled(c);
+
+    await publish('org.tenant.deletion_requested', {
+      orgId: tenantId,
+      deleteAfter: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+    });
+    await runOnceUntilHandled(c);
+    expect(await h.opensipsProjection.listDomains()).not.toContain(fqdn);
+    expect((await h.readModel.findTenant(h.db.kysely, tenantId))?.status).toBe('suspended');
+
+    // Cancelled for a tenant that had been suspended: it stays off.
+    await publish('org.tenant.deletion_cancelled', { orgId: tenantId, status: 'suspended' });
+    await runOnceUntilHandled(c);
+    expect(await h.opensipsProjection.listDomains()).not.toContain(fqdn);
+
+    // Cancelled for one that was active: back on the SIP edge.
+    await publish('org.tenant.deletion_cancelled', { orgId: tenantId, status: 'active' });
+    await runOnceUntilHandled(c);
+    expect(await h.opensipsProjection.listDomains()).toContain(fqdn);
+    expect((await h.readModel.findTenant(h.db.kysely, tenantId))?.status).toBe('active');
+  }, 60000);
 
   it('redelivery does not re-project twice (dedupe via consumed_events)', async () => {
     const c = consumer();

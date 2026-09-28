@@ -55,6 +55,8 @@ export function createOrgConsumer(
       'org.tenant.created',
       'org.tenant.suspended',
       'org.tenant.resumed',
+      'org.tenant.deletion_requested',
+      'org.tenant.deletion_cancelled',
       'org.domain.added',
     ],
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
@@ -81,6 +83,8 @@ export function createOrgConsumer(
           return;
         }
 
+        // S1-16 (G-11 (1)): asking for deletion suspends the tenant.
+        case 'org.tenant.deletion_requested':
         case 'org.tenant.suspended': {
           const data = envelope.data as TenantStatusData;
           await readModel.setTenantStatus(trx, data.orgId, 'suspended');
@@ -89,8 +93,11 @@ export function createOrgConsumer(
           return;
         }
 
+        // A cancelled deletion puts back what the tenant was: active, or still suspended.
+        case 'org.tenant.deletion_cancelled':
         case 'org.tenant.resumed': {
-          const data = envelope.data as TenantStatusData;
+          const data = envelope.data as TenantStatusData & { status?: 'active' | 'suspended' };
+          if (data.status === 'suspended') return;
           await readModel.setTenantStatus(trx, data.orgId, 'active');
           const domain = await readModel.findDomain(trx, data.orgId);
           if (domain !== undefined) await projection.activateDomain(domain.fqdn, data.orgId);

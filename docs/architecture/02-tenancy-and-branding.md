@@ -23,7 +23,7 @@ Invariants, enforced in `org-service` and backed by DB constraints where possibl
 | Reseller | Tenants (own) | Own tenants | Also configures tenant trunks, domains, and base limits |
 | Tenant admin | Users, extensions, call flows, and so on inside the tenant | Same | Cannot create orgs |
 
-Org lifecycle: `active` → `suspended` → `active`, and from either state → `pending_deletion` → `deleted` (hard delete after a retention window, with a data export offered first).
+Org lifecycle: `active` → `suspended` → `active`, and from either state → `pending_deletion` → `deleted` (hard delete after a retention window, with a data export offered first). S1-16 (G-11): the window is 30 days, cancellable (the org returns to what it was); `pending_deletion` is suspended for everything that honours a suspension; a reseller is deleted only once it has no tenants.
 
 - **Suspending** a tenant blocks console login for that tenant and rejects SIP registration and inbound and outbound calls for its domain. `telephony-config` removes the domain from the OpenSIPs projection. Data is retained.
 - **Suspending** a reseller suspends all of its tenants.

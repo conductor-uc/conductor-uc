@@ -1,3 +1,4 @@
+import type { ColumnType } from '@cuc/db';
 import type { EventTables } from '@cuc/events';
 
 export type OrgType = 'master' | 'reseller' | 'tenant';
@@ -46,6 +47,17 @@ export interface OrgServiceDb extends EventTables {
     created_at: Date;
     updated_at: Date;
     version: number;
+    /** S1-16 (G-11): when deletion was asked for; null unless `pending_deletion` or `deleted`. */
+    deletion_requested_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
+    /** When a `pending_deletion` org is deleted, 30 days after it was asked. */
+    delete_after: ColumnType<Date | null, Date | null | undefined, Date | null>;
+    /** What a cancelled deletion puts back: `active` or `suspended`. */
+    status_before_deletion: ColumnType<
+      OrgStatus | null,
+      OrgStatus | null | undefined,
+      OrgStatus | null
+    >;
+    deleted_at: ColumnType<Date | null, Date | null | undefined, Date | null>;
   };
 
   /**

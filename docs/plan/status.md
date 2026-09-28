@@ -9,7 +9,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | Stage | Done | Partial | Not started |
 |---|---|---|---|
 | S0 Foundations (10) | 10 | 0 | 0 |
-| S1 Orgs, identity, single-node (16) | 15 | 0 | 1 |
+| S1 Orgs, identity, single-node (16) | 15 | 1 | 0 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (11) | 1 | 3 | 7 |
@@ -19,7 +19,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **72** | **12** | **43** |
+| **Total (127)** | **72** | **13** | **42** |
 
 Milestones: M1 (S1) reached except organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -59,7 +59,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S1-13 | Done | `telephony-config` `routes/fs.routes.ts` (`/fs/directory`, `/fs/dialplan`) |
 | S1-14 | Done | `tests/sip` (`scenarios.test.ts`, `register.xml`, `answer_call.xml`); CI `sip` job |
 | S1-15 | Done | G-10: `packages/authz` `READ_TWINS` (21 `.read` permissions, `.manage` implies `.read`), support roles; identity `permission-lookup.ts` and `/me` expand implied reads; `@cuc/http` resolver; 55 GET routes declare the read; console `core/permissions.dart` (`holds`), sections and read-only screens (`test/read_only_test.dart`) |
-| S1-16 | Not started | Organisation deletion (G-11) |
+| S1-16 | Partial | Lifecycle built: org-service `POST`/`DELETE /v1/{tenants,resellers}/{id}/deletion` (pending_deletion for 30 days, suspended meanwhile, cancellable back to what it was; a reseller only without tenants; only the master or the owning reseller), an hourly job marks it `deleted` and emits `org.{type}.deleted`; telephony-config suspends on request; console **Delete…** (typed confirmation) and **Cancel deletion**. Not yet: each service removing the org's data on `org.*.deleted`, and the export (G-11 (2), (3)) |
 
 ## Stage 2
 

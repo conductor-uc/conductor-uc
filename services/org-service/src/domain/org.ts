@@ -78,11 +78,9 @@ export class InvalidOrgStatusTransitionError extends Error {
 }
 
 /**
- * The lifecycle from 02 §2: `active` <-> `suspended`. `pending_deletion` and
- * `deleted` are reachable states (05 §3.1's `status` column allows them) but
- * no stage task yet builds the hard-delete-after-retention-window flow that
- * would transition into them — see decisions.md G-11. Suspend and resume are
- * therefore the only transitions this validates for now.
+ * The lifecycle from 02 §2: `active` <-> `suspended`, and from either
+ * `pending_deletion` (S1-16, G-11), which is cancellable for
+ * {@link DELETION_GRACE_DAYS} days and then becomes `deleted` for good.
  */
 export function assertCanSuspend(status: OrgStatus): void {
   if (status !== 'active') {
@@ -98,4 +96,34 @@ export function assertCanResume(status: OrgStatus): void {
       `Cannot resume an org that is '${status}'; only 'suspended' orgs can be resumed.`,
     );
   }
+}
+
+/** G-11: how long a deletion can be called off, and the export downloaded. */
+export const DELETION_GRACE_DAYS = 30;
+
+/** Deletion can be asked of an `active` or `suspended` org (G-11 (1)). */
+export function assertCanRequestDeletion(status: OrgStatus): void {
+  if (status !== 'active' && status !== 'suspended') {
+    throw new InvalidOrgStatusTransitionError(
+      `Cannot delete an org that is '${status}'; only 'active' or 'suspended' orgs can be.`,
+    );
+  }
+}
+
+export function assertCanCancelDeletion(status: OrgStatus): void {
+  if (status !== 'pending_deletion') {
+    throw new InvalidOrgStatusTransitionError(
+      `There is no deletion to cancel for an org that is '${status}'.`,
+    );
+  }
+}
+
+/** When a deletion asked for at [requestedAt] goes ahead. */
+export function deleteAfter(requestedAt: Date): Date {
+  return new Date(requestedAt.getTime() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
+}
+
+/** G-11 (4): a reseller is deleted only once it has no tenants left. */
+export class OrgHasTenantsError extends Error {
+  override readonly name = 'OrgHasTenantsError';
 }

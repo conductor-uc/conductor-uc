@@ -6,8 +6,12 @@ import { enqueueEvent } from '@cuc/events';
 
 import { tenantDomainFor } from '../domain/domain.js';
 import {
+  assertCanCancelDeletion,
+  assertCanRequestDeletion,
   assertCanResume,
   assertCanSuspend,
+  deleteAfter,
+  OrgHasTenantsError,
   assertValidParentType,
   InvalidOrgHierarchyError,
   resellerIdFor,
@@ -29,6 +33,8 @@ export interface Org {
   readonly country: string;
   /** Parsed from the `limits` JSON column. */
   readonly limits: Record<string, unknown>;
+  /** S1-16: when a `pending_deletion` org is deleted; null otherwise. */
+  readonly deleteAfter: Date | null;
 }
 
 const ORG_COLUMNS = [
@@ -43,6 +49,8 @@ const ORG_COLUMNS = [
   'country',
   'limits',
   'version',
+  'delete_after',
+  'status_before_deletion',
 ] as const;
 
 interface OrgRow {
@@ -57,6 +65,8 @@ interface OrgRow {
   country: string;
   limits: string;
   version: number;
+  delete_after: Date | null;
+  status_before_deletion: OrgStatus | null;
 }
 
 export class MasterAlreadyExistsError extends Error {
@@ -139,6 +149,7 @@ export function createOrgRepo(db: Database<OrgServiceDb>, options: CreateOrgRepo
       timezone: row.timezone,
       country: row.country,
       limits: parseLimits(row.limits),
+      deleteAfter: row.delete_after,
     };
   }
 
@@ -223,6 +234,7 @@ export function createOrgRepo(db: Database<OrgServiceDb>, options: CreateOrgRepo
         timezone: 'UTC',
         country: 'US',
         limits: {},
+        deleteAfter: null,
       };
     },
 
@@ -251,10 +263,14 @@ export function createOrgRepo(db: Database<OrgServiceDb>, options: CreateOrgRepo
       return db.kysely.transaction().execute(async (trx) => {
         const parent = await trx
           .selectFrom('orgs')
-          .select(['id', 'type'])
+          .select(['id', 'type', 'status'])
           .where('id', '=', input.parentId)
           .executeTakeFirst();
         if (parent === undefined) throw new ParentNotFoundError(input.parentId);
+        // S1-16: nothing new under an org on its way out.
+        if (parent.status === 'pending_deletion' || parent.status === 'deleted') {
+          throw new ParentNotFoundError(input.parentId);
+        }
 
         assertValidParentType(type, parent.type);
         const resellerId = resellerIdFor(type, parent);
@@ -332,6 +348,7 @@ export function createOrgRepo(db: Database<OrgServiceDb>, options: CreateOrgRepo
           timezone: 'UTC',
           country: 'US',
           limits: {},
+          deleteAfter: null,
         };
       });
     },
@@ -461,6 +478,161 @@ export function createOrgRepo(db: Database<OrgServiceDb>, options: CreateOrgRepo
 
         return toOrg({ ...existing, status: 'active' });
       });
+    },
+
+    /**
+     * S1-16 (G-11 (1), (4)): `active` or `suspended` -> `pending_deletion`,
+     * which suspends the org (telephony-config takes its domain off the SIP
+     * edge as it does for a suspension) and sets `delete_after` 30 days on.
+     * A reseller with tenants not yet deleted is refused.
+     */
+    async requestDeletion(ctx: DbContext, id: string, now: Date = new Date()): Promise<Org> {
+      return db.kysely.transaction().execute(async (trx) => {
+        const existing = await trx
+          .selectFrom('orgs')
+          .select(ORG_COLUMNS)
+          .where('id', '=', id)
+          .forUpdate()
+          .executeTakeFirst();
+        if (existing === undefined) throw new OrgNotFoundError(id);
+        if (existing.type === 'master') {
+          throw new InvalidOrgHierarchyError('The master org cannot be deleted.');
+        }
+        assertCanRequestDeletion(existing.status);
+        if (existing.type === 'reseller') {
+          const tenant = await trx
+            .selectFrom('orgs')
+            .select('id')
+            .where('parent_id', '=', id)
+            .where('status', '!=', 'deleted')
+            .executeTakeFirst();
+          if (tenant !== undefined) {
+            throw new OrgHasTenantsError('Delete every tenant of this reseller first.');
+          }
+        }
+
+        const after = deleteAfter(now);
+        await trx
+          .updateTable('orgs')
+          .set({
+            status: 'pending_deletion',
+            status_before_deletion: existing.status,
+            deletion_requested_at: now,
+            delete_after: after,
+            updated_at: now,
+            version: existing.version + 1,
+          })
+          .where('id', '=', id)
+          .execute();
+
+        await enqueueEvent(trx, orgEvents, {
+          type:
+            existing.type === 'reseller'
+              ? 'org.reseller.deletion_requested'
+              : 'org.tenant.deletion_requested',
+          data: { orgId: id, deleteAfter: after.toISOString() },
+          ...eventMeta(ctx),
+        });
+
+        return toOrg({
+          ...existing,
+          status: 'pending_deletion',
+          delete_after: after,
+          status_before_deletion: existing.status,
+        });
+      });
+    },
+
+    /** S1-16 (G-11 (1)): calls a deletion off, putting back the status the org had. */
+    async cancelDeletion(ctx: DbContext, id: string, now: Date = new Date()): Promise<Org> {
+      return db.kysely.transaction().execute(async (trx) => {
+        const existing = await trx
+          .selectFrom('orgs')
+          .select(ORG_COLUMNS)
+          .where('id', '=', id)
+          .forUpdate()
+          .executeTakeFirst();
+        if (existing === undefined) throw new OrgNotFoundError(id);
+        assertCanCancelDeletion(existing.status);
+        const restored: OrgStatus =
+          existing.status_before_deletion === 'suspended' ? 'suspended' : 'active';
+
+        await trx
+          .updateTable('orgs')
+          .set({
+            status: restored,
+            status_before_deletion: null,
+            deletion_requested_at: null,
+            delete_after: null,
+            updated_at: now,
+            version: existing.version + 1,
+          })
+          .where('id', '=', id)
+          .execute();
+
+        await enqueueEvent(trx, orgEvents, {
+          type:
+            existing.type === 'reseller'
+              ? 'org.reseller.deletion_cancelled'
+              : 'org.tenant.deletion_cancelled',
+          data: { orgId: id, status: restored },
+          ...eventMeta(ctx),
+        });
+
+        return toOrg({
+          ...existing,
+          status: restored,
+          delete_after: null,
+          status_before_deletion: null,
+        });
+      });
+    },
+
+    /**
+     * S1-16 (G-11 (3)): every `pending_deletion` org whose `delete_after` has
+     * passed becomes `deleted`, and `org.{type}.deleted` tells every service
+     * to remove its data. Each org is claimed with a conditional update, so
+     * two copies running at once delete it once. A reseller that has gained a
+     * tenant since (it cannot through this service, but a tenant still being
+     * deleted counts) waits for the next pass. Answers the orgs deleted.
+     */
+    async finishDueDeletions(now: Date = new Date()): Promise<string[]> {
+      const due = await db.kysely
+        .selectFrom('orgs')
+        .select(['id', 'type'])
+        .where('status', '=', 'pending_deletion')
+        .where('delete_after', '<=', now)
+        .orderBy('delete_after')
+        .limit(100)
+        .execute();
+      const deleted: string[] = [];
+      for (const org of due) {
+        const done = await db.kysely.transaction().execute(async (trx) => {
+          if (org.type === 'reseller') {
+            const tenant = await trx
+              .selectFrom('orgs')
+              .select('id')
+              .where('parent_id', '=', org.id)
+              .where('status', '!=', 'deleted')
+              .executeTakeFirst();
+            if (tenant !== undefined) return false;
+          }
+          const claimed = await trx
+            .updateTable('orgs')
+            .set({ status: 'deleted', deleted_at: now, updated_at: now })
+            .where('id', '=', org.id)
+            .where('status', '=', 'pending_deletion')
+            .executeTakeFirst();
+          if (Number(claimed.numUpdatedRows) !== 1) return false;
+          await enqueueEvent(trx, orgEvents, {
+            type: org.type === 'reseller' ? 'org.reseller.deleted' : 'org.tenant.deleted',
+            data: { orgId: org.id },
+          });
+          return true;
+        });
+        if (done) deleted.push(org.id);
+      }
+      return deleted;
     },
   };
 }

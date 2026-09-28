@@ -7548,5 +7548,83 @@
   "keyStatusExpired": "Ended",
   "@keyStatusExpired": {
     "description": "API keys page (software access for an organization). Status chip: past its end date."
+  },
+  "problemResellerHasTenants": "Delete this reseller's tenants first.",
+  "@problemResellerHasTenants": {
+    "description": "Problem shown when deleting a reseller that still has tenants."
+  },
+  "orgDelete": "Delete\u2026",
+  "@orgDelete": {
+    "description": "Resellers and tenants list. Menu item: start deleting an organization."
+  },
+  "orgDeleteTitle": "Delete {name}?",
+  "@orgDeleteTitle": {
+    "description": "Resellers and tenants list. Delete dialog title.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Acme Dental"
+      }
+    }
+  },
+  "orgDeleteBody": "It is suspended at once: nobody can sign in and its phones stop working. For 30 days an administrator can still download an export of its settings, calls, recordings and voicemail, and you can cancel. After that everything it holds is deleted for good.",
+  "@orgDeleteBody": {
+    "description": "Resellers and tenants list. Delete dialog explanation."
+  },
+  "orgDeleteConfirmField": "Type {slug} to confirm",
+  "@orgDeleteConfirmField": {
+    "description": "Resellers and tenants list. Field label: type the organization's short name to confirm deleting it.",
+    "placeholders": {
+      "slug": {
+        "type": "String",
+        "example": "acme-dental"
+      }
+    }
+  },
+  "orgDeleteButton": "Delete",
+  "@orgDeleteButton": {
+    "description": "Resellers and tenants list. Dialog button: delete the organization (after 30 days)."
+  },
+  "orgDeleteRequested": "{name} will be deleted on {date}.",
+  "@orgDeleteRequested": {
+    "description": "Resellers and tenants list. Confirmation after asking to delete.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Acme Dental"
+      },
+      "date": {
+        "type": "String",
+        "example": "28 Oct 2026"
+      }
+    }
+  },
+  "orgCancelDeletion": "Cancel deletion",
+  "@orgCancelDeletion": {
+    "description": "Resellers and tenants list. Menu item: stop a deletion that is waiting."
+  },
+  "orgDeletionCancelled": "{name} will not be deleted.",
+  "@orgDeletionCancelled": {
+    "description": "Resellers and tenants list. Confirmation after cancelling a deletion.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Acme Dental"
+      }
+    }
+  },
+  "orgStatusSuspended": "suspended",
+  "@orgStatusSuspended": {
+    "description": "Resellers and tenants list. Status shown after an organization's short name."
+  },
+  "orgStatusDeleting": "deleted on {date}",
+  "@orgStatusDeleting": {
+    "description": "Resellers and tenants list. Status of an organization waiting to be deleted.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "28 Oct 2026"
+      }
+    }
   }
 }

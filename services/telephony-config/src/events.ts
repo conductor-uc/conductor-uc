@@ -42,6 +42,23 @@ export const telephonyEvents = defineEvents({
     description: 'A suspended tenant was returned to active.',
     data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
   },
+  /** S1-16 (G-11): deletion asked for; the tenant is suspended until it happens. */
+  'org.tenant.deletion_requested': {
+    schemaVersion: 1,
+    description: 'Deletion of a tenant was asked for; it is suspended until then.',
+    data: Type.Object({
+      orgId: Type.String({ minLength: 1 }),
+      deleteAfter: Type.String({ format: 'date-time' }),
+    }),
+  },
+  'org.tenant.deletion_cancelled': {
+    schemaVersion: 1,
+    description: "A tenant's deletion was cancelled; it is back to the status it had.",
+    data: Type.Object({
+      orgId: Type.String({ minLength: 1 }),
+      status: Type.Union([Type.Literal('active'), Type.Literal('suspended')]),
+    }),
+  },
   'org.certificate.issued': {
     schemaVersion: 1,
     description:

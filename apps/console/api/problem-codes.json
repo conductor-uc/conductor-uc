@@ -176,6 +176,7 @@
   "recording_unavailable",
   "refresh_token_reused",
   "reseller_cannot_link_user",
+  "reseller_has_tenants",
   "reseller_lifecycle_denied",
   "reseller_not_found",
   "reseller_private_data_denied",

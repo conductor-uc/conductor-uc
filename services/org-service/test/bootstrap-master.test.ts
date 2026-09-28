@@ -28,6 +28,7 @@ const MASTER: Org = {
   timezone: 'UTC',
   country: 'US',
   limits: {},
+  deleteAfter: null,
 };
 
 const ADMIN = {

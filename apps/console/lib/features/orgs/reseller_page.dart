@@ -47,6 +47,7 @@ class _Detail extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final suspended = reseller['status'] != 'active';
+    final deleting = reseller['status'] == 'pending_deletion';
     final id = '${reseller['id']}';
     return DefaultTabController(
       length: 6,
@@ -58,7 +59,8 @@ class _Detail extends ConsumerWidget {
             PageHeader(
               title: '${reseller['name']}',
               subtitle:
-                  '${reseller['slug']} · ${suspended ? reseller['status'] : 'active'}'
+                  '${reseller['slug']}'
+                  '${suspended ? ' · ${orgStatusText(context.l10n, reseller)}' : ''}'
                   '${reseller['timezone'] == null ? '' : ' · ${reseller['timezone']}'}',
               leading: IconButton(
                 tooltip: context.l10n.orgBackToResellers,
@@ -72,13 +74,30 @@ class _Detail extends ConsumerWidget {
                         orgAction(context, ref, reseller, true, 'edit'),
                     child: Text(context.l10n.commonEdit),
                   ),
+                  if (!deleting)
+                    OutlinedButton(
+                      onPressed: () =>
+                          orgAction(context, ref, reseller, true, 'suspend'),
+                      child: Text(
+                        suspended
+                            ? context.l10n.orgResume
+                            : context.l10n.orgSuspend,
+                      ),
+                    ),
+                  // S1-16: only once it has no tenants; the service says so otherwise.
                   OutlinedButton(
-                    onPressed: () =>
-                        orgAction(context, ref, reseller, true, 'suspend'),
+                    key: const ValueKey('reseller-delete'),
+                    onPressed: () => orgAction(
+                      context,
+                      ref,
+                      reseller,
+                      true,
+                      deleting ? 'cancel-deletion' : 'delete',
+                    ),
                     child: Text(
-                      suspended
-                          ? context.l10n.orgResume
-                          : context.l10n.orgSuspend,
+                      deleting
+                          ? context.l10n.orgCancelDeletion
+                          : context.l10n.orgDelete,
                     ),
                   ),
                 ],
