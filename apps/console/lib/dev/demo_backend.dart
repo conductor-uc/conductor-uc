@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -8,6 +9,55 @@ import 'demo_access.dart';
 import 'demo_operations.dart';
 import 'demo_pbx.dart';
 import 'demo_realtime.dart';
+
+/// S4-13: a made-up chart, shaped as the gateway answers one: two nodes for the
+/// per-node charts, a few services for the per-service ones, one line else.
+Map<String, Object?> demoHistory(String chart, String range) {
+  final seconds = switch (range) {
+    '6h' => 21600,
+    '24h' => 86400,
+    '7d' => 604800,
+    _ => 3600,
+  };
+  final step = seconds ~/ 120;
+  final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final (unit, labels, base) = switch (chart) {
+    'calls-by-node' || 'sessions-by-node' => ('count', ['fs-1', 'fs-2'], 12.0),
+    'node-cpu' => ('percent', ['fs-1', 'fs-2'], 35.0),
+    'request-rate' || 'error-rate' => (
+      'perSecond',
+      ['api-gateway', 'pbx-config-service', 'call-control'],
+      chart == 'error-rate' ? 0.2 : 8.0,
+    ),
+    'latency-p95' => (
+      'seconds',
+      ['api-gateway', 'pbx-config-service', 'call-control'],
+      0.08,
+    ),
+    'outbox-pending' ||
+    'consumer-backlog' => ('count', ['pbx-config-service'], 3.0),
+    _ => ('count', [''], 40.0),
+  };
+  return {
+    'chart': chart,
+    'unit': unit,
+    'range': range,
+    'stepSeconds': step,
+    'series': [
+      for (final (i, label) in labels.indexed)
+        {
+          'label': label,
+          'points': [
+            for (var t = 0; t <= 120; t++)
+              [
+                now - seconds + t * step,
+                base * (1 + 0.4 * math.sin((t + i * 17) / 9)) * (1 + i * 0.3),
+              ],
+          ],
+        },
+    ],
+  };
+}
 
 /// The demo org's API keys (S1-08), newest first.
 final demoApiKeys = <Map<String, Object?>>[];
@@ -386,6 +436,28 @@ class _DemoAdapter implements HttpClientAdapter {
     if (path == '/v1/platform/overview' ||
         path.startsWith('/v1/platform/nodes/')) {
       return _operationsRoute(options);
+    }
+    // S4-13: one chart of the catalog, made up; `master-nohistory@` sees a
+    // platform that keeps no history.
+    final metric = RegExp(r'^/v1/platform/metrics/([^/]+)$').firstMatch(path);
+    if (metric != null) {
+      if (_orgType != 'master') {
+        return _problem(
+          403,
+          'forbidden',
+          'Only the master can see operations.',
+        );
+      }
+      if (_email.startsWith('master-nohistory')) {
+        return _problem(
+          503,
+          'history_unavailable',
+          'The platform keeps no history.',
+        );
+      }
+      return _json(
+        demoHistory(metric[1]!, '${options.queryParameters['range'] ?? '1h'}'),
+      );
     }
     return null;
   }

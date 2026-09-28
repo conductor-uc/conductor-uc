@@ -12,14 +12,14 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
-| S4 HA and scale (11) | 1 | 3 | 7 |
+| S4 HA and scale (11) | 3 | 1 | 7 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **73** | **12** | **42** |
+| **Total (127)** | **75** | **10** | **42** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -118,8 +118,8 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S4-09 | Not started | no capacity benchmarks or sizing guide (`telephony-config/src/bench.ts` is unrelated) |
 | S4-10 | Partial | O-7 recorded as deferred in decisions.md; no RTPengine |
 | S4-11 | Not started | `infra/deploy` empty |
-| S4-12 | In progress | G-124: `platform.observe`/`platform.operate`; `/statusz` on every service; `GET /v1/platform/overview`; audited drain, return and weight routes; the console's Operations section |
-| S4-13 | In progress | backend built: `/metrics` on every service (OpenTelemetry), node, OpenSIPs, dispatcher, consumer and store gauges, Prometheus in compose (15 days), `GET /v1/platform/metrics/{chart}` from a fixed catalog; the console's History tab not yet |
+| S4-12 | Done | G-124: `platform.observe`/`platform.operate`; `/statusz` on every service; `GET /v1/platform/overview`; audited drain, return and weight routes; the console's Operations section (Overview, Services, Media nodes, Signalling, Events, Data stores; History with S4-13). Confirmed live |
+| S4-13 | Done | `/metrics` on every service (OpenTelemetry), node, OpenSIPs, dispatcher, consumer and store gauges, Prometheus in compose (15 days), `GET /v1/platform/metrics/{chart}` from a fixed catalog; the console's **History** tab (every chart over an hour to a week, a line per node, service or consumer; says so once when no history is kept). Confirmed live against Prometheus |
 
 ## Stage 5
 

@@ -300,7 +300,77 @@ class OperationsApi {
     data: {'weight': weight},
     options: _options,
   );
+
+  /// S4-13: one chart of the fixed catalog over [range] (`1h`, `6h`, `24h`,
+  /// `7d`), from Prometheus through the gateway. 503 `history_unavailable`
+  /// when the platform keeps no history.
+  Future<HistoryChart> history(String chart, String range) async {
+    final response = await _dio.get<Object?>(
+      '/v1/platform/metrics/$chart',
+      queryParameters: {'range': range},
+      options: _options,
+    );
+    return HistoryChart.fromJson(
+      (response.data as Map).cast<String, dynamic>(),
+    );
+  }
 }
+
+/// One chart's lines over a range (11 §3).
+class HistoryChart {
+  const HistoryChart({required this.unit, required this.series});
+
+  /// `count`, `percent`, `perSecond` or `seconds`.
+  final String unit;
+  final List<HistorySeries> series;
+
+  factory HistoryChart.fromJson(Map<String, dynamic> json) => HistoryChart(
+    unit: '${json['unit']}',
+    series: [
+      for (final s in (json['series'] as List? ?? const []))
+        HistorySeries(
+          label: '${(s as Map)['label'] ?? ''}',
+          points: [
+            for (final p in (s['points'] as List? ?? const []))
+              (
+                DateTime.fromMillisecondsSinceEpoch(
+                  ((p as List)[0] as num).toInt() * 1000,
+                ),
+                (p[1] as num).toDouble(),
+              ),
+          ],
+        ),
+    ],
+  );
+}
+
+class HistorySeries {
+  const HistorySeries({required this.label, required this.points});
+
+  /// The node, service or consumer; empty for a chart with one line.
+  final String label;
+  final List<(DateTime, double)> points;
+}
+
+/// The charts of the catalog, in the order the History tab shows them.
+const historyCharts = [
+  'calls-by-node',
+  'sessions-by-node',
+  'node-cpu',
+  'registrations',
+  'dialogs',
+  'request-rate',
+  'error-rate',
+  'latency-p95',
+  'outbox-pending',
+  'consumer-backlog',
+];
+
+/// One chart over one range, asked for when shown.
+final historyChartProvider = FutureProvider.autoDispose
+    .family<HistoryChart, (String, String)>(
+      (ref, key) => ref.read(operationsApiProvider).history(key.$1, key.$2),
+    );
 
 final operationsApiProvider = Provider.autoDispose<OperationsApi>((ref) {
   final session = ref.watch(sessionProvider);

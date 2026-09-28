@@ -95,6 +95,7 @@ One **Operations** section for the master (replacing Platform health), polling t
 - **Services:** every service with its status, response time, version, uptime, memory, outbox, and failing checks.
 - **Media nodes:** one card per node: status and dispatcher state, calls, sessions against its maximum, CPU, leases, weight; **Drain**, **Return to service** and **Set weight**, each confirmed, for holders of `platform.operate`.
 - **Signalling, Events, Data stores:** the corresponding sections as tables and charts.
+- **History** (S4-13): every chart of the catalog (§3) over the last hour, 6 hours, day or week, one line per node, service or consumer with a legend, a crosshair tooltip, the date on the axis for a range of days; when the platform keeps no history (`history_unavailable`) the tab says so once, and the other tabs are unaffected.
 
 Charts use `fl_chart` (MIT).
 
@@ -126,4 +127,4 @@ A Prometheus server (`prom/prometheus`, Apache-2.0) scrapes every service every 
 | `latency-p95` | 95th percentile response time | service |
 | `outbox-pending`, `consumer-backlog` | events waiting to be published, and to be consumed | service, consumer |
 
-Answers `{chart, unit, range, stepSeconds, series: [{label, points: [[unixSeconds, value], ...]}]}`; 404 `unknown_chart`; 503 `history_unavailable` when the gateway has no `PROMETHEUS_URL` or Prometheus does not answer, and the console keeps drawing only what it has seen since it opened. The console's History tab is the next step.
+Answers `{chart, unit, range, stepSeconds, series: [{label, points: [[unixSeconds, value], ...]}]}`; 404 `unknown_chart`; 503 `history_unavailable` when the gateway has no `PROMETHEUS_URL` or Prometheus does not answer, and the console keeps drawing only what it has seen since it opened. The console's **History** tab (§2.3) draws them.

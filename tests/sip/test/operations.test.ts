@@ -124,6 +124,37 @@ describe.skipIf(skipReason !== undefined)('S4-12 operations console (live)', () 
     expect((await node()).draining).toBe(false);
   });
 
+  it('S4-13: charts history from Prometheus, a media node per line', async () => {
+    // Prometheus scrapes every 15 s; the stack has been up long enough to have points.
+    await expect
+      .poll(
+        async () => {
+          const response = await dockerCurlJson(
+            'GET',
+            `${GATEWAY_URL}/v1/platform/metrics/calls-by-node?range=1h`,
+            undefined,
+            as(operator),
+          );
+          expect(response.status, JSON.stringify(response.json)).toBe(200);
+          const chart = response.json as {
+            unit: string;
+            series: { label: string; points: unknown[] }[];
+          };
+          expect(chart.unit).toBe('count');
+          return chart.series.filter((s) => s.points.length > 0).map((s) => s.label);
+        },
+        { timeout: 60_000, interval: 5_000 },
+      )
+      .toContain(NODE);
+    const unknown = await dockerCurlJson(
+      'GET',
+      `${GATEWAY_URL}/v1/platform/metrics/not-a-chart?range=1h`,
+      undefined,
+      as(operator),
+    );
+    expect(unknown.status).toBe(404);
+  }, 90_000);
+
   it("changes a node's weight in OpenSIPs", async () => {
     const changed = await act('PUT', `/v1/platform/nodes/${NODE}/weight`, { weight: 3 });
     expect(changed.status, JSON.stringify(changed.json)).toBe(200);

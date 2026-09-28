@@ -7696,5 +7696,81 @@
   "expDownload": "Download",
   "@expDownload": {
     "description": "Export data page (take an organization's data away, above all before it is deleted). Button: download the file."
+  },
+  "opsTabHistory": "History",
+  "@opsTabHistory": {
+    "description": "Operations console tab: charts of the platform over past hours or days."
+  },
+  "opsHistoryRange": "Over the last",
+  "@opsHistoryRange": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Label before the choice of time range."
+  },
+  "opsRangeHour": "hour",
+  "@opsRangeHour": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Time range choice."
+  },
+  "opsRangeSixHours": "6 hours",
+  "@opsRangeSixHours": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Time range choice."
+  },
+  "opsRangeDay": "day",
+  "@opsRangeDay": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Time range choice."
+  },
+  "opsRangeWeek": "week",
+  "@opsRangeWeek": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Time range choice."
+  },
+  "opsHistoryUnavailable": "History is not being kept",
+  "@opsHistoryUnavailable": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Shown when the platform has no metrics store."
+  },
+  "opsHistoryUnavailableHelp": "The platform keeps charts over time once its metrics store is set up (PROMETHEUS_URL on the gateway). The other tabs show what is happening now.",
+  "@opsHistoryUnavailableHelp": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Explanation when history is not kept. PROMETHEUS_URL is a setting name; keep it as is."
+  },
+  "opsHistoryEmpty": "Nothing measured in this range yet.",
+  "@opsHistoryEmpty": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). A chart with no data."
+  },
+  "opsChartCallsByNode": "Calls on each media node",
+  "@opsChartCallsByNode": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "opsChartSessionsByNode": "Sessions on each media node",
+  "@opsChartSessionsByNode": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "opsChartNodeCpu": "Media node CPU in use",
+  "@opsChartNodeCpu": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "opsChartRegistrations": "Registered phones",
+  "@opsChartRegistrations": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "opsChartDialogs": "Calls at the SIP edge",
+  "@opsChartDialogs": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "opsChartRequestRate": "Requests per second, by service",
+  "@opsChartRequestRate": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "opsChartErrorRate": "Errors per second, by service",
+  "@opsChartErrorRate": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "opsChartLatency": "Slowest responses (95th percentile), by service",
+  "@opsChartLatency": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "opsChartOutbox": "Events waiting to be published, by service",
+  "@opsChartOutbox": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "opsChartConsumerBacklog": "Events waiting to be handled, by consumer",
+  "@opsChartConsumerBacklog": {
+    "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
   }
 }

@@ -401,3 +401,161 @@ class TrendChart extends StatelessWidget {
     );
   }
 }
+
+/// S4-13: a chart of the catalog over a range, one line per node, service or
+/// consumer, with a legend when there is more than one. Time along the bottom
+/// (the date too for a range of days), and a crosshair tooltip naming each
+/// line.
+class HistoryLines extends StatelessWidget {
+  const HistoryLines({
+    super.key,
+    required this.series,
+    required this.format,
+    this.height = 180,
+  });
+
+  final List<(String label, List<(DateTime, double)> points)> series;
+  final String Function(double value) format;
+  final double height;
+
+  /// Distinct, readable on light and dark alike.
+  static const _palette = [
+    Color(0xFF1E88E5),
+    Color(0xFFE53935),
+    Color(0xFF43A047),
+    Color(0xFFFB8C00),
+    Color(0xFF8E24AA),
+    Color(0xFF00ACC1),
+    Color(0xFF6D4C41),
+    Color(0xFFD81B60),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final all = [for (final s in series) ...s.$2];
+    if (all.length < 2) {
+      return SizedBox(
+        height: height,
+        child: Center(
+          child: Text(context.l10n.opsHistoryEmpty, style: _axisStyle(theme)),
+        ),
+      );
+    }
+    final start = all.map((p) => p.$1).reduce((a, b) => a.isBefore(b) ? a : b);
+    final end = all.map((p) => p.$1).reduce((a, b) => a.isAfter(b) ? a : b);
+    double x(DateTime at) => at.difference(start).inSeconds.toDouble();
+    final span = math.max(x(end), 1.0);
+    final days = end.difference(start).inHours > 36;
+    String when(double seconds) {
+      final at = start.add(Duration(seconds: seconds.round()));
+      return days ? formatDate(at.toIso8601String()) : formatTime(at);
+    }
+
+    final top = niceCeiling(all.map((p) => p.$2).fold(0.0, math.max));
+    Color colorOf(int i) => _palette[i % _palette.length];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: height,
+          child: LineChart(
+            LineChartData(
+              minX: 0,
+              maxX: span,
+              minY: 0,
+              maxY: top,
+              gridData: FlGridData(
+                drawVerticalLine: false,
+                horizontalInterval: top / 4,
+                getDrawingHorizontalLine: (_) => FlLine(
+                  color: scheme.outlineVariant.withValues(alpha: 0.6),
+                  strokeWidth: 1,
+                ),
+              ),
+              borderData: FlBorderData(show: false),
+              titlesData: FlTitlesData(
+                topTitles: const AxisTitles(),
+                rightTitles: const AxisTitles(),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 52,
+                    interval: top / 4,
+                    getTitlesWidget: (value, meta) => SideTitleWidget(
+                      meta: meta,
+                      child: Text(format(value), style: _axisStyle(theme)),
+                    ),
+                  ),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(
+                    showTitles: true,
+                    reservedSize: 24,
+                    interval: span / 3,
+                    getTitlesWidget: (value, meta) => SideTitleWidget(
+                      meta: meta,
+                      child: Text(when(value), style: _axisStyle(theme)),
+                    ),
+                  ),
+                ),
+              ),
+              lineTouchData: LineTouchData(
+                touchTooltipData: LineTouchTooltipData(
+                  getTooltipColor: (_) => scheme.inverseSurface,
+                  getTooltipItems: (touched) => [
+                    for (final spot in touched)
+                      LineTooltipItem(
+                        [
+                          if (series[spot.barIndex].$1.isNotEmpty)
+                            series[spot.barIndex].$1,
+                          when(spot.x),
+                          format(spot.y),
+                        ].join('  '),
+                        TextStyle(
+                          color: scheme.onInverseSurface,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              lineBarsData: [
+                for (final (i, s) in series.indexed)
+                  LineChartBarData(
+                    spots: [for (final (at, v) in s.$2) FlSpot(x(at), v)],
+                    isCurved: true,
+                    preventCurveOverShooting: true,
+                    color: colorOf(i),
+                    barWidth: 2,
+                    dotData: const FlDotData(show: false),
+                  ),
+              ],
+            ),
+            duration: Duration.zero,
+          ),
+        ),
+        if (series.length > 1) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              for (final (i, s) in series.indexed)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 10, height: 10, color: colorOf(i)),
+                    const SizedBox(width: 4),
+                    Text(s.$1, style: _axisStyle(theme)),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
