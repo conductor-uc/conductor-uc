@@ -12,14 +12,14 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
-| S4 HA and scale (11) | 3 | 2 | 6 |
+| S4 HA and scale (11) | 4 | 1 | 6 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **75** | **11** | **41** |
+| **Total (127)** | **76** | **10** | **41** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -110,7 +110,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S4-01 | Done | [ADR 0001](../architecture/adr/0001-orchestrator.md) (O-1: Compose per server now, Kubernetes for the application tier later) and [10-production-topology.md](../architecture/10-production-topology.md) (roles, zones, per-component HA and stable endpoints, the S4 task that builds each). Two choices in it are Proposed for the owner: D-016 (MariaDB Galera, single writer) and D-017 (floating addresses and internal load balancers). `infra/deploy` stays empty until S4-11 |
 | S4-02 | Done | G-123: `OPENSIPS_FS_DESTINATION` entries carry the node id and a weight (`seed-dispatcher.py` syncs set 1, keeping a drained node's state); weighted round robin (`ds_select_dst(1, 4)`); OPTIONS probing every 2 s, down after 2 failures. call-control `GET /internal/v1/nodes`, `POST .../nodes/{id}/drain\|undrain`: draining set in Redis, leases handed over at once, `call.node.drain_changed`; telephony-config sets the dispatcher rows inactive and calls MI `ds_set_state`. Live tests `tests/sip/test/dispatcher.test.ts` (3:1 weights, drain and undrain). No console page; one OpenSIPs edge (S4-06) |
 | S4-03 | Partial | leases live in Redis via call-control; compose runs one call-control replica; no multi-replica test |
-| S4-04 | Partial | Node death built (04 §4): call-control's watcher announces each leg as `call.lost` and clears it, releases the node's leases; telephony-config ends each leg's dialog at the edge by Call-ID (OpenSIPs now creates a dialog for every leg to or from a node); cdr-service writes `node_failure` records; the live views drop the calls. Confirmed live (both parties sent a BYE 10.8 s after the node was killed). Not yet: the Redis rebuild (04 §5) |
+| S4-04 | Done | Node death (04 §4): call-control's watcher announces each leg as `call.lost` and clears it, releases the node's leases; telephony-config ends each leg's dialog at the edge by Call-ID; cdr-service writes `node_failure` records; the live views drop the calls (live: both parties sent a BYE about 10.7 s after the node was killed). Redis loss (04 §5): a registry epoch; one replica rebuilds every live call from the nodes (`show channels`, `uuid_dump`), each replica restores the leases it renews (live: the call back 0.6 s after its keys were deleted). The 10 nodes × 1,000 calls target is for S4-09's benchmarks |
 | S4-05 | Not started | `cachedb_redis` is loaded but no affinity lookup in `route{}` |
 | S4-06 | Not started | no clusterer, dialog replication, or VIP config |
 | S4-07 | Not started | compose has single MariaDB, Redis, NATS |

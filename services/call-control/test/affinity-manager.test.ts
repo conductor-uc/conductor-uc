@@ -202,6 +202,29 @@ describe.skipIf(skipReason !== undefined)('affinity manager (S2-12; 04 §3.3)', 
     });
   });
 
+  it('S4-04: sets its leases again after Redis lost them, and gives up one taken meanwhile', async () => {
+    await addLiveNode('fs-0', 0);
+    const manager = newManager();
+    const tenantId = randomUUID();
+    const queueId = randomUUID();
+    const confId = randomUUID();
+    await manager.acquire(tenantId, 'queue', queueId);
+    await manager.acquire(tenantId, 'conf', confId);
+    const registry = createAffinityRegistry(redis, keyPrefix);
+
+    // Redis loses both; another replica takes the conference meanwhile.
+    await registry.release({ tenantId, kind: 'queue', resourceId: queueId }, 'fs-0');
+    await registry.release({ tenantId, kind: 'conf', resourceId: confId }, 'fs-0');
+    await registry.acquire({ tenantId, kind: 'conf', resourceId: confId }, 'fs-9', 60_000);
+
+    expect(await manager.restore()).toBe(1);
+    expect(await manager.getOwner(tenantId, 'queue', queueId)).toBe('fs-0');
+    expect(await manager.getOwner(tenantId, 'conf', confId)).toBe('fs-9');
+    // No longer this replica's: a later acquire asks Redis, not its own memory.
+    expect((await manager.acquire(tenantId, 'conf', confId)).nodeId).toBe('fs-9');
+    manager.stop();
+  });
+
   it('releases the lease and stops renewing it', async () => {
     await addLiveNode('fs-0', 0);
 
