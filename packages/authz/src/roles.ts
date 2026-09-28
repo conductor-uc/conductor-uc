@@ -85,6 +85,7 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
   'recording.download',
   'recording.delete',
   'recording.control',
+  'call.control',
   'cdr.read',
   'cdr.export',
   'voicemail.access',
@@ -143,6 +144,8 @@ const RESELLER_SUPPORT_PERMISSIONS: readonly Permission[] = [
  * neither: that stays with `tenant_admin`. It does control the recording of a
  * live call (`recording.control`, S5-15): pausing while a caller reads out card
  * or medical details is a supervisor's everyday job, within the tenant's rules.
+ * And it moves live calls (`call.control`, S9-12): transferring, parking and
+ * picking up calls for the people it supervises.
  */
 const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
   'org.view',
@@ -154,6 +157,7 @@ const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
   'monitor.whisper',
   'monitor.barge',
   'recording.control',
+  'call.control',
   'analytics.view',
   ...SELF_PERMISSIONS,
 ];

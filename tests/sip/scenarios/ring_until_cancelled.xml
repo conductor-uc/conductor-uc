@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S9-12: a phone that rings and is never answered here, until the call is
+  taken elsewhere: waits for an INVITE, rings, and succeeds only when the
+  INVITE is CANCELled (someone picked the call up from another phone).
+  Run second, after `register.xml`, like `answer_call.xml` (see its own
+  comment on why).
+-->
+<scenario name="Ring until cancelled">
+  <recv request="INVITE" crlf="true" timeout="60000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 180 Ringing
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv request="CANCEL" timeout="60000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 487 Request Terminated
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      CSeq: [cseq] INVITE
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv request="ACK" crlf="true">
+  </recv>
+</scenario>

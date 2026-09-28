@@ -98,6 +98,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'recording.download': 'private',
   'recording.delete': 'private',
   'recording.control': 'private',
+  'call.control': 'private',
   'cdr.read': 'private',
   'cdr.export': 'private',
   'billing.read': 'usage',
@@ -114,6 +115,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'self.voicemail': 'private',
   'self.history': 'private',
   'self.recording': 'private',
+  'self.calls': 'private',
   'platform.observe': 'config',
   'platform.operate': 'config',
 };
@@ -149,6 +151,15 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
  * keeps every reseller out, it has no read twin and nothing implies it.
  */
 /**
+ * `call.control` (S9-12, docs/decisions.md G-125): transfer, park, pick up and hang up any live
+ * call in the tenant, from the console (the attendant console's and the supervisor's buttons). A
+ * pickup rings the person's own phone (O-14). None of the existing permissions fits:
+ * `monitor.calls` is passive watching (support holds it, and support never writes),
+ * `monitor.barge` joins a call rather than moving it, and `recording.control` is only a call's
+ * recording. It acts on live calls, whose parties and numbers are private, so it is `private`: H1
+ * keeps every reseller out, it has no read twin and nothing implies it.
+ */
+/**
  * `self.settings`, `self.voicemail` and `self.history` are not in 07 §3.3
  * either: they are the end-user self-service portal's (parity 1e) permissions
  * for a person's OWN extension, mailbox and call history. They are a different
@@ -165,11 +176,18 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
  * in-call feature codes (`*1`, `*2`) that person can already press on their phone. `private`,
  * like the recordings it creates.
  */
+/**
+ * `self.calls` (S9-12, G-125), the same shape again: a person transfers (blind or attended),
+ * parks or hangs up a live call on their own extension, and places a call from their own phone
+ * (click-to-call: their phone rings first, then the number is dialed as if they had dialed it,
+ * through the same routing and toll-fraud limits). Everything it does, their phone can already do.
+ */
 export const SELF_PERMISSIONS = [
   'self.settings',
   'self.voicemail',
   'self.history',
   'self.recording',
+  'self.calls',
 ] as const;
 
 export type CatalogPermission = keyof typeof PERMISSION_CATALOG;

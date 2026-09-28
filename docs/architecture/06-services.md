@@ -258,6 +258,24 @@ The routes declare `scopedPermission` (`@cuc/http`): the permission guard applie
 
 Answers: 200 `{mode, callUuid, monitorCallUuid}` once the phone has answered and joined; 404 `call_not_found`, `no_linked_extension`; 403 `insufficient_permission` (not for this call), `people_only`, `tenant_boundary`, `reseller_private_data_denied` (H1); 409 `call_not_answered`, `own_call`, `phone_unreachable`, `phone_not_answered`; 503 `permissions_unavailable`, `monitor_unavailable`, `media_unavailable` (nothing was done) and `media_node_failed`.
 
+**Moving live calls (S9-12, G-125):** hang up, transfer, park and pick up, for the console and the attendant console, and a person's own, with click-to-call. Every call the person takes part in rings their own phone (O-14).
+
+| Route | Permission | Class | What |
+|---|---|---|---|
+| `POST /v1/tenants/{t}/calls/{callUuid}/hangup` | `call.control` | private | `uuid_kill` the leg |
+| `POST /v1/tenants/{t}/calls/{callUuid}/transfer` `{to}` | `call.control` | private | blind: the named leg goes to `to` |
+| `POST /v1/tenants/{t}/calls/{callUuid}/park` `{parkingLotId}` | `call.control` | private | the named leg goes to the lot's first free slot; answers `{slot}` |
+| `POST /v1/tenants/{t}/calls/{callUuid}/pickup` | `call.control` | private | a leg ringing a phone: the person's own phone rings, and takes the call |
+| `POST /v1/tenants/{t}/me/live-calls/{callUuid}/hangup` | `self.calls` | private | their own leg |
+| `POST /v1/tenants/{t}/me/live-calls/{callUuid}/transfer` `{to, attended?}` | `self.calls` | private | the other party on their own leg, blind; or attended: the other party waits |
+| `POST /v1/tenants/{t}/me/live-calls/{callUuid}/transfer/complete` and `/cancel` | `self.calls` | private | join the waiting party to whoever answered, or go back to them |
+| `POST /v1/tenants/{t}/me/live-calls/{callUuid}/park` `{parkingLotId}` | `self.calls` | private | the other party on their own leg |
+| `POST /v1/tenants/{t}/me/dial` `{to}` | `self.calls` | private | click-to-call; dialing a slot takes back the call parked there |
+
+`to` is what a phone could dial: `^\+?[0-9*#]{1,32}$`. A transfer or park sends the leg back through the tenant's own dialplan, so every rule a phone's call meets applies (extensions, groups, flows, outside numbers with the toll-fraud limits, emergency routing): `uuid_setvar_multi` sets `sip_h_X-Call-Direction=internal` and `sip_h_X-Tenant-Id`, the variables OpenSIPs' trusted headers give a phone's call (03 §3.2), then `uuid_transfer <leg> <to> XML public`. The caller ID is left alone, so whoever answers sees the original caller. A park picks the first slot `valet_info <lot>@<domain>` does not list, reserved in Redis for 15 s (`parkslot:{t}:{lot}:{slot}`, `SET NX`), since parking into a taken slot would retrieve that call instead; a lot whose lease is on another node than the call is refused (`parking_lot_elsewhere`, until calls move between nodes, S4-05). A pickup reads the ringing leg's `originating_leg_uuid` (or `call_uuid`) and rings the person's phone into `&intercept(<caller's leg>)`, which stops the ringing phone. Click-to-call rings the person's phone (`bgapi originate ... &park()`, through OpenSIPs as for monitoring), then sets the same variables plus `sip_from_user` and the effective caller ID to their extension, and sends it through the dialplan. An attended transfer sets `park_after_bridge=true` on the person's leg, parks the other party (`uuid_transfer <leg> set:park_timeout=300,park inline`, silent, let go after 5 minutes), keeps its uuid on the person's leg in the registry (`consultHeld`), and sends the person's leg through the dialplan; complete is `uuid_bridge <waiting> <answered>` and `uuid_kill` of the person's leg, cancel is `uuid_bridge <person> <waiting>`.
+
+Each operation is audited (`call.hangup`, `call.transfer`, `call.park`, `call.pickup`, `call.dial`, `call.transfer.consult|complete|cancel`; `reason` names the number or the slot) before the call is touched, and nothing is done when the audit cannot be written. Answers: 404 `call_not_found`, `no_linked_extension`, `parking_lot_not_found`; 400 `invalid_destination`; 409 `call_not_answered`, `call_not_connected`, `call_not_ringing`, `own_call`, `parking_lot_full`, `parking_lot_elsewhere`, `transfer_in_progress`, `no_transfer_in_progress`, `consult_not_answered`, `phone_unreachable`, `phone_not_answered`; 403 `people_only` and the guard's; 503 `call_control_unavailable`, `media_unavailable` (nothing was done), `media_node_failed`.
+
 ## cdr-service
 
 **Owns:** CDRs, ingestion dedupe, webhook subscriptions.

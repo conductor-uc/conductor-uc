@@ -136,6 +136,8 @@ export const configSchema = Type.Object({
       // recording, for a supervisor on any call and for a person on their own.
       '/v1/tenants/*/calls=call',
       '/v1/tenants/*/me/live-calls=call',
+      // S9-12: click-to-call, from a person's own phone.
+      '/v1/tenants/*/me/dial=call',
       // call-control (S4-12): the operations console's drain, undrain and weight.
       '/v1/platform/nodes=call',
     ],

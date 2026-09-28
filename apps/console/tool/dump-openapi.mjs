@@ -60,6 +60,7 @@ const SOURCES = [
   ['call-control', 'recording', 'registerRecordingControlRoutes', 1],
   // S5-10: listen, whisper and barge on live calls (S5-09's routes).
   ['call-control', 'monitor', 'registerMonitorRoutes', 1],
+  ['call-control', 'call-operations', 'registerCallOperationRoutes', 1],
   // A leading `@` names a module directly under `src/` rather than `src/routes/`.
   ['api-gateway', '@platform-health', 'registerPlatformHealth', 1],
 ];
@@ -143,6 +144,17 @@ const OVERRIDES = {
   'post /v1/tenants/{tenantId}/me/extension/reveal': 'revealMySipCredentials',
   'post /v1/tenants/{tenantId}/me/voicemail/greeting/presign': 'presignMyGreeting',
   'post /v1/tenants/{tenantId}/me/voicemail/greeting/complete': 'completeMyGreeting',
+  // S9-12: moving live calls, and a person's own.
+  'post /v1/tenants/{tenantId}/calls/{callUuid}/hangup': 'hangUpCall',
+  'post /v1/tenants/{tenantId}/calls/{callUuid}/transfer': 'transferCall',
+  'post /v1/tenants/{tenantId}/calls/{callUuid}/park': 'parkCall',
+  'post /v1/tenants/{tenantId}/calls/{callUuid}/pickup': 'pickUpCall',
+  'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/hangup': 'hangUpMyCall',
+  'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/transfer': 'transferMyCall',
+  'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/transfer/complete': 'completeMyTransfer',
+  'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/transfer/cancel': 'cancelMyTransfer',
+  'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/park': 'parkMyCall',
+  'post /v1/tenants/{tenantId}/me/dial': 'dialFromMyPhone',
   'delete /v1/tenants/{tenantId}/me/voicemail/messages/{messageId}': 'deleteMyMessage',
   'post /v1/tenants/{tenantId}/me/voicemail/reset-pin': 'resetMyVoicemailPin',
   'put /v1/tenants/{tenantId}/me/voicemail/email-settings': 'saveMyVoicemailEmailSettings',

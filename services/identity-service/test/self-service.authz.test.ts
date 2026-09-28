@@ -133,6 +133,7 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
         permissions: [
           'monitor.presence',
           'org.view',
+          'self.calls',
           'self.history',
           'self.recording',
           'self.settings',
@@ -292,6 +293,7 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
       expect(response.json<{ permissions: string[] }>().permissions).toEqual([
         'monitor.presence',
         'org.view',
+        'self.calls',
         'self.history',
         'self.recording',
         'self.settings',

@@ -129,6 +129,7 @@ const selfScopedPermissions = {
   'self.voicemail',
   'self.history',
   'self.recording',
+  'self.calls',
 };
 
 /// Whether [held] is a person with a phone and nothing else: some `self.*`

@@ -87,6 +87,8 @@ export interface SeedResult {
   readonly tenantFlow: { readonly id: string; readonly fqdn: string };
   /** S2-20 (G-38): a watcher extension (601) and a presentity extension (602). */
   readonly tenantPresence: { readonly id: string; readonly fqdn: string };
+  /** S9-12: a caller (801), the person moving the call (802) and a colleague (803). */
+  readonly tenantCalls: { readonly id: string; readonly fqdn: string };
   /** `{ number: { password, realm } }`, one entry per seeded extension. */
   readonly extensions: Record<string, { readonly password: string; readonly realm: string }>;
 }
@@ -309,6 +311,14 @@ export async function seed(): Promise<SeedResult> {
       'presence',
       'BLF/presence test tenant',
     );
+    const tenantCalls = await findOrCreateOrg(
+      orgRepo,
+      orgDb,
+      'tenant',
+      reseller.id,
+      'calls',
+      'Call operations test tenant',
+    );
 
     const extensions: SeedResult['extensions'] = {};
 
@@ -361,6 +371,9 @@ export async function seed(): Promise<SeedResult> {
     await seedExtension(tenantFlow.id, '502', 'SIP Test 502 (auto-attendant bridge target)');
     await seedExtension(tenantPresence.id, '601', 'SIP Test 601 (BLF watcher)');
     await seedExtension(tenantPresence.id, '602', 'SIP Test 602 (BLF presentity)');
+    await seedExtension(tenantCalls.id, '801', 'SIP Test 801 (caller)');
+    await seedExtension(tenantCalls.id, '802', 'SIP Test 802 (the person moving the call)');
+    await seedExtension(tenantCalls.id, '803', 'SIP Test 803 (colleague)');
 
     // Suspended last, and idempotent: `suspend()` on an already-suspended
     // tenant is a real InvalidOrgStatusTransitionError, not "nothing to do".
@@ -409,6 +422,10 @@ export async function seed(): Promise<SeedResult> {
       tenantPresence: {
         id: tenantPresence.id,
         fqdn: await tenantFqdn(orgDb, tenantPresence.id),
+      },
+      tenantCalls: {
+        id: tenantCalls.id,
+        fqdn: await tenantFqdn(orgDb, tenantCalls.id),
       },
       tenantFraud: {
         id: tenantFraud.id,

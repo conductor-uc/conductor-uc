@@ -167,6 +167,10 @@ describe('the default routing table', () => {
     // S5-15: the live call recording buttons, not call history.
     ['/v1/tenants/t1/calls/c1/recording', SERVICES.call],
     ['/v1/tenants/t1/me/live-calls/c1/recording', SERVICES.call],
+    // S9-12: moving live calls, and click-to-call.
+    ['/v1/tenants/t1/calls/c1/transfer', SERVICES.call],
+    ['/v1/tenants/t1/me/live-calls/c1/transfer/complete', SERVICES.call],
+    ['/v1/tenants/t1/me/dial', SERVICES.call],
   ])('%s goes to its service', (path, target) => {
     expect(resolveRoute(table, path)?.target).toBe(target);
   });

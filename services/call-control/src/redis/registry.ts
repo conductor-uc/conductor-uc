@@ -66,6 +66,17 @@ export interface CallRegistry {
    * by least load among live nodes").
    */
   liveNodeIds(): Promise<string[]>;
+  /**
+   * S9-12: holds a parking slot for a call being parked, across every replica, for `ttlMs`.
+   * False when someone else holds it: parking into a slot that is taken would retrieve the call
+   * parked there instead (`mod_valet_parking` decides by the slot), joining two callers.
+   */
+  reserveParkingSlot(
+    tenantId: string,
+    lotId: string,
+    slot: number,
+    ttlMs: number,
+  ): Promise<boolean>;
 }
 
 export interface NodeState {
@@ -376,6 +387,17 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
         const entry = results?.[index];
         return entry !== undefined && entry[0] === null && entry[1] === 'up';
       });
+    },
+
+    async reserveParkingSlot(tenantId, lotId, slot, ttlMs) {
+      const set = await redis.set(
+        k(`parkslot:${tenantId}:${lotId}:${String(slot)}`),
+        '1',
+        'PX',
+        ttlMs,
+        'NX',
+      );
+      return set === 'OK';
     },
   };
 }

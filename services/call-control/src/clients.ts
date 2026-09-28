@@ -187,6 +187,45 @@ export function createExtensionScopeLookup(options: ClientOptions): ExtensionSco
   };
 }
 
+export interface ParkingLotSlots {
+  readonly id: string;
+  readonly slotStart: number;
+  readonly slotEnd: number;
+}
+
+/**
+ * S9-12: a parking lot's slots (pbx-config-service's
+ * `GET /internal/v1/tenants/:tenantId/parking-lots/:id`), to park a call in the first free one.
+ * `undefined` when the tenant has no such lot; throws {@link UpstreamError} when it cannot be asked.
+ */
+export type ParkingLotLookup = (
+  tenantId: string,
+  lotId: string,
+) => Promise<ParkingLotSlots | undefined>;
+
+export function createParkingLotLookup(options: ClientOptions): ParkingLotLookup {
+  return async (tenantId, lotId) => {
+    const response = await call(
+      options,
+      `/internal/v1/tenants/${encodeURIComponent(tenantId)}/parking-lots/${encodeURIComponent(lotId)}`,
+      { method: 'GET' },
+    );
+    if (response.status === 404) return undefined;
+    if (!response.ok) {
+      throw new UpstreamError(`pbx-config-service answered ${String(response.status)}`);
+    }
+    const body = (await response.json()) as Partial<ParkingLotSlots>;
+    if (
+      typeof body.id !== 'string' ||
+      !Number.isInteger(body.slotStart) ||
+      !Number.isInteger(body.slotEnd)
+    ) {
+      throw new UpstreamError('pbx-config-service gave an answer this service cannot read');
+    }
+    return { id: body.id, slotStart: body.slotStart!, slotEnd: body.slotEnd! };
+  };
+}
+
 /**
  * S5-09: a tenant's SIP domain (org-service's `GET /internal/v1/tenants/:id/domain`), which a
  * supervisor's phone is registered under, so the call to it can be routed through OpenSIPs.

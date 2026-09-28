@@ -737,6 +737,7 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
       expect(me.json.permissions).toEqual([
         'monitor.presence',
         'org.view',
+        'self.calls',
         'self.history',
         'self.recording',
         'self.settings',
