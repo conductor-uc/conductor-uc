@@ -188,7 +188,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
-    expect(find.text('Required'), findsNWidgets(2));
+    expect(find.text('This is required.'), findsNWidgets(2));
   });
 
   testWidgets('gives someone a role', (tester) async {

@@ -174,7 +174,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
     expect(find.text('New phone'), findsWidgets);
-    expect(find.text('Required'), findsWidgets);
+    expect(find.text('This is required.'), findsWidgets);
 
     await tester.enterText(field('MAC address *'), '00:15:65:aa:bb:dd');
     await pickFromDropdown(tester, 'Extension *', '102 · Bob Osei');
@@ -269,7 +269,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Required'), findsWidgets);
+    expect(find.text('This is required.'), findsWidgets);
     expect(find.text('Dan Ito'), findsNothing);
   });
 
@@ -328,7 +328,7 @@ void main() {
     await tester.enterText(field('Name *'), 'Support');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
-    expect(find.text('Required'), findsWidgets);
+    expect(find.text('This is required.'), findsWidgets);
 
     await tester.tap(find.widgetWithText(FilterChip, '103 · Carol Diaz'));
     await tester.pumpAndSettle();

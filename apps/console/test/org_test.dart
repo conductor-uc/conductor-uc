@@ -82,7 +82,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
-      expect(find.text('Required'), findsWidgets);
+      expect(find.text('This is required.'), findsWidgets);
 
       await fillNewOrg(tester, slug: 'northwind');
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
