@@ -1,3 +1,4 @@
+import { OpenSipsMiClientError } from '../src/opensips-mi-client.js';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { EventConsumer } from '@cuc/events';
 import { databaseOrSkipReason, natsOrSkipReason } from '@cuc/testing';
@@ -31,6 +32,8 @@ describe.skipIf(skipReason !== undefined)('FS node drain in the dispatcher (S4-0
       pullTimeoutMs: 1000,
     });
     await consumer.ensure();
+    // The stream is shared (G-17): start from nothing, not from what other suites left.
+    await h.bus.jsm.streams.purge('CALL');
   });
 
   afterAll(async () => {
@@ -156,6 +159,54 @@ describe.skipIf(skipReason !== undefined)('FS node drain in the dispatcher (S4-0
       ['sip:unnamed:5060', '1'],
     ]);
     expect(h.mi.calls.at(-1)).toBe('ds_reload');
+  });
+
+  it("S4-04: ends a lost leg's dialog at the edge by its Call-ID, and leaves one that is already over", async () => {
+    const lost = (sipCallId: string | null) => ({
+      callUuid: crypto.randomUUID(),
+      nodeId: 'fs2',
+      direction: 'inbound' as const,
+      startedAt: 1_790_000_000_000,
+      answeredAt: null,
+      detectedAt: 1_790_000_010_000,
+      from: '+15550001111',
+      to: '1001',
+      extension: null,
+      sipCallId,
+    });
+    const send = async (data: ReturnType<typeof lost>) => {
+      telephonyEvents.assertPayload('call.lost', data);
+      await h.bus.publish({
+        id: crypto.randomUUID(),
+        type: 'call.lost',
+        schemaVersion: telephonyEvents.contract('call.lost').schemaVersion,
+        occurredAt: new Date().toISOString(),
+        orgContext: {},
+        data,
+      });
+    };
+    await send(lost('abc@edge'));
+    expect((await runOnceUntilHandled(consumer)).handled).toBe(1);
+    expect(h.mi.queries).toEqual([{ method: 'dlg_end_dlg', params: ['abc@edge'] }]);
+
+    // No Call-ID known: nothing to end.
+    h.mi.queries.length = 0;
+    await send(lost(null));
+    expect((await runOnceUntilHandled(consumer)).handled).toBe(1);
+    expect(h.mi.queries).toEqual([]);
+
+    // Already over at the edge: not an error, not retried.
+    const query = h.mi.query.bind(h.mi);
+    h.mi.query = () =>
+      Promise.reject(
+        new OpenSipsMiClientError("OpenSIPs MI 'dlg_end_dlg' failed (404): Dialog not found"),
+      );
+    try {
+      await send(lost('gone@edge'));
+      expect(await runOnceUntilHandled(consumer)).toMatchObject({ handled: 1, failed: 0 });
+    } finally {
+      h.mi.query = query;
+    }
   });
 
   it('changes nothing for a node no destination names', async () => {

@@ -1,3 +1,4 @@
+import { hostname } from 'node:os';
 import { recordAuditEvent } from '@cuc/audit';
 import { redactConfig } from '@cuc/config';
 import { createDatabase, migrateToLatest } from '@cuc/db';
@@ -45,6 +46,7 @@ import { createSerialQueue } from './serial.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerPlatformRoutes } from './routes/platform.routes.js';
 import type { CallControlDb } from './schema.js';
+import { createNodeFailureWatcher } from './node-failure.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -170,6 +172,19 @@ const affinity = createAffinityManager({
   leaseTtlMs: config.AFFINITY_LEASE_TTL_MS,
   renewIntervalMs: config.AFFINITY_RENEW_INTERVAL_MS,
 });
+
+// S4-04 (04 §4): a media node whose heartbeat expired has its calls announced
+// as lost and its leases released, by exactly one replica.
+const nodeFailure = createNodeFailureWatcher({
+  registry,
+  affinity,
+  db: db.kysely,
+  logger,
+  replicaId: `${hostname()}:${String(process.pid)}`,
+  isConnected: (nodeId) => heartbeatIntervals.has(nodeId),
+  startupGraceMs: config.HEARTBEAT_TTL_MS * 2,
+});
+nodeFailure.start();
 
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
@@ -344,6 +359,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   for (const interval of heartbeatIntervals.values()) clearInterval(interval);
   affinity.stop();
+  await nodeFailure.stop();
   await Promise.all(eslClients.map((client) => client.stop()));
   relay.stop();
   await Promise.race([

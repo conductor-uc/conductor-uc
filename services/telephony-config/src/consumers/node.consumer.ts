@@ -3,7 +3,7 @@ import { createConsumer, type Bus, type EventConsumer } from '@cuc/events';
 import type { Logger } from '@cuc/logger';
 
 import { telephonyEvents } from '../events.js';
-import type { OpenSipsMiClient } from '../opensips-mi-client.js';
+import { OpenSipsMiClientError, type OpenSipsMiClient } from '../opensips-mi-client.js';
 import {
   FS_DISPATCHER_SET,
   type OpenSipsProjectionRepo,
@@ -13,6 +13,12 @@ import type { TelephonyConfigDb } from '../schema.js';
 interface DrainChangedData {
   readonly nodeId: string;
   readonly draining: boolean;
+}
+
+interface LostData {
+  readonly callUuid: string;
+  readonly nodeId: string;
+  readonly sipCallId: string | null;
 }
 
 interface WeightChangedData {
@@ -54,9 +60,31 @@ export function createNodeConsumer(
     logger,
     registry: telephonyEvents,
     durable: 'telephony-config-nodes',
-    subjects: ['call.node.drain_changed', 'call.node.weight_changed'],
+    subjects: ['call.node.drain_changed', 'call.node.weight_changed', 'call.lost'],
+    // S4-04: ending a dead node's dialogs must not give up after five tries.
+    maxDeliver: 20,
     ...(options.pullTimeoutMs === undefined ? {} : { pullTimeoutMs: options.pullTimeoutMs }),
     handler: async (envelope) => {
+      // S4-04 (04 §4): a leg lost with its node. Its dialog at the edge is
+      // still up, so the other party would hear silence until its own
+      // timers gave up: ending it sends them a BYE now. The dialog is found
+      // by the leg's SIP Call-ID, which `topology_hiding()` leaves as is.
+      if (envelope.type === 'call.lost') {
+        const { sipCallId, callUuid, nodeId } = envelope.data as LostData;
+        if (sipCallId === null) return;
+        try {
+          await mi.query('dlg_end_dlg', [sipCallId]);
+          logger.info({ callUuid, nodeId, sipCallId }, "ended a lost leg's dialog at the edge");
+        } catch (error) {
+          // Already over (the other leg's end, or the party hung up): nothing left to end.
+          if (error instanceof OpenSipsMiClientError && /not found/i.test(error.message)) {
+            logger.info({ callUuid, sipCallId }, 'a lost leg\'s dialog was already over at the edge');
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
       if (envelope.type === 'call.node.weight_changed') {
         const { nodeId, weight } = envelope.data as WeightChangedData;
         const rows = await opensips.setDispatcherNodeWeight(nodeId, weight);

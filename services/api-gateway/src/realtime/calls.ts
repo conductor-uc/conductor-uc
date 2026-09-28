@@ -177,6 +177,12 @@ export function callEventFromEnvelope(
           hangupCause: stringField(data, 'hangupCause') ?? 'UNKNOWN',
         },
       };
+    // S4-04: a leg lost with its media node ended, as far as anyone watching can tell.
+    case 'call.lost':
+      return {
+        tenantId,
+        event: { type: 'call.ended', callUuid, hangupCause: 'NODE_FAILURE' },
+      };
     default:
       return undefined;
   }

@@ -158,6 +158,7 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
             state: 'answered',
             answeredAt: action.answeredAt,
             ...controlsOf(action),
+            ...(action.sipCallId === undefined ? {} : { sipCallId: action.sipCallId }),
           });
           return;
         }

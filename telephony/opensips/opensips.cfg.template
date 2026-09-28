@@ -409,6 +409,11 @@ route{
     # typed `int`, and quoting it produces a config parse error
     # ("Param [2] expected to be an integer or variable").
     if (ds_is_in_list("$si", $sp)) {
+        # S4-04: a dialog for every call leg a media node places, so the edge
+        # can end it (`dlg_end_dlg` by Call-ID, from telephony-config) when the
+        # node dies mid-call. `topology_hiding()` alone does not create one
+        # here: confirmed live, `dlg_list` was empty during an answered call.
+        create_dialog();
         if (!topology_hiding()) {
             xlog("L_ERR", "topology_hiding failed for $ru (from FS)\n");
             send_reply(500, "Server Internal Error");
@@ -521,6 +526,8 @@ route{
         exit;
     }
 
+    # S4-04: and for every call leg sent to a media node (see above).
+    create_dialog();
     if (!topology_hiding()) {
         xlog("L_ERR", "topology_hiding failed for $ru\n");
         send_reply(500, "Server Internal Error");

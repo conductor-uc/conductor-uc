@@ -37,6 +37,18 @@ export interface CallRegistry {
   endCall(callUuid: string, nodeId: string, tenantId: string | null): Promise<void>;
   /** For tests and the "50 concurrent calls" proof: every call UUID currently owned by a node. */
   callsForNode(nodeId: string): Promise<string[]>;
+  /** S4-04: every node that has ever sent a heartbeat (`fsnodes`), up or not. */
+  knownNodeIds(): Promise<string[]>;
+  /** S4-04: whether `fsnode:{id}` still exists, i.e. its heartbeat has not expired. */
+  isNodeAlive(nodeId: string): Promise<boolean>;
+  /**
+   * S4-04: claims the handling of a node's death for this replica
+   * (`nodelost:{id}`, `SET NX PX`), so exactly one replica sweeps it. False
+   * when another replica already has it. The claim lapses after [ttlMs].
+   */
+  claimNodeLoss(nodeId: string, replicaId: string, ttlMs: number): Promise<boolean>;
+  /** S4-04: forgets a node's (now empty) call set once its calls are handled. */
+  forgetNodeCalls(nodeId: string): Promise<void>;
   getCall(callUuid: string): Promise<Record<string, string> | undefined>;
   /**
    * Records whose call this is when CHANNEL_CREATE could not say (a call from a
@@ -123,6 +135,12 @@ export interface CallRecord {
   readonly extension: string | null;
   /** S5-15: `cuc_rec_controls`, what the recording buttons may do on the call. */
   readonly controls: RecordingControls;
+  /**
+   * S4-04: the SIP Call-ID of this leg's dialog with OpenSIPs (the edge keeps
+   * it, no topology-hiding rewrite), so the edge can end the dialog if the
+   * node dies. Null when the event did not carry one.
+   */
+  readonly sipCallId?: string | null;
 }
 
 /** HSET only when the hash exists, in one step (no read-then-write race with a hangup). */
@@ -304,6 +322,7 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
           to: call.to,
           ext: call.extension ?? '',
           controls: call.controls,
+          sipCallId: call.sipCallId ?? '',
         })
         .pexpire(key, safetyTtlMs)
         .sadd(k(`node:${call.nodeId}:calls`), call.callUuid);
@@ -330,6 +349,22 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
 
     async callsForNode(nodeId) {
       return redis.smembers(k(`node:${nodeId}:calls`));
+    },
+
+    async knownNodeIds() {
+      return redis.smembers(k('fsnodes'));
+    },
+
+    async isNodeAlive(nodeId) {
+      return (await redis.exists(k(`fsnode:${nodeId}`))) === 1;
+    },
+
+    async claimNodeLoss(nodeId, replicaId, ttlMs) {
+      return (await redis.set(k(`nodelost:${nodeId}`), replicaId, 'PX', ttlMs, 'NX')) === 'OK';
+    },
+
+    async forgetNodeCalls(nodeId) {
+      await redis.del(k(`node:${nodeId}:calls`));
     },
 
     async getCall(callUuid) {

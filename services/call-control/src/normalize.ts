@@ -27,6 +27,8 @@ export type ChannelAction =
       readonly answeredAt: string;
       /** S5-15: `cuc_rec_controls` as the channel says it now, when it says it at all. */
       readonly controls?: RecordingControls;
+      /** S4-04: an outbound leg's Call-ID, known once its INVITE went out. */
+      readonly sipCallId?: string;
     }
   | {
       readonly kind: 'bridged';
@@ -272,6 +274,7 @@ export function normalizeEslEvent(
           to,
           extension: extensionOf(raw, direction, to),
           controls: parseRecordingControls(raw['variable_cuc_rec_controls']),
+          sipCallId: raw['variable_sip_call_id'] ?? null,
         },
       };
     }
@@ -283,6 +286,9 @@ export function normalizeEslEvent(
         tenantId,
         answeredAt: eventTimestampMs(raw),
         ...controlsOf(raw),
+        ...(raw['variable_sip_call_id'] === undefined
+          ? {}
+          : { sipCallId: raw['variable_sip_call_id'] }),
       };
     case 'CHANNEL_BRIDGE': {
       const bridgedTo = raw['Other-Leg-Unique-ID'];

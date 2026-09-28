@@ -11,6 +11,7 @@ import { createLogger } from '@cuc/logger';
 import { storageFromConfig } from '@cuc/storage';
 
 import { configSchema, loadServiceConfig } from './config.js';
+import { createCallLostConsumer } from './consumers/call-lost.consumer.js';
 import { createExportConsumer } from './consumers/export.consumer.js';
 import { createOrgClient } from './org-client.js';
 import { createCdrRepo } from './repo/cdr.repo.js';
@@ -86,6 +87,17 @@ const exportConsumer = createExportConsumer(db, bus, logger, storage, cdrRepo, e
 await exportConsumer.ensure();
 const exportConsumerLoop = exportConsumer.run();
 
+// S4-04: a leg lost with its media node becomes a `node_failure` call record.
+const callLostConsumer = createCallLostConsumer(
+  db,
+  bus,
+  logger,
+  cdrRepo,
+  orgClient.resellerForTenant,
+);
+await callLostConsumer.ensure();
+const callLostLoop = callLostConsumer.run();
+
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
   serviceVersion: config.SERVICE_VERSION,
@@ -142,6 +154,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   relay.stop();
   exportConsumer.stop();
+  callLostConsumer.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
@@ -150,6 +163,7 @@ async function shutdown(signal: string): Promise<void> {
   await relayLoop;
   await orgDeletionLoop;
   await exportConsumerLoop;
+  await callLostLoop;
   await bus.close();
   await partitions.stop();
   await db.destroy();

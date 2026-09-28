@@ -28,6 +28,8 @@ describe('normalizeEslEvent', () => {
         // An outbound leg is the number it rang; that is not an extension number here.
         extension: null,
         controls: 'none',
+        // S4-04: none in this event; outbound legs learn theirs on answer.
+        sipCallId: null,
       },
     });
   });

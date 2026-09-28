@@ -324,6 +324,12 @@ describe('live call events', () => {
         { ...base, hangupCause: 'NORMAL_CLEARING' },
         { type: 'call.ended', callUuid: 'c1', hangupCause: 'NORMAL_CLEARING' },
       ],
+      [
+        // S4-04: lost with its media node.
+        'call.lost',
+        { ...base, detectedAt: 1, startedAt: 0, answeredAt: null },
+        { type: 'call.ended', callUuid: 'c1', hangupCause: 'NODE_FAILURE' },
+      ],
     ];
     for (const [type, data, event] of cases) {
       expect(callEventFromEnvelope(envelope(type, data)), type).toEqual({
