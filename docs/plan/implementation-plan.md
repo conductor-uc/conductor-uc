@@ -453,6 +453,56 @@ Key acceptance criteria:
 
 ---
 
+## Stage 9 — Console usability and localization
+
+**Goal:** a small-business administrator, and each of their users, can run their phone system from the console without knowing VoIP. Nothing the console can do today is lost: guided flows and plain-language screens come first, and the full configuration stays one click away under **Advanced**. Every string is translatable (translations themselves are later work). Decided by the owner on 2026-09-28: D-018 to D-021.
+
+Principles every task in this stage follows:
+- **Task first, model second.** Common jobs ("add a person", "set up the main number") are guided flows that create the same objects the detail screens edit.
+- **Plain language by default.** Every choice has a human label and a one-line explanation; jargon lives under Advanced, explained. Phone numbers are entered and shown as people write them, and normalized for the API.
+- **Validate where the mistake is.** Per field, as the person types or leaves the field, and server errors land on the field they are about.
+- **No dead ends.** Empty states name the next step, pickers can create what is missing, and a delete says what depends on the thing.
+- **Nothing untranslatable.** No new user-facing literal outside the ARB files (CI enforces it once S9-01 lands).
+
+| ID | Task | Depends on |
+|---|---|---|
+| S9-01 | Localization foundation: `flutter gen-l10n`, English ARB template, `context.l10n`, one locale-aware formatting module (dates, times, durations, numbers, bytes), CI check against new hard-coded strings; shell and sign-in migrated first | — |
+| S9-02 | Stable problem codes: an explicit `code` on every `ProblemError`, field errors carry the validation keyword and parameters; the console translates by code (server `detail` as fallback) and puts field errors on their fields | S9-01 |
+| S9-03 | Component kit: data table (search, sort, paging, bulk select), empty state with an action, confirm dialog that shows impact, success and undo toasts, full-page editor layout for complex objects | S9-01 |
+| S9-04 | Form kit: sections and an Advanced expander, choice labels with descriptions, validators (phone numbers in the tenant's country, MAC, ranges, cross-field rules), validation on change or leaving a field, required markers, create-in-place from a picker; `ResourceDef` moved onto it | S9-03 |
+| S9-05 | Shell: grouped navigation per role, responsive layout (drawer and bottom bar on narrow screens), header with who and where you are, account menu (profile, password, two-step verification, language), help link; Act as keeps the tenant in the URL, lands on the tenant home, and has a tenant switcher | S9-01 |
+| S9-06 | Tenant home: setup checklist (people, phones, a number, how calls are answered), what needs attention, recent activity | S9-05 |
+| S9-07 | People (D-019): one screen and one flow for a person with their extension, voicemail and phone; Extensions and Phones stay available under Advanced | S9-04, S9-06 |
+| S9-08 | Every tenant configuration screen rewritten in plain language on the form kit: labels, choice descriptions, Advanced sections, "used by" and delete impact | S9-04 |
+| S9-09 | "Set up your main number": business hours, then a menu, a ring group or a person, then after hours; generates a call flow that opens in the visual editor. Phone numbers show and link to what answers them | S9-08, S9-10 |
+| S9-10 | Call flow editor: templates, rename, duplicate and delete (callflow-service gains delete), reachable from phone numbers, "used by"; resellers may view and edit while acting as a tenant (D-020) | S9-03 |
+| S9-11 | End-user portal: a home page (my number, voicemail, recent calls), one-step "forward to my mobile", record or upload a greeting, connect my phone or softphone, searchable call history, click-to-call once S9-12 lands | S9-04, S9-05 |
+| S9-12 | call-control operations: blind and attended transfer, park and retrieve, pickup, hangup, click-to-call; permissions, audit, tests on the SIP suite | S5-08 |
+| S9-13 | Queue live feed on the realtime `queues` topic; agent sign in, sign out and pause over HTTP (shares its data with S7-06) | S5-08 |
+| S9-14 | Attendant console: live extension grid, incoming, queued and parked calls, drag a call to transfer it, directory search, keyboard shortcuts; uses the receptionist's own phone | S9-12, S9-13, S9-03 |
+| S9-15 | Monitoring: queue column; tenant admins get listen, whisper and barge (D-021) | S9-13 |
+| S9-16 | Reseller and master: new-tenant setup wizard, dashboards that say what needs attention | S9-05, S9-03 |
+| S9-17 | Sweep: every remaining string externalized, accessibility (semantics, focus order, keyboard use), right-to-left layout, dark mode, `08-console.md` rewritten | all above |
+
+**S9-01 Localization foundation.** `flutter_localizations` and `intl`, `generate: true`, `l10n.yaml` with `arb-dir: lib/l10n` (inside the brand-leak scan) and `app_en.arb` as the template. Keys are `featureScreenElement` in camelCase with a `@description` on each. Plurals and choices use ICU, never strings assembled from nouns. Tests pin the `en` locale.
+*Done when:* the app runs with localization delegates, the shell and sign-in screens have no literal user-facing strings, the hand-rolled date and number helpers are gone, and CI fails a change that adds a literal `Text('…')`.
+
+**S9-02 Stable problem codes.** Every `ProblemError` in every service names a code. `ProblemFieldError` gains `keyword` and `params`.
+*Done when:* no service raises a problem without an explicit code (a lint enforces it), the console maps codes to translated messages, and a validation error appears under the field it is about.
+
+**S9-07 People.** Creating a person makes the user, their extension (next free number suggested), their voicemail and optionally their phone, with the tenant's default emergency location, in one flow that can be resumed if a step fails.
+*Done when:* a new tenant admin adds a person with a desk phone without visiting another screen, and a failure part-way leaves nothing half-made that the screen does not offer to finish.
+
+**S9-09 Main number.** *Done when:* a tenant with one phone number routes it to a menu in business hours and to voicemail after hours without opening the call flow editor, and the result opens in the editor as an ordinary flow.
+
+**S9-12 Call operations.** *Done when:* each operation works on the SIP suite across two media nodes, is refused without its permission, and is audited.
+
+**S9-14 Attendant console.** *Done when:* a receptionist sees every extension's state live, answers and transfers an incoming call to a busy or idle extension by dragging it, parks and retrieves a call, and does it all from the keyboard.
+
+**Stage 9 exit:** a person who has never configured a phone system sets up a new tenant (people, phones, a number, business hours and a menu) and a receptionist runs the front desk, both without help, and the console carries no user-facing string outside the ARB files.
+
+---
+
 ## Cross-cutting release readiness (before first production tenant)
 
 - [ ] Security review of authentication, authorization (H1 matrix), secrets handling, and SIP exposure

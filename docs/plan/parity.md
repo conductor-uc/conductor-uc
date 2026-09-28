@@ -58,7 +58,7 @@ Legend: **Built** exists with tests. **Partial** some of it. **Planned** in the 
 | Audio conferencing, PIN | Yes | Yes | Built | |
 | Web / video conferencing | Yes | Yes | Planned (S6-01) | P3 |
 | Call recording, on demand and by policy | Yes | Yes | Partial (G-111): by policy (tenant, extension, queue, DID, direction), consent announcement, search, play, download, delete, retention; calls through IVR flows (S5-11); a per-tenant "recording required" option that refuses calls whose recording cannot be set up (S5-12); on-demand recording and pause/resume by feature code (`*1`, `*2`), per rule, audited (S5-13); agent-scoped rules for queue calls, from the agent's answer (S5-14); record, stop, pause and resume buttons for live calls in the console (supervisors and administrators, `recording.control`) and on each person's My phone (their own calls), with the feature codes' rules, audited as the person (S5-15, G-120). S5-11 to S5-14 verified live; S5-15's live test is written, not yet run | **P1** (tranche 2a) |
-| Attendant / receptionist console | Yes | Yes | Gap | P3 |
+| Attendant / receptionist console | Yes | Yes | Gap: planned as S9-12 to S9-14 (owner, 2026-09-28) | P2 |
 | Executive-assistant / boss-secretary | Yes | Yes | Gap | P3 |
 | Music on hold and prompts | Yes | Yes | Built (media) | |
 | Fax to email and email to fax | Yes | Yes | Planned (S7-01, S7-02) | P2 |
@@ -70,7 +70,7 @@ Legend: **Built** exists with tests. **Partial** some of it. **Planned** in the 
 | Capability | NetSapiens | Metaswitch | Here | Priority |
 |---|---|---|---|---|
 | Admin portal | Yes | Yes | Built (console) | |
-| End-user self-service portal (settings, voicemail, history) | Yes | Yes (CommPortal) | Gap: the console is admin-oriented | **P1** |
+| End-user self-service portal (settings, voicemail, history) | Yes | Yes (CommPortal) | Partial: three My phone screens; the full portal is S9-11 | **P1** |
 | Web softphone (WebRTC) | Yes | Yes | Gap | P2 |
 | Mobile apps | Yes | Yes | Gap | P3 |
 | Auto-provisioning of desk phones | Yes | Yes | Partial (Yealink only) | P2 |
