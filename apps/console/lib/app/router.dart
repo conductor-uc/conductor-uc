@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../core/acting.dart';
 import '../core/permissions.dart';
 import '../core/session.dart';
+import '../l10n/l10n.dart';
 import '../features/auth/invite_page.dart';
 import '../features/auth/login_page.dart';
 import '../features/auth/mfa_page.dart';
@@ -107,7 +108,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/login',
         builder: (context, state) => LoginPage(
           orgId: state.uri.queryParameters['org'],
-          notice: _notices[state.uri.queryParameters['notice']],
+          notice: _notice(context, state.uri.queryParameters['notice']),
         ),
       ),
       GoRoute(path: '/login/mfa', builder: (context, state) => const MfaPage()),
@@ -210,7 +211,8 @@ const _signedOutPaths = {
 };
 
 /// What a `?notice=` on the sign-in page says.
-const _notices = {
-  'password-changed': 'Password changed. Sign in with your new password.',
-  'account-created': 'Account created. Sign in to continue.',
+String? _notice(BuildContext context, String? code) => switch (code) {
+  'password-changed' => context.l10n.authNoticePasswordChanged,
+  'account-created' => context.l10n.authNoticeAccountCreated,
+  _ => null,
 };

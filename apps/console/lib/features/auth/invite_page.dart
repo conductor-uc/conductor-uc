@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
 import 'auth_errors.dart';
+import '../../l10n/l10n.dart';
 import 'auth_scaffold.dart';
 import 'reset_pages.dart';
 
@@ -62,7 +63,7 @@ class _InvitePageState extends ConsumerState<InvitePage> {
       if (mounted) {
         setState(() {
           _invalid = !isOffline(e);
-          _error = isOffline(e) ? 'Could not reach the server.' : null;
+          _error = isOffline(e) ? context.l10n.commonCouldNotReachServer : null;
         });
       }
     } finally {
@@ -71,7 +72,11 @@ class _InvitePageState extends ConsumerState<InvitePage> {
   }
 
   Future<void> _accept() async {
-    final problem = newPasswordProblem(_password.text, _confirm.text);
+    final problem = newPasswordProblem(
+      context.l10n,
+      _password.text,
+      _confirm.text,
+    );
     if (problem != null) {
       setState(() => _error = problem);
       return;
@@ -96,15 +101,16 @@ class _InvitePageState extends ConsumerState<InvitePage> {
       if (!mounted) return;
       setState(() {
         _error = switch (problemCode(e)) {
-          'invalid_invitation' => 'This invitation is invalid or has expired.',
-          'email_taken' =>
-            'That email already has an account. Sign in instead.',
-          'weak_password' => problemDetail(e) ?? 'Choose a stronger password.',
-          'password_in_use' => problemDetail(e) ?? 'That password is already used for another account with this email. Choose a different one.',
+          'invalid_invitation' => context.l10n.authInviteInvalidShort,
+          'email_taken' => context.l10n.authEmailTaken,
+          'weak_password' =>
+            problemDetail(e) ?? context.l10n.authChooseStrongerPassword,
+          'password_in_use' =>
+            problemDetail(e) ?? context.l10n.authPasswordInUse,
           _ =>
             isOffline(e)
-                ? 'Could not reach the server.'
-                : 'Something went wrong. Try again.',
+                ? context.l10n.commonCouldNotReachServer
+                : context.l10n.commonSomethingWentWrongTryAgain,
         };
       });
     } finally {
@@ -115,56 +121,57 @@ class _InvitePageState extends ConsumerState<InvitePage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const AuthScaffold(
-        title: 'Accept invitation',
-        children: [Center(child: CircularProgressIndicator())],
+      return AuthScaffold(
+        title: context.l10n.authInviteTitle,
+        children: const [Center(child: CircularProgressIndicator())],
       );
     }
     final invitation = _invitation;
     if (invitation == null) {
       return AuthScaffold(
-        title: 'Accept invitation',
+        title: context.l10n.authInviteTitle,
         children: [
           FormMessage(
             _invalid
-                ? 'This invitation is invalid or has expired. Ask whoever '
-                      'invited you to send a new one.'
-                : (_error ?? 'Could not load this invitation.'),
+                ? context.l10n.authInviteInvalid
+                : (_error ?? context.l10n.authInviteCouldNotLoad),
             isError: true,
           ),
           TextButton(
             onPressed: () => context.go('/login'),
-            child: const Text('Go to sign in'),
+            child: Text(context.l10n.authGoToSignIn),
           ),
         ],
       );
     }
     return AuthScaffold(
-      title: 'Welcome, ${invitation.displayName}',
+      title: context.l10n.authInviteWelcome(invitation.displayName),
       children: [
-        Text('Choose a password for ${invitation.email}.'),
+        Text(context.l10n.authInviteChoosePassword(invitation.email)),
         const SizedBox(height: 8),
         TextField(
           controller: _password,
           obscureText: true,
           autofillHints: const [AutofillHints.newPassword],
           decoration: InputDecoration(
-            labelText: 'Password',
-            helperText: 'At least $minPasswordLength characters.',
+            labelText: context.l10n.authPassword,
+            helperText: context.l10n.authPasswordHelper(minPasswordLength),
           ),
         ),
         TextField(
           controller: _confirm,
           obscureText: true,
           autofillHints: const [AutofillHints.newPassword],
-          decoration: const InputDecoration(labelText: 'Confirm password'),
+          decoration: InputDecoration(
+            labelText: context.l10n.authConfirmPassword,
+          ),
           onSubmitted: (_) => _busy ? null : _accept(),
         ),
         if (_error != null) FormMessage(_error!, isError: true),
         const SizedBox(height: 20),
         FilledButton(
           onPressed: _busy ? null : _accept,
-          child: const Text('Create account'),
+          child: Text(context.l10n.authCreateAccount),
         ),
       ],
     );

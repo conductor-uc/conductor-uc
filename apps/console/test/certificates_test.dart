@@ -42,7 +42,10 @@ void main() {
       find.textContaining('Ready. Certificates are requested'),
       findsOneWidget,
     );
-    expect(find.textContaining('Agreed 2026-'), findsOneWidget);
+    expect(
+      find.textContaining(RegExp(r'^Agreed \w{3} \d+, 2026$')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('an address that is not one is refused, with the reason', (

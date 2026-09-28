@@ -54,6 +54,25 @@ The gateway allows the console's origin only if its hostname is in the gateway's
 console hostnames. Reseller users always complete two-step verification (07 §1); master users
 do once it is turned on under **Security**, which a new platform leaves off until it is set up.
 
+## Strings and translation
+
+Every string a person reads lives in `lib/l10n/app_en.arb` (English is the
+template; other languages come later, D-018). `flutter pub get` generates
+`AppLocalizations` from it, and widgets use `context.l10n.someKey`. Code with
+no `BuildContext` (formatters, error messages) uses `currentL10n`.
+
+- **Keys** are `featureScreenElement` in camelCase (`authSignInButton`,
+  `navPhoneNumbers`), and every entry has a `@description` saying where it
+  appears, for the translator.
+- **Counts and choices** use ICU `plural` and `select`. Don't build sentences
+  from nouns ("No ${plural} yet"): other languages inflect them.
+- **Dates, times, durations and numbers** go through `lib/core/format.dart`,
+  never by hand.
+- **CI** runs `node tool/check-strings.mjs`, which fails when Dart code gains a
+  user-facing literal. The literals that predate the rule are counted per file
+  in `tool/strings-baseline.json`; after moving some into the ARB, run
+  `node tool/check-strings.mjs --update` to lower it.
+
 ## Checks
 
 ```sh

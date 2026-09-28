@@ -6,34 +6,7 @@ import '../pbx/pbx_api.dart';
 import '../myphone/my_phone_api.dart';
 import '../pbx/resource.dart';
 import 'voicemail_api.dart';
-
-/// "24 Sep 2026, 19:20" in the viewer's own time.
-String formatWhen(DateTime when) {
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  final t = when.toLocal();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${t.day} ${months[t.month - 1]} ${t.year}, ${two(t.hour)}:${two(t.minute)}';
-}
-
-/// "0:42", "12:05".
-String formatLength(num? durationMs) {
-  if (durationMs == null) return '—';
-  final total = (durationMs / 1000).round();
-  return '${total ~/ 60}:${(total % 60).toString().padLeft(2, '0')}';
-}
+import '../../core/format.dart';
 
 /// The tenant's voicemail: its mailboxes, and one mailbox's messages. Private
 /// data (rule H1), so it is not shown to a reseller acting as the tenant.
@@ -285,8 +258,8 @@ class MessagesView extends ConsumerWidget {
             style: read ? null : const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
-        DataCell(Text(when == null ? '—' : formatWhen(when))),
-        DataCell(Text(formatLength(m['durationMs'] as num?))),
+        DataCell(Text(formatDateTime(when))),
+        DataCell(Text(formatClockMs(m['durationMs'] as num?))),
         DataCell(Chip(label: Text(read ? 'Read' : 'New'))),
         DataCell(
           Row(

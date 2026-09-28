@@ -3,6 +3,80 @@ import 'package:flutter/material.dart';
 import '../../core/acting.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
+
+/// The navigation's names, translated through lib/l10n (S9-01).
+enum NavLabel {
+  dashboard,
+  audit,
+  users,
+  myCallHandling,
+  myVoicemail,
+  myCallHistory,
+  myPhone,
+  resellers,
+  operations,
+  certificates,
+  security,
+  tenants,
+  trunks,
+  domains,
+  brand,
+  extensions,
+  phones,
+  phoneNumbers,
+  callFlows,
+  ringGroups,
+  outboundRoutes,
+  queues,
+  conferenceRooms,
+  parkingLots,
+  schedules,
+  media,
+  monitoring,
+  recordings,
+  voicemail,
+  callRecords,
+  reports,
+  settings,
+}
+
+extension NavLabelText on NavLabel {
+  String of(AppLocalizations l10n) => switch (this) {
+    NavLabel.dashboard => l10n.navDashboard,
+    NavLabel.audit => l10n.navAudit,
+    NavLabel.users => l10n.navUsers,
+    NavLabel.myCallHandling => l10n.navMyCallHandling,
+    NavLabel.myVoicemail => l10n.navMyVoicemail,
+    NavLabel.myCallHistory => l10n.navMyCallHistory,
+    NavLabel.myPhone => l10n.navMyPhone,
+    NavLabel.resellers => l10n.navResellers,
+    NavLabel.operations => l10n.navOperations,
+    NavLabel.certificates => l10n.navCertificates,
+    NavLabel.security => l10n.navSecurity,
+    NavLabel.tenants => l10n.navTenants,
+    NavLabel.trunks => l10n.navTrunks,
+    NavLabel.domains => l10n.navDomains,
+    NavLabel.brand => l10n.navBrand,
+    NavLabel.extensions => l10n.navExtensions,
+    NavLabel.phones => l10n.navPhones,
+    NavLabel.phoneNumbers => l10n.navPhoneNumbers,
+    NavLabel.callFlows => l10n.navCallFlows,
+    NavLabel.ringGroups => l10n.navRingGroups,
+    NavLabel.outboundRoutes => l10n.navOutboundRoutes,
+    NavLabel.queues => l10n.navQueues,
+    NavLabel.conferenceRooms => l10n.navConferenceRooms,
+    NavLabel.parkingLots => l10n.navParkingLots,
+    NavLabel.schedules => l10n.navSchedules,
+    NavLabel.media => l10n.navMedia,
+    NavLabel.monitoring => l10n.navMonitoring,
+    NavLabel.recordings => l10n.navRecordings,
+    NavLabel.voicemail => l10n.navVoicemail,
+    NavLabel.callRecords => l10n.navCallRecords,
+    NavLabel.reports => l10n.navReports,
+    NavLabel.settings => l10n.navSettings,
+  };
+}
 
 class Section {
   const Section(
@@ -14,7 +88,9 @@ class Section {
   });
 
   final String path;
-  final String label;
+
+  /// What the menu calls it: `label.of(context.l10n)`.
+  final NavLabel label;
   final IconData icon;
 
   /// Shows tenant `private` data, which a reseller can never read (rule H1).
@@ -33,16 +109,20 @@ class Section {
       requires.any((p) => holds(permissions, p));
 }
 
-const _dashboard = Section('/dashboard', 'Dashboard', Icons.dashboard_outlined);
+const _dashboard = Section(
+  '/dashboard',
+  NavLabel.dashboard,
+  Icons.dashboard_outlined,
+);
 const _audit = Section(
   '/audit',
-  'Audit',
+  NavLabel.audit,
   Icons.fact_check_outlined,
   requires: ['audit.read'],
 );
 const _users = Section(
   '/users',
-  'Users',
+  NavLabel.users,
   Icons.people_outline,
   requires: ['user.read'],
 );
@@ -53,20 +133,20 @@ const _users = Section(
 const myPhoneSections = [
   Section(
     '/my-phone/call-handling',
-    'My call handling',
+    NavLabel.myCallHandling,
     Icons.call_split_outlined,
     requires: ['self.settings'],
   ),
   Section(
     '/my-phone/voicemail',
-    'My voicemail',
+    NavLabel.myVoicemail,
     Icons.voicemail_outlined,
     privateData: true,
     requires: ['self.voicemail'],
   ),
   Section(
     '/my-phone/history',
-    'My call history',
+    NavLabel.myCallHistory,
     Icons.history_outlined,
     privateData: true,
     requires: ['self.history'],
@@ -77,40 +157,39 @@ const myPhoneSections = [
 /// entry for the same three screens.
 const myPhoneEntry = Section(
   '/my-phone',
-  'My phone',
+  NavLabel.myPhone,
   Icons.phone_in_talk_outlined,
   privateData: true,
   requires: ['self.settings', 'self.voicemail', 'self.history'],
 );
 
-/// Top-level sections by org type (08 §3). Each is a placeholder page until
-/// its owning task (S3-06 to S3-08) builds the screens.
+/// Top-level sections by org type (08 §3).
 const sectionsByOrgType = <OrgType, List<Section>>{
   OrgType.master: [
     _dashboard,
     Section(
       '/resellers',
-      'Resellers',
+      NavLabel.resellers,
       Icons.storefront_outlined,
       requires: ['reseller.read'],
     ),
     // S4-12: the services, media nodes, SIP edge, event bus and data stores.
     Section(
       '/operations',
-      'Operations',
+      NavLabel.operations,
       Icons.monitor_heart_outlined,
       requires: ['platform.observe'],
     ),
     Section(
       '/certificates',
-      'Certificates',
+      NavLabel.certificates,
       Icons.verified_user_outlined,
       requires: ['domain.read'],
     ),
     // Whether the platform's administrators must use two-step verification.
     Section(
       '/security',
-      'Security',
+      NavLabel.security,
       Icons.lock_outline,
       requires: ['platform.observe'],
     ),
@@ -121,25 +200,25 @@ const sectionsByOrgType = <OrgType, List<Section>>{
     _dashboard,
     Section(
       '/tenants',
-      'Tenants',
+      NavLabel.tenants,
       Icons.apartment_outlined,
       requires: ['tenant.read', 'tenant.create'],
     ),
     Section(
       '/trunks',
-      'Trunks',
+      NavLabel.trunks,
       Icons.cable_outlined,
       requires: ['trunk.read'],
     ),
     Section(
       '/domains',
-      'Domains',
+      NavLabel.domains,
       Icons.dns_outlined,
       requires: ['domain.read'],
     ),
     Section(
       '/brand',
-      'Brand',
+      NavLabel.brand,
       Icons.palette_outlined,
       requires: ['brand.read'],
     ),
@@ -151,79 +230,79 @@ const sectionsByOrgType = <OrgType, List<Section>>{
     _users,
     Section(
       '/extensions',
-      'Extensions',
+      NavLabel.extensions,
       Icons.dialpad_outlined,
       requires: ['extension.read'],
     ),
     Section(
       '/phones',
-      'Phones',
+      NavLabel.phones,
       Icons.phone_android_outlined,
       requires: ['extension.read'],
     ),
     Section(
       '/phone-numbers',
-      'Phone numbers',
+      NavLabel.phoneNumbers,
       Icons.phone_outlined,
       requires: ['did.read'],
     ),
     Section(
       '/call-flows',
-      'Call flows',
+      NavLabel.callFlows,
       Icons.account_tree_outlined,
       requires: ['callflow.read'],
     ),
     Section(
       '/ring-groups',
-      'Ring groups',
+      NavLabel.ringGroups,
       Icons.groups_outlined,
       requires: ['group.read'],
     ),
     Section(
       '/outbound-routes',
-      'Outbound routes',
+      NavLabel.outboundRoutes,
       Icons.call_made_outlined,
       requires: ['trunk.read', 'emergency_route.read'],
     ),
     Section(
       '/queues',
-      'Queues',
+      NavLabel.queues,
       Icons.queue_outlined,
       requires: ['queue.read'],
     ),
     Section(
       '/conference-rooms',
-      'Conference rooms',
+      NavLabel.conferenceRooms,
       Icons.video_call_outlined,
       requires: ['conference_room.read'],
     ),
     Section(
       '/parking-lots',
-      'Parking lots',
+      NavLabel.parkingLots,
       Icons.local_parking_outlined,
       requires: ['parking_lot.read'],
     ),
     Section(
       '/schedules',
-      'Schedules',
+      NavLabel.schedules,
       Icons.schedule_outlined,
       requires: ['schedule.read'],
     ),
     Section(
       '/media',
-      'Media',
+      NavLabel.media,
       Icons.library_music_outlined,
       requires: ['media.read'],
     ),
     Section(
       '/monitoring',
-      'Monitoring',
+      NavLabel.monitoring,
       Icons.visibility_outlined,
       requires: ['monitor.presence'],
     ),
     Section(
       '/recordings',
-      'Recordings',
+      NavLabel.recordings,
       Icons.mic_none_outlined,
       privateData: true,
       requires: [
@@ -235,27 +314,27 @@ const sectionsByOrgType = <OrgType, List<Section>>{
     ),
     Section(
       '/voicemail',
-      'Voicemail',
+      NavLabel.voicemail,
       Icons.voicemail_outlined,
       privateData: true,
       requires: ['voicemail.access'],
     ),
     Section(
       '/call-records',
-      'Call records',
+      NavLabel.callRecords,
       Icons.history_outlined,
       privateData: true,
       requires: ['cdr.read'],
     ),
     Section(
       '/reports',
-      'Reports',
+      NavLabel.reports,
       Icons.bar_chart_outlined,
       requires: ['cdr.read', 'analytics.view', 'billing.read'],
     ),
     Section(
       '/settings',
-      'Settings',
+      NavLabel.settings,
       Icons.settings_outlined,
       requires: ['emergency_location.read'],
     ),

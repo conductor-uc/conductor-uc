@@ -5,17 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import '../cdr/call_records_page.dart'
-    show
-        directionLabels,
-        dispositionLabels,
-        formatDuration,
-        formatWhen,
-        partyLabel;
+    show directionLabels, dispositionLabels, partyLabel;
 import '../pbx/call_handling_dialog.dart';
 import '../pbx/pbx_api.dart';
 import '../voicemail/voicemail_page.dart' show MessagesView;
 import 'my_live_calls.dart';
 import 'my_phone_api.dart';
+import '../../core/format.dart';
 
 /// The three "My phone" screens (a person's own call handling, voicemail and
 /// call history). A person who holds only self-service permissions gets them as
@@ -375,7 +371,7 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
                               DataRow(
                                 key: ValueKey('my-call-${r['id']}'),
                                 cells: [
-                                  DataCell(Text(formatWhen(r['startAt']))),
+                                  DataCell(Text(formatDateTime(r['startAt']))),
                                   DataCell(
                                     Text(
                                       directionLabels['${r['direction']}'] ??
@@ -391,9 +387,7 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
                                     ),
                                   ),
                                   DataCell(Text('${r['toNumber']}')),
-                                  DataCell(
-                                    Text(formatDuration(r['durationSec'])),
-                                  ),
+                                  DataCell(Text(formatClock(r['durationSec']))),
                                   DataCell(
                                     Text(
                                       dispositionLabels['${r['disposition']}'] ??

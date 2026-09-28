@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
 import 'pbx_api.dart' show Json;
+import '../../core/format.dart';
 
 /// Weekday order as a schedule shows it. The service numbers days 0 (Sunday)
 /// to 6 (Saturday); people read a week from Monday.
 const _weekOrder = [1, 2, 3, 4, 5, 6, 0];
-const _dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 final _timePattern = RegExp(r'^([01]\d|2[0-3]):[0-5]\d$');
 final _datePattern = RegExp(r'^\d{4}-\d{2}-\d{2}$');
@@ -36,8 +36,8 @@ String describeDays(Iterable<int> days) {
     }
     parts.add(
       j - i >= 2
-          ? '${_dayNames[ordered[i]]}–${_dayNames[ordered[j]]}'
-          : [for (var k = i; k <= j; k++) _dayNames[ordered[k]]].join(', '),
+          ? '${weekdayShort(ordered[i])}–${weekdayShort(ordered[j])}'
+          : [for (var k = i; k <= j; k++) weekdayShort(ordered[k])].join(', '),
     );
     i = j + 1;
   }
@@ -202,7 +202,7 @@ class _WeeklyHoursEditorState extends State<WeeklyHoursEditor> {
                       for (final d in _weekOrder)
                         FilterChip(
                           key: ValueKey('day-$i-$d'),
-                          label: Text(_dayNames[d]),
+                          label: Text(weekdayShort(d)),
                           selected: row.days.contains(d),
                           visualDensity: VisualDensity.compact,
                           onSelected: (on) {

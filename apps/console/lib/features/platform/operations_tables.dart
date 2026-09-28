@@ -79,7 +79,7 @@ class ServicesTab extends StatelessWidget {
                     Text(s.status == 'down' ? noValue : formatMs(s.latencyMs)),
                   ),
                   DataCell(Text(s.version ?? noValue)),
-                  DataCell(Text(formatDuration(s.uptimeSeconds))),
+                  DataCell(Text(formatSpan(s.uptimeSeconds))),
                   DataCell(Text(formatBytes(s.rssBytes))),
                   DataCell(_outbox(s)),
                   DataCell(
@@ -108,13 +108,13 @@ class ServicesTab extends StatelessWidget {
   }
 
   Widget _outbox(ServiceStatus s) {
-    if (s.outboxPending == null) return const Text(noValue);
+    if (s.outboxPending == null) return Text(noValue);
     final failed = s.outboxFailed ?? 0;
     final pending = s.outboxPending!;
     final text = pending == 0
         ? 'Empty'
         : '${formatCount(pending)} waiting, oldest '
-              '${formatDuration(s.outboxOldestSeconds)}';
+              '${formatSpan(s.outboxOldestSeconds)}';
     if (failed == 0) return Text(text);
     return HealthLabel(
       Health.bad,
@@ -160,7 +160,7 @@ class SignallingTab extends StatelessWidget {
                   value: serviceHealth(s.status).$2,
                   icon: Icons.router_outlined,
                   health: serviceHealth(s.status).$1,
-                  detail: 'Up ${formatDuration(s.uptimeSeconds)}',
+                  detail: 'Up ${formatSpan(s.uptimeSeconds)}',
                 ),
                 StatTile(
                   label: 'Registered phones',
@@ -406,7 +406,7 @@ class DataStoresTab extends StatelessWidget {
                       [
                         if (store.version != null) 'Version ${store.version}',
                         if (store.uptimeSeconds != null)
-                          'up ${formatDuration(store.uptimeSeconds)}',
+                          'up ${formatSpan(store.uptimeSeconds)}',
                       ].join(', '),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,

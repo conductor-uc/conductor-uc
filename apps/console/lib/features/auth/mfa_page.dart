@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/api_client.dart';
 import '../../core/session.dart';
 import 'auth_errors.dart';
+import '../../l10n/l10n.dart';
 import 'auth_scaffold.dart';
 
 /// The second sign-in step (07 §1): confirm a new authenticator on first use,
@@ -59,8 +60,8 @@ class _MfaPageState extends ConsumerState<MfaPage> {
     } catch (e) {
       setState(
         () => _error = isOffline(e)
-            ? 'Could not reach the server.'
-            : 'That code was not accepted. If it keeps failing, sign in again.',
+            ? context.l10n.commonCouldNotReachServer
+            : context.l10n.authMfaCodeRejected,
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -80,14 +81,11 @@ class _MfaPageState extends ConsumerState<MfaPage> {
 
     return AuthScaffold(
       title: enrolling
-          ? 'Set up two-step verification'
-          : 'Two-step verification',
+          ? context.l10n.authMfaSetUpTitle
+          : context.l10n.authMfaTitle,
       children: [
         if (step is MfaEnrollStep) ...[
-          const Text(
-            'Scan this code with an authenticator app, or enter the key by hand, '
-            'then type the 6-digit code it shows.',
-          ),
+          Text(context.l10n.authMfaScanInstructions),
           const SizedBox(height: 16),
           Center(
             child: QrImageView(
@@ -99,23 +97,30 @@ class _MfaPageState extends ConsumerState<MfaPage> {
           const SizedBox(height: 8),
           SelectableText(step.secret, textAlign: TextAlign.center),
         ] else
-          const Text('Enter the 6-digit code from your authenticator app.'),
+          Text(context.l10n.authMfaEnterCode),
         const SizedBox(height: 16),
         TextField(
           controller: _code,
           autofocus: true,
           keyboardType: TextInputType.number,
           autofillHints: const [AutofillHints.oneTimeCode],
-          decoration: const InputDecoration(labelText: 'Code'),
+          decoration: InputDecoration(labelText: context.l10n.authMfaCode),
           onSubmitted: (_) => _busy ? null : _submit(step),
         ),
         if (_error != null) FormMessage(_error!, isError: true),
         const SizedBox(height: 20),
         FilledButton(
           onPressed: _busy ? null : () => _submit(step),
-          child: Text(enrolling ? 'Confirm' : 'Verify'),
+          child: Text(
+            enrolling
+                ? context.l10n.authMfaConfirm
+                : context.l10n.authMfaVerify,
+          ),
         ),
-        TextButton(onPressed: _back, child: const Text('Back to sign in')),
+        TextButton(
+          onPressed: _back,
+          child: Text(context.l10n.commonBackToSignIn),
+        ),
       ],
     );
   }

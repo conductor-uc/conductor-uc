@@ -1,0 +1,511 @@
+{
+  "@@locale": "en",
+  "appTitleFallback": "Console",
+  "@appTitleFallback": {
+    "description": "Browser tab title when no brand is configured (the neutral presentation). Must stay generic: never a product or company name."
+  },
+  "commonBackToSignIn": "Back to sign in",
+  "@commonBackToSignIn": {
+    "description": "Link back to the sign-in page from any signed-out page."
+  },
+  "commonGoBack": "Go back",
+  "@commonGoBack": {
+    "description": "Button that returns to the start page from an error page."
+  },
+  "commonCouldNotReachServer": "Could not reach the server.",
+  "@commonCouldNotReachServer": {
+    "description": "A request failed before it reached the server (offline, DNS, server down)."
+  },
+  "commonSomethingWentWrong": "Something went wrong.",
+  "@commonSomethingWentWrong": {
+    "description": "Generic failure with no further detail."
+  },
+  "commonSomethingWentWrongTryAgain": "Something went wrong. Try again.",
+  "@commonSomethingWentWrongTryAgain": {
+    "description": "Generic failure where retrying may help."
+  },
+  "commonServerRejected": "The server rejected that ({status}).",
+  "@commonServerRejected": {
+    "description": "A request was refused and the server gave no explanation. {status} is the HTTP status number.",
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "commonNoValue": "—",
+  "@commonNoValue": {
+    "description": "Shown in place of a value nobody reported. Usually a dash."
+  },
+  "commonNever": "Never",
+  "@commonNever": {
+    "description": "Shown in place of a date for something that has never happened."
+  },
+  "shellSignOut": "Sign out",
+  "@shellSignOut": {
+    "description": "Header button that signs the person out."
+  },
+  "shellActingAs": "Acting as {tenant}",
+  "@shellActingAs": {
+    "description": "Banner shown while a platform or reseller administrator works inside a customer's account. {tenant} is the customer organization's name.",
+    "placeholders": {
+      "tenant": {
+        "type": "String"
+      }
+    }
+  },
+  "shellActingExit": "Exit",
+  "@shellActingExit": {
+    "description": "Button on the acting banner that returns to the administrator's own account."
+  },
+  "shellForbiddenTitle": "Not available to you",
+  "@shellForbiddenTitle": {
+    "description": "Heading when someone opens a page their role does not include."
+  },
+  "shellForbiddenBody": "Your role doesn't include this page.",
+  "@shellForbiddenBody": {
+    "description": "Explanation under the not-available heading."
+  },
+  "shellNotFoundTitle": "Page not found",
+  "@shellNotFoundTitle": {
+    "description": "Heading for an address that is not a page."
+  },
+  "shellNotFoundBody": "There is nothing at this address.",
+  "@shellNotFoundBody": {
+    "description": "Explanation under the page-not-found heading."
+  },
+  "navDashboard": "Dashboard",
+  "@navDashboard": {
+    "description": "Navigation menu item. The overview page."
+  },
+  "navAudit": "Audit",
+  "@navAudit": {
+    "description": "Navigation menu item. The audit trail: who did what, when."
+  },
+  "navUsers": "Users",
+  "@navUsers": {
+    "description": "Navigation menu item. People who can sign in to this organization."
+  },
+  "navMyCallHandling": "My call handling",
+  "@navMyCallHandling": {
+    "description": "Navigation menu item. A person's own forwarding and ringing settings."
+  },
+  "navMyVoicemail": "My voicemail",
+  "@navMyVoicemail": {
+    "description": "Navigation menu item. A person's own voicemail messages."
+  },
+  "navMyCallHistory": "My call history",
+  "@navMyCallHistory": {
+    "description": "Navigation menu item. A person's own recent calls."
+  },
+  "navMyPhone": "My phone",
+  "@navMyPhone": {
+    "description": "Navigation menu item. Entry to a person's own phone settings, voicemail and history."
+  },
+  "navResellers": "Resellers",
+  "@navResellers": {
+    "description": "Navigation menu item. Partner companies that resell the service."
+  },
+  "navOperations": "Operations",
+  "@navOperations": {
+    "description": "Navigation menu item. The platform's live health and capacity."
+  },
+  "navCertificates": "Certificates",
+  "@navCertificates": {
+    "description": "Navigation menu item. Security certificates for web and phone connections."
+  },
+  "navSecurity": "Security",
+  "@navSecurity": {
+    "description": "Navigation menu item. Platform sign-in security settings."
+  },
+  "navTenants": "Tenants",
+  "@navTenants": {
+    "description": "Navigation menu item. A reseller's customer organizations."
+  },
+  "navTrunks": "Trunks",
+  "@navTrunks": {
+    "description": "Navigation menu item. Connections to phone carriers."
+  },
+  "navDomains": "Domains",
+  "@navDomains": {
+    "description": "Navigation menu item. Web addresses a reseller serves the console from."
+  },
+  "navBrand": "Brand",
+  "@navBrand": {
+    "description": "Navigation menu item. A reseller's name, logo and colors."
+  },
+  "navExtensions": "Extensions",
+  "@navExtensions": {
+    "description": "Navigation menu item. Internal phone numbers of the organization."
+  },
+  "navPhones": "Phones",
+  "@navPhones": {
+    "description": "Navigation menu item. Desk phones and other devices."
+  },
+  "navPhoneNumbers": "Phone numbers",
+  "@navPhoneNumbers": {
+    "description": "Navigation menu item. Outside phone numbers the organization receives calls on."
+  },
+  "navCallFlows": "Call flows",
+  "@navCallFlows": {
+    "description": "Navigation menu item. Visual designs of how incoming calls are answered."
+  },
+  "navRingGroups": "Ring groups",
+  "@navRingGroups": {
+    "description": "Navigation menu item. Groups of phones that ring together or in turn."
+  },
+  "navOutboundRoutes": "Outbound routes",
+  "@navOutboundRoutes": {
+    "description": "Navigation menu item. How outgoing calls reach the carrier."
+  },
+  "navQueues": "Queues",
+  "@navQueues": {
+    "description": "Navigation menu item. Call queues where callers wait for the next agent."
+  },
+  "navConferenceRooms": "Conference rooms",
+  "@navConferenceRooms": {
+    "description": "Navigation menu item. Rooms for conference calls."
+  },
+  "navParkingLots": "Parking lots",
+  "@navParkingLots": {
+    "description": "Navigation menu item. Where calls are put on hold to be picked up from another phone."
+  },
+  "navSchedules": "Schedules",
+  "@navSchedules": {
+    "description": "Navigation menu item. Business hours and holidays."
+  },
+  "navMedia": "Media",
+  "@navMedia": {
+    "description": "Navigation menu item. Recorded greetings and hold music."
+  },
+  "navMonitoring": "Monitoring",
+  "@navMonitoring": {
+    "description": "Navigation menu item. Who is on the phone right now, and live calls."
+  },
+  "navRecordings": "Recordings",
+  "@navRecordings": {
+    "description": "Navigation menu item. Recorded calls and recording rules."
+  },
+  "navVoicemail": "Voicemail",
+  "@navVoicemail": {
+    "description": "Navigation menu item. The organization's voicemail boxes."
+  },
+  "navCallRecords": "Call records",
+  "@navCallRecords": {
+    "description": "Navigation menu item. History of calls made and received."
+  },
+  "navReports": "Reports",
+  "@navReports": {
+    "description": "Navigation menu item. Call reports and statistics."
+  },
+  "navSettings": "Settings",
+  "@navSettings": {
+    "description": "Navigation menu item. Organization settings."
+  },
+  "authOrganizationId": "Organization ID",
+  "@authOrganizationId": {
+    "description": "Field label for the ID of the organization a person signs in to. Only asked when the web address does not say which organization it is."
+  },
+  "authEmail": "Email",
+  "@authEmail": {
+    "description": "Field label for an email address."
+  },
+  "authPassword": "Password",
+  "@authPassword": {
+    "description": "Field label for a password."
+  },
+  "authSignInTitle": "Sign in",
+  "@authSignInTitle": {
+    "description": "Heading of the sign-in page."
+  },
+  "authSignInButton": "Sign in",
+  "@authSignInButton": {
+    "description": "Button that submits the sign-in form."
+  },
+  "authForgotPassword": "Forgot your password?",
+  "@authForgotPassword": {
+    "description": "Link to the password reset page."
+  },
+  "authCouldNotSignIn": "Could not sign in.",
+  "@authCouldNotSignIn": {
+    "description": "Sign-in failed for an unexpected reason."
+  },
+  "authEnterOrganizationId": "Enter your organization ID to continue.",
+  "@authEnterOrganizationId": {
+    "description": "The web address does not say which organization this is, so the person has to enter its ID."
+  },
+  "authNotRecognized": "Those details were not recognized.",
+  "@authNotRecognized": {
+    "description": "Wrong email, password or organization. Deliberately does not say which."
+  },
+  "authNoticePasswordChanged": "Password changed. Sign in with your new password.",
+  "@authNoticePasswordChanged": {
+    "description": "Shown on the sign-in page after a password reset."
+  },
+  "authNoticeAccountCreated": "Account created. Sign in to continue.",
+  "@authNoticeAccountCreated": {
+    "description": "Shown on the sign-in page after accepting an invitation."
+  },
+  "authMfaSetUpTitle": "Set up two-step verification",
+  "@authMfaSetUpTitle": {
+    "description": "Heading when a person must add an authenticator app before signing in."
+  },
+  "authMfaTitle": "Two-step verification",
+  "@authMfaTitle": {
+    "description": "Heading when a person must enter a code from their authenticator app."
+  },
+  "authMfaScanInstructions": "Scan this code with an authenticator app, or enter the key by hand, then type the 6-digit code it shows.",
+  "@authMfaScanInstructions": {
+    "description": "Instructions next to the QR code for setting up an authenticator app."
+  },
+  "authMfaEnterCode": "Enter the 6-digit code from your authenticator app.",
+  "@authMfaEnterCode": {
+    "description": "Instructions for entering a sign-in code."
+  },
+  "authMfaCode": "Code",
+  "@authMfaCode": {
+    "description": "Field label for the 6-digit code."
+  },
+  "authMfaConfirm": "Confirm",
+  "@authMfaConfirm": {
+    "description": "Button that confirms a newly set-up authenticator app."
+  },
+  "authMfaVerify": "Verify",
+  "@authMfaVerify": {
+    "description": "Button that submits a sign-in code."
+  },
+  "authMfaCodeRejected": "That code was not accepted. If it keeps failing, sign in again.",
+  "@authMfaCodeRejected": {
+    "description": "The 6-digit code was wrong or expired."
+  },
+  "authResetTitle": "Reset your password",
+  "@authResetTitle": {
+    "description": "Heading of the page for requesting a password reset link."
+  },
+  "authResetSend": "Send reset link",
+  "@authResetSend": {
+    "description": "Button that emails a password reset link."
+  },
+  "authResetEnterEmail": "Enter your email.",
+  "@authResetEnterEmail": {
+    "description": "The email field is empty."
+  },
+  "authResetEnterOrgAndEmail": "Enter your organization ID and email.",
+  "@authResetEnterOrgAndEmail": {
+    "description": "The organization ID or email field is empty."
+  },
+  "authResetTryAgainLater": "Something went wrong. Try again in a moment.",
+  "@authResetTryAgainLater": {
+    "description": "Requesting a reset link failed; retrying later may help."
+  },
+  "authResetCheckEmailTitle": "Check your email",
+  "@authResetCheckEmailTitle": {
+    "description": "Heading after a reset link has been requested."
+  },
+  "authResetCheckEmailBody": "If there is an account for that email, we have sent a link to choose a new password. It works for a limited time.",
+  "@authResetCheckEmailBody": {
+    "description": "Explains that a reset link was sent if the account exists. Deliberately does not confirm that the account exists."
+  },
+  "authResetLinkIncomplete": "This link is incomplete. Request a new one.",
+  "@authResetLinkIncomplete": {
+    "description": "The reset link is missing its token."
+  },
+  "authResetRequestNewLink": "Request a new link",
+  "@authResetRequestNewLink": {
+    "description": "Button that goes back to requesting a reset link."
+  },
+  "authResetChooseTitle": "Choose a new password",
+  "@authResetChooseTitle": {
+    "description": "Heading of the page for setting a new password."
+  },
+  "authNewPassword": "New password",
+  "@authNewPassword": {
+    "description": "Field label for a new password."
+  },
+  "authConfirmNewPassword": "Confirm new password",
+  "@authConfirmNewPassword": {
+    "description": "Field label for typing the new password again."
+  },
+  "authPasswordHelper": "At least {count, plural, =1{1 character} other{{count} characters}}.",
+  "@authPasswordHelper": {
+    "description": "Help text under a new-password field.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "authChangePassword": "Change password",
+  "@authChangePassword": {
+    "description": "Button that saves a new password."
+  },
+  "authSignedOutEverywhere": "You will be signed out everywhere, and asked to sign in again.",
+  "@authSignedOutEverywhere": {
+    "description": "Note that changing the password ends every session."
+  },
+  "authPasswordTooShort": "Use at least {count, plural, =1{1 character} other{{count} characters}}.",
+  "@authPasswordTooShort": {
+    "description": "The new password is too short.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "authPasswordsDoNotMatch": "The two passwords do not match.",
+  "@authPasswordsDoNotMatch": {
+    "description": "The password and its confirmation differ."
+  },
+  "authResetLinkInvalid": "This link is invalid or has expired. Request a new one.",
+  "@authResetLinkInvalid": {
+    "description": "The reset link cannot be used any more."
+  },
+  "authChooseStrongerPassword": "Choose a stronger password.",
+  "@authChooseStrongerPassword": {
+    "description": "The password was refused as too weak."
+  },
+  "authPasswordInUse": "That password is already used for another account with this email. Choose a different one.",
+  "@authPasswordInUse": {
+    "description": "The same email has accounts in several organizations, and each must have its own password."
+  },
+  "authInviteTitle": "Accept invitation",
+  "@authInviteTitle": {
+    "description": "Heading of the page for accepting an invitation."
+  },
+  "authInviteInvalid": "This invitation is invalid or has expired. Ask whoever invited you to send a new one.",
+  "@authInviteInvalid": {
+    "description": "The invitation link cannot be used."
+  },
+  "authInviteInvalidShort": "This invitation is invalid or has expired.",
+  "@authInviteInvalidShort": {
+    "description": "The invitation was refused when accepting it."
+  },
+  "authInviteCouldNotLoad": "Could not load this invitation.",
+  "@authInviteCouldNotLoad": {
+    "description": "Loading the invitation failed."
+  },
+  "authGoToSignIn": "Go to sign in",
+  "@authGoToSignIn": {
+    "description": "Button to the sign-in page."
+  },
+  "authInviteWelcome": "Welcome, {name}",
+  "@authInviteWelcome": {
+    "description": "Heading greeting an invited person. {name} is their display name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "authInviteChoosePassword": "Choose a password for {email}.",
+  "@authInviteChoosePassword": {
+    "description": "Instructions on the invitation page. {email} is the invited address.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "authConfirmPassword": "Confirm password",
+  "@authConfirmPassword": {
+    "description": "Field label for typing the password again."
+  },
+  "authCreateAccount": "Create account",
+  "@authCreateAccount": {
+    "description": "Button that accepts the invitation."
+  },
+  "authEmailTaken": "That email already has an account. Sign in instead.",
+  "@authEmailTaken": {
+    "description": "The invited email already has an account in this organization."
+  },
+  "formatBytes": "{value} {unit, select, B{B} KB{KB} MB{MB} GB{GB} TB{TB} other{{unit}}}",
+  "@formatBytes": {
+    "description": "A size in bytes. {value} is already formatted; {unit} is B, KB, MB, GB or TB.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      },
+      "unit": {
+        "type": "String"
+      }
+    }
+  },
+  "formatMilliseconds": "{value} ms",
+  "@formatMilliseconds": {
+    "description": "A time in milliseconds. {value} is already formatted.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "formatPerSecond": "{value}/s",
+  "@formatPerSecond": {
+    "description": "A rate per second. {value} is already formatted.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "formatSeconds": "{count} s",
+  "@formatSeconds": {
+    "description": "A short duration in seconds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "formatMinutes": "{count} min",
+  "@formatMinutes": {
+    "description": "A duration in minutes.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "formatHours": "{count} h",
+  "@formatHours": {
+    "description": "A duration in hours.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "formatHoursMinutes": "{hours} h {minutes} min",
+  "@formatHoursMinutes": {
+    "description": "A duration in hours and minutes.",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "formatDays": "{count} d",
+  "@formatDays": {
+    "description": "A duration in days.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "formatDaysHours": "{days} d {hours} h",
+  "@formatDaysHours": {
+    "description": "A duration in days and hours.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "hours": {
+        "type": "int"
+      }
+    }
+  }
+}

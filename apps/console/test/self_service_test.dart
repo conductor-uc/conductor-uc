@@ -8,6 +8,7 @@ import 'package:console/dev/demo_realtime.dart';
 import 'package:console/core/realtime.dart';
 import 'package:console/features/shell/sections.dart';
 import 'package:console/features/voicemail/voicemail_api.dart';
+import 'package:console/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -54,6 +55,9 @@ Future<void> open(WidgetTester tester, String section) async {
   await tester.tap(navItem(section));
   await tester.pumpAndSettle();
 }
+
+/// The English strings the navigation is checked against.
+final en = lookupAppLocalizations(const Locale('en'));
 
 void main() {
   group('my live calls (S5-15)', () {
@@ -136,14 +140,14 @@ void main() {
     test('visibleSections: only their phone, whatever the org type holds', () {
       final only = {...demoSelfService};
       final sections = visibleSections(session(OrgType.tenant), null, only);
-      expect([for (final s in sections) s.label], selfSections);
+      expect([for (final s in sections) s.label.of(en)], selfSections);
     });
 
     test('an administrator keeps the administrator navigation', () {
       final admin = {...demoPermissions('tenant', 'admin@x')!};
       final plain = visibleSections(session(OrgType.tenant), null, admin);
-      expect(plain.map((s) => s.label), isNot(contains('My phone')));
-      expect(plain.map((s) => s.label), contains('Extensions'));
+      expect(plain.map((s) => s.label.of(en)), isNot(contains('My phone')));
+      expect(plain.map((s) => s.label.of(en)), contains('Extensions'));
       // Linked to an extension: also My phone.
       final withPhone = visibleSections(
         session(OrgType.tenant),
@@ -151,8 +155,8 @@ void main() {
         admin,
         true,
       );
-      expect(withPhone.map((s) => s.label), contains('My phone'));
-      expect(withPhone.map((s) => s.label), contains('Extensions'));
+      expect(withPhone.map((s) => s.label.of(en)), contains('My phone'));
+      expect(withPhone.map((s) => s.label.of(en)), contains('Extensions'));
     });
 
     test('My phone needs a self permission, even with an extension', () {
@@ -163,7 +167,7 @@ void main() {
         without,
         true,
       );
-      expect(sections.map((s) => s.label), isNot(contains('My phone')));
+      expect(sections.map((s) => s.label.of(en)), isNot(contains('My phone')));
     });
 
     test('a reseller or the master has no phone of their own', () {
@@ -173,9 +177,12 @@ void main() {
           ...demoSelfService,
         };
         final sections = visibleSections(session(type), null, held, true);
-        expect(sections.map((s) => s.label), isNot(contains('My phone')));
+        expect(
+          sections.map((s) => s.label.of(en)),
+          isNot(contains('My phone')),
+        );
         for (final label in selfSections) {
-          expect(sections.map((s) => s.label), isNot(contains(label)));
+          expect(sections.map((s) => s.label.of(en)), isNot(contains(label)));
         }
       }
     });
@@ -190,9 +197,9 @@ void main() {
         held,
         true,
       );
-      expect(sections.map((s) => s.label), isNot(contains('My phone')));
+      expect(sections.map((s) => s.label.of(en)), isNot(contains('My phone')));
       // And a reseller never gets the private-data sections of the tenant (H1).
-      expect(sections.map((s) => s.label), isNot(contains('Voicemail')));
+      expect(sections.map((s) => s.label.of(en)), isNot(contains('Voicemail')));
     });
 
     test(

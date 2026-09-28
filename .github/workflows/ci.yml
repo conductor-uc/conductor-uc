@@ -394,6 +394,11 @@ jobs:
       - run: flutter analyze
         working-directory: apps/console
 
+      # S9-01 (D-018): user-facing text lives in lib/l10n/app_en.arb. The
+      # literals that predate it are counted per file and may only go down.
+      - name: No new hard-coded strings
+        run: node apps/console/tool/check-strings.mjs
+
       - run: flutter test
         working-directory: apps/console
 

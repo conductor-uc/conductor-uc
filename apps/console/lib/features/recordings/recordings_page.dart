@@ -3,21 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
 import '../../widgets/page.dart';
-import '../cdr/call_records_page.dart' show formatWhen, parseDate;
+import '../cdr/call_records_page.dart' show parseDate;
 import '../pbx/pbx_api.dart';
 import '../pbx/resource.dart';
 import '../voicemail/voicemail_api.dart' show openRecordingProvider;
-import '../voicemail/voicemail_page.dart' show formatLength;
 import 'policies_panel.dart';
 import 'recordings_api.dart';
+import '../../core/format.dart';
 
 /// "1.2 MB", "88 KB", "512 B".
-String formatBytes(num? bytes) {
-  if (bytes == null) return '—';
-  if (bytes < 1024) return '${bytes.round()} B';
-  if (bytes < 1024 * 1024) return '${(bytes / 1024).round()} KB';
-  return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-}
 
 /// The tenant's call recordings and the rules that decide what is recorded.
 /// Recordings are `private` tenant data, so this is for the tenant's own people
@@ -404,7 +398,7 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
                     DataRow(
                       key: ValueKey('rec-${r['id']}'),
                       cells: [
-                        DataCell(Text(formatWhen(r['startedAt']))),
+                        DataCell(Text(formatDateTime(r['startedAt']))),
                         DataCell(
                           Text(
                             recordingDirections['${r['direction']}'] ??
@@ -412,7 +406,7 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
                           ),
                         ),
                         DataCell(Text(_where(r, titles))),
-                        DataCell(Text(formatLength(r['durationMs'] as num?))),
+                        DataCell(Text(formatClockMs(r['durationMs'] as num?))),
                         DataCell(Text(formatBytes(r['sizeBytes'] as num?))),
                         DataCell(
                           Chip(
@@ -431,9 +425,7 @@ class _RecordingTableState extends ConsumerState<_RecordingTable> {
                           Text(
                             r['retentionDate'] == null
                                 ? 'Until deleted'
-                                : formatWhen(r['retentionDate'])
-                                      .split(' ')
-                                      .first,
+                                : formatDate(r['retentionDate']),
                           ),
                         ),
                         DataCell(

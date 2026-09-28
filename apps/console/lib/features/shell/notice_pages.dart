@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 
 /// Shown when a signed-in person types the address of a page their role does
@@ -11,13 +12,13 @@ class ForbiddenPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PageFrame(
     children: [
-      const PageHeader(
-        title: 'Not available to you',
-        subtitle: "Your role doesn't include this page.",
+      PageHeader(
+        title: context.l10n.shellForbiddenTitle,
+        subtitle: context.l10n.shellForbiddenBody,
       ),
       TextButton(
         onPressed: () => context.go('/'),
-        child: const Text('Go back'),
+        child: Text(context.l10n.commonGoBack),
       ),
     ],
   );
@@ -30,13 +31,13 @@ class NotFoundPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PageFrame(
     children: [
-      const PageHeader(
-        title: 'Page not found',
-        subtitle: 'There is nothing at this address.',
+      PageHeader(
+        title: context.l10n.shellNotFoundTitle,
+        subtitle: context.l10n.shellNotFoundBody,
       ),
       TextButton(
         onPressed: () => context.go('/'),
-        child: const Text('Go back'),
+        child: Text(context.l10n.commonGoBack),
       ),
     ],
   );

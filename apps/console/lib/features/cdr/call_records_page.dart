@@ -9,6 +9,7 @@ import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource.dart';
 import 'cdr_api.dart';
+import '../../core/format.dart';
 
 /// Opens a download address in a new tab. A provider so tests can watch it
 /// instead of leaving the app.
@@ -31,25 +32,6 @@ const dispositionLabels = {
   'cancelled': 'Cancelled',
   'node_failure': 'Failed (platform)',
 };
-
-String _two(int n) => n.toString().padLeft(2, '0');
-
-/// A date as the filter fields write it: `2026-09-24`.
-String formatDate(DateTime d) => '${d.year}-${_two(d.month)}-${_two(d.day)}';
-
-/// An instant from the service, shown in the viewer's own time zone.
-String formatWhen(Object? iso) {
-  final d = iso is String ? DateTime.tryParse(iso)?.toLocal() : null;
-  if (d == null) return '—';
-  return '${formatDate(d)} ${_two(d.hour)}:${_two(d.minute)}:${_two(d.second)}';
-}
-
-String formatDuration(Object? seconds) {
-  final s = seconds is num ? seconds.toInt() : 0;
-  final h = s ~/ 3600;
-  final m = (s % 3600) ~/ 60;
-  return h > 0 ? '$h:${_two(m)}:${_two(s % 60)}' : '$m:${_two(s % 60)}';
-}
 
 /// A whole-day date typed as `YYYY-MM-DD`, or null when it is not one.
 DateTime? parseDate(String text) {
@@ -354,7 +336,7 @@ class _CallTableState extends ConsumerState<_CallTable> {
                         builder: (_) => CallDetailDialog(id: '${r['id']}'),
                       ),
                       cells: [
-                        DataCell(Text(formatWhen(r['startAt']))),
+                        DataCell(Text(formatDateTime(r['startAt']))),
                         DataCell(
                           Text(
                             directionLabels['${r['direction']}'] ??
@@ -365,7 +347,7 @@ class _CallTableState extends ConsumerState<_CallTable> {
                           Text(partyLabel(r['fromNumber'], r['fromName'])),
                         ),
                         DataCell(Text('${r['toNumber']}')),
-                        DataCell(Text(formatDuration(r['durationSec']))),
+                        DataCell(Text(formatClock(r['durationSec']))),
                         DataCell(
                           Text(
                             dispositionLabels['${r['disposition']}'] ??
@@ -432,11 +414,11 @@ class CallDetailDialog extends ConsumerWidget {
                 dispositionLabels['${c['disposition']}'] ??
                     '${c['disposition']}',
               ),
-              ('Started', formatWhen(c['startAt'])),
-              ('Answered', formatWhen(c['answerAt'])),
-              ('Ended', formatWhen(c['endAt'])),
-              ('Duration', formatDuration(c['durationSec'])),
-              ('Billable time', formatDuration(c['billableSec'])),
+              ('Started', formatDateTime(c['startAt'])),
+              ('Answered', formatDateTime(c['answerAt'])),
+              ('Ended', formatDateTime(c['endAt'])),
+              ('Duration', formatClock(c['durationSec'])),
+              ('Billable time', formatClock(c['billableSec'])),
               ('From', partyLabel(c['fromNumber'], c['fromName'])),
               ('To', '${c['toNumber']}'),
               ('Dialed', '${c['dialedNumber']}'),
@@ -523,9 +505,9 @@ class ExportDialog extends ConsumerStatefulWidget {
 
 class _ExportDialogState extends ConsumerState<ExportDialog> {
   late final _from = TextEditingController(
-    text: formatDate(DateTime.now().subtract(const Duration(days: 30))),
+    text: isoDate(DateTime.now().subtract(const Duration(days: 30))),
   );
-  late final _to = TextEditingController(text: formatDate(DateTime.now()));
+  late final _to = TextEditingController(text: isoDate(DateTime.now()));
   String? _error;
   bool _busy = false;
 

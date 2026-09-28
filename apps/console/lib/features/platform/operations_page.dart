@@ -9,6 +9,7 @@ import 'operations_api.dart';
 import 'operations_nodes.dart';
 import 'operations_overview.dart';
 import 'operations_tables.dart';
+import '../../core/format.dart';
 
 /// How often the page asks for a new reading while it is open.
 const operationsRefresh = Duration(seconds: 5);
@@ -71,7 +72,7 @@ class _OperationsPageState extends ConsumerState<OperationsPage> {
             title: 'Operations',
             subtitle: checked == null
                 ? 'The services, media nodes, SIP edge, event bus and data stores.'
-                : 'Read at ${_clock(checked)} UTC. Refreshes every '
+                : 'Read at ${formatUtcClock(checked)} UTC. Refreshes every '
                       '${operationsRefresh.inSeconds} seconds.',
             actions: [
               if (overview.isLoading && overview.hasValue)
@@ -137,10 +138,4 @@ class _OperationsPageState extends ConsumerState<OperationsPage> {
       ),
     );
   }
-}
-
-String _clock(DateTime at) {
-  final utc = at.toUtc();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${two(utc.hour)}:${two(utc.minute)}:${two(utc.second)}';
 }

@@ -1,11 +1,12 @@
 import 'package:console/core/session.dart';
 import 'package:console/features/shell/sections.dart';
 import 'package:console/features/voicemail/voicemail_api.dart';
-import 'package:console/features/voicemail/voicemail_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'pbx_test.dart' show openSection;
+
+import 'package:console/core/format.dart';
 
 /// Opens Voicemail as a tenant user. Recordings a person plays are collected
 /// in the returned list instead of opening a browser tab.
@@ -44,17 +45,6 @@ Future<void> openMailboxAction(
 
 void main() {
   group('formatting', () {
-    test('a length is minutes and seconds', () {
-      expect(formatLength(42000), '0:42');
-      expect(formatLength(95000), '1:35');
-      expect(formatLength(3605000), '60:05');
-      expect(formatLength(null), '—');
-    });
-
-    test('a time is day, month, year and clock', () {
-      expect(formatWhen(DateTime(2026, 9, 4, 7, 5)), '4 Sep 2026, 07:05');
-    });
-
     test('settings round-trip the mailbox fields', () {
       final settings = EmailSettings.fromMailbox({
         'notifyEmail': 'a@example.test',
@@ -113,7 +103,7 @@ void main() {
     expect(find.text('New'), findsNWidgets(2));
     expect(find.text('Read'), findsOneWidget);
     expect(
-      find.text(formatWhen(DateTime.utc(2026, 9, 24, 17, 20))),
+      find.text(formatDateTime(DateTime.utc(2026, 9, 24, 17, 20))),
       findsOneWidget,
     );
 

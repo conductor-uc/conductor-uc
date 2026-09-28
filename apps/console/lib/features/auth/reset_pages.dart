@@ -5,17 +5,22 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/api_client.dart';
 import 'auth_errors.dart';
+import '../../l10n/l10n.dart';
 import 'auth_scaffold.dart';
 
 /// The shortest password identity-service accepts (a length floor, G-56).
 const minPasswordLength = 12;
 
 /// Checks a new password and its confirmation before anything is sent.
-String? newPasswordProblem(String password, String confirmation) {
+String? newPasswordProblem(
+  AppLocalizations l10n,
+  String password,
+  String confirmation,
+) {
   if (password.length < minPasswordLength) {
-    return 'Use at least $minPasswordLength characters.';
+    return l10n.authPasswordTooShort(minPasswordLength);
   }
-  if (password != confirmation) return 'The two passwords do not match.';
+  if (password != confirmation) return l10n.authPasswordsDoNotMatch;
   return null;
 }
 
@@ -47,8 +52,8 @@ class _ResetRequestPageState extends ConsumerState<ResetRequestPage> {
     if (_email.text.trim().isEmpty || (_askOrg && _org.text.trim().isEmpty)) {
       setState(
         () => _error = _askOrg
-            ? 'Enter your organization ID and email.'
-            : 'Enter your email.',
+            ? context.l10n.authResetEnterOrgAndEmail
+            : context.l10n.authResetEnterEmail,
       );
       return;
     }
@@ -74,13 +79,13 @@ class _ResetRequestPageState extends ConsumerState<ResetRequestPage> {
           // address the page is served from, not on the account.
           setState(() {
             _askOrg = true;
-            _error = 'Enter your organization ID to continue.';
+            _error = context.l10n.authEnterOrganizationId;
           });
         } else {
           setState(
             () => _error = isOffline(e)
-                ? 'Could not reach the server.'
-                : 'Something went wrong. Try again in a moment.',
+                ? context.l10n.commonCouldNotReachServer
+                : context.l10n.authResetTryAgainLater,
           );
         }
       }
@@ -93,43 +98,42 @@ class _ResetRequestPageState extends ConsumerState<ResetRequestPage> {
   Widget build(BuildContext context) {
     if (_sent) {
       return AuthScaffold(
-        title: 'Check your email',
+        title: context.l10n.authResetCheckEmailTitle,
         children: [
-          const Text(
-            'If there is an account for that email, we have sent a link to '
-            'choose a new password. It works for a limited time.',
-          ),
+          Text(context.l10n.authResetCheckEmailBody),
           const SizedBox(height: 16),
           TextButton(
             onPressed: () => context.go('/login'),
-            child: const Text('Back to sign in'),
+            child: Text(context.l10n.commonBackToSignIn),
           ),
         ],
       );
     }
     return AuthScaffold(
-      title: 'Reset your password',
+      title: context.l10n.authResetTitle,
       children: [
         if (_askOrg)
           TextField(
             controller: _org,
-            decoration: const InputDecoration(labelText: 'Organization ID'),
+            decoration: InputDecoration(
+              labelText: context.l10n.authOrganizationId,
+            ),
           ),
         TextField(
           controller: _email,
           autofillHints: const [AutofillHints.email],
-          decoration: const InputDecoration(labelText: 'Email'),
+          decoration: InputDecoration(labelText: context.l10n.authEmail),
           onSubmitted: (_) => _busy ? null : _submit(),
         ),
         if (_error != null) FormMessage(_error!, isError: true),
         const SizedBox(height: 20),
         FilledButton(
           onPressed: _busy ? null : _submit,
-          child: const Text('Send reset link'),
+          child: Text(context.l10n.authResetSend),
         ),
         TextButton(
           onPressed: () => context.go('/login'),
-          child: const Text('Back to sign in'),
+          child: Text(context.l10n.commonBackToSignIn),
         ),
       ],
     );
@@ -160,7 +164,11 @@ class _ResetConfirmPageState extends ConsumerState<ResetConfirmPage> {
   }
 
   Future<void> _submit() async {
-    final problem = newPasswordProblem(_password.text, _confirm.text);
+    final problem = newPasswordProblem(
+      context.l10n,
+      _password.text,
+      _confirm.text,
+    );
     if (problem != null) {
       setState(() => _error = problem);
       return;
@@ -184,14 +192,15 @@ class _ResetConfirmPageState extends ConsumerState<ResetConfirmPage> {
       if (!mounted) return;
       setState(() {
         _error = switch (problemCode(e)) {
-          'invalid_reset_token' =>
-            'This link is invalid or has expired. Request a new one.',
-          'weak_password' => problemDetail(e) ?? 'Choose a stronger password.',
-          'password_in_use' => problemDetail(e) ?? 'That password is already used for another account with this email. Choose a different one.',
+          'invalid_reset_token' => context.l10n.authResetLinkInvalid,
+          'weak_password' =>
+            problemDetail(e) ?? context.l10n.authChooseStrongerPassword,
+          'password_in_use' =>
+            problemDetail(e) ?? context.l10n.authPasswordInUse,
           _ =>
             isOffline(e)
-                ? 'Could not reach the server.'
-                : 'Something went wrong. Try again.',
+                ? context.l10n.commonCouldNotReachServer
+                : context.l10n.commonSomethingWentWrongTryAgain,
         };
       });
     } finally {
@@ -203,44 +212,44 @@ class _ResetConfirmPageState extends ConsumerState<ResetConfirmPage> {
   Widget build(BuildContext context) {
     if (widget.token == null || widget.token!.isEmpty) {
       return AuthScaffold(
-        title: 'Reset your password',
+        title: context.l10n.authResetTitle,
         children: [
-          const Text('This link is incomplete. Request a new one.'),
+          Text(context.l10n.authResetLinkIncomplete),
           TextButton(
             onPressed: () => context.go('/reset'),
-            child: const Text('Request a new link'),
+            child: Text(context.l10n.authResetRequestNewLink),
           ),
         ],
       );
     }
     return AuthScaffold(
-      title: 'Choose a new password',
+      title: context.l10n.authResetChooseTitle,
       children: [
         TextField(
           controller: _password,
           obscureText: true,
           autofillHints: const [AutofillHints.newPassword],
           decoration: InputDecoration(
-            labelText: 'New password',
-            helperText: 'At least $minPasswordLength characters.',
+            labelText: context.l10n.authNewPassword,
+            helperText: context.l10n.authPasswordHelper(minPasswordLength),
           ),
         ),
         TextField(
           controller: _confirm,
           obscureText: true,
           autofillHints: const [AutofillHints.newPassword],
-          decoration: const InputDecoration(labelText: 'Confirm new password'),
+          decoration: InputDecoration(
+            labelText: context.l10n.authConfirmNewPassword,
+          ),
           onSubmitted: (_) => _busy ? null : _submit(),
         ),
         if (_error != null) FormMessage(_error!, isError: true),
         const SizedBox(height: 20),
         FilledButton(
           onPressed: _busy ? null : _submit,
-          child: const Text('Change password'),
+          child: Text(context.l10n.authChangePassword),
         ),
-        const FormMessage(
-          'You will be signed out everywhere, and asked to sign in again.',
-        ),
+        FormMessage(context.l10n.authSignedOutEverywhere),
       ],
     );
   }

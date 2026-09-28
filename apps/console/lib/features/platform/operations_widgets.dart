@@ -1,65 +1,16 @@
 import 'package:flutter/material.dart';
 
-/// "—" for a figure nobody reported.
-const noValue = '—';
+import '../../core/format.dart';
 
-/// 1536 → "1.5 KB"; binary units, as memory is counted.
-String formatBytes(double? bytes) {
-  if (bytes == null) return noValue;
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  var value = bytes;
-  var unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  final digits = unit == 0 || value >= 100 ? 0 : 1;
-  return '${value.toStringAsFixed(digits)} ${units[unit]}';
-}
-
-/// 273_600 → "3 d 4 h"; the two largest units, as an operator reads uptime.
-String formatDuration(double? seconds) {
-  if (seconds == null) return noValue;
-  final s = seconds.round();
-  if (s < 60) return '$s s';
-  final minutes = s ~/ 60;
-  if (minutes < 60) return '$minutes min';
-  final hours = minutes ~/ 60;
-  if (hours < 24) {
-    final m = minutes % 60;
-    return m == 0 ? '$hours h' : '$hours h $m min';
-  }
-  final days = hours ~/ 24;
-  final h = hours % 24;
-  return h == 0 ? '$days d' : '$days d $h h';
-}
-
-String formatPercent(double? value) =>
-    value == null ? noValue : '${value.toStringAsFixed(value < 10 ? 1 : 0)}%';
-
-String formatCount(num? value) {
-  if (value == null) return noValue;
-  final digits = value.round().toString();
-  final out = StringBuffer();
-  for (var i = 0; i < digits.length; i++) {
-    if (i > 0 && (digits.length - i) % 3 == 0 && digits[i - 1] != '-') {
-      out.write(',');
-    }
-    out.write(digits[i]);
-  }
-  return out.toString();
-}
-
-String formatMs(double? ms) =>
-    ms == null ? noValue : '${ms.toStringAsFixed(ms < 10 ? 1 : 0)} ms';
+export '../../core/format.dart'
+    show formatBytes, formatCount, formatMs, formatPercent, formatSpan, noValue;
 
 /// A data store's fact in its own unit.
 String formatFact(double? value, String unit) => switch (unit) {
   'bytes' => formatBytes(value),
-  'seconds' => formatDuration(value),
+  'seconds' => formatSpan(value),
   'percent' => formatPercent(value),
-  'perSecond' =>
-    value == null ? noValue : '${value.toStringAsFixed(value < 10 ? 1 : 0)}/s',
+  'perSecond' => formatRate(value),
   _ => formatCount(value),
 };
 
