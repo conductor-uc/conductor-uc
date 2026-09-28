@@ -17,7 +17,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
-| S9 Console usability and localization (17) | 0 | 0 | 17 |
+| S9 Console usability and localization (17) | 17 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
 | **Total (127)** | **70** | **13** | **44** |
 
@@ -179,23 +179,23 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 
 | ID | Status | Evidence |
 |---|---|---|
-| S9-01 | Not started | Planned 2026-09-28 |
-| S9-02 | Not started | Planned 2026-09-28 |
-| S9-03 | Not started | Planned 2026-09-28 |
-| S9-04 | Not started | Planned 2026-09-28 |
-| S9-05 | Not started | Planned 2026-09-28 |
-| S9-06 | Not started | Planned 2026-09-28 |
-| S9-07 | Not started | Planned 2026-09-28 |
-| S9-08 | Not started | Planned 2026-09-28 |
-| S9-09 | Not started | Planned 2026-09-28 |
-| S9-10 | Not started | Planned 2026-09-28 |
-| S9-11 | Not started | Planned 2026-09-28 |
-| S9-12 | Not started | Planned 2026-09-28 |
-| S9-13 | Not started | Planned 2026-09-28 |
-| S9-14 | Not started | Planned 2026-09-28 |
-| S9-15 | Not started | Planned 2026-09-28 |
-| S9-16 | Not started | Planned 2026-09-28 |
-| S9-17 | Not started | Planned 2026-09-28 |
+| S9-01 | Done | Localization foundation: gen-l10n, `app_en.arb`, `context.l10n`, the string ratchet (#262) |
+| S9-02 | Done | Stable problem codes on every service error, translated by the console; field errors by keyword (#264) |
+| S9-03 | Done | Component kit: `AppTable`, `EditorPage`, empty states, confirmations with impact, toasts with undo (#265) |
+| S9-04 | Done | Form kit: validation on leaving a field, phone/MAC formatting, Advanced sections, create in place (#266) |
+| S9-05 | Done | Shell: grouped navigation, drawer, account menu, acting as a tenant in the URL (#267) |
+| S9-06 | Done | Tenant home: setup checklist, what needs attention, recent calls (#268) |
+| S9-07 | Done | People: a person with extension, voicemail and desk phone in one flow; invitation links an extension (#269) |
+| S9-08 | Done | Every configuration screen in plain language, with Advanced for the technical fields (#270) |
+| S9-09 | Done | Main number setup without the call flow editor (#272) |
+| S9-10 | Done | Call flows: templates, rename, copy, delete; resellers build them (D-020) (#271) |
+| S9-11 | Done | End-user home: forward to mobile, record or upload a greeting, connect a phone, searchable history (#273) |
+| S9-12 | Done | call-control: hang up, transfer (blind and attended), park, pickup, click-to-call; `call.control`, `self.calls` (G-125); SIPp-tested (#274) |
+| S9-13 | Done | Live queues on the `queues` topic; agent sign in, out, break over HTTP (G-126); SIPp-tested (#275) |
+| S9-14 | Done | Attendant console; parked calls from `valet_parking::info` (G-127); SIPp-tested (#276) |
+| S9-15 | Done | Monitoring queue column and queues; tenant admins listen, whisper and barge (D-021) (#277) |
+| S9-16 | Done | New-tenant wizard; reseller and master homes that say what needs attention (#278) |
+| S9-17 | Done | Every string in the ARB (#279); accessibility, right to left, dark mode (#280); 08 rewritten (#281) |
 
 ## Cross-cutting release readiness
 
