@@ -138,6 +138,11 @@ const OVERRIDES = {
   'get /v1/tenants/{tenantId}/me/voicemail/messages': 'listMyVoicemailMessages',
   'get /v1/tenants/{tenantId}/me/voicemail/messages/{messageId}/play-url': 'getMyMessagePlayUrl',
   'post /v1/tenants/{tenantId}/me/voicemail/messages/{messageId}/read': 'markMyMessageRead',
+  // S9-11: connecting their own phone, and their own greeting.
+  'get /v1/tenants/{tenantId}/me/sip-endpoint': 'getMySipEndpoint',
+  'post /v1/tenants/{tenantId}/me/extension/reveal': 'revealMySipCredentials',
+  'post /v1/tenants/{tenantId}/me/voicemail/greeting/presign': 'presignMyGreeting',
+  'post /v1/tenants/{tenantId}/me/voicemail/greeting/complete': 'completeMyGreeting',
   'delete /v1/tenants/{tenantId}/me/voicemail/messages/{messageId}': 'deleteMyMessage',
   'post /v1/tenants/{tenantId}/me/voicemail/reset-pin': 'resetMyVoicemailPin',
   'put /v1/tenants/{tenantId}/me/voicemail/email-settings': 'saveMyVoicemailEmailSettings',

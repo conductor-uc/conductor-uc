@@ -44,6 +44,11 @@ export interface CdrListFilter {
   readonly did?: string;
   /** Calls to, from or dialed as this number (an extension number or an E.164 number), exact match. */
   readonly number?: string;
+  /**
+   * Calls whose caller or called number, dialed digits or caller name
+   * contain this text (S9-11: a person searching their own history).
+   */
+  readonly search?: string;
   readonly limit?: number;
   /** Opaque, from a previous page's `nextCursor` — {@link encodeCursor}/{@link decodeCursor}. */
   readonly cursor?: string;
@@ -268,6 +273,18 @@ export function createCdrRepo(db: Database<CdrServiceDb>) {
             eb('from_number', '=', number),
             eb('to_number', '=', number),
             eb('dialed_number', '=', number),
+          ]),
+        );
+      }
+      if (filter.search !== undefined && filter.search.trim() !== '') {
+        // Escape LIKE's own wildcards: what is typed is matched literally.
+        const pattern = `%${filter.search.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+        query = query.where((eb) =>
+          eb.or([
+            eb('from_number', 'like', pattern),
+            eb('from_name', 'like', pattern),
+            eb('to_number', 'like', pattern),
+            eb('dialed_number', 'like', pattern),
           ]),
         );
       }

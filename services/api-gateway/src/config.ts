@@ -113,6 +113,7 @@ export const configSchema = Type.Object({
       '/v1/tenants/*/me/extension=pbx',
       '/v1/tenants/*/me/directory=pbx',
       '/v1/tenants/*/me/call-handling=pbx',
+      '/v1/tenants/*/me/sip-endpoint=pbx',
       // callflow-service
       '/v1/tenants/*/flows=callflow',
       // voicemail-service

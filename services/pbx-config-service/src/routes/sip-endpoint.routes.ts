@@ -1,4 +1,4 @@
-import { ProblemError, Type, type Server } from '@cuc/http';
+import { ProblemError, selfActor, Type, type Server } from '@cuc/http';
 
 import { activeSipProxy, type SipProxyLookup, type TenantDomainLookup } from '../org-client.js';
 
@@ -66,28 +66,41 @@ export function registerSipEndpointRoutes(
   edge: SipEdgeConfig,
   sipProxy?: SipProxyLookup,
 ): void {
+  async function endpoint(tenantId: string) {
+    const domain = await primaryDomain(tenantId);
+    if (domain === undefined) {
+      throw ProblemError.conflict(
+        'This tenant has no domain yet, so phones have nothing to register to.',
+        { code: 'tenant_domain_not_found' },
+      );
+    }
+    return {
+      server: domain,
+      port: edge.port,
+      tlsPort: edge.transports.includes('tls') ? edge.tlsPort : null,
+      transports: [...edge.transports],
+      realm: domain,
+      outboundProxy: (await activeSipProxy(sipProxy, tenantId)) ?? null,
+    };
+  }
+
   app.get(
     '/v1/tenants/:tenantId/sip-endpoint',
     {
       config: { permission: 'extension.read', dataClass: 'config' },
       schema: { params: TenantParamsSchema, response: { 200: SipEndpointSchema } },
     },
-    async (request) => {
-      const domain = await primaryDomain(request.params.tenantId);
-      if (domain === undefined) {
-        throw ProblemError.conflict(
-          'This tenant has no domain yet, so phones have nothing to register to.',
-          { code: 'tenant_domain_not_found' },
-        );
-      }
-      return {
-        server: domain,
-        port: edge.port,
-        tlsPort: edge.transports.includes('tls') ? edge.tlsPort : null,
-        transports: [...edge.transports],
-        realm: domain,
-        outboundProxy: (await activeSipProxy(sipProxy, request.params.tenantId)) ?? null,
-      };
+    async (request) => endpoint(request.params.tenantId),
+  );
+
+  // S9-11: the same, for a person setting up their own phone or app. Nothing
+  // here is secret; their own password comes from .../me/extension/reveal.
+  app.get(
+    '/v1/tenants/:tenantId/me/sip-endpoint',
+    {
+      config: { permission: 'self.settings', dataClass: 'config' },
+      schema: { params: TenantParamsSchema, response: { 200: SipEndpointSchema } },
     },
+    async (request) => endpoint(selfActor(request).tenantId),
   );
 }

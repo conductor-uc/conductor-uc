@@ -243,6 +243,40 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in cdr-service'
     expect(inbound.json<{ rows: unknown[] }>().rows).toHaveLength(1);
   });
 
+  it('searches my own history by number or name, and nothing wider (S9-11)', async () => {
+    const tenantId = crypto.randomUUID();
+    numbers.set(`${tenantId}:user-a`, '101');
+    await seed(tenantId);
+    await h.cdrs.ingest(
+      call(tenantId, {
+        fromNumber: '101',
+        toNumber: '+15005550199',
+        dialedNumber: '+15005550199',
+        fromName: 'Front desk',
+        startAt: new Date('2026-01-17T10:00:00.000Z'),
+        endAt: new Date('2026-01-17T10:01:00.000Z'),
+      }),
+      null,
+    );
+    const asA = person(tenantId, 'user-a');
+    const search = async (text: string) =>
+      (
+        await app.inject({
+          method: 'GET',
+          url: url(tenantId, `?search=${encodeURIComponent(text)}`),
+          headers: asA,
+        })
+      ).json<{ rows: { toNumber: string; fromNumber: string }[] }>().rows;
+
+    expect((await search('0100')).map((r) => r.fromNumber)).toEqual(['+15005550100']);
+    expect((await search('front')).map((r) => r.toNumber)).toEqual(['+15005550199']);
+    // "10" is in 103 and 105 too, but those calls are someone else's.
+    expect(await search('10')).toHaveLength(3);
+    // Wildcards are matched as themselves.
+    expect(await search('%')).toEqual([]);
+    expect(await search('_')).toEqual([]);
+  });
+
   it('takes the page size as the digit string a query string carries, and refuses one out of range', async () => {
     const tenantId = crypto.randomUUID();
     numbers.set(`${tenantId}:user-a`, '101');

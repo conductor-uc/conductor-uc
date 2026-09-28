@@ -10,6 +10,7 @@ enum NavLabel {
   dashboard,
   audit,
   users,
+  myHome,
   myCallHandling,
   myVoicemail,
   myCallHistory,
@@ -46,6 +47,7 @@ extension NavLabelText on NavLabel {
     NavLabel.dashboard => l10n.navDashboard,
     NavLabel.audit => l10n.navAudit,
     NavLabel.users => l10n.navUsers,
+    NavLabel.myHome => l10n.navMyHome,
     NavLabel.myCallHandling => l10n.navMyCallHandling,
     NavLabel.myVoicemail => l10n.navMyVoicemail,
     NavLabel.myCallHistory => l10n.navMyCallHistory,
@@ -173,10 +175,17 @@ const _tenantUsers = Section(
   group: NavGroup.admin,
 );
 
-/// The three screens of a person's own phone (end-user self-service). They are
-/// everything a person who holds only self-service permissions sees, in place
-/// of the administrator's navigation.
+/// The screens of a person's own phone (end-user self-service): their home
+/// first (S9-11), then the details. They are everything a person who holds
+/// only self-service permissions sees, in place of the administrator's
+/// navigation.
 const myPhoneSections = [
+  Section(
+    '/my-phone/home',
+    NavLabel.myHome,
+    Icons.home_outlined,
+    requires: ['self.settings'],
+  ),
   Section(
     '/my-phone/call-handling',
     NavLabel.myCallHandling,
@@ -200,7 +209,7 @@ const myPhoneSections = [
 ];
 
 /// What an administrator who is also linked to an extension is offered: one
-/// entry for the same three screens.
+/// entry for the same screens.
 const myPhoneEntry = Section(
   '/my-phone',
   NavLabel.myPhone,

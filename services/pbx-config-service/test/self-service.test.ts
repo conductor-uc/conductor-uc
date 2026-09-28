@@ -161,12 +161,51 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in pbx-config-s
       'GET /v1/tenants/:tenantId/me/call-handling',
       'GET /v1/tenants/:tenantId/me/directory',
       'GET /v1/tenants/:tenantId/me/extension',
+      'POST /v1/tenants/:tenantId/me/extension/reveal',
       'PUT /v1/tenants/:tenantId/me/call-handling',
     ]);
     for (const route of routes) {
       expect(route.permission).toBe('self.settings');
-      expect(route.dataClass).toBe('config');
+      // Their own SIP password is a credential, the one secret here (S9-11).
+      expect(route.dataClass).toBe(route.url.endsWith('/reveal') ? 'secret' : 'config');
     }
+  });
+
+  describe('setting up their own phone (S9-11)', () => {
+    it("shows a person their own extension's sign-in, and audits it", async () => {
+      const tenantId = crypto.randomUUID();
+      await makeExtension(tenantId, '101', 'user-a');
+      const response = await app.inject({
+        method: 'POST',
+        url: me(tenantId, 'extension/reveal'),
+        headers: person(tenantId, 'user-a'),
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        username: '101',
+        realm: `${tenantId}.platform.test`,
+      });
+      expect(response.json<{ password: string }>().password).not.toBe('');
+      expect(bus.published.map((e) => e.data)).toContainEqual(
+        expect.objectContaining({
+          action: 'extension.credential.revealed',
+          actorId: 'user-a',
+          reason: 'self-service',
+        }),
+      );
+    });
+
+    it('someone with no extension of their own has nothing to reveal', async () => {
+      const tenantId = crypto.randomUUID();
+      await makeExtension(tenantId, '101', 'user-a');
+      const response = await app.inject({
+        method: 'POST',
+        url: me(tenantId, 'extension/reveal'),
+        headers: person(tenantId, 'user-b'),
+      });
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toMatchObject({ code: 'no_linked_extension' });
+    });
   });
 
   describe('the link between a person and an extension', () => {

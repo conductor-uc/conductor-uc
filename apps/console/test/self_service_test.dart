@@ -29,7 +29,12 @@ const nophone = 'nophone@example.test';
 /// A tenant administrator who is also linked to extension 101.
 const linked = 'linked@example.test';
 
-const selfSections = ['My call handling', 'My voicemail', 'My call history'];
+const selfSections = [
+  'Home',
+  'My call handling',
+  'My voicemail',
+  'My call history',
+];
 
 Future<List<String>> signInTo(WidgetTester tester, String email) async {
   final opened = <String>[];
@@ -105,6 +110,7 @@ void main() {
 
     testWidgets('shows nothing when the person is on no call', (tester) async {
       await signInTo(tester, user);
+      await open(tester, 'My call handling');
       // No live connection in this test: the card is simply not there.
       expect(find.textContaining('On a call'), findsNothing);
       expect(find.byType(Card), findsNothing);
@@ -221,7 +227,7 @@ void main() {
 
   group('a person with only a phone', () {
     testWidgets(
-      'sees My call handling, My voicemail and My call history, and nothing administrative',
+      'sees their home, call handling, voicemail and call history, and nothing administrative',
       (tester) async {
         await signInTo(tester, user);
 
@@ -240,7 +246,10 @@ void main() {
         ]) {
           expect(navItem(label), findsNothing, reason: label);
         }
-        // Lands on the first, about their own extension.
+        // Lands on their home, about their own extension.
+        expect(find.text('Hello, User'), findsOneWidget);
+        expect(find.text('Your extension is 101.'), findsOneWidget);
+        await open(tester, 'My call handling');
         expect(find.text('My call handling'), findsWidgets);
         expect(
           find.textContaining('What happens to calls to extension 101'),
@@ -264,7 +273,7 @@ void main() {
       ]) {
         router.go(path);
         await tester.pumpAndSettle();
-        expect(router.state.uri.path, '/my-phone/call-handling', reason: path);
+        expect(router.state.uri.path, '/my-phone/home', reason: path);
         expect(find.text('Users'), findsNothing);
       }
     });
@@ -279,6 +288,7 @@ void main() {
       tester,
     ) async {
       await signInTo(tester, user);
+      await open(tester, 'My call handling');
       expect(find.text('Off'), findsOneWidget); // do not disturb
       expect(find.text('Nobody'), findsOneWidget); // also ring
 
@@ -298,6 +308,7 @@ void main() {
       tester,
     ) async {
       await signInTo(tester, user);
+      await open(tester, 'My call handling');
       tester.view.physicalSize = const Size(1280, 2000);
       await tester.tap(find.widgetWithText(FilledButton, 'Change'));
       await tester.pumpAndSettle();
@@ -324,6 +335,7 @@ void main() {
       tester,
     ) async {
       await signInTo(tester, user);
+      await open(tester, 'My call handling');
       tester.view.physicalSize = const Size(1280, 2000);
       await tester.tap(find.widgetWithText(FilledButton, 'Change'));
       await tester.pumpAndSettle();
@@ -500,7 +512,7 @@ void main() {
     });
 
     testWidgets(
-      'keeps the administrator navigation, and linked to one also gets My phone with its three tabs',
+      'keeps the administrator navigation, and linked to one also gets My phone with its tabs',
       (tester) async {
         await signInTo(tester, linked);
         expect(navItem('Extensions'), findsOneWidget);
@@ -511,12 +523,12 @@ void main() {
         }
 
         await open(tester, 'My phone');
+        expect(find.text('Your extension is 101.'), findsOneWidget);
+        // The screens as tabs.
+        expect(find.widgetWithText(ChoiceChip, 'Home'), findsOneWidget);
+        await tester.tap(find.widgetWithText(ChoiceChip, 'Call handling'));
+        await tester.pumpAndSettle();
         expect(find.text('My call handling'), findsOneWidget);
-        // The three screens as tabs.
-        expect(
-          find.widgetWithText(ChoiceChip, 'Call handling'),
-          findsOneWidget,
-        );
         await tester.tap(find.widgetWithText(ChoiceChip, 'Call history'));
         await tester.pumpAndSettle();
         expect(find.text('My call history'), findsOneWidget);

@@ -933,7 +933,7 @@ void main() {
             .where((p) => p['in'] == 'query')
             .map((p) => p['name'])
             .toSet();
-        expect(query, {'from', 'to', 'direction', 'cursor', 'limit'});
+        expect(query, {'from', 'to', 'direction', 'search', 'cursor', 'limit'});
         final list = _schema(op('calls', 'get'), response: '200');
         final row =
             ((list['properties'] as Map)['rows'] as Map)['items'] as Map;

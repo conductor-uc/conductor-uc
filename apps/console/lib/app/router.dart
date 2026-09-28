@@ -17,6 +17,7 @@ import '../features/media/media_page.dart';
 import '../features/monitoring/monitoring_page.dart';
 import '../features/myphone/my_phone_api.dart';
 import '../features/myphone/my_phone_pages.dart';
+import '../features/myphone/my_home.dart';
 import '../features/orgs/domains_panel.dart';
 import '../features/orgs/reseller_page.dart';
 import '../features/trunks/outbound_routes_page.dart';
@@ -220,6 +221,7 @@ Widget _pageFor(Section section) {
   if (section.path == '/voicemail') return const VoicemailPage();
   if (section.path == '/recordings') return const RecordingsPage();
   if (section.path == '/monitoring') return const MonitoringPage();
+  if (section.path == '/my-phone/home') return const MyHomePage();
   if (section.path == '/my-phone/call-handling') {
     return const MyCallHandlingPage();
   }

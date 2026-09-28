@@ -18,6 +18,8 @@ const MyCallsQuerySchema = Type.Object({
   from: Type.Optional(Type.String()),
   to: Type.Optional(Type.String()),
   direction: Type.Optional(Type.Union(CDR_DIRECTIONS.map((value) => Type.Literal(value)))),
+  /** A number or name to look for among the other parties (S9-11). */
+  search: Type.Optional(Type.String({ maxLength: 64 })),
   cursor: Type.Optional(Type.String()),
   limit: Type.Optional(LimitQuerySchema),
 });
@@ -98,6 +100,7 @@ export function registerMeRoutes(
         ...(query.from === undefined ? {} : { from: new Date(query.from) }),
         ...(query.to === undefined ? {} : { to: new Date(query.to) }),
         ...(query.direction === undefined ? {} : { direction: query.direction }),
+        ...(query.search === undefined ? {} : { search: query.search }),
         ...(query.cursor === undefined ? {} : { cursor: query.cursor }),
         ...(query.limit === undefined ? {} : { limit: parseLimit(query.limit) }),
       });
