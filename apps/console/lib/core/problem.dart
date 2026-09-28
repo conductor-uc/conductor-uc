@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
 
+import '../l10n/l10n.dart';
+
 /// The message to show for a failed call: the server's own `detail` (RFC 9457)
 /// when it sent one, so "extension number already in use" reads as that. A
 /// request that failed validation also says which fields and why, so "The body
@@ -15,10 +17,10 @@ String problemMessage(Object error) {
         return fields.isEmpty ? detail : '$detail $fields';
       }
     }
-    if (error.response == null) return 'Could not reach the server.';
-    return 'The server rejected that (${error.response!.statusCode}).';
+    if (error.response == null) return currentL10n.commonCouldNotReachServer;
+    return currentL10n.commonServerRejected(error.response!.statusCode ?? 0);
   }
-  return 'Something went wrong.';
+  return currentL10n.commonSomethingWentWrong;
 }
 
 /// `[{field: '/adminPassword', message: 'must NOT have ...'}]` as one line.

@@ -1,9 +1,7 @@
 import 'package:console/app/router.dart';
 import 'package:console/core/session.dart';
 import 'package:console/dev/demo_backend.dart';
-import 'package:console/features/cdr/call_records_page.dart' show formatWhen;
 import 'package:console/features/recordings/recordings_api.dart';
-import 'package:console/features/recordings/recordings_page.dart';
 import 'package:console/features/shell/sections.dart';
 import 'package:console/features/voicemail/voicemail_api.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +10,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'act_as_test.dart' show actAs, navItem, signInAs;
 import 'support.dart';
+
+import 'package:console/core/format.dart';
 
 /// Signs in as [email] and opens Recordings. Addresses a person plays or
 /// downloads from are collected in the returned list instead of opening a tab.
@@ -59,7 +59,7 @@ Future<void> pickIn(WidgetTester tester, String label, String option) async {
 /// Rows on screen: a tenant administrator has a Delete button on each.
 int get _rows => find.byTooltip('Delete').evaluate().length;
 
-String _when(DateTime utc) => formatWhen(utc.toIso8601String());
+String _when(DateTime utc) => formatDateTime(utc.toIso8601String());
 
 void main() {
   group('formatting', () {
@@ -205,7 +205,7 @@ void main() {
         // An internal call names both people.
         expect(find.text('103 · Carol Diaz, 101 · Alice Kim'), findsWidgets);
         // Kept until 90 days after it started.
-        expect(find.text('2026-12-23'), findsWidgets);
+        expect(find.text('Dec 23, 2026'), findsWidgets);
       },
     );
 

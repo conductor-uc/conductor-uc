@@ -9,6 +9,7 @@ import 'live_calls.dart';
 import 'monitor_controls.dart';
 import 'presence_board.dart';
 import 'recording_controls.dart';
+import '../../core/format.dart';
 
 /// Monitoring (08 §5): the presence board and the tenant's live calls, both
 /// streamed from the gateway's realtime hub, with the recording buttons
@@ -116,15 +117,9 @@ const _stateLabels = {
   'held': 'On hold',
 };
 
-String _two(int n) => n.toString().padLeft(2, '0');
-
 /// Minutes and seconds (hours when there are any) from [since] to [now].
-String liveDuration(DateTime since, DateTime now) {
-  final s = now.difference(since).inSeconds.clamp(0, 1 << 31);
-  final h = s ~/ 3600;
-  final m = (s % 3600) ~/ 60;
-  return h > 0 ? '$h:${_two(m)}:${_two(s % 60)}' : '$m:${_two(s % 60)}';
-}
+String liveDuration(DateTime since, DateTime now) =>
+    formatClock(now.difference(since).inSeconds);
 
 class _LiveCallsTable extends ConsumerWidget {
   const _LiveCallsTable({

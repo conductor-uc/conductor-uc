@@ -6,6 +6,7 @@ import '../../core/permissions.dart';
 import '../../core/problem.dart';
 import 'operations_api.dart';
 import 'operations_widgets.dart';
+import '../../core/format.dart';
 
 /// The Media nodes tab: a card per FreeSWITCH node, with its actions for those
 /// who may take them (`platform.operate`).
@@ -202,13 +203,8 @@ class _NodeCardState extends ConsumerState<NodeCard> {
                   'Weight',
                   node.weight == null ? noValue : '${node.weight}',
                 ),
-                Fact('Uptime', formatDuration(node.uptimeSeconds)),
-                Fact(
-                  'New sessions',
-                  node.sessionsPerSecond == null
-                      ? noValue
-                      : '${node.sessionsPerSecond!.toStringAsFixed(1)}/s',
-                ),
+                Fact('Uptime', formatSpan(node.uptimeSeconds)),
+                Fact('New sessions', formatRate(node.sessionsPerSecond)),
               ],
             ),
             const SizedBox(height: 16),
@@ -233,7 +229,7 @@ class _NodeCardState extends ConsumerState<NodeCard> {
             Text(
               heartbeat == null
                   ? 'No heartbeat reported yet.'
-                  : 'Last heartbeat ${_clock(heartbeat)} UTC.',
+                  : 'Last heartbeat ${formatUtcClock(heartbeat)} UTC.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -283,12 +279,6 @@ class _NodeCardState extends ConsumerState<NodeCard> {
       ),
     );
   }
-}
-
-String _clock(DateTime at) {
-  final utc = at.toUtc();
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${two(utc.hour)}:${two(utc.minute)}:${two(utc.second)}';
 }
 
 /// A labelled bar for a share of a whole: sessions of the maximum, CPU busy.

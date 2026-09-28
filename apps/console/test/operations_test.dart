@@ -200,10 +200,10 @@ void main() {
         expect(formatBytes(512), '512 B');
         expect(formatBytes(1536), '1.5 KB');
         expect(formatBytes(91234304), '87.0 MB');
-        expect(formatDuration(42), '42 s');
-        expect(formatDuration(600), '10 min');
-        expect(formatDuration(8200), '2 h 16 min');
-        expect(formatDuration(273600), '3 d 4 h');
+        expect(formatSpan(42), '42 s');
+        expect(formatSpan(600), '10 min');
+        expect(formatSpan(8200), '2 h 16 min');
+        expect(formatSpan(273600), '3 d 4 h');
         expect(formatPercent(28.5), '29%');
         expect(formatPercent(4.25), '4.3%');
         expect(formatCount(18240), '18,240');

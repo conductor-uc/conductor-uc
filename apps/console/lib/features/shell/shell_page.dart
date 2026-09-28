@@ -6,6 +6,7 @@ import '../../app/session_brand.dart';
 import '../../core/acting.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 import '../myphone/my_phone_api.dart';
 import '../../widgets/brand_header.dart';
 import 'sections.dart';
@@ -40,7 +41,7 @@ class ShellPage extends ConsumerWidget {
         actions: [
           TextButton(
             onPressed: () => ref.read(sessionProvider.notifier).signOut(),
-            child: const Text('Sign out'),
+            child: Text(context.l10n.shellSignOut),
           ),
         ],
       ),
@@ -62,7 +63,7 @@ class ShellPage extends ConsumerWidget {
                       for (final s in sections)
                         NavigationRailDestination(
                           icon: Icon(s.icon),
-                          label: Text(s.label),
+                          label: Text(s.label.of(context.l10n)),
                         ),
                     ],
                   ),
@@ -105,7 +106,7 @@ class SectionPage extends StatelessWidget {
       child: Align(
         alignment: Alignment.topLeft,
         child: Text(
-          section.label,
+          section.label.of(context.l10n),
           style: Theme.of(context).textTheme.headlineSmall,
         ),
       ),
@@ -133,11 +134,14 @@ class _ActingBanner extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Acting as ${tenant.name}',
+                context.l10n.shellActingAs(tenant.name),
                 style: TextStyle(color: scheme.onSecondaryContainer),
               ),
             ),
-            TextButton(onPressed: onExit, child: const Text('Exit')),
+            TextButton(
+              onPressed: onExit,
+              child: Text(context.l10n.shellActingExit),
+            ),
           ],
         ),
       ),

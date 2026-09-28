@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-import 'operations_widgets.dart';
+import '../../core/format.dart';
 
 /// Rounds [max] up to a tidy axis top (1, 2, 5, 10, 20, 50, ...), never below
 /// [floor], so a quiet platform still draws a sensible axis.
@@ -295,9 +295,7 @@ class TrendChart extends StatelessWidget {
     final span = math.max(spots.last.x, 1.0);
     String clock(double seconds) {
       final at = origin.add(Duration(milliseconds: (seconds * 1000).round()));
-      final local = at.toLocal();
-      String two(int n) => n.toString().padLeft(2, '0');
-      return '${two(local.hour)}:${two(local.minute)}';
+      return formatTime(at);
     }
 
     return SizedBox(

@@ -10,6 +10,7 @@ import '../auth/auth_scaffold.dart' show FormMessage;
 import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart';
 import 'users_api.dart';
+import '../../core/format.dart';
 
 /// The people in an organization: invite, name, role, and whether they can
 /// sign in. The signed-in user's own, or the tenant they have entered, or, when
@@ -145,10 +146,8 @@ class UsersPage extends ConsumerWidget {
   }
 
   String _when(Object? iso) {
-    final t = iso == null ? null : DateTime.tryParse('$iso')?.toLocal();
-    if (t == null) return 'Never';
-    String two(int n) => n.toString().padLeft(2, '0');
-    return '${t.year}-${two(t.month)}-${two(t.day)} ${two(t.hour)}:${two(t.minute)}';
+    if (iso == null || DateTime.tryParse('$iso') == null) return 'Never';
+    return formatDateTime(iso);
   }
 
   Future<void> _edit(

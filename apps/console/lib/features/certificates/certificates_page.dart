@@ -6,6 +6,7 @@ import '../../core/permissions.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import 'certificates_api.dart';
+import '../../core/format.dart';
 
 /// The platform operator's certificate settings: the one Let's Encrypt account
 /// every certificate is requested under, and the platform's own certificates.
@@ -218,7 +219,9 @@ class _LetsEncryptCardState extends ConsumerState<LetsEncryptCard> {
               ),
               subtitle: widget.settings['termsAgreedAt'] == null
                   ? null
-                  : Text('Agreed ${_date(widget.settings['termsAgreedAt'])}'),
+                  : Text(
+                      'Agreed ${formatDate(widget.settings['termsAgreedAt'])}',
+                    ),
             ),
             Align(
               alignment: Alignment.centerLeft,
@@ -344,13 +347,6 @@ class _PublicAddressCardState extends ConsumerState<PublicAddressCard> {
   }
 }
 
-String _date(Object? iso) {
-  final t = iso == null ? null : DateTime.tryParse('$iso')?.toLocal();
-  if (t == null) return '—';
-  String two(int n) => n.toString().padLeft(2, '0');
-  return '${t.year}-${two(t.month)}-${two(t.day)}';
-}
-
 /// What a name's certificate is doing, and why if it is not working.
 class CertificateTable extends StatelessWidget {
   const CertificateTable({super.key, required this.rows});
@@ -395,14 +391,14 @@ class CertificateTable extends StatelessWidget {
                         : null,
                   ),
                 ),
-                DataCell(Text(_date(c['notAfter']))),
+                DataCell(Text(formatDate(c['notAfter']))),
                 DataCell(
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 360),
                     child: Text(
                       c['lastError'] == null
                           ? (c['status'] == 'pending' ? 'Being requested.' : '')
-                          : '${c['lastError']} Trying again ${_date(c['nextAttemptAt'])}.',
+                          : '${c['lastError']} Trying again ${formatDate(c['nextAttemptAt'])}.',
                     ),
                   ),
                 ),

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/api_client.dart';
 import '../../core/session.dart';
 import 'auth_errors.dart';
+import '../../l10n/l10n.dart';
 import 'auth_scaffold.dart';
 
 /// Password sign-in, the first step of S3-04. The organization comes from the
@@ -86,20 +87,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               .set(MfaVerifyStep(ticket: data!.verificationTicket!));
           if (mounted) context.go('/login/mfa');
         default:
-          setState(() => _error = 'Could not sign in.');
+          setState(() => _error = context.l10n.authCouldNotSignIn);
       }
     } catch (e) {
       if (problemCode(e) == 'org_required') {
         setState(() {
           _askOrg = true;
-          _error =
-              problemDetail(e) ?? 'Enter your organization ID to continue.';
+          _error = problemDetail(e) ?? context.l10n.authEnterOrganizationId;
         });
       } else {
         setState(
           () => _error = isOffline(e)
-              ? 'Could not reach the server.'
-              : 'Those details were not recognized.',
+              ? context.l10n.commonCouldNotReachServer
+              : context.l10n.authNotRecognized,
         );
       }
     } finally {
@@ -110,35 +110,37 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return AuthScaffold(
-      title: 'Sign in',
+      title: context.l10n.authSignInTitle,
       children: [
         if (widget.notice != null) FormMessage(widget.notice!),
         if (_askOrg)
           TextField(
             controller: _org,
-            decoration: const InputDecoration(labelText: 'Organization ID'),
+            decoration: InputDecoration(
+              labelText: context.l10n.authOrganizationId,
+            ),
           ),
         TextField(
           controller: _email,
           autofillHints: const [AutofillHints.username],
-          decoration: const InputDecoration(labelText: 'Email'),
+          decoration: InputDecoration(labelText: context.l10n.authEmail),
         ),
         TextField(
           controller: _password,
           obscureText: true,
           autofillHints: const [AutofillHints.password],
-          decoration: const InputDecoration(labelText: 'Password'),
+          decoration: InputDecoration(labelText: context.l10n.authPassword),
           onSubmitted: (_) => _busy ? null : _submit(),
         ),
         if (_error != null) FormMessage(_error!, isError: true),
         const SizedBox(height: 20),
         FilledButton(
           onPressed: _busy ? null : _submit,
-          child: const Text('Sign in'),
+          child: Text(context.l10n.authSignInButton),
         ),
         TextButton(
           onPressed: () => context.go('/reset'),
-          child: const Text('Forgot your password?'),
+          child: Text(context.l10n.authForgotPassword),
         ),
       ],
     );

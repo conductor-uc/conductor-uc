@@ -11,6 +11,9 @@ dependencies:
     sdk: flutter
   flutter_web_plugins:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
   console_api:
     path: packages/console_api
   dio: ^5.9.0
@@ -29,3 +32,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # S9-01 (D-018): lib/l10n/*.arb become AppLocalizations on `flutter pub get`.
+  generate: true

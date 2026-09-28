@@ -1,0 +1,9 @@
+# S9-01 (D-018): every user-facing string lives in lib/l10n/app_<locale>.arb,
+# with English as the template. `flutter pub get` generates AppLocalizations.
+arb-dir: lib/l10n
+template-arb-file: app_en.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+nullable-getter: false
+required-resource-attributes: true
+format: true

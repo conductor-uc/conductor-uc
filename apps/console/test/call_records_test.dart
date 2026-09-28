@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'act_as_test.dart' show actAs, navItem, signInAs;
 import 'support.dart';
 
+import 'package:console/core/format.dart';
+
 /// Signs in as [email] and opens Call records.
 Future<void> openCalls(
   WidgetTester tester, {
@@ -81,7 +83,7 @@ void main() {
       var rows = tableRows(tester);
       expect(rows, hasLength(50));
       // Newest first: 2026-09-24 09:00 UTC is the newest call.
-      final newest = formatWhen('2026-09-24T09:00:00.000Z');
+      final newest = formatDateTime('2026-09-24T09:00:00.000Z');
       expect(rows.first.first, newest);
       // An inbound call, then an outbound one, then an internal one.
       expect(rows[0].sublist(1, 4), ['Inbound', '+14155551000', '101']);
@@ -167,7 +169,7 @@ void main() {
           ).subtract(Duration(hours: 3 * i)).toLocal(),
       ].where((d) => d.year == 2026 && d.month == 9 && d.day == 22).length;
       expect(rows, hasLength(expected));
-      expect(rows.every((r) => r[0].startsWith('2026-09-22')), isTrue);
+      expect(rows.every((r) => r[0].startsWith('Sep 22, 2026')), isTrue);
     });
 
     testWidgets('says so when nothing matches, and Clear starts over', (
@@ -233,7 +235,7 @@ void main() {
       await openCalls(tester, urls: opened);
       expect(find.text('Export CSV'), findsOneWidget);
       await startExport(tester, from: '2026-09-01', to: '2026-09-24');
-      expect(find.text('Export, 2026-09-01 to 2026-09-24'), findsOneWidget);
+      expect(find.text('Export, Sep 1, 2026 to Sep 24, 2026'), findsOneWidget);
       expect(find.text('Waiting to start…'), findsOneWidget);
       expect(find.text('Download'), findsNothing);
 
@@ -279,7 +281,7 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Start export'));
       await tester.pumpAndSettle();
       expect(find.text('Export call records'), findsNothing);
-      expect(find.textContaining('Export, 2026-09-01'), findsOneWidget);
+      expect(find.textContaining('Export, Sep 1, 2026'), findsOneWidget);
       await tester.pump(const Duration(seconds: 3));
       await tester.pump(const Duration(seconds: 3));
       await tester.pumpAndSettle();

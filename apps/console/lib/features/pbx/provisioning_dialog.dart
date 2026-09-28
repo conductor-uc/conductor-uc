@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
 import 'pbx_api.dart';
+import '../../core/format.dart';
 
 /// What to tell a Yealink desk phone so it sets itself up.
 ///
@@ -59,11 +60,7 @@ class _ProvisioningDialogState extends ConsumerState<ProvisioningDialog> {
           ? 'Set up, but the phone has not fetched its settings yet.'
           : 'No setup details have been created yet.';
     }
-    final when = DateTime.tryParse('$at')?.toLocal();
-    String two(int n) => n.toString().padLeft(2, '0');
-    final text = when == null
-        ? '$at'
-        : '${when.year}-${two(when.month)}-${two(when.day)} ${two(when.hour)}:${two(when.minute)}';
+    final text = formatDateTime(at);
     final ip = widget.device['lastSeenIp'];
     final agent = widget.device['lastUserAgent'];
     return 'Last fetched its settings $text'
