@@ -47,8 +47,10 @@ const CdrSchema = Type.Object({
 });
 
 const CreateExportBodySchema = Type.Object({
-  from: Type.String({ minLength: 1 }),
-  to: Type.String({ minLength: 1 }),
+  from: Type.Optional(Type.String({ minLength: 1 })),
+  to: Type.Optional(Type.String({ minLength: 1 })),
+  /** S1-16: every call record the tenant still has, in place of `from`/`to`. */
+  all: Type.Optional(Type.Boolean()),
 });
 const ExportParamsSchema = Type.Object({
   tenantId: Type.String({ minLength: 1 }),
@@ -186,11 +188,16 @@ export function registerCdrRoutes(
     },
     async (request, reply) => {
       try {
-        const created = await exports_.create(
-          ctxFor(request),
-          new Date(request.body.from),
-          new Date(request.body.to),
-        );
+        const { from, to, all } = request.body;
+        if (all !== true && (from === undefined || to === undefined)) {
+          throw ProblemError.badRequest('Give from and to, or all: true.', {
+            code: 'export_range_missing',
+          });
+        }
+        const created =
+          all === true
+            ? await exports_.create(ctxFor(request), new Date(0), new Date(), { unbounded: true })
+            : await exports_.create(ctxFor(request), new Date(from!), new Date(to!));
         return reply.status(201).send({
           id: created.id,
           status: created.status,

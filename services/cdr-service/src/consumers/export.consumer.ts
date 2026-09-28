@@ -1,9 +1,11 @@
+import { Readable } from 'node:stream';
+
 import type { Database } from '@cuc/db';
 import { createConsumer, type Bus, type EventConsumer } from '@cuc/events';
 import type { Logger } from '@cuc/logger';
 import type { Storage } from '@cuc/storage';
 
-import { toCsv } from '../domain/export.js';
+import { csvHeader, csvLines, monthWindows } from '../domain/export.js';
 import { cdrEvents } from '../events.js';
 import type { CdrRepo } from '../repo/cdr.repo.js';
 import type { ExportRepo } from '../repo/export.repo.js';
@@ -69,10 +71,34 @@ export function createExportConsumer(
 
       await exportRepo.markProcessing(exportId);
 
-      let csv: string;
+      // A month at a time (a `cdrs` partition each), streamed to storage, so a
+      // tenant's whole history (S1-16) never has to fit in memory. An
+      // unbounded export starts at the tenant's earliest record still kept.
+      const earliest = await cdrRepo.earliestStartAt(tenantId);
+      const from = earliest !== undefined && earliest > job.fromAt ? earliest : job.fromAt;
+      const windows = earliest === undefined ? [] : monthWindows(from, job.toAt);
+      async function* csv(): AsyncGenerator<Buffer> {
+        yield Buffer.from(csvHeader(), 'utf8');
+        for (const [index, [start, end]] of windows.entries()) {
+          // `listAllInRange` includes its `to`, so each month but the last stops a
+          // millisecond (`start_at`'s precision) short of the next one's start.
+          const to = index === windows.length - 1 ? end : new Date(end.getTime() - 1);
+          const lines = csvLines(await cdrRepo.listAllInRange(tenantId, start, to));
+          if (lines !== '') yield Buffer.from(lines, 'utf8');
+        }
+      }
+
+      const objectKey = objectKeyFor(tenantId, exportId);
+      const tenantStorage = storage.forTenant(tenantId);
       try {
-        const rows = await cdrRepo.listAllInRange(tenantId, job.fromAt, job.toAt);
-        csv = toCsv(rows);
+        // Idempotent (`@cuc/storage`'s own doc comment) — nothing else
+        // provisions this tenant's bucket before an export is the first
+        // thing it ever writes, unlike voicemail's own mailbox creation or
+        // pbx-config-service's media-asset upload flow.
+        await tenantStorage.provisionBucket();
+        await tenantStorage.putStream(objectKey, Readable.from(csv()), {
+          contentType: 'text/csv',
+        });
       } catch (error) {
         log.error({ err: error }, 'failed to build the CDR export; reporting failure');
         await exportRepo.markFailed(
@@ -81,17 +107,6 @@ export function createExportConsumer(
         );
         return;
       }
-
-      const objectKey = objectKeyFor(tenantId, exportId);
-      const tenantStorage = storage.forTenant(tenantId);
-      // Idempotent (`@cuc/storage`'s own doc comment) — nothing else
-      // provisions this tenant's bucket before an export is the first
-      // thing it ever writes, unlike voicemail's own mailbox creation or
-      // pbx-config-service's media-asset upload flow.
-      await tenantStorage.provisionBucket();
-      await tenantStorage.putObject(objectKey, Buffer.from(csv, 'utf8'), {
-        contentType: 'text/csv',
-      });
       await exportRepo.markReady(exportId, objectKey);
       log.info('CDR export ready');
     },

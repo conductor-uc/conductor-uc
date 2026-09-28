@@ -77,6 +77,7 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 | `call.control` | private | Tenant admin, tenant supervisor (S9-12, G-125): hang up, transfer, park and pick up any live call of the tenant; a pickup rings the person's own phone |
 | `queue.agent.manage` | config | Tenant admin, tenant supervisor (S9-20, G-126): sign someone else in, out or on a break as an agent. Grantable on a queue, so a queue lead manages the agents of that queue. Its read twin is `queue.read` |
 | `cdr.read` / `cdr.export` | private | Tenant admin |
+| `data.export` | private | Tenant admin (S1-16, G-11 (2)): build and download a zip of every recording and voicemail file the tenant stores. Never a reseller (H1), even acting as the tenant |
 | `voicemail.access` | private | Mailbox owner; grantable per `mailbox` |
 | `monitor.presence` | config | Tenant users (tenant-wide) |
 | `monitor.calls` | private | Tenant admin, tenant supervisor, master support: watching the tenant's live calls (the realtime `calls` topic, S5-08, G-119) |

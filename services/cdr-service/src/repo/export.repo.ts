@@ -52,9 +52,14 @@ function toCdrExport(row: CdrExportRow): CdrExport {
  */
 export function createExportRepo(db: Database<CdrServiceDb>) {
   return {
-    async create(ctx: DbContext, fromAt: Date, toAt: Date): Promise<CdrExport> {
+    async create(
+      ctx: DbContext,
+      fromAt: Date,
+      toAt: Date,
+      options: { readonly unbounded?: boolean } = {},
+    ): Promise<CdrExport> {
       const { tenantId } = requireTenant(ctx);
-      const range = validateExportRange(fromAt, toAt);
+      const range = validateExportRange(fromAt, toAt, options);
 
       const id = randomUUID();
       const now = new Date();

@@ -1355,6 +1355,19 @@ class DemoPbx {
     if (RegExp(r'^/v1/tenants/[^/]+/cdr-exports$').hasMatch(path) &&
         method == 'POST') {
       final body = _body(options);
+      // S1-16: the whole history, for the data export.
+      if (body['all'] == true) {
+        final export = {
+          'id': 'exp-${_next++}',
+          'status': 'pending',
+          'fromAt': DateTime.utc(2025).toIso8601String(),
+          'toAt': DateTime.now().toUtc().toIso8601String(),
+          'downloadUrl': null,
+          'errorMessage': null,
+        };
+        _exports['${export['id']}'] = export;
+        return _json(export, 201);
+      }
       final from = DateTime.tryParse('${body['from']}');
       final to = DateTime.tryParse('${body['to']}');
       if (from == null || to == null) {
@@ -1374,6 +1387,39 @@ class DemoPbx {
       };
       _exports['${export['id']}'] = export;
       return _json(export, 201);
+    }
+    // S1-16: a tenant's recordings and voicemail, zipped; ready on the second look.
+    if (RegExp(r'^/v1/tenants/[^/]+/file-exports$').hasMatch(path) &&
+        method == 'POST') {
+      final export = <String, dynamic>{
+        'id': 'fx-${_next++}',
+        'status': 'pending',
+        'fileCount': null,
+        'sizeBytes': null,
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'downloadUrl': null,
+        'errorMessage': null,
+      };
+      _exports['${export['id']}'] = export;
+      return _json(export, 202);
+    }
+    final fileExport = RegExp(r'^/v1/tenants/[^/]+/file-exports/([^/]+)$')
+        .firstMatch(path);
+    if (fileExport != null && method == 'GET') {
+      final export = _exports[fileExport.group(1)];
+      if (export == null) return _problem(404, 'No such export.');
+      if (export['status'] == 'pending') {
+        export['status'] = 'processing';
+      } else if (export['status'] == 'processing') {
+        export['status'] = 'ready';
+        export['fileCount'] = 12;
+        export['sizeBytes'] = 5242880;
+      }
+      if (export['status'] == 'ready') {
+        export['downloadUrl'] =
+            'https://storage.demo.invalid/exports/${export['id']}.zip';
+      }
+      return _json(export);
     }
     final exp = RegExp(r'^/v1/tenants/[^/]+/cdr-exports/([^/]+)$')
         .firstMatch(path);

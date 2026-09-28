@@ -153,6 +153,13 @@ describe('allPermissions', () => {
   });
 });
 
+describe('data.export (S1-16, G-11)', () => {
+  it('is private, so never a reseller (H1), with no read twin', () => {
+    expect(dataClassOf('data.export')).toBe('private');
+    expect(Object.hasOwn(READ_TWINS, 'data.export')).toBe(false);
+  });
+});
+
 describe('queue.agent.manage (S9-20, G-126)', () => {
   it('is config-class, and implies reading the queue', () => {
     expect(dataClassOf('queue.agent.manage')).toBe('config');

@@ -135,6 +135,7 @@ async function findOrCreateOrg(
       limits: (typeof existing.limits === 'string'
         ? JSON.parse(existing.limits)
         : existing.limits) as Org['limits'],
+      deleteAfter: existing.delete_after ?? null,
     };
   }
 }

@@ -115,6 +115,7 @@ A `LiveCall` is one channel (leg): `callUuid`, `direction` (`inbound`: the leg c
 - `POST /v1/resellers/{id}/tenants` (reseller or master)
 - `GET/PATCH /v1/tenants/{id}`
 - `POST /v1/tenants/{id}:suspend` and `:resume`
+- `POST` / `GET /v1/tenants/{t}/file-exports`, `GET .../file-exports/{id}` (`data.export`, private; S1-16, G-11 (2)): a zip of the tenant's recordings (`recordings/`) and voicemail (`voicemail/`), in their folders, built by `file-export.consumer.ts` on `org.file_export.requested` (each file streamed in, the zip uploaded in parts to the tenant's own `exports/`, so it is purged with the tenant); 202, then `pending`, `processing`, `ready` (with `fileCount`, `sizeBytes`) or `failed`. A ready one's `downloadUrl` is a 5-minute link; asking and every link are audited (`data.export.requested`, `data.export.downloaded`).
 - `POST` / `DELETE /v1/tenants/{id}/deletion` (`tenant.manage`) and `/v1/resellers/{id}/deletion` (`reseller.manage`) (S1-16, G-11): asks for deletion (202, `pending_deletion`, `deleteAfter` 30 days on; the org is suspended meanwhile) or calls it off (back to `active` or `suspended`, whichever it was). Only the master, a reseller for its own tenants, or the platform's own service token; anyone else gets the same 404 as for a missing org. A reseller with tenants not yet deleted is refused (409 `reseller_has_tenants`), and nothing new is created under an org on its way out. Events `org.{reseller,tenant}.deletion_requested` `{orgId, deleteAfter}` and `.deletion_cancelled` `{orgId, status}`; telephony-config treats a request as a suspension. Hourly (`deletion-job.ts`), each org whose `delete_after` has passed becomes `deleted` (claimed with a conditional update, so once) and `org.{reseller,tenant}.deleted` `{orgId}` is emitted; the row stays as a tombstone for its slug (02 §3).
 - `POST /v1/resellers/{id}/base-domains` and `:verify`
 - `PUT /v1/resellers/{id}/brand`
@@ -328,7 +329,7 @@ The status is set on **every** node in service the way `agent_status.lua` sets i
 
 - `GET /v1/tenants/{t}/cdrs?from&to&cursor&limit&direction&extension&did`
 - `GET /v1/tenants/{t}/cdrs/{id}`
-- `POST /v1/tenants/{t}/cdr-exports` (async CSV to S3)
+- `POST /v1/tenants/{t}/cdr-exports` (async CSV to S3). S1-16: `{all: true}` in place of `from`/`to` exports every record still kept, read a month (a partition) at a time and streamed to storage.
 - Webhooks: `cdr.created`, signed with HMAC-SHA256 and retried with backoff
 
 The **billing view** for resellers is pending decision D-013.

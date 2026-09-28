@@ -28,10 +28,12 @@
     "@cuc/logger": "workspace:*",
     "@cuc/storage": "workspace:*",
     "acme-client": "^5.4.0",
+    "archiver": "^7.0.1",
     "kysely": "^0.29.5"
   },
   "devDependencies": {
     "@cuc/testing": "workspace:*",
+    "@types/archiver": "^6.0.4",
     "typescript": "~5.9.3",
     "vitest": "^5.0.0"
   }

@@ -226,6 +226,34 @@ describe.skipIf(skipReason !== undefined)('@cuc/storage', () => {
         expect(await storage.purgeTenant(goneId)).toBe(0);
       });
 
+      it('S1-16: lists under a prefix as keys are known, and streams objects both ways', async () => {
+        const storage = makeStorage(mode);
+        const tenant = storage.forTenant(randomUUID());
+        await tenant.provisionBucket();
+        await tenant.putObject('recordings/a.wav', Buffer.from('aaaa'));
+        await tenant.putObject('voicemail/b.wav', Buffer.from('bb'));
+        const listed: { key: string; sizeBytes: number }[] = [];
+        for await (const object of tenant.list('recordings/')) listed.push(object);
+        expect(listed).toEqual([{ key: 'recordings/a.wav', sizeBytes: 4 }]);
+
+        const { Readable } = await import('node:stream');
+        await tenant.putStream(
+          'exports/x.txt',
+          Readable.from([Buffer.from('he'), Buffer.from('llo')]),
+          {
+            contentType: 'text/plain',
+          },
+        );
+        const chunks: Buffer[] = [];
+        for await (const chunk of await tenant.getStream('exports/x.txt'))
+          chunks.push(chunk as Buffer);
+        expect(Buffer.concat(chunks).toString()).toBe('hello');
+
+        const none: unknown[] = [];
+        for await (const object of storage.forTenant(randomUUID()).list('')) none.push(object);
+        expect(none).toEqual([]);
+      });
+
       it('deletes every object under a prefix, and nothing else', async () => {
         const storage = makeStorage(mode);
         const tenant = storage.forTenant(randomUUID());

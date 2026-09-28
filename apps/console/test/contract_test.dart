@@ -531,7 +531,8 @@ void main() {
       expect(
         (_schema(start.cast<String, dynamic>())['properties'] as Map).keys
             .toSet(),
-        {'from', 'to'},
+        // S1-16: or `all`, every record still kept, for a data export.
+        {'from', 'to', 'all'},
       );
       final one =
           (paths['/v1/tenants/{tenantId}/cdr-exports/{id}'] as Map)['get']

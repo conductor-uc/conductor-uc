@@ -18,7 +18,9 @@ import {
   S3ServiceException,
   type LifecycleRule as S3LifecycleRule,
 } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Readable } from 'node:stream';
 import type { Logger } from '@cuc/logger';
 
 import { locatePlatformObject, locateTenantObject, type ObjectLocation } from './bucket-naming.js';
@@ -72,6 +74,22 @@ export interface ScopedStorage {
   getObject(key: string): Promise<Buffer>;
   /** The write half of {@link getObject} — writes bytes directly rather than handing a client a presigned PUT URL. */
   putObject(key: string, body: Buffer, options?: PutObjectOptions): Promise<void>;
+  /**
+   * S1-16: reads an object as a stream, for one too large to hold in memory
+   * (a recording, going into an export).
+   */
+  getStream(key: string): Promise<Readable>;
+  /**
+   * S1-16: writes a stream of unknown length (an export being built) in
+   * parts, never holding more than a few parts in memory.
+   */
+  putStream(key: string, body: Readable, options?: PutObjectOptions): Promise<void>;
+  /**
+   * S1-16: every object under `prefix`, as keys the caller knows them (the
+   * tenant's own prefix removed in prefix-per-tenant mode), with sizes, a page
+   * at a time. None for a bucket that does not exist.
+   */
+  list(prefix: string): AsyncIterable<{ readonly key: string; readonly sizeBytes: number }>;
   /**
    * The object's size and ETag without reading it, or `undefined` when it does not exist.
    * For a single-part upload without KMS the ETag is the object's MD5 in hex, quotes removed
@@ -396,6 +414,55 @@ export function createStorage(options: CreateStorageOptions): Storage {
       async deleteObject(key) {
         const { bucket, key: realKey } = locate(key);
         await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: realKey }));
+      },
+      async getStream(key) {
+        const { bucket, key: realKey } = locate(key);
+        const result = await client.send(new GetObjectCommand({ Bucket: bucket, Key: realKey }));
+        if (!(result.Body instanceof Readable)) {
+          throw new Error(`'${key}' did not come back as a stream`);
+        }
+        return result.Body;
+      },
+      async putStream(key, body, putOptions) {
+        const { bucket, key: realKey } = locate(key);
+        await new Upload({
+          client,
+          params: {
+            Bucket: bucket,
+            Key: realKey,
+            Body: body,
+            ...(putOptions?.contentType === undefined
+              ? {}
+              : { ContentType: putOptions.contentType }),
+          },
+          queueSize: 2,
+          partSize: 8 * 1024 * 1024,
+        }).done();
+      },
+      async *list(prefix) {
+        const { bucket, key: realPrefix } = locate(prefix);
+        const tenantPrefix = locate('').key;
+        let token: string | undefined;
+        do {
+          let page;
+          try {
+            page = await client.send(
+              new ListObjectsV2Command({
+                Bucket: bucket,
+                Prefix: realPrefix,
+                ...(token === undefined ? {} : { ContinuationToken: token }),
+              }),
+            );
+          } catch (error) {
+            if (error instanceof S3ServiceException && error.name === 'NoSuchBucket') return;
+            throw error;
+          }
+          for (const object of page.Contents ?? []) {
+            if (object.Key === undefined) continue;
+            yield { key: object.Key.slice(tenantPrefix.length), sizeBytes: object.Size ?? 0 };
+          }
+          token = page.IsTruncated === true ? page.NextContinuationToken : undefined;
+        } while (token !== undefined);
       },
       async deleteUnder(prefix) {
         const { bucket, key: realPrefix } = locate(prefix);

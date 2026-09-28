@@ -319,6 +319,17 @@ export function createCdrRepo(db: Database<CdrServiceDb>) {
      * `domain/export.ts`'s `validateExportRange` already bounds how wide a
      * range this can be asked to walk.
      */
+    /** S1-16: when the tenant's earliest call record still kept starts, if it has any. */
+    async earliestStartAt(tenantId: string): Promise<Date | undefined> {
+      const row = await db
+        .scoped({ tenantId })
+        .selectFrom('cdrs')
+        .select((eb) => eb.fn.min('start_at').as('earliest'))
+        .executeTakeFirst();
+      const earliest = row?.earliest as Date | string | null | undefined;
+      return earliest === null || earliest === undefined ? undefined : new Date(earliest);
+    },
+
     async listAllInRange(tenantId: string, fromAt: Date, toAt: Date): Promise<Cdr[]> {
       const all: Cdr[] = [];
       let cursor: string | undefined;

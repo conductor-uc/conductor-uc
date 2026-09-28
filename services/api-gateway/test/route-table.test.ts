@@ -175,6 +175,8 @@ describe('the default routing table', () => {
     ['/v1/tenants/t1/pickup-groups/g1', SERVICES.pbx],
     ['/v1/tenants/t1/me/agent-status', SERVICES.call],
     ['/v1/tenants/t1/me/queues', SERVICES.call],
+    // S1-16: a tenant's files export is org-service's.
+    ['/v1/tenants/t1/file-exports', SERVICES.org],
     ['/v1/tenants/t1/live-agents/301/status', SERVICES.call],
   ])('%s goes to its service', (path, target) => {
     expect(resolveRoute(table, path)?.target).toBe(target);

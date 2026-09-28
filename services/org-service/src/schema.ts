@@ -78,6 +78,20 @@ export interface OrgServiceDb extends EventTables {
     updated_at: Date;
   };
 
+  /** S1-16 (G-11 (2)): a tenant's recordings and voicemail, zipped for download. */
+  file_exports: {
+    id: string;
+    tenant_id: string;
+    status: 'pending' | 'processing' | 'ready' | 'failed';
+    object_key: string | null;
+    size_bytes: number | null;
+    file_count: number | null;
+    error_message: string | null;
+    requested_by: string;
+    created_at: Date;
+    updated_at: Date;
+  };
+
   tenant_domains: {
     id: string;
     tenant_id: string;

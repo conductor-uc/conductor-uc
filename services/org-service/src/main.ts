@@ -33,6 +33,9 @@ import { registerOrgRoutes } from './routes/org.routes.js';
 import { createDeletionJob, DELETION_INTERVAL_MS } from './deletion-job.js';
 import type { OrgServiceDb } from './schema.js';
 import { createOrgDeletionConsumer } from './org-deletion.js';
+import { createFileExportConsumer } from './file-export.consumer.js';
+import { createFileExportRepo } from './repo/file-export.repo.js';
+import { registerFileExportRoutes } from './routes/file-export.routes.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -185,6 +188,13 @@ const storage = storageFromConfig(config, logger);
 const orgDeletion = createOrgDeletionConsumer(db, bus, logger, storage);
 await orgDeletion.ensure();
 const orgDeletionLoop = orgDeletion.run();
+
+// S1-16 (G-11 (2)): a tenant's recordings and voicemail, zipped for download.
+const fileExports = createFileExportRepo(db);
+registerFileExportRoutes(app, { exports: fileExports, storage });
+const fileExportConsumer = createFileExportConsumer(db, bus, logger, storage, fileExports);
+await fileExportConsumer.ensure();
+const fileExportLoop = fileExportConsumer.run();
 // 02 §3's table: the master/unbranded console lives at console.{PLATFORM_BASE_DOMAIN}.
 registerBrandRoutes(
   app,
@@ -223,8 +233,10 @@ async function shutdown(signal: string): Promise<void> {
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   orgDeletion.stop();
+  fileExportConsumer.stop();
   await relayLoop;
   await orgDeletionLoop;
+  await fileExportLoop;
   void reconcileDone;
   void certificateWorkerDone;
   await bus.close();

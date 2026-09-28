@@ -25,7 +25,17 @@ export class InvalidExportRangeError extends Error {
   }
 }
 
-export function validateExportRange(fromAt: Date, toAt: Date): { fromAt: Date; toAt: Date } {
+/**
+ * `unbounded` (S1-16): the whole history a tenant still has, for the export
+ * offered before an org is deleted. The worker reads it a month at a time
+ * (partition by partition), so the cap that protects a live query is not
+ * needed there.
+ */
+export function validateExportRange(
+  fromAt: Date,
+  toAt: Date,
+  options: { readonly unbounded?: boolean } = {},
+): { fromAt: Date; toAt: Date } {
   if (Number.isNaN(fromAt.getTime()) || Number.isNaN(toAt.getTime())) {
     throw new InvalidExportRangeError(
       'from and to must be valid RFC 3339 timestamps.',
@@ -36,7 +46,7 @@ export function validateExportRange(fromAt: Date, toAt: Date): { fromAt: Date; t
     throw new InvalidExportRangeError('to must be after from.', 'export_range_reversed');
   }
   const spanDays = (toAt.getTime() - fromAt.getTime()) / (24 * 60 * 60 * 1000);
-  if (spanDays > MAX_RANGE_DAYS) {
+  if (options.unbounded !== true && spanDays > MAX_RANGE_DAYS) {
     throw new InvalidExportRangeError(
       `from/to cannot span more than ${String(MAX_RANGE_DAYS)} days.`,
       'export_range_too_long',
@@ -94,7 +104,17 @@ function csvField(value: string): string {
 
 /** RFC 4180 CSV, header first. Small/simple enough (no embedded objects) that a dependency would be overkill. */
 export function toCsv(rows: readonly CsvCdrRow[]): string {
-  const lines = [CSV_COLUMNS.join(',')];
+  return csvHeader() + csvLines(rows);
+}
+
+/** The CSV's header line (S1-16: written once, before the rows arrive a month at a time). */
+export function csvHeader(): string {
+  return CSV_COLUMNS.join(',') + '\r\n';
+}
+
+/** The CSV lines for [rows], without the header; empty for none. */
+export function csvLines(rows: readonly CsvCdrRow[]): string {
+  const lines: string[] = [];
   for (const row of rows) {
     lines.push(
       [
@@ -120,5 +140,18 @@ export function toCsv(rows: readonly CsvCdrRow[]): string {
         .join(','),
     );
   }
-  return lines.join('\r\n') + '\r\n';
+  return lines.length === 0 ? '' : lines.join('\r\n') + '\r\n';
+}
+
+/** Calendar months (UTC) covering [from, to), each clipped to the range: the cdrs partitions. */
+export function monthWindows(from: Date, to: Date): [Date, Date][] {
+  const windows: [Date, Date][] = [];
+  let start = from;
+  while (start < to) {
+    const next = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+    const end = next < to ? next : to;
+    windows.push([start, end]);
+    start = end;
+  }
+  return windows;
 }

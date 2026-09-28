@@ -102,6 +102,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'call.control': 'private',
   'cdr.read': 'private',
   'cdr.export': 'private',
+  'data.export': 'private',
   'billing.read': 'usage',
   'voicemail.access': 'private',
   'monitor.presence': 'config',
@@ -159,6 +160,13 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
  * `monitor.barge` joins a call rather than moving it, and `recording.control` is only a call's
  * recording. It acts on live calls, whose parties and numbers are private, so it is `private`: H1
  * keeps every reseller out, it has no read twin and nothing implies it.
+ */
+/**
+ * `data.export` (S1-16, docs/decisions.md G-11 (2)): build and download a zip
+ * of every recording and voicemail message a tenant stores, the export
+ * offered before an org is deleted. `private`, like what it holds: H1 keeps
+ * every reseller out, even acting as the tenant, so a tenant's own
+ * administrator (or the master) downloads it. No read twin.
  */
 /**
  * `queue.agent.manage` (S9-20, docs/decisions.md G-126): sign someone else in, out or on a break

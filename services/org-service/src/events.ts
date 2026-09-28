@@ -116,6 +116,18 @@ export const orgEvents = defineEvents({
     description: 'A tenant was deleted; every service removes its data.',
     data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
   },
+  /**
+   * S1-16 (G-11 (2)): a zip of a tenant's recordings and voicemail was asked
+   * for; this service's own worker builds it.
+   */
+  'org.file_export.requested': {
+    schemaVersion: 1,
+    description: "A zip of a tenant's recordings and voicemail was asked for.",
+    data: Type.Object({
+      exportId: Type.String({ minLength: 1 }),
+      tenantId: Type.String({ minLength: 1 }),
+    }),
+  },
   'org.domain.added': {
     schemaVersion: 1,
     description:
