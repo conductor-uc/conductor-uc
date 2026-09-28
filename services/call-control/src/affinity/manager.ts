@@ -83,6 +83,12 @@ export interface AffinityManager {
   /** S4-02: the leases a node holds now, whichever replica renews them. */
   leasesHeldBy(nodeId: string): Promise<AffinityLease[]>;
   /**
+   * S4-03: renews every lease the node holds, whichever replica acquired it. The node's owner
+   * does this on every renewal interval, so a busy queue, parking lot or conference keeps its node
+   * when the replica that acquired its lease dies. Returns how many were renewed.
+   */
+  renewHeldBy(nodeId: string): Promise<number>;
+  /**
    * S4-04 (04 §5): after Redis lost its data, sets again every lease this replica was renewing,
    * to the node it was on (`SET NX`: a lease someone else has since taken is theirs, and this
    * replica stops renewing it). Returns how many were restored.
@@ -197,10 +203,15 @@ export function createAffinityManager(options: AffinityManagerOptions): Affinity
       const lease = { tenantId, kind, resourceId };
       const trackingKey = leaseTrackingKey(tenantId, kind, resourceId);
 
-      const tracked = renewals.get(trackingKey);
-      if (tracked !== undefined) return { nodeId: tracked.nodeId, acquired: false };
-
+      // Redis, not this replica's memory, says who holds it (S4-03): with several replicas,
+      // another may have released it since (a drain, a dead node), and answering from memory
+      // would send the call to the old node (found live).
       const existingOwner = await registry.getOwner(lease);
+      const tracked = renewals.get(trackingKey);
+      if (tracked !== undefined && tracked.nodeId !== existingOwner) {
+        clearInterval(tracked.timer);
+        renewals.delete(trackingKey);
+      }
       if (existingOwner !== undefined) return { nodeId: existingOwner, acquired: false };
 
       const chosenNodeId = await chooseNode(preferredNodeId);
@@ -244,6 +255,14 @@ export function createAffinityManager(options: AffinityManagerOptions): Affinity
 
     async leasesHeldBy(nodeId) {
       return registry.leasesHeldBy(nodeId);
+    },
+
+    async renewHeldBy(nodeId) {
+      let renewed = 0;
+      for (const lease of await registry.leasesHeldBy(nodeId)) {
+        if (await registry.renew(lease, nodeId, leaseTtlMs)) renewed += 1;
+      }
+      return renewed;
     },
 
     async restore() {

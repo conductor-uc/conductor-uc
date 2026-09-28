@@ -107,5 +107,50 @@ describe.skipIf(skipReason !== undefined)(
       expect(await h.registry.getCall(b)).toMatchObject({ state: 'answered', bridgedTo: a });
       expect(restores).toBe(1);
     });
+    it('catches up on a node taken over from another replica: adds what it missed, ends what is gone', async () => {
+      const tenantId = crypto.randomUUID();
+      const nodeId = `fs-sync-${crypto.randomUUID().slice(0, 8)}`;
+      const a = crypto.randomUUID();
+      const b = crypto.randomUUID();
+      const node = fakeNode(tenantId, a, b);
+      const rebuild = createRegistryRebuild({
+        registry: h.registry,
+        affinity: { restore: () => Promise.resolve(0) },
+        nodes: () => new Map(),
+        callSafetyTtlMs: 60_000,
+        logger: h.logger,
+      });
+
+      // The registry has one of the node's calls, and one that ended while nobody watched.
+      const gone = crypto.randomUUID();
+      for (const callUuid of [a, gone]) {
+        await h.registry.createCall(
+          {
+            callUuid,
+            nodeId,
+            tenantId,
+            direction: 'inbound',
+            state: 'answered',
+            startedAt: String(Date.now() - 60_000),
+            from: '+15550001111',
+            to: '1001',
+            extension: null,
+            controls: 'none',
+            sipCallId: null,
+          },
+          60_000,
+        );
+      }
+      const ended: string[] = [];
+      const result = await rebuild.syncNode(nodeId, node.esl, (callUuid) => {
+        ended.push(callUuid);
+        return h.registry.endCall(callUuid, nodeId, tenantId);
+      });
+
+      expect(result).toEqual({ added: 1, ended: 1 });
+      expect(ended).toEqual([gone]);
+      expect(await h.registry.getCall(b)).toMatchObject({ node: nodeId, bridgedTo: a });
+      expect((await h.registry.callsForNode(nodeId)).sort()).toEqual([a, b].sort());
+    });
   },
 );

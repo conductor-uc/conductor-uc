@@ -671,6 +671,17 @@ services:
       OPENSIPS_SIP_URI: opensips:${OPENSIPS_SIP_PORT:-5060}
     healthcheck: *node-healthcheck
 
+  call-control-2:
+    # S4-03: a second replica, as production runs (10 §3). Each media node is
+    # owned by one replica at a time (`node-ownership.ts`); both stay connected
+    # to every node and serve any request. The shared `call-control` name puts
+    # both behind the address every other service already uses.
+    extends:
+      service: call-control
+    networks:
+      default:
+        aliases: [call-control]
+
   callflow-service:
     build:
       context: ../..
@@ -919,7 +930,7 @@ services:
       TELEPHONY_CONFIG_URL: http://telephony-config:8080
       # S4-12: the operations console also asks these for their status, and
       # NATS' monitoring port for its figures.
-      PLATFORM_STATUS_TARGETS: media-worker=http://media-worker:8080,notification-service=http://notification-service:8080,recording-uploader=http://recording-uploader:9464,recording-uploader-2=http://recording-uploader-2:9464
+      PLATFORM_STATUS_TARGETS: media-worker=http://media-worker:8080,notification-service=http://notification-service:8080,recording-uploader=http://recording-uploader:9464,recording-uploader-2=http://recording-uploader-2:9464,call-control-2=http://call-control-2:8080
       NATS_MONITOR_URL: http://nats:8222
       # S4-13: the history charts.
       PROMETHEUS_URL: http://prometheus:9090

@@ -41,6 +41,7 @@ import { createRecordingController } from './recording-control.js';
 import { registerRecordingControlRoutes } from './routes/recording.routes.js';
 import { configSchema, loadServiceConfig, parseFsNodes } from './config.js';
 import { createEslClient, type EslClient } from './esl/client.js';
+import { createNodeOwnership } from './node-ownership.js';
 import { createCallRegistry } from './redis/registry.js';
 import { createSerialQueue } from './serial.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
@@ -112,13 +113,17 @@ const channelHandler = createChannelHandler({
 });
 
 // One ESL client per configured node (`FS_NODES`), each with its own
-// reconnect loop and its own periodic self-heartbeat (04 §3.1: "from ESL
-// HEARTBEAT plus its own ping" — FS's own HEARTBEAT event interval is not
-// guaranteed to be shorter than the registry TTL, so this service also
-// refreshes the key on a fixed timer of its own while the connection is up,
-// independent of what FS sends).
+// reconnect loop. The node's owner (S4-03, `node-ownership.ts`) also runs a
+// periodic self-heartbeat (04 §3.1: "from ESL HEARTBEAT plus its own ping" —
+// FS's own HEARTBEAT event interval is not guaranteed to be shorter than the
+// registry TTL, so this service also refreshes the key on a fixed timer of its
+// own, independent of what FS sends).
 const fsNodes = parseFsNodes(config.FS_NODES);
-const heartbeatIntervals = new Map<string, ReturnType<typeof setInterval>>();
+const replicaId = `${hostname()}:${String(process.pid)}`;
+/** The nodes this replica's event socket is up to. */
+const connected = new Set<string>();
+/** Per owned node: its heartbeat and its leases' renewal. */
+const ownerTimers = new Map<string, ReturnType<typeof setInterval>[]>();
 const eslClientsById = new Map<string, EslClient>();
 
 const handleInOrder = createSerialQueue((nodeId, error) => {
@@ -132,23 +137,19 @@ const eslClients = fsNodes.map((node) =>
     logger,
     reconnectMinDelayMs: config.ESL_RECONNECT_MIN_DELAY_MS,
     reconnectMaxDelayMs: config.ESL_RECONNECT_MAX_DELAY_MS,
-    // One node's events in the order FreeSWITCH raised them (`serial.ts`).
+    // One node's events in the order FreeSWITCH raised them (`serial.ts`), and only on the
+    // replica that owns the node (S4-03): every other replica drops them.
     onEvent: (nodeId, raw) => {
+      if (!ownership.owns(nodeId)) return;
       handleInOrder(nodeId, () => channelHandler.handleEvent(nodeId, raw));
     },
     onConnect: (nodeId) => {
-      void registry.heartbeat(nodeId, config.HEARTBEAT_TTL_MS);
-      const interval = setInterval(() => {
-        void registry.heartbeat(nodeId, config.HEARTBEAT_TTL_MS);
-      }, config.HEARTBEAT_INTERVAL_MS);
-      heartbeatIntervals.set(nodeId, interval);
+      connected.add(nodeId);
+      void ownership.runOnce();
     },
     onDisconnect: (nodeId) => {
-      const interval = heartbeatIntervals.get(nodeId);
-      if (interval !== undefined) {
-        clearInterval(interval);
-        heartbeatIntervals.delete(nodeId);
-      }
+      connected.delete(nodeId);
+      void ownership.runOnce();
     },
   }),
 );
@@ -157,8 +158,6 @@ fsNodes.forEach((node, index) => {
   const client = eslClients[index];
   if (client !== undefined) eslClientsById.set(node.id, client);
 });
-
-for (const client of eslClients) client.start();
 
 // S2-12 (04 §3.3): acquire/renew/release for `aff:{tenantId}:{kind}:
 // {resourceId}` — needs both the ESL clients above (to reload the chosen
@@ -181,8 +180,8 @@ const nodeFailure = createNodeFailureWatcher({
   affinity,
   db: db.kysely,
   logger,
-  replicaId: `${hostname()}:${String(process.pid)}`,
-  isConnected: (nodeId) => heartbeatIntervals.has(nodeId),
+  replicaId,
+  isConnected: (nodeId) => connected.has(nodeId),
   startupGraceMs: config.HEARTBEAT_TTL_MS * 2,
 });
 nodeFailure.start();
@@ -192,11 +191,51 @@ nodeFailure.start();
 const registryRebuild = createRegistryRebuild({
   registry,
   affinity,
-  nodes: () => new Map([...eslClientsById].filter(([nodeId]) => heartbeatIntervals.has(nodeId))),
+  nodes: () => new Map([...eslClientsById].filter(([nodeId]) => connected.has(nodeId))),
   callSafetyTtlMs: config.CALL_SAFETY_TTL_MS,
   logger,
 });
 registryRebuild.start();
+
+// S4-03 (04 §2): each node is owned by one replica, which handles its events, heartbeats it,
+// renews the leases on it, and first catches up on its calls.
+const ownership = createNodeOwnership({
+  redis,
+  keyPrefix: config.REDIS_KEY_PREFIX,
+  replicaId,
+  nodeIds: fsNodes.map((node) => node.id),
+  isConnected: (nodeId) => connected.has(nodeId),
+  logger,
+  onAcquired: (nodeId) => {
+    const heartbeat = () => void registry.heartbeat(nodeId, config.HEARTBEAT_TTL_MS);
+    heartbeat();
+    ownerTimers.set(nodeId, [
+      setInterval(heartbeat, config.HEARTBEAT_INTERVAL_MS),
+      setInterval(() => {
+        affinity.renewHeldBy(nodeId).catch((error: unknown) => {
+          logger.error({ err: error, nodeId }, "affinity: could not renew a node's leases");
+        });
+      }, config.AFFINITY_RENEW_INTERVAL_MS),
+    ]);
+    const esl = eslClientsById.get(nodeId);
+    if (esl === undefined) return;
+    handleInOrder(nodeId, async () => {
+      await registryRebuild.syncNode(nodeId, esl, (callUuid) =>
+        channelHandler.handleEvent(nodeId, {
+          'Event-Name': 'CHANNEL_HANGUP_COMPLETE',
+          'Unique-ID': callUuid,
+        }),
+      );
+    });
+  },
+  onLost: (nodeId) => {
+    for (const timer of ownerTimers.get(nodeId) ?? []) clearInterval(timer);
+    ownerTimers.delete(nodeId);
+  },
+});
+
+for (const client of eslClients) client.start();
+ownership.start();
 
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
@@ -369,7 +408,8 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
-  for (const interval of heartbeatIntervals.values()) clearInterval(interval);
+  // Gives this replica's nodes up first, so another replica takes them at once.
+  await ownership.stop();
   affinity.stop();
   await nodeFailure.stop();
   await registryRebuild.stop();

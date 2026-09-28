@@ -357,7 +357,7 @@ sudo iptables -A DOCKER-USER -p tcp -m multiport --dports 3306,6379,4222 -j DROP
 
 ## 6. Scaling the application services
 
-Safe to run in several copies: api-gateway, identity, org, pbx-config, trunk, callflow, voicemail, cdr, media-worker and notification services. recording-service and telephony-config also work, but repeat their background work ([components §6](components.md#6-running-more-than-one-copy)). **Never run more than one call-control.**
+Safe to run in several copies: api-gateway, identity, org, pbx-config, trunk, callflow, voicemail, cdr, media-worker and notification services. recording-service and telephony-config also work, but repeat their background work ([components §6](components.md#6-running-more-than-one-copy)). call-control works too: each media server is owned by one copy at a time, and another takes it over within 8 s if that copy dies (S4-03). Each copy needs event-socket access to every media server: widen `FS_CLUSTER_CIDR` on the media servers to cover every app server.
 
 The URL settings (`*_SERVICE_URL`, `TELEPHONY_CONFIG_URL`, and so on) each name one address. To run several copies of a service across app servers, put a private load balancer in front of them and point the URL at it. HAProxy example for pbx-config-service on two app servers:
 
@@ -377,7 +377,7 @@ Database connections grow with copies: each copy of each service opens up to `DB
 
 ## 7. Adding and removing media servers
 
-**The limitation first.** OpenSIPs spreads calls over media servers round robin. Queues, parking lots and conference rooms live in one node's memory while in use, and call-control pins each to a node with a lease. But OpenSIPs does not yet send a call to the node holding the lease (G-46, plan task S4-05). With two or more media servers, a caller joining a queue, a parking slot or a conference that is active on another node can fail. Plain calls, ring groups, IVR flows and voicemail are not affected. If your tenants use queues, parking or conferences, run **one** media server until S4-05 is built.
+OpenSIPs spreads calls over media servers by weight. Queues, parking lots and conference rooms live in one node's memory while in use, and call-control pins each to a node with a lease. A caller who lands on another node is sent on to the node holding the lease through OpenSIPs (S4-05, G-128); the node the caller landed on stays in the call's media path. One gap remains: `*8` pickup of a phone ringing on another node does not work.
 
 To add media server N:
 
@@ -407,7 +407,7 @@ The node takes no new calls within a second or two, and its queues, parking lots
 | Server lost | Effect | Recovery |
 |---|---|---|
 | edge-1 | **All calls and the console stop.** Phones cannot register or call. | Restore or rebuild it. Nothing on it is durable: its state is in MariaDB. |
-| One media server | Its calls drop, and its recordings and voicemail messages not yet uploaded are lost (O-13, accepted; such a message is never listed). OpenSIPs stops sending new calls to it once its OPTIONS probe (every 10 seconds) goes unanswered, so within tens of seconds; calls routed to it before then fail. call-control marks it down. **Its call records are not written** (synthetic CDRs are S4-04, not built). | Other nodes carry new calls. Restart it; it rejoins without configuration changes. |
+| One media server | Its calls drop, and its recordings and voicemail messages not yet uploaded are lost (O-13, accepted; such a message is never listed). OpenSIPs stops sending new calls to it once its OPTIONS probe (every 10 seconds) goes unanswered, so within tens of seconds; calls routed to it before then fail. call-control marks it down within 10 s, ends its calls at the edge (both parties get a BYE), writes a `node_failure` call record for each, and releases its queues, parking lots and conference rooms (S4-04). | Other nodes carry new calls. Restart it; it rejoins without configuration changes. |
 | app-1 | New calls fail, because FreeSWITCH asks telephony-config for every call. Established calls stay up, but anything in them that needs telephony-config (a transfer, an IVR step, voicemail) fails. The console and API stop. | Restart. Services reconnect and catch up on events from NATS. |
 | data-1 | Everything stops: services cannot reach MariaDB, and OpenSIPs cannot authenticate. | Restore MariaDB from backup ([operations §4](operations.md#4-backups-and-restore)). Redis needs no restore. |
 | object storage | Recording and voicemail playback, prompt uploads and exports fail. Recordings and voicemail messages wait in the media servers' spool and upload when storage is back; a new voicemail message is listed only then. Calls otherwise work: FreeSWITCH caches prompts. | Provider's concern. |
