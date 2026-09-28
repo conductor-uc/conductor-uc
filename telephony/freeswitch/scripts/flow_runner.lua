@@ -381,27 +381,42 @@ local function resolveAffinity(kind, resourceId)
   return false, ownerNodeId
 end
 
---[[
-The "hairpin" (04 §3.3): sends the call back out through OpenSIPs carrying
-an `X-Affinity-Node` hint naming the node that actually holds the lease.
+local function isSet(value)
+  return value ~= nil and value ~= "" and value ~= "_undef_"
+end
 
-UNVERIFIED LIVE and, despite having a real caller as of S2-13 (`handlers.
-queue` below), still practically unreachable (docs/decisions.md G-46, same
-discipline as G-43/G-45/G-47 above): `opensips.cfg.template`'s own `route{}`
-does not yet read this header at all (its own comment on the `cachedb_redis`
-load: "read by call-control (S2+), not by anything in this script") —
-teaching OpenSIPs to dispatch on it is S4-05's job ("Affinity routing at
-OpenSIPs + multi-node lease tests"), not this one's. With exactly one FS
-node in the dev stack (S2-19 adds the second), a queue's lease can only
-ever resolve to that same node, so `handlers.queue`'s hairpin branch can
-never actually run yet — reachable in code, not in practice.
+--[[
+The "hairpin" (04 §3.3, S4-05): sends the call back out through OpenSIPs to the
+node holding the lease, the same way `/fs/dialplan` does for a DID
+(`xml.ts`'s `buildAffinityHairpinDocument`; keep the two in step). OpenSIPs
+relays on `X-Affinity-Node` (the owning node's dispatcher address, which
+telephony-config answers with the lease) and trusts the `X-Affinity-*`
+headers only from a media node; the owning node's `/fs/dialplan` serves
+`X-Affinity-Target` for `X-Affinity-Tenant` directly and never hairpins it on.
+
+A call this node is already recording says so (`X-Affinity-Recorded`): the
+recording goes on here, where the media still passes, and the owning node does
+not start a second one. Returns false when there is nowhere to send the call.
 --]]
-local function hairpinTransfer(targetNodeId)
+local function hairpinTransfer(targetNodeUri, target)
   local domain = session:getVariable("cuc_tenant_domain")
   local routeUri = session:getVariable("cuc_opensips_sip_uri")
-  log("INFO", "hairpinning to node '" .. targetNodeId .. "' via " .. tostring(routeUri))
-  session:setVariable("sip_h_X-Affinity-Node", targetNodeId)
-  session:execute("bridge", "{sip_route_uri=sip:" .. tostring(routeUri) .. "}sofia/internal/" .. tenantId .. "@" .. tostring(domain))
+  local destination = session:getVariable("destination_number")
+  if not isSet(targetNodeUri) or not isSet(domain) or not isSet(routeUri) or not isSet(destination) then
+    return false
+  end
+  log("INFO", "hairpinning " .. target .. " to " .. targetNodeUri .. " via " .. routeUri)
+  local variables = {
+    "sip_route_uri=sip:" .. routeUri,
+    "sip_h_X-Affinity-Node=" .. targetNodeUri,
+    "sip_h_X-Affinity-Target=" .. target,
+    "sip_h_X-Affinity-Tenant=" .. tenantId,
+  }
+  if isSet(session:getVariable("cuc_recording_id")) then
+    table.insert(variables, "sip_h_X-Affinity-Recorded=1")
+  end
+  session:execute("bridge", "{" .. table.concat(variables, ",") .. "}sofia/internal/" .. destination .. "@" .. domain)
+  return true
 end
 
 -- ---------------------------------------------------------------------------
@@ -416,10 +431,6 @@ end
 -- A call already being recorded (tenant or DID rules at flow entry, or an
 -- earlier hand-off) says so (`recording=1`), and gets no second recording.
 -- ---------------------------------------------------------------------------
-
-local function isSet(value)
-  return value ~= nil and value ~= "" and value ~= "_undef_"
-end
 
 -- The query string that asks for a recording decision with a lookup.
 local function recordingQuery()
@@ -609,8 +620,12 @@ function handlers.queue(node)
   end
 
   if decoded.isLocal == false then
-    hairpinTransfer(decoded.nodeId)
-    return nil
+    local target = "queue:" .. node.config.queueId
+    local didId = session:getVariable("cuc_did_id")
+    if isSet(didId) then target = target .. ":" .. didId end
+    if hairpinTransfer(decoded.nodeUri, target) then return nil end
+    log("ERR", "queue node '" .. node.id .. "' is leased to node '" .. tostring(decoded.nodeId) .. "', which could not be reached")
+    return node.ports.next
   end
 
   applyRecording(decoded.recording, false)

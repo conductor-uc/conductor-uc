@@ -242,8 +242,10 @@ modparam("pua", "db_url", "${OPENSIPS_DB_URL}")
 loadmodule "pua_dialoginfo.so"
 
 #### Affinity leases (D-010) — read by call-control (S2+), not by
-#### anything in this script. Configured here since this is where every
-#### other shared resource URL for this node lives.
+#### anything in this script: S4-05 routes a pinned call on the hairpin
+#### headers a media node sets (see the "request from FS" branch below), not
+#### on a lease this proxy reads. Kept loaded, as configured, for a later
+#### reader at the edge.
 loadmodule "cachedb_redis.so"
 modparam("cachedb_redis", "cachedb_url", "${OPENSIPS_REDIS_URL}")
 
@@ -292,6 +294,17 @@ route{
     remove_hf("X-Tenant-Domain");
     remove_hf("X-Trunk-Id");
     remove_hf("X-Call-Direction");
+
+    # S4-05 (04 §3.3): the hairpin headers a media node sets to send a call to
+    # the node holding a queue, parking lot or conference room. Trusted only
+    # from a media node; anyone else's are dropped here, before anything reads
+    # them, so a phone or trunk cannot steer a call to a node or name a tenant.
+    if (!ds_is_in_list("$si", $sp)) {
+        remove_hf("X-Affinity-Node");
+        remove_hf("X-Affinity-Target");
+        remove_hf("X-Affinity-Tenant");
+        remove_hf("X-Affinity-Recorded");
+    }
 
     # Answer aliveness/OPTIONS pings addressed to this proxy itself (not a
     # specific user) directly — the same pattern dispatcher's own OPTIONS
@@ -420,6 +433,19 @@ route{
             exit;
         }
         fix_nated_contact();
+        # S4-05 (04 §3.3), the hairpin: the node that took the call found its
+        # queue, parking lot or conference room leased to another node, and
+        # names that node's dispatcher address. Relayed straight there, with
+        # the target and tenant headers for its dialplan; no location lookup.
+        # The lease itself is not read here (no `cachedb_redis` lookup): the
+        # node asks call-control, which acquires it, in the same round trip
+        # that decides the call, so the edge never routes on a stale copy.
+        if (is_present_hf("X-Affinity-Node")) {
+            $du = $hdr(X-Affinity-Node);
+            remove_hf("X-Affinity-Node");
+            route(relay);
+            exit;
+        }
         if (!lookup("location")) {
             # Not a registered local user — S2-04: 03 §2.1's "else ->
             # do_routing(group = tenant's dr group)" branch.

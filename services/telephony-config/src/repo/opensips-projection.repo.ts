@@ -117,6 +117,21 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
     },
 
     /**
+     * S4-05 (04 §3.3): the SIP address OpenSIPs reaches a media node on, for a call hairpinned to
+     * the node holding a lease. Found by the id in `attrs`, like a drain.
+     */
+    async findNodeSipUri(nodeId: string): Promise<string | undefined> {
+      const row = await k
+        .selectFrom('dispatcher')
+        .select('destination')
+        .where('setid', '=', FS_DISPATCHER_SET)
+        .where('attrs', '=', nodeId)
+        .orderBy('id')
+        .executeTakeFirst();
+      return row?.destination;
+    },
+
+    /**
      * S4-12 (G-124): the FS node's share of new calls, on its dispatcher rows in set 1. Returns
      * how many rows name the node. The table is the only copy: `seed-dispatcher.py` leaves an
      * existing row's weight alone.

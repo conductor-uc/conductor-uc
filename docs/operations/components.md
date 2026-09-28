@@ -194,11 +194,11 @@ What the code allows today. "Safe" means the code guards against two copies doin
 | media-worker, notification-service | **Safe** | Consumers only |
 | **call-control** | **No: run exactly one** | Every copy connects to every FreeSWITCH node and would publish every call event twice. Nothing hands nodes out between copies (plan task S4-03). |
 | **OpenSIPs** | **No: run exactly one** | No clustering (S4-06); telephony-config reloads one MI address |
-| FreeSWITCH | One per server; **several servers work for plain calls** | Round-robin dispatch is verified with two nodes. But OpenSIPs does not yet send a call to the node that already holds a queue, parking lot or conference (G-46, plan task S4-05). With two or more nodes, a call to a queue, parking slot or conference room that is already active on another node can fail. **Use one FreeSWITCH node if those features matter**, until S4-05 is built. |
+| FreeSWITCH | One per server; **several servers work** | Weighted round-robin dispatch, verified with two nodes. A call to a queue, parking slot or conference room already active on another node is sent on to that node through OpenSIPs (S4-05, G-128); the node that took the call stays in its media path. `*8` pickup of a call ringing on another node does not work yet. |
 | recording-uploader | One per FreeSWITCH node | It shares that node's spool |
 | MariaDB, Redis, NATS | **One each** | No clustering is configured or tested (S4-07). Replication is possible with the products' own tools, but the platform has no support for failover. |
 
-Nothing detects a failed FreeSWITCH node and cleans up its calls (S4-04). OpenSIPs stops sending new calls to a node that stops answering its OPTIONS probe. Calls in progress on a node that dies are lost, and so are recordings not yet uploaded (decision O-13, accepted).
+OpenSIPs stops sending new calls to a node that stops answering its OPTIONS probe. When a node's heartbeat expires (10 s), call-control ends its calls at the edge (both parties get a BYE), writes a `node_failure` call record for each, and releases its queues, parking lots and conference rooms, so the next caller gets them on another node (S4-04, S4-05). The calls themselves are lost, and so are recordings not yet uploaded (decision O-13, accepted).
 
 ## 7. Startup order and dependencies
 
