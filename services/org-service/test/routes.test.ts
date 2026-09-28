@@ -348,6 +348,141 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
     });
   });
 
+  describe('deletion (S1-16, G-11)', () => {
+    const as = (orgType: 'master' | 'reseller' | 'tenant', orgId: string) =>
+      signInternalHeaders(TEST_INTERNAL_SECRET, {
+        actorId: 'user-1',
+        actorType: 'user',
+        orgId,
+        orgType,
+      });
+
+    async function tree() {
+      const master = await createMaster();
+      const reseller = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'acme',
+        name: 'Acme',
+      });
+      const other = await repo.create({}, 'reseller', {
+        parentId: master.id,
+        slug: 'other',
+        name: 'Other',
+      });
+      const tenant = await repo.create({}, 'tenant', {
+        parentId: reseller.id,
+        slug: 'widgets',
+        name: 'Widgets',
+      });
+      return { master, reseller, other, tenant };
+    }
+
+    async function events(): Promise<string[]> {
+      const rows = await db.kysely.selectFrom('outbox').select('type').execute();
+      return rows.map((r) => r.type);
+    }
+
+    it('a reseller asks to delete its tenant: it is suspended for 30 days, then can be cancelled back to what it was', async () => {
+      const { reseller, tenant } = await tree();
+      await db.kysely.deleteFrom('outbox').execute();
+
+      const asked = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenant.id}/deletion`,
+        headers: as('reseller', reseller.id),
+      });
+      expect(asked.statusCode, asked.body).toBe(202);
+      const body = asked.json<{ status: string; deleteAfter: string }>();
+      expect(body.status).toBe('pending_deletion');
+      const days = (new Date(body.deleteAfter).getTime() - Date.now()) / 86_400_000;
+      expect(days).toBeGreaterThan(29.9);
+      expect(days).toBeLessThanOrEqual(30);
+      expect(await events()).toContain('org.tenant.deletion_requested');
+
+      // Pending deletion is neither suspendable nor resumable; it is only cancelled.
+      const suspend = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenant.id}/suspend`,
+        headers: asService,
+      });
+      expect(suspend.statusCode).toBe(409);
+      const again = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenant.id}/deletion`,
+        headers: as('reseller', reseller.id),
+      });
+      expect(again.json()).toMatchObject({ code: 'invalid_status_transition' });
+
+      const cancelled = await app.inject({
+        method: 'DELETE',
+        url: `/v1/tenants/${tenant.id}/deletion`,
+        headers: as('reseller', reseller.id),
+      });
+      expect(cancelled.statusCode).toBe(200);
+      expect(cancelled.json()).toMatchObject({ status: 'active', deleteAfter: null });
+      expect(await events()).toContain('org.tenant.deletion_cancelled');
+    });
+
+    it('a cancelled deletion of a suspended tenant leaves it suspended', async () => {
+      const { tenant } = await tree();
+      await repo.suspend({}, tenant.id);
+      await repo.requestDeletion({}, tenant.id);
+      expect(await repo.cancelDeletion({}, tenant.id)).toMatchObject({ status: 'suspended' });
+    });
+
+    it("never reaches another reseller's tenant, nor lets a tenant delete itself", async () => {
+      const { other, tenant } = await tree();
+      const foreign = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenant.id}/deletion`,
+        headers: as('reseller', other.id),
+      });
+      expect(foreign.statusCode).toBe(404);
+      const self = await app.inject({
+        method: 'POST',
+        url: `/v1/tenants/${tenant.id}/deletion`,
+        headers: as('tenant', tenant.id),
+      });
+      expect(self.statusCode).toBe(404);
+      expect((await repo.findById(tenant.id))?.status).toBe('active');
+    });
+
+    it('deletes a reseller only once it has no tenants left (G-11 (4))', async () => {
+      const { master, reseller, tenant } = await tree();
+      const refused = await app.inject({
+        method: 'POST',
+        url: `/v1/resellers/${reseller.id}/deletion`,
+        headers: as('master', master.id),
+      });
+      expect(refused.json()).toMatchObject({ code: 'reseller_has_tenants' });
+
+      // With its tenant deleted, it can go too; and no tenant can be added meanwhile.
+      await repo.requestDeletion({}, tenant.id);
+      await repo.finishDueDeletions(new Date(Date.now() + 31 * 86_400_000));
+      const asked = await app.inject({
+        method: 'POST',
+        url: `/v1/resellers/${reseller.id}/deletion`,
+        headers: as('master', master.id),
+      });
+      expect(asked.statusCode).toBe(202);
+      await expect(
+        repo.create({}, 'tenant', { parentId: reseller.id, slug: 'late', name: 'Late' }),
+      ).rejects.toThrow();
+    });
+
+    it('once the 30 days are up the org is deleted, once, and every service is told', async () => {
+      const { tenant } = await tree();
+      await repo.requestDeletion({}, tenant.id, new Date('2026-01-01T00:00:00Z'));
+      await db.kysely.deleteFrom('outbox').execute();
+
+      expect(await repo.finishDueDeletions(new Date('2026-01-30T00:00:00Z'))).toEqual([]);
+      expect(await repo.finishDueDeletions(new Date('2026-01-31T00:00:01Z'))).toEqual([tenant.id]);
+      expect((await repo.findById(tenant.id))?.status).toBe('deleted');
+      expect(await repo.finishDueDeletions(new Date('2026-02-01T00:00:00Z'))).toEqual([]);
+      expect(await events()).toEqual(['org.tenant.deleted']);
+    });
+  });
+
   describe('suspend / resume', () => {
     it('suspends and resumes a tenant', async () => {
       const master = await createMaster();

@@ -163,6 +163,82 @@ void main() {
     );
   });
 
+  group('deleting (S1-16, G-11)', () {
+    testWidgets(
+      'deleting a tenant needs its short name typed, suspends it with a date, and can be cancelled',
+      (tester) async {
+        await signInAs(tester, 'reseller@example.test');
+        await openMenu(tester, 'Acme Dental', 'Delete…');
+        expect(find.text('Delete Acme Dental?'), findsOneWidget);
+        final button = find.byKey(const ValueKey('org-delete-button'));
+        expect(tester.widget<FilledButton>(button).onPressed, isNull);
+        await tester.enterText(
+          find.byKey(const ValueKey('org-delete-confirm')),
+          'acme',
+        );
+        await tester.pump();
+        expect(tester.widget<FilledButton>(button).onPressed, isNull);
+        await tester.enterText(
+          find.byKey(const ValueKey('org-delete-confirm')),
+          'acme-dental',
+        );
+        await tester.pump();
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+        expect(find.textContaining('will be deleted on'), findsOneWidget);
+
+        final tile = find.ancestor(
+          of: find.text('Acme Dental'),
+          matching: find.byType(ListTile),
+        );
+        expect(
+          find.descendant(
+            of: tile,
+            matching: find.textContaining('acme-dental · deleted on'),
+          ),
+          findsOneWidget,
+        );
+
+        // While it waits, it is only cancelled, not suspended or resumed.
+        await tester.tap(
+          find.descendant(
+            of: tile,
+            matching: find.byType(PopupMenuButton<String>),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Resume'), findsNothing);
+        await tester.tap(find.text('Cancel deletion'));
+        await tester.pumpAndSettle();
+        expect(find.text('Acme Dental will not be deleted.'), findsOneWidget);
+        expect(find.text('acme-dental'), findsOneWidget);
+      },
+    );
+
+    testWidgets('a reseller with tenants is not deleted, and says why', (
+      tester,
+    ) async {
+      await signInAs(tester, 'master@example.test');
+      await tapNav(tester, 'Resellers');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Northwind Telecom').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('reseller-delete')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const ValueKey('org-delete-confirm')),
+        'northwind',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('org-delete-button')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text("Delete this reseller's tenants first."),
+        findsOneWidget,
+      );
+    });
+  });
+
   group('brand editor (reseller)', () {
     Future<void> openBrand(WidgetTester tester) async {
       await signInAs(tester, 'reseller@example.test');

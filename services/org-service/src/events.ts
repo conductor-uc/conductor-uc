@@ -65,6 +65,57 @@ export const orgEvents = defineEvents({
     description: 'A suspended tenant was returned to active.',
     data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
   },
+  /**
+   * S1-16 (G-11): deletion asked for. The org is suspended from now on (the
+   * SIP edge stops serving it) until `deleteAfter`, or until it is cancelled.
+   */
+  'org.reseller.deletion_requested': {
+    schemaVersion: 1,
+    description: 'Deletion of a reseller was asked for; it is suspended until then.',
+    data: Type.Object({
+      orgId: Type.String({ minLength: 1 }),
+      deleteAfter: Type.String({ format: 'date-time' }),
+    }),
+  },
+  'org.tenant.deletion_requested': {
+    schemaVersion: 1,
+    description: 'Deletion of a tenant was asked for; it is suspended until then.',
+    data: Type.Object({
+      orgId: Type.String({ minLength: 1 }),
+      deleteAfter: Type.String({ format: 'date-time' }),
+    }),
+  },
+  /** The deletion was called off; `status` is what the org is again. */
+  'org.reseller.deletion_cancelled': {
+    schemaVersion: 1,
+    description: "A reseller's deletion was cancelled; it is back to the status it had.",
+    data: Type.Object({
+      orgId: Type.String({ minLength: 1 }),
+      status: Type.Union([Type.Literal('active'), Type.Literal('suspended')]),
+    }),
+  },
+  'org.tenant.deletion_cancelled': {
+    schemaVersion: 1,
+    description: "A tenant's deletion was cancelled; it is back to the status it had.",
+    data: Type.Object({
+      orgId: Type.String({ minLength: 1 }),
+      status: Type.Union([Type.Literal('active'), Type.Literal('suspended')]),
+    }),
+  },
+  /**
+   * The grace period is over: every service removes the org's rows and stored
+   * objects (G-11 (3)). Audit entries about it stay until audit retention.
+   */
+  'org.reseller.deleted': {
+    schemaVersion: 1,
+    description: 'A reseller was deleted; every service removes its data.',
+    data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
+  },
+  'org.tenant.deleted': {
+    schemaVersion: 1,
+    description: 'A tenant was deleted; every service removes its data.',
+    data: Type.Object({ orgId: Type.String({ minLength: 1 }) }),
+  },
   'org.domain.added': {
     schemaVersion: 1,
     description:

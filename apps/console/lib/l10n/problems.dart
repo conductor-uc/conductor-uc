@@ -12,6 +12,7 @@ String? problemText(
   Map<String, Object?> params,
 ) => switch (code) {
   'validation_failed' => l.problemValidationFailed,
+  'reseller_has_tenants' => l.problemResellerHasTenants,
   'route_not_found' => l.problemRouteNotFound,
   'internal_error' => l.problemInternalError,
   'sign_in_required' => l.problemSignInRequired,

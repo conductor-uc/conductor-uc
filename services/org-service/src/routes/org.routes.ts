@@ -1,6 +1,10 @@
-import { ProblemError, Type, type Server } from '@cuc/http';
+import { ProblemError, Type, type RequestContext, type Server } from '@cuc/http';
 
-import { InvalidOrgHierarchyError, InvalidOrgStatusTransitionError } from '../domain/org.js';
+import {
+  InvalidOrgHierarchyError,
+  InvalidOrgStatusTransitionError,
+  OrgHasTenantsError,
+} from '../domain/org.js';
 import type { AdminUserCreator } from '../identity-client.js';
 import { AdminUserEmailTakenError } from '../identity-client.js';
 import {
@@ -36,6 +40,8 @@ const OrgSchema = Type.Object({
   timezone: Type.String(),
   country: Type.String(),
   limits: Type.Record(Type.String(), Type.Unknown()),
+  /** S1-16: when a `pending_deletion` org is deleted; null otherwise. */
+  deleteAfter: Type.Union([Type.String({ format: 'date-time' }), Type.Null()]),
 });
 
 const CreatedOrgSchema = Type.Object({
@@ -60,8 +66,8 @@ const UpdateOrgBodySchema = Type.Object({
 
 const IdParamsSchema = Type.Object({ id: Type.String({ minLength: 1 }) });
 
-function toResponse(org: Org): Org {
-  return org;
+function toResponse(org: Org) {
+  return { ...org, deleteAfter: org.deleteAfter?.toISOString() ?? null };
 }
 
 /**
@@ -230,6 +236,33 @@ export function registerOrgRoutes(
       toResponse(await transitionOrg(repo, 'reseller', 'resume', request.params.id)),
   );
 
+  // S1-16 (G-11): deleting a reseller, which must have no tenants left.
+  app.post(
+    '/v1/resellers/:id/deletion',
+    {
+      config: { permission: 'reseller.manage', dataClass: 'config' },
+      schema: { params: IdParamsSchema, response: { 202: OrgSchema } },
+    },
+    async (request, reply) =>
+      reply
+        .status(202)
+        .send(
+          toResponse(
+            await deletionOf(repo, 'reseller', 'request', request.params.id, request.context),
+          ),
+        ),
+  );
+
+  app.delete(
+    '/v1/resellers/:id/deletion',
+    {
+      config: { permission: 'reseller.manage', dataClass: 'config' },
+      schema: { params: IdParamsSchema, response: { 200: OrgSchema } },
+    },
+    async (request) =>
+      toResponse(await deletionOf(repo, 'reseller', 'cancel', request.params.id, request.context)),
+  );
+
   app.post(
     '/v1/resellers/:id/tenants',
     {
@@ -304,6 +337,81 @@ export function registerOrgRoutes(
     },
     async (request) => toResponse(await transitionOrg(repo, 'tenant', 'resume', request.params.id)),
   );
+
+  // S1-16 (G-11): a reseller (or the master) deletes a tenant.
+  app.post(
+    '/v1/tenants/:id/deletion',
+    {
+      config: { permission: 'tenant.manage', dataClass: 'config' },
+      schema: { params: IdParamsSchema, response: { 202: OrgSchema } },
+    },
+    async (request, reply) =>
+      reply
+        .status(202)
+        .send(
+          toResponse(
+            await deletionOf(repo, 'tenant', 'request', request.params.id, request.context),
+          ),
+        ),
+  );
+
+  app.delete(
+    '/v1/tenants/:id/deletion',
+    {
+      config: { permission: 'tenant.manage', dataClass: 'config' },
+      schema: { params: IdParamsSchema, response: { 200: OrgSchema } },
+    },
+    async (request) =>
+      toResponse(await deletionOf(repo, 'tenant', 'cancel', request.params.id, request.context)),
+  );
+}
+
+/**
+ * S1-16 (G-11): asks for an org's deletion, or calls it off. Asking suspends
+ * it until `deleteAfter`, 30 days on; cancelling puts back the status it had.
+ * 409 `invalid_status_transition` (not active or suspended, or no deletion to
+ * cancel), `reseller_has_tenants`.
+ */
+async function deletionOf(
+  repo: OrgRepo,
+  expectedType: 'reseller' | 'tenant',
+  action: 'request' | 'cancel',
+  id: string,
+  actor: RequestContext,
+): Promise<Org> {
+  const org = await requireType(repo, expectedType, id);
+  // Destructive, so the signed caller must own the org: the master (or the
+  // platform's own tooling, by service token) any, a reseller only its own
+  // tenants (G-11 (1)). The same answer whether or not
+  // the org exists elsewhere.
+  const owns =
+    actor.actorType === 'service' ||
+    actor.orgType === 'master' ||
+    (actor.orgType === 'reseller' && org.type === 'tenant' && org.resellerId === actor.orgId);
+  if (!owns) {
+    throw ProblemError.notFound(`No ${expectedType} with that id.`, {
+      code: expectedType === 'reseller' ? 'reseller_not_found' : 'tenant_not_found',
+    });
+  }
+  try {
+    return await (action === 'request'
+      ? repo.requestDeletion({}, id)
+      : repo.cancelDeletion({}, id));
+  } catch (error) {
+    if (error instanceof OrgNotFoundError) {
+      throw ProblemError.notFound(error.message, { code: 'org_not_found', params: { orgId: id } });
+    }
+    if (error instanceof InvalidOrgHierarchyError) {
+      throw ProblemError.badRequest(error.message, { code: 'invalid_org_hierarchy' });
+    }
+    if (error instanceof InvalidOrgStatusTransitionError) {
+      throw ProblemError.conflict(error.message, { code: 'invalid_status_transition' });
+    }
+    if (error instanceof OrgHasTenantsError) {
+      throw ProblemError.conflict(error.message, { code: 'reseller_has_tenants' });
+    }
+    throw error;
+  }
 }
 
 async function updateOrg(
@@ -359,7 +467,7 @@ async function requireType(
   repo: OrgRepo,
   expectedType: 'reseller' | 'tenant',
   id: string,
-): Promise<void> {
+): Promise<Org> {
   const org = await repo.findById(id);
   if (org === undefined || org.type !== expectedType) {
     throw ProblemError.notFound(`No ${expectedType} with that id.`, {
@@ -367,4 +475,5 @@ async function requireType(
       code: expectedType === 'reseller' ? 'reseller_not_found' : 'tenant_not_found',
     });
   }
+  return org;
 }

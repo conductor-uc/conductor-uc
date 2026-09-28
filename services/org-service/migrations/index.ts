@@ -5,6 +5,7 @@ import * as brandsAndHostnames from './002_brands_and_hostnames.js';
 import * as certificates from './003_certificates.js';
 import * as acmeSettings from './004_acme_settings.js';
 import * as platformNetwork from './005_platform_network.js';
+import * as orgDeletion from './006_org_deletion.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -21,4 +22,5 @@ export const migrations: Record<string, Migration> = {
   '003_certificates': certificates,
   '004_acme_settings': acmeSettings,
   '005_platform_network': platformNetwork,
+  '006_org_deletion': orgDeletion,
 };

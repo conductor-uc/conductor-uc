@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/format.dart';
 import '../../core/acting.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
 import '../../l10n/l10n.dart';
+import '../../widgets/feedback.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart';
@@ -137,6 +139,7 @@ class _OrgTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final suspended = org['status'] != 'active';
+    final deleting = org['status'] == 'pending_deletion';
     final canEdit = ref.watch(
       canProvider(isReseller ? 'reseller.manage' : 'tenant.manage'),
     );
@@ -156,7 +159,9 @@ class _OrgTile extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            suspended ? '${org['slug']} · ${org['status']}' : '${org['slug']}',
+            suspended
+                ? '${org['slug']} · ${orgStatusText(context.l10n, org)}'
+                : '${org['slug']}',
           ),
           if (domain != null)
             Text(domain, key: ValueKey('domain-${org['id']}')),
@@ -202,7 +207,7 @@ class _OrgTile extends ConsumerWidget {
                     value: 'people',
                     child: Text(context.l10n.navPeople),
                   ),
-                if (canSuspend)
+                if (canSuspend && !deleting)
                   PopupMenuItem(
                     value: 'suspend',
                     child: Text(
@@ -210,6 +215,17 @@ class _OrgTile extends ConsumerWidget {
                           ? context.l10n.orgResume
                           : context.l10n.orgSuspend,
                     ),
+                  ),
+                // S1-16 (G-11): deleting, after 30 days; or calling it off.
+                if (canEdit && !deleting)
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Text(context.l10n.orgDelete),
+                  ),
+                if (canEdit && deleting)
+                  PopupMenuItem(
+                    value: 'cancel-deletion',
+                    child: Text(context.l10n.orgCancelDeletion),
                   ),
               ],
             ),
@@ -260,6 +276,37 @@ Future<void> orgAction(
     return;
   }
 
+  if (choice == 'delete' || choice == 'cancel-deletion') {
+    final messenger = ScaffoldMessenger.of(context);
+    final name = '${org['name']}';
+    if (choice == 'delete') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (_) => _DeleteOrgDialog(org: org),
+      );
+      if (confirmed != true) return;
+    }
+    try {
+      if (choice == 'delete') {
+        final updated = await api.requestDeletion(reseller: isReseller, id: id);
+        showToast(
+          messenger,
+          currentL10n.orgDeleteRequested(
+            name,
+            formatDate(updated['deleteAfter']),
+          ),
+        );
+      } else {
+        await api.cancelDeletion(reseller: isReseller, id: id);
+        showToast(messenger, currentL10n.orgDeletionCancelled(name));
+      }
+      refresh();
+    } catch (e) {
+      showToast(messenger, problemMessage(e));
+    }
+    return;
+  }
+
   final suspend = org['status'] == 'active';
   final messenger = ScaffoldMessenger.of(context);
   final confirmed = await showDialog<bool>(
@@ -293,5 +340,77 @@ Future<void> orgAction(
     refresh();
   } catch (e) {
     messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
+  }
+}
+
+/// An org's status, in words: suspended, or when it will be deleted (S1-16).
+String orgStatusText(AppLocalizations l10n, Json org) =>
+    org['status'] == 'pending_deletion'
+    ? l10n.orgStatusDeleting(formatDate(org['deleteAfter']))
+    : l10n.orgStatusSuspended;
+
+/// S1-16 (G-11): what deleting does, and a typed confirmation, since it cannot
+/// be undone after the 30 days.
+class _DeleteOrgDialog extends StatefulWidget {
+  const _DeleteOrgDialog({required this.org});
+
+  final Json org;
+
+  @override
+  State<_DeleteOrgDialog> createState() => _DeleteOrgDialogState();
+}
+
+class _DeleteOrgDialogState extends State<_DeleteOrgDialog> {
+  final _typed = TextEditingController();
+
+  @override
+  void dispose() {
+    _typed.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final slug = '${widget.org['slug']}';
+    final matches = _typed.text.trim() == slug;
+    return AlertDialog(
+      title: Text(l10n.orgDeleteTitle('${widget.org['name']}')),
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.orgDeleteBody),
+            const SizedBox(height: 16),
+            TextField(
+              key: const ValueKey('org-delete-confirm'),
+              controller: _typed,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: l10n.orgDeleteConfirmField(slug),
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text(l10n.commonCancel),
+        ),
+        FilledButton(
+          key: const ValueKey('org-delete-button'),
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+          ),
+          onPressed: matches ? () => Navigator.of(context).pop(true) : null,
+          child: Text(l10n.orgDeleteButton),
+        ),
+      ],
+    );
   }
 }

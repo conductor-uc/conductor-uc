@@ -30,6 +30,7 @@ import {
 import { registerDomainRoutes } from './routes/domain.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerOrgRoutes } from './routes/org.routes.js';
+import { createDeletionJob, DELETION_INTERVAL_MS } from './deletion-job.js';
 import type { OrgServiceDb } from './schema.js';
 
 const config = loadServiceConfig();
@@ -193,6 +194,10 @@ const kekRewrap = createKekRewrapJob(db, kek, logger);
 app.addReadinessCheck('kek_rewrap', kekRewrap.readinessCheck);
 kekRewrap.start(REWRAP_INTERVAL_MS);
 
+// S1-16 (G-11): deletions whose 30 days are up.
+const deletionJob = createDeletionJob({ repo: orgRepo, logger });
+deletionJob.start(DELETION_INTERVAL_MS);
+
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
 
@@ -215,6 +220,7 @@ async function shutdown(signal: string): Promise<void> {
   void certificateWorkerDone;
   await bus.close();
   await kekRewrap.stop();
+  await deletionJob.stop();
   await db.destroy();
   logger.info('shutdown complete');
   process.exit(0);

@@ -984,11 +984,34 @@ class DemoPbx {
           : _createOrg(list, _body(options));
     }
     final org = RegExp(
-      r'^/v1/(?:resellers|tenants)/([^/]+)(?:/(suspend|resume))?$',
+      r'^/v1/(?:resellers|tenants)/([^/]+)(?:/(suspend|resume|deletion))?$',
     ).firstMatch(path);
     if (org != null) {
       final row = _findOrg(org.group(1)!);
       if (row == null) return _problem(404, 'Not found.');
+      // S1-16: deletion waits 30 days; cancelling puts back what it was.
+      if (org.group(2) == 'deletion') {
+        if (method == 'POST') {
+          if (path.startsWith('/v1/resellers/') &&
+              (_tenants['${row['id']}'] ?? const []).isNotEmpty) {
+            return _problem(
+              409,
+              'Delete every tenant of this reseller first.',
+              code: 'reseller_has_tenants',
+            );
+          }
+          row['statusBeforeDeletion'] = row['status'];
+          row['status'] = 'pending_deletion';
+          row['deleteAfter'] = DateTime.now()
+              .toUtc()
+              .add(const Duration(days: 30))
+              .toIso8601String();
+          return _json(row, 202);
+        }
+        row['status'] = row.remove('statusBeforeDeletion') ?? 'active';
+        row['deleteAfter'] = null;
+        return _json(row);
+      }
       if (org.group(2) != null) {
         row['status'] = org.group(2) == 'suspend' ? 'suspended' : 'active';
         return _json(row);
