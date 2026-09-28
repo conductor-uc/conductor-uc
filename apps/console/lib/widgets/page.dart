@@ -81,13 +81,18 @@ class AsyncBody<T> extends StatelessWidget {
     super.key,
     required this.value,
     required this.builder,
-    required this.emptyText,
+    this.emptyText = '',
+    this.empty,
     this.isEmpty,
   });
 
   final AsyncValue<T> value;
   final Widget Function(T data) builder;
   final String emptyText;
+
+  /// Shown instead of [emptyText] when there is nothing: an [EmptyState]
+  /// that says what these are and how to add the first (S9-03).
+  final Widget? empty;
 
   /// Whether [data] has nothing to list; defaults to an empty collection.
   final bool Function(T data)? isEmpty;
@@ -98,7 +103,8 @@ class AsyncBody<T> extends StatelessWidget {
     error: (e, _) => Center(child: Text(problemMessage(e))),
     data: (data) {
       final empty = isEmpty?.call(data) ?? (data is Iterable && data.isEmpty);
-      return empty ? Center(child: Text(emptyText)) : builder(data);
+      if (!empty) return builder(data);
+      return this.empty ?? Center(child: Text(emptyText));
     },
   );
 }

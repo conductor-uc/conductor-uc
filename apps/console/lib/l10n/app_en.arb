@@ -784,5 +784,117 @@
   "problemEmailTaken": "That email already has an account here.",
   "@problemEmailTaken": {
     "description": "An account with that email exists in this organization."
+  },
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "Button that closes a dialog or form without saving."
+  },
+  "commonSave": "Save",
+  "@commonSave": {
+    "description": "Button that saves changes."
+  },
+  "commonDelete": "Delete",
+  "@commonDelete": {
+    "description": "Button or tooltip that deletes something."
+  },
+  "commonEdit": "Edit",
+  "@commonEdit": {
+    "description": "Tooltip on a button that opens something for editing."
+  },
+  "commonUndo": "Undo",
+  "@commonUndo": {
+    "description": "Action on a notice that reverses what was just done."
+  },
+  "commonSaved": "Saved.",
+  "@commonSaved": {
+    "description": "Short notice after changes were saved."
+  },
+  "commonDeleted": "Deleted.",
+  "@commonDeleted": {
+    "description": "Short notice after something was deleted."
+  },
+  "tableSearch": "Search",
+  "@tableSearch": {
+    "description": "Placeholder in the search box above a table."
+  },
+  "tableClearSearch": "Clear search",
+  "@tableClearSearch": {
+    "description": "Tooltip on the button that empties the table search box."
+  },
+  "tableNoMatches": "Nothing matches “{query}”.",
+  "@tableNoMatches": {
+    "description": "Shown when a table search finds nothing. {query} is what was typed.",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "tableSelected": "{count, plural, =1{1 selected} other{{count} selected}}",
+  "@tableSelected": {
+    "description": "How many table rows are selected.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tableClearSelection": "Clear selection",
+  "@tableClearSelection": {
+    "description": "Button that unselects every table row."
+  },
+  "tableActions": "Actions",
+  "@tableActions": {
+    "description": "Screen-reader name of the column of row buttons (edit, delete, ...)."
+  },
+  "tableDeleteSelected": "{count, plural, =1{Delete 1} other{Delete {count}}}",
+  "@tableDeleteSelected": {
+    "description": "Button that deletes the selected table rows.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tableDeleteSelectedTitle": "{count, plural, =1{Delete 1 item?} other{Delete {count} items?}}",
+  "@tableDeleteSelectedTitle": {
+    "description": "Heading of the confirmation before deleting several rows at once.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tableDeleteSelectedBody": "This can't be undone.",
+  "@tableDeleteSelectedBody": {
+    "description": "Warning in the confirmation before deleting several rows."
+  },
+  "tableDeletedSome": "{count, plural, =1{Deleted 1.} other{Deleted {count}.}}",
+  "@tableDeletedSome": {
+    "description": "Notice after deleting several rows.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tableDeleteFailed": "{deleted, plural, =0{Nothing was deleted.} =1{Deleted 1.} other{Deleted {deleted}.}} {failed, plural, =1{1 couldn't be deleted:} other{{failed} couldn't be deleted. The first reason:}} {reason}",
+  "@tableDeleteFailed": {
+    "description": "Notice after a bulk delete where some rows were refused. {reason} is the first refusal's explanation.",
+    "placeholders": {
+      "deleted": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "confirmAlsoAffects": "This also affects:",
+  "@confirmAlsoAffects": {
+    "description": "Heading above the list of other things a deletion or change affects."
   }
 }

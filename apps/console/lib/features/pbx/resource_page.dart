@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
+import '../../widgets/data_table.dart';
+import '../../widgets/feedback.dart';
 import '../../widgets/page.dart';
 import 'call_handling_dialog.dart';
 import 'connect_phone_dialog.dart';
@@ -61,27 +64,49 @@ class ResourceView extends ConsumerWidget {
         ?header,
         const SizedBox(height: 16),
         Expanded(
-          child: AsyncBody(
+          child: AsyncBody<List<Json>>(
             value: rows,
-            emptyText: 'No ${def.plural.toLowerCase()} yet.',
+            empty: EmptyState(
+              icon: def.icon,
+              title: 'No ${def.plural.toLowerCase()} yet.',
+              message: def.blurb,
+              action: !def.readOnly && canChange
+                  ? FilledButton.icon(
+                      onPressed: () => _openForm(context, ref),
+                      icon: const Icon(Icons.add),
+                      label: Text('New ${def.singular.toLowerCase()}'),
+                    )
+                  : null,
+            ),
             builder: (data) => SingleChildScrollView(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: MediaQuery.sizeOf(context).width - 320,
-                  ),
-                  child: DataTable(
-                    columns: [
-                      for (final c in columns) DataColumn(label: Text(c.label)),
-                      const DataColumn(label: Text('')),
-                    ],
-                    rows: [
-                      for (final row in data)
-                        _row(context, ref, row, columns, canChange),
-                    ],
-                  ),
-                ),
+              child: AppTable<Json>(
+                rows: data,
+                rowKey: (row) => '${row['id']}',
+                columns: [
+                  for (final c in columns)
+                    AppColumn<Json>(
+                      label: c.label,
+                      cell: (row) => _cell(context, ref, c, row[c.key], row),
+                      text: (row) => _cellText(ref, c, row[c.key], row),
+                      sortValue: c.kind == FieldKind.integer
+                          ? (row) => (row[c.key] as num?) ?? -1
+                          : null,
+                      numeric: c.kind == FieldKind.integer,
+                    ),
+                ],
+                actions: (row) => _actions(context, ref, row, canChange),
+                bulkActions: canChange
+                    ? (selected, clear) => [
+                        TextButton.icon(
+                          onPressed: () =>
+                              _deleteMany(context, ref, selected, clear),
+                          icon: const Icon(Icons.delete_outline),
+                          label: Text(
+                            context.l10n.tableDeleteSelected(selected.length),
+                          ),
+                        ),
+                      ]
+                    : null,
               ),
             ),
           ),
@@ -90,52 +115,40 @@ class ResourceView extends ConsumerWidget {
     );
   }
 
-  DataRow _row(
+  List<Widget> _actions(
     BuildContext context,
     WidgetRef ref,
     Json row,
-    List<Field> columns,
     bool canChange,
-  ) {
-    return DataRow(
-      cells: [
-        for (final c in columns)
-          DataCell(_cell(context, ref, c, row[c.key], row)),
-        DataCell(
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ...?rowActions?.call(context, ref, row),
-              if (!def.readOnly && canChange)
-                IconButton(
-                  tooltip: 'Edit',
-                  icon: const Icon(Icons.edit_outlined),
-                  onPressed: () => _openForm(context, ref, row),
-                ),
-              if (canChange)
-                IconButton(
-                  tooltip: 'Delete',
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _confirmDelete(context, ref, row),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+  ) => [
+    ...?rowActions?.call(context, ref, row),
+    if (!def.readOnly && canChange)
+      IconButton(
+        tooltip: context.l10n.commonEdit,
+        icon: const Icon(Icons.edit_outlined),
+        onPressed: () => _openForm(context, ref, row),
+      ),
+    if (canChange)
+      IconButton(
+        tooltip: context.l10n.commonDelete,
+        icon: const Icon(Icons.delete_outline),
+        onPressed: () => _confirmDelete(context, ref, row),
+      ),
+  ];
+
+  static String _statusLabel(Object? value) => switch (value) {
+    'pending' => 'Waiting for upload',
+    'processing' => 'Processing…',
+    'ready' => 'Ready',
+    'failed' => 'Failed',
+    _ => '$value',
+  };
 
   Widget _statusChip(BuildContext context, Object? value, Json row) {
     final scheme = Theme.of(context).colorScheme;
     final failed = value == 'failed';
     final working = value == 'processing';
-    final label = switch (value) {
-      'pending' => 'Waiting for upload',
-      'processing' => 'Processing…',
-      'ready' => 'Ready',
-      'failed' => 'Failed',
-      _ => '$value',
-    };
+    final label = _statusLabel(value);
     final chip = Chip(
       visualDensity: VisualDensity.compact,
       avatar: working
@@ -165,33 +178,38 @@ class ResourceView extends ConsumerWidget {
     Json row,
   ) {
     if (f.status) return _statusChip(context, value, row);
+    if (f.kind == FieldKind.toggle) {
+      return Icon(value == true ? Icons.check : Icons.remove, size: 18);
+    }
+    return Text(_cellText(ref, f, value, row));
+  }
+
+  /// A cell as text: what it shows, and what search and sort use.
+  String _cellText(WidgetRef ref, Field f, Object? value, Json row) {
+    if (f.status) return _statusLabel(value);
     switch (f.kind) {
       case FieldKind.toggle:
-        return Icon(value == true ? Icons.check : Icons.remove, size: 18);
+        return value == true ? f.label : '';
       case FieldKind.ref:
-        return Text(_lookup(ref, f.ref!, value));
+        return _lookup(ref, f.ref!, value);
       case FieldKind.dynamicRef:
         final type = row[f.refByField] as String?;
         final target = type == null ? null : f.refMap[type];
-        return Text(target == null ? '—' : _lookup(ref, target, value));
+        return target == null ? '—' : _lookup(ref, target, value);
       case FieldKind.refList:
         final ids = [...?(value as List?)];
-        return Text(
-          ids.isEmpty
-              ? '—'
-              : ids.map((id) => _lookup(ref, f.ref!, id)).join(', '),
-        );
+        return ids.isEmpty
+            ? '—'
+            : ids.map((id) => _lookup(ref, f.ref!, id)).join(', ');
       case FieldKind.textList:
         final words = [...?(value as List?)];
-        return Text(words.isEmpty ? '—' : words.join(', '));
+        return words.isEmpty ? '—' : words.join(', ');
       case FieldKind.weeklyHours:
-        return Text(summarizeRules(value));
+        return summarizeRules(value);
       case FieldKind.dateList:
-        return Text(summarizeHolidays(value));
+        return summarizeHolidays(value);
       default:
-        return Text(
-          value == null || value == '' ? (f.emptyLabel ?? '—') : '$value',
-        );
+        return value == null || value == '' ? (f.emptyLabel ?? '—') : '$value';
     }
   }
 
@@ -210,11 +228,14 @@ class ResourceView extends ConsumerWidget {
     WidgetRef ref, [
     Json? row,
   ]) async {
+    final messenger = ScaffoldMessenger.of(context);
     final saved = await showDialog<Json>(
       context: context,
       builder: (_) => ResourceFormDialog(def: def, row: row),
     );
-    if (saved != null) ref.invalidate(rowsProvider(def.key));
+    if (saved == null) return;
+    ref.invalidate(rowsProvider(def.key));
+    showToast(messenger, currentL10n.commonSaved);
   }
 
   Future<void> _confirmDelete(
@@ -224,30 +245,65 @@ class ResourceView extends ConsumerWidget {
   ) async {
     final api = ref.read(pbxApiProvider);
     final messenger = ScaffoldMessenger.of(context);
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Delete ${def.singular.toLowerCase()}?'),
-        content: Text(def.titleOf(row)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+    final confirmed = await confirmAction(
+      context,
+      title: 'Delete ${def.singular.toLowerCase()}?',
+      message: def.titleOf(row),
+      confirmLabel: context.l10n.commonDelete,
     );
-    if (confirmed != true || api == null) return;
+    if (!confirmed || api == null) return;
     try {
       await api.delete(def.key, '${row['id']}');
       ref.invalidate(rowsProvider(def.key));
+      showToast(messenger, currentL10n.commonDeleted);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
+      showToast(messenger, problemMessage(e));
     }
+  }
+
+  /// Deletes the selected rows one by one, and says how it went: the first
+  /// refusal's reason when any were refused (one still in use, say).
+  Future<void> _deleteMany(
+    BuildContext context,
+    WidgetRef ref,
+    List<Json> rows,
+    VoidCallback clear,
+  ) async {
+    final api = ref.read(pbxApiProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
+    final confirmed = await confirmAction(
+      context,
+      title: l10n.tableDeleteSelectedTitle(rows.length),
+      message: l10n.tableDeleteSelectedBody,
+      impact: [for (final r in rows.take(10)) def.titleOf(r)],
+      confirmLabel: l10n.tableDeleteSelected(rows.length),
+    );
+    if (!confirmed || api == null) return;
+    var deleted = 0;
+    Object? firstFailure;
+    var failed = 0;
+    for (final row in rows) {
+      try {
+        await api.delete(def.key, '${row['id']}');
+        deleted++;
+      } catch (e) {
+        failed++;
+        firstFailure ??= e;
+      }
+    }
+    clear();
+    ref.invalidate(rowsProvider(def.key));
+    showToast(
+      messenger,
+      firstFailure == null
+          ? l10n.tableDeletedSome(deleted)
+          : l10n.tableDeleteFailed(
+              deleted,
+              failed,
+              problemMessage(firstFailure),
+            ),
+    );
   }
 }
 

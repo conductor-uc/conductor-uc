@@ -78,7 +78,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('No outbound routes yet.'), findsOneWidget);
 
-      await tester.tap(find.text('New outbound route'));
+      // The empty page offers the first one too; the header's button is first.
+      await tester.tap(find.text('New outbound route').first);
       await tester.pumpAndSettle();
       await tester.enterText(field('Priority *'), '1');
       await tester.tap(find.widgetWithText(FilterChip, 'Primary trunk'));
