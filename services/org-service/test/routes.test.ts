@@ -6,6 +6,7 @@ import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 import { migrations } from '../migrations/index.js';
 import { createOrgRepo, type OrgRepo } from '../src/repo/org.repo.js';
 import { registerOrgRoutes } from '../src/routes/org.routes.js';
+import { registerOrgOwnership } from '../src/routes/ownership.js';
 import type { OrgServiceDb } from '../src/schema.js';
 import type { AdminUserCreator, AdminUserInput, CreatedAdminUser } from '../src/identity-client.js';
 import { AdminUserEmailTakenError } from '../src/identity-client.js';
@@ -77,6 +78,7 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
         internalServiceToken: TEST_SERVICE_TOKEN,
       },
     });
+    registerOrgOwnership(app, repo);
     registerOrgRoutes(app, repo, adminUsers.create);
     await app.ready();
 
@@ -257,12 +259,27 @@ describe.skipIf(skipReason !== undefined)('org-service HTTP routes', () => {
         headers: signInternalHeaders(TEST_INTERNAL_SECRET, {
           actorId: 'user-1',
           actorType: 'user',
+          orgId: reseller.id,
           orgType: 'reseller',
         }),
         payload: { slug: 'widgets', name: 'Widgets', ...ADMIN_BODY },
       });
 
       expect(response.statusCode).toBe(201);
+
+      // Only under itself: another reseller naming this one is told it does not exist.
+      const elsewhere = await app.inject({
+        method: 'POST',
+        url: `/v1/resellers/${reseller.id}/tenants`,
+        headers: signInternalHeaders(TEST_INTERNAL_SECRET, {
+          actorId: 'user-2',
+          actorType: 'user',
+          orgId: 'some-other-reseller',
+          orgType: 'reseller',
+        }),
+        payload: { slug: 'sneaky', name: 'Sneaky', ...ADMIN_BODY },
+      });
+      expect(elsewhere.statusCode).toBe(404);
     });
 
     it('404s when the reseller does not exist', async () => {

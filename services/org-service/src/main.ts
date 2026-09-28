@@ -30,6 +30,7 @@ import {
 import { registerDomainRoutes } from './routes/domain.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerOrgRoutes } from './routes/org.routes.js';
+import { registerOrgOwnership } from './routes/ownership.js';
 import { createDeletionJob, DELETION_INTERVAL_MS } from './deletion-job.js';
 import type { OrgServiceDb } from './schema.js';
 import { createOrgDeletionConsumer } from './org-deletion.js';
@@ -118,6 +119,8 @@ const identityClient = createIdentityClient({
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
 const orgRepo = createOrgRepo(db, { platformBaseDomain: config.PLATFORM_BASE_DOMAIN });
+// Who may address an org by id, for every `/v1/{resellers,tenants}/:id` route below.
+registerOrgOwnership(app, orgRepo);
 registerOrgRoutes(app, orgRepo, identityClient.createAdminUser);
 const domainRepo = createDomainRepo(db);
 registerDomainRoutes(app, domainRepo, nodeDnsResolver());
