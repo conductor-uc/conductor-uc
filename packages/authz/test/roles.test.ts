@@ -77,12 +77,22 @@ describe('BUILT_IN_ROLES', () => {
     expect(BUILT_IN_ROLES.get('tenant_admin')?.permissions.has('secret.reveal')).toBe(true);
   });
 
-  it('monitor.listen/whisper/barge belong to tenant_supervisor, not tenant_admin', () => {
-    const admin = BUILT_IN_ROLES.get('tenant_admin');
-    const supervisor = BUILT_IN_ROLES.get('tenant_supervisor');
-    for (const permission of ['monitor.listen', 'monitor.whisper', 'monitor.barge']) {
-      expect(admin?.permissions.has(permission), `admin → ${permission}`).toBe(false);
-      expect(supervisor?.permissions.has(permission), `supervisor → ${permission}`).toBe(true);
+  it('monitor.listen/whisper/barge belong to tenant_supervisor and, since D-021, tenant_admin; never to support, a reseller or a plain user', () => {
+    for (const roleId of ['tenant_admin', 'tenant_supervisor', 'master_admin']) {
+      for (const permission of ['monitor.listen', 'monitor.whisper', 'monitor.barge']) {
+        expect(
+          BUILT_IN_ROLES.get(roleId as never)?.permissions.has(permission),
+          `${roleId} → ${permission}`,
+        ).toBe(true);
+      }
+    }
+    for (const roleId of ['master_support', 'reseller_admin', 'reseller_support', 'tenant_user']) {
+      for (const permission of ['monitor.listen', 'monitor.whisper', 'monitor.barge']) {
+        expect(
+          BUILT_IN_ROLES.get(roleId as never)?.permissions.has(permission),
+          `${roleId} → ${permission}`,
+        ).toBe(false);
+      }
     }
   });
 

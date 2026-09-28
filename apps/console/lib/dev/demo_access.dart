@@ -53,6 +53,10 @@ const _tenantAdmin = [
   'voicemail.access',
   'monitor.presence',
   'monitor.calls',
+  // D-021: administrators listen, whisper and barge as supervisors do.
+  'monitor.listen',
+  'monitor.whisper',
+  'monitor.barge',
   'analytics.view',
   'audit.read',
   'apikey.manage',

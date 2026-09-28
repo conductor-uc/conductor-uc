@@ -398,8 +398,8 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
     it('cannot put a permission they lack into a custom role, or one that is not a permission', async () => {
       const org = crypto.randomUUID();
       const admin = await person(org, 'tenant_admin');
-      // Held by tenant_supervisor and the reseller/master tiers, not by a tenant admin.
-      for (const permission of ['monitor.barge', 'reseller.manage', 'billing.read']) {
+      // Held by the reseller and master tiers, not by a tenant admin.
+      for (const permission of ['domain.manage', 'reseller.manage', 'billing.read']) {
         const response = await call('POST', `/v1/orgs/${org}/roles`, admin.as, {
           name: `r-${permission}`,
           permissions: ['cdr.read', permission],
@@ -445,9 +445,16 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
       expect(await h.grants.listForOrg(org)).toEqual([]);
     });
 
-    it('G-121 (7): may give a user monitoring of one extension or queue, and nothing wider', async () => {
+    it('G-121 (7): an administrator without monitoring may give a user monitoring of one extension or queue, and nothing wider', async () => {
       const org = crypto.randomUUID();
-      const admin = await person(org, 'tenant_admin');
+      // Since D-021 the built-in tenant_admin holds monitoring; the exception is
+      // for an administrator whose (custom) role does not.
+      const role = await h.roles.createCustomRole(org, 'people admin', [
+        'org.view',
+        'user.manage',
+        'grant.manage',
+      ]);
+      const admin = await person(org, role.id);
       const lead = await person(org, 'tenant_user');
       const grant = (body: object) => call('POST', `/v1/orgs/${org}/grants`, admin.as, body);
       const queueId = crypto.randomUUID();
@@ -514,6 +521,19 @@ describe.skipIf(skipReason !== undefined)('self-service: authorization in identi
         expect(response.json(), JSON.stringify(body)).toMatchObject({ code });
       }
       expect(await h.grants.listForOrg(org)).toHaveLength(2);
+    });
+
+    it('D-021: the built-in tenant administrator holds monitoring, so may grant it across the tenant', async () => {
+      const org = crypto.randomUUID();
+      const admin = await person(org, 'tenant_admin');
+      const lead = await person(org, 'tenant_user');
+      const response = await call('POST', `/v1/orgs/${org}/grants`, admin.as, {
+        principalType: 'user',
+        principalId: lead.id,
+        permission: 'monitor.barge',
+        scope: { type: 'org', id: org },
+      });
+      expect(response.statusCode).toBe(201);
     });
 
     it("cannot list or change another org's grants or roles", async () => {

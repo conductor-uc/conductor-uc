@@ -4,6 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/l10n.dart';
+
 import '../../core/api_client.dart';
 import '../../core/problem.dart';
 import '../../core/session.dart';
@@ -219,8 +221,8 @@ class RecordingControls extends ConsumerWidget {
 }
 
 /// How a call's recording reads in a table or a card.
-String recordingLabel(String state) => switch (state) {
-  'on' => 'Recording',
-  'paused' => 'Paused',
+String recordingLabel(AppLocalizations l, String state) => switch (state) {
+  'on' => l.monRecordingOn,
+  'paused' => l.monRecordingPaused,
   _ => '—',
 };

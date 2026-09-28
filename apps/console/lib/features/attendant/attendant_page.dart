@@ -13,6 +13,7 @@ import '../monitoring/presence.dart';
 import '../myphone/my_phone_api.dart' show myExtensionProvider;
 import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart' show tenantCountryProvider;
+import '../monitoring/live_queues.dart';
 import 'attendant_api.dart';
 
 /// The attendant console (S9-14): the calls coming in, waiting, parked and in
@@ -331,7 +332,7 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
           onTakeBack: (slot) => _dial('$slot'),
         ),
         const SizedBox(height: 12),
-        const _QueuesStrip(),
+        const QueuesPanel(),
       ],
     );
 
@@ -713,27 +714,31 @@ class _ExtensionTile extends StatelessWidget {
     final theme = Theme.of(context);
     final (label, icon, color) = switch (state) {
       'idle' => (
-        l10n.attAvailable,
+        l10n.presenceAvailable,
         Icons.check_circle_outline,
         Colors.green.shade800,
       ),
       'ringing' => (
-        l10n.attRinging,
+        l10n.presenceRinging,
         Icons.ring_volume_outlined,
         Colors.orange.shade900,
       ),
-      'on_call' => (l10n.attOnACall, Icons.call, Colors.red.shade700),
+      'on_call' => (l10n.presenceOnACall, Icons.call, Colors.red.shade700),
       'dnd' => (
-        l10n.attDoNotDisturb,
+        l10n.presenceDoNotDisturb,
         Icons.do_not_disturb_on_outlined,
         Colors.purple.shade700,
       ),
       'offline' => (
-        l10n.attOffline,
+        l10n.presenceOffline,
         Icons.phone_disabled_outlined,
         Colors.grey.shade700,
       ),
-      _ => (l10n.attUnknown, Icons.help_outline, theme.colorScheme.outline),
+      _ => (
+        l10n.presenceUnknown,
+        Icons.help_outline,
+        theme.colorScheme.outline,
+      ),
     };
     return Tooltip(
       message: onTap == null ? '' : l10n.attSendHere,
@@ -858,107 +863,6 @@ class _ParkingStrip extends StatelessWidget {
             },
           ),
       ],
-    );
-  }
-}
-
-/// The queues: how many wait and for how long, and each agent, who can be
-/// signed in, out or on a break from here.
-class _QueuesStrip extends ConsumerWidget {
-  const _QueuesStrip();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = context.l10n;
-    if (!ref.watch(canProvider('queue.read'))) return const SizedBox.shrink();
-    final queues = ref.watch(liveQueuesProvider).value;
-    if (queues == null || queues.isEmpty) return const SizedBox.shrink();
-    final labels = {
-      for (final q
-          in ref.watch(rowsProvider('queues')).asData?.value ?? const <Json>[])
-        '${q['id']}': '${q['label']}',
-    };
-    final now = ref.watch(clockProvider).value ?? DateTime.now();
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final queue in queues)
-          Card(
-            key: ValueKey('attendant-queue-${queue.queueId}'),
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    labels[queue.queueId] ?? queue.queueId,
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  Text(
-                    queue.longestWaitingSince == null
-                        ? l10n.attQueueWaiting(queue.waiting)
-                        : l10n.attQueueWaitingLongest(
-                            queue.waiting,
-                            formatClock(
-                              now
-                                  .difference(queue.longestWaitingSince!)
-                                  .inSeconds
-                                  .clamp(0, 1 << 30),
-                            ),
-                          ),
-                  ),
-                  Wrap(
-                    spacing: 4,
-                    children: [
-                      for (final agent in queue.agents)
-                        _AgentChip(agent: agent),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _AgentChip extends ConsumerWidget {
-  const _AgentChip({required this.agent});
-
-  final LiveAgent agent;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final l10n = context.l10n;
-    final label = switch (agent.status) {
-      'available' => l10n.attAgentAvailable,
-      'on_break' => l10n.attAgentOnBreak,
-      'logged_out' => l10n.attAgentSignedOut,
-      _ => l10n.attUnknown,
-    };
-    return PopupMenuButton<String>(
-      key: ValueKey('attendant-agent-${agent.extension}'),
-      tooltip: l10n.attAgentChange,
-      onSelected: (status) async {
-        final messenger = ScaffoldMessenger.of(context);
-        try {
-          await ref
-              .read(attendantApiProvider)
-              ?.setAgentStatus(agent.extension, status);
-        } catch (e) {
-          showToast(messenger, problemMessage(e));
-        }
-      },
-      itemBuilder: (_) => [
-        PopupMenuItem(value: 'available', child: Text(l10n.attAgentSignIn)),
-        PopupMenuItem(value: 'on_break', child: Text(l10n.attAgentBreak)),
-        PopupMenuItem(value: 'logged_out', child: Text(l10n.attAgentSignOut)),
-      ],
-      child: Chip(label: Text('${agent.extension} · $label')),
     );
   }
 }

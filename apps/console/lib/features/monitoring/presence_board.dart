@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../pbx/pbx_api.dart';
 import 'presence.dart';
 
@@ -19,35 +20,35 @@ class PresenceLook {
 
 /// The look of each state the topic sends. An unknown one is shown as it
 /// comes, in neutral.
-PresenceLook presenceLook(String state) => switch (state) {
+PresenceLook presenceLook(AppLocalizations l, String state) => switch (state) {
   'idle' => PresenceLook(
-    'Available',
+    l.presenceAvailable,
     Icons.check_circle_outline,
     Colors.green.shade800,
   ),
   'ringing' => PresenceLook(
-    'Ringing',
+    l.presenceRinging,
     Icons.ring_volume_outlined,
     Colors.orange.shade900,
   ),
-  'on_call' => PresenceLook('On a call', Icons.call, Colors.red.shade700),
+  'on_call' => PresenceLook(l.presenceOnACall, Icons.call, Colors.red.shade700),
   'dnd' => PresenceLook(
-    'Do not disturb',
+    l.presenceDoNotDisturb,
     Icons.do_not_disturb_on_outlined,
     Colors.purple.shade700,
   ),
   'offline' => PresenceLook(
-    'Offline',
+    l.presenceOffline,
     Icons.phone_disabled_outlined,
     Colors.grey.shade700,
   ),
-  _ => PresenceLook(_unknownLabel(state), Icons.help_outline, null),
+  _ => PresenceLook(_unknownLabel(l, state), Icons.help_outline, null),
 };
 
 /// `on_break` reads as "On break"; nothing at all as "Unknown".
-String _unknownLabel(String state) {
+String _unknownLabel(AppLocalizations l, String state) {
   final words = state.replaceAll('_', ' ').trim();
-  if (words.isEmpty) return 'Unknown';
+  if (words.isEmpty) return l.presenceUnknown;
   return '${words[0].toUpperCase()}${words.substring(1)}';
 }
 
@@ -61,19 +62,20 @@ class PresencePanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     if (ref.watch(tenantIdProvider) == null) {
-      return const Text('Choose a tenant to see its extensions.');
+      return Text(l10n.monChooseTenantPresence);
     }
     if (!ref.watch(canProvider('monitor.presence'))) {
-      return const Text("Your role doesn't include presence.");
+      return Text(l10n.monNoPresenceRole);
     }
     final view = ref.watch(presenceProvider).value;
     final stopped = view?.stopped;
     if (view == null || (!view.loaded && stopped == null)) {
-      return const Text('Connecting…');
+      return Text(l10n.monConnecting);
     }
-    if (stopped != null) return Text(_stoppedText(stopped));
-    if (view.extensions.isEmpty) return const Text('No extensions yet.');
+    if (stopped != null) return Text(_stoppedText(l10n, stopped));
+    if (view.extensions.isEmpty) return Text(l10n.monNoExtensions);
     final names = ref.watch(canProvider('extension.read'))
         ? {
             for (final e
@@ -99,12 +101,12 @@ class PresencePanel extends ConsumerWidget {
   }
 }
 
-String _stoppedText(String code) => switch (code) {
-  'offline' || 'unavailable' => 'Live updates are unavailable. Reconnecting…',
+String _stoppedText(AppLocalizations l, String code) => switch (code) {
+  'offline' || 'unavailable' => l.monUpdatesUnavailable,
   'forbidden' ||
   'permission_denied' ||
-  'reseller_private_data_denied' => "Your role doesn't include presence.",
-  _ => 'Live updates stopped.',
+  'reseller_private_data_denied' => l.monNoPresenceRole,
+  _ => l.monUpdatesStopped,
 };
 
 /// One extension on the board: its number, its name when known, and its state
@@ -118,7 +120,7 @@ class PresenceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final look = presenceLook(presence.state);
+    final look = presenceLook(context.l10n, presence.state);
     final color = look.color ?? theme.colorScheme.outline;
     final name = this.name;
     return MergeSemantics(
