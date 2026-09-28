@@ -4786,6 +4786,10 @@
   "@usrRoleSupervisor": {
     "description": "Built-in tenant role: oversees queues and agents."
   },
+  "usrRoleReceptionist": "Receptionist",
+  "@usrRoleReceptionist": {
+    "description": "Built-in tenant role: answers the front desk with the attendant console (moves calls, sees who is free), with no administrator powers."
+  },
   "usrRoleUser": "User",
   "@usrRoleUser": {
     "description": "Built-in tenant role: an ordinary person with a phone."
@@ -7319,5 +7323,75 @@
   "myAgentStatusSaved": "Status changed.",
   "@myAgentStatusSaved": {
     "description": "A person's own home page. Confirmation after changing their queue status."
+  },
+  "attTalkFirst": "Talk to them first",
+  "@attTalkFirst": {
+    "description": "Attendant console (receptionist's screen). Button on a call on the receptionist's own phone: call someone while the caller waits, then put the caller through."
+  },
+  "attTalkFirstTitle": "Who do you want to talk to first?",
+  "@attTalkFirstTitle": {
+    "description": "Attendant console (receptionist's screen). Dialog title: choose whom to call while the caller waits."
+  },
+  "attDropSetting": "When I drop a call on someone",
+  "@attDropSetting": {
+    "description": "Attendant console (receptionist's screen). Tooltip of the menu choosing what dragging a call onto a person does."
+  },
+  "attDropNow": "Send it at once",
+  "@attDropNow": {
+    "description": "Attendant console (receptionist's screen). Menu choice: dropping a call on someone sends it straight away."
+  },
+  "attDropTalkFirst": "Talk to them first (calls on my phone)",
+  "@attDropTalkFirst": {
+    "description": "Attendant console (receptionist's screen). Menu choice: dropping a call that is on my own phone calls that person first while the caller waits."
+  },
+  "attConsultCalling": "Calling {person}. The caller is waiting.",
+  "@attConsultCalling": {
+    "description": "Attendant console (receptionist's screen). Shown after starting to talk to someone first.",
+    "placeholders": {
+      "person": {
+        "type": "String",
+        "example": "102 \u00b7 Bob Li"
+      }
+    }
+  },
+  "attConsulting": "You are talking to {person}. {caller} is waiting and hears music.",
+  "@attConsulting": {
+    "description": "Attendant console (receptionist's screen). Banner while talking to someone before putting a caller through.",
+    "placeholders": {
+      "person": {
+        "type": "String",
+        "example": "102 \u00b7 Bob Li"
+      },
+      "caller": {
+        "type": "String",
+        "example": "+1 555 0142"
+      }
+    }
+  },
+  "attConsultComplete": "Put them through",
+  "@attConsultComplete": {
+    "description": "Attendant console (receptionist's screen). Button: join the waiting caller to the person the receptionist is talking to."
+  },
+  "attConsultCancel": "Back to the caller",
+  "@attConsultCancel": {
+    "description": "Attendant console (receptionist's screen). Button: end the talk with the other person and return to the waiting caller."
+  },
+  "attConsultDone": "Put through to {person}.",
+  "@attConsultDone": {
+    "description": "Attendant console (receptionist's screen). Confirmation after putting a waiting caller through.",
+    "placeholders": {
+      "person": {
+        "type": "String",
+        "example": "102 \u00b7 Bob Li"
+      }
+    }
+  },
+  "attConsultBack": "You are back with the caller.",
+  "@attConsultBack": {
+    "description": "Attendant console (receptionist's screen). Confirmation after returning to the waiting caller."
+  },
+  "attTalkFirstCall": "Call them",
+  "@attTalkFirstCall": {
+    "description": "Attendant console (receptionist's screen). Dialog button: call the chosen person while the caller waits."
   }
 }

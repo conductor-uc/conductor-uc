@@ -130,6 +130,10 @@ var _nextLeg = 0;
 /// The caller a ringing phone's leg was placed for (a pickup takes it).
 const _callerOf = {'demo-b2': 'demo-b1'};
 
+/// S9-21: an attended transfer under way, by the person's own leg: the party
+/// waiting while they talk to someone else.
+final _consults = <String, String>{};
+
 /// Each demo queue agent's status, as the attendant's menu leaves it.
 final _agentStatus = <String, String>{};
 
@@ -301,6 +305,55 @@ List<Map<String, Object?>> demoQueues(DateTime now) {
         });
       }
       answer = (200, {'result': 'dialing', 'callUuid': mine['callUuid']});
+    // S9-21: an attended transfer from the person's own phone (101): the other
+    // party waits (hold music), and 101 talks to `to` first.
+    case 'consult':
+      if (leg == null || leg['extension'] != '101') return notFound;
+      if (_consults.containsKey(callUuid)) {
+        return problem(
+          409,
+          'transfer_in_progress',
+          'A transfer is already under way on this call.',
+        );
+      }
+      final waiting = partners(leg).firstOrNull;
+      if (waiting == null) {
+        return problem(
+          409,
+          'call_not_connected',
+          'This call is not connected to anyone.',
+        );
+      }
+      change(waiting, {'bridgedTo': null});
+      final consulted = add(
+        phoneLeg('101', '${body['to']}', '${leg['callUuid']}'),
+      );
+      change('${leg['callUuid']}', {'bridgedTo': consulted['callUuid']});
+      _consults['${leg['callUuid']}'] = waiting;
+      answer = (200, {'result': 'consulting', 'heldCallUuid': waiting});
+    case 'complete' || 'cancel':
+      final waiting = _consults.remove(callUuid);
+      if (leg == null || waiting == null) {
+        return problem(
+          409,
+          'no_transfer_in_progress',
+          'There is no transfer under way on this call.',
+        );
+      }
+      final consulted = partners(leg);
+      if (action == 'complete') {
+        end('${leg['callUuid']}');
+        for (final other in consulted) {
+          change(other, {'bridgedTo': waiting});
+          change(waiting, {'bridgedTo': other});
+        }
+        answer = (200, {'result': 'transferred'});
+      } else {
+        consulted.forEach(end);
+        change('${leg['callUuid']}', {'bridgedTo': waiting});
+        change(waiting, {'bridgedTo': leg['callUuid']});
+        answer = (200, {'result': 'resumed'});
+      }
     default:
       return problem(400, 'bad_request', 'Unknown action.');
   }
@@ -615,5 +668,6 @@ void resetDemoRecordings() {
   _extra.clear();
   _changes.clear();
   _agentStatus.clear();
+  _consults.clear();
   _nextLeg = 0;
 }

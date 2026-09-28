@@ -141,6 +141,24 @@ describe.skipIf(skipReason !== undefined)('GET /v1/orgs/:orgId/me', () => {
     expect(body.permissions).not.toContain('extension.manage');
   });
 
+  it('a receptionist (S9-21) runs the attendant console, and changes no configuration', async () => {
+    const r1 = await makeUser('org-1', 'tenant', 'r1@example.test');
+    await h.roles.assignRole(r1, 'tenant_receptionist', 'org-1');
+    const body = (
+      await app.inject({
+        method: 'GET',
+        url: '/v1/orgs/org-1/me',
+        headers: asUser(r1, 'org-1', 'tenant'),
+      })
+    ).json<MeBody>();
+    for (const permission of ['call.control', 'monitor.calls', 'monitor.presence', 'queue.read']) {
+      expect(body.permissions).toContain(permission);
+    }
+    expect(body.permissions).toContain('self.calls');
+    expect(body.permissions).not.toContain('monitor.listen');
+    expect(body.permissions).not.toContain('extension.manage');
+  });
+
   it('the master holds everything the catalog defines', async () => {
     const m1 = await makeUser('master-org', 'master', 'm1@example.test');
     await h.roles.assignRole(m1, 'master_admin', 'master-org');

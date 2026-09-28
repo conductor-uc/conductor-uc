@@ -52,6 +52,22 @@ class AttendantApi {
   /// parking slot takes back the call parked there.
   Future<Json> dial(String to) => _post('me/dial', {'to': to});
 
+  /// S9-21: an attended transfer of a call on the receptionist's own phone
+  /// ([ownLeg], their leg of it): the other party waits and hears the hold
+  /// music while the receptionist's phone calls [to]. Answers the waiting
+  /// party's leg (`heldCallUuid`).
+  Future<Json> consult(String ownLeg, String to) =>
+      _post('me/live-calls/$ownLeg/transfer', {'to': to, 'attended': true});
+
+  /// Joins the waiting party to the person the receptionist is talking to,
+  /// and lets the receptionist go.
+  Future<Json> completeTransfer(String ownLeg) =>
+      _post('me/live-calls/$ownLeg/transfer/complete');
+
+  /// Ends the talk with the person asked, and goes back to the waiting party.
+  Future<Json> cancelTransfer(String ownLeg) =>
+      _post('me/live-calls/$ownLeg/transfer/cancel');
+
   /// Signs an agent in (`available`), out (`logged_out`) or on a break.
   Future<Json> setAgentStatus(String extension, String status) async {
     final response = await _dio.put<Object?>(

@@ -64,6 +64,9 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
   let tenantId: string;
   let fqdn: string;
   let token: string;
+  /** S9-21: a receptionist, with the built-in role and no phone. */
+  let receptionistToken: string;
+  let receptionistId: string;
   let userId: string;
   let id802: string;
 
@@ -82,6 +85,14 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
       await tenantAdminHeaders(tenantId, seed.resellerId),
     );
     expect(linked.status, JSON.stringify(linked.json)).toBe(200);
+    const receptionist = await createSignInAdmin(tenantId, seed.resellerId, 'tenant_receptionist');
+    receptionistId = receptionist.userId;
+    receptionistToken = await signInThroughGateway(
+      GATEWAY_URL,
+      tenantId,
+      receptionist.email,
+      receptionist.password,
+    );
   }, 120_000);
 
   afterEach(async () => {
@@ -108,9 +119,9 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
   }
 
   /** Through api-gateway, signed in as the console does. */
-  function act(path: string, body?: unknown) {
+  function act(path: string, body?: unknown, as = token) {
     return dockerCurlJson('POST', `${GATEWAY_URL}/v1/tenants/${tenantId}/${path}`, body, {
-      authorization: `Bearer ${token}`,
+      authorization: `Bearer ${as}`,
     });
   }
 
@@ -153,7 +164,7 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
     throw new Error(`${what} never happened: ${JSON.stringify(last)}`);
   }
 
-  async function audited(action: string): Promise<AuditEvent[]> {
+  async function audited(action: string, actorId = userId): Promise<AuditEvent[]> {
     const deadline = Date.now() + 30_000;
     let found: AuditEvent[] = [];
     while (Date.now() < deadline) {
@@ -164,7 +175,7 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
         await tenantAdminHeaders(tenantId, seed.resellerId),
       );
       found = (response.json as { rows: AuditEvent[] }).rows.filter(
-        (event) => event.action === action && event.actorId === userId,
+        (event) => event.action === action && event.actorId === actorId,
       );
       if (found.length > 0) return found;
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -199,7 +210,7 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
     for (const number of numbers) await clearRegistration(`${number}@${fqdn}`);
   }
 
-  it('the console transfers a caller to a colleague: 803 rings and answers, 802 is let go', async () => {
+  it('the console transfers a caller to a colleague: 803 rings and answers, 802 is let go (S9-21: done by a receptionist)', async () => {
     await withSingleFsNode(async () => {
       await registered('801', '802', '803');
       const person = phone('802', PERSON);
@@ -211,7 +222,19 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
         (leg) => leg.extension === '801' && leg.state === 'answered' && leg.bridgedTo !== null,
       );
 
-      const moved = await act(`calls/${callerLeg.callUuid}/transfer`, { to: '803' });
+      // S9-21: the built-in receptionist role moves calls, and changes no configuration.
+      const refused = await dockerCurlJson(
+        'POST',
+        `${GATEWAY_URL}/v1/tenants/${tenantId}/parking-lots`,
+        { label: 'not allowed', slotStart: 790, slotEnd: 791 },
+        { authorization: `Bearer ${receptionistToken}` },
+      );
+      expect(refused.status, JSON.stringify(refused.json)).toBe(403);
+      const moved = await act(
+        `calls/${callerLeg.callUuid}/transfer`,
+        { to: '803' },
+        receptionistToken,
+      );
       expect(moved.status, JSON.stringify(moved.json)).toBe(200);
       expect(moved.json).toEqual({ result: 'transferred', callUuid: callerLeg.callUuid });
 
@@ -225,7 +248,7 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
       await fsCli(`uuid_kill ${callerLeg.callUuid}`);
       expect((await colleague.result()).successfulCalls).toBe(1);
       await caller.result();
-      expect(await audited('call.transfer')).toContainEqual(
+      expect(await audited('call.transfer', receptionistId)).toContainEqual(
         expect.objectContaining({ resource: `call:${callerLeg.callUuid}` }),
       );
     });

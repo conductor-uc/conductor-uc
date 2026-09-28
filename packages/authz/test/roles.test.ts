@@ -167,6 +167,24 @@ describe('BUILT_IN_ROLES', () => {
     }
   });
 
+  it('tenant_receptionist (S9-21, G-127) runs the attendant console and nothing more', () => {
+    const receptionist = BUILT_IN_ROLES.get('tenant_receptionist');
+    expect([...(receptionist?.permissions ?? [])].sort()).toEqual(
+      [
+        'call.control',
+        'monitor.calls',
+        'monitor.presence',
+        'org.view',
+        'queue.read',
+        ...SELF_PERMISSIONS,
+      ].sort(),
+    );
+    // No listening in, no agent management, no configuration.
+    for (const permission of ['monitor.listen', 'queue.agent.manage', 'extension.manage']) {
+      expect(receptionist?.permissions.has(permission), permission).toBe(false);
+    }
+  });
+
   it('tenant_user holds only the self-service permissions plus the two every signed-in person needs', () => {
     const tenantUser = BUILT_IN_ROLES.get('tenant_user');
     expect([...(tenantUser?.permissions ?? [])].sort()).toEqual(
@@ -194,7 +212,12 @@ describe('BUILT_IN_ROLES', () => {
   });
 
   it('every tenant-tier role holds the self-service permissions, so a linked admin has a My phone too', () => {
-    for (const roleId of ['tenant_admin', 'tenant_supervisor', 'tenant_user']) {
+    for (const roleId of [
+      'tenant_admin',
+      'tenant_supervisor',
+      'tenant_receptionist',
+      'tenant_user',
+    ]) {
       for (const permission of SELF_PERMISSIONS) {
         expect(BUILT_IN_ROLES.get(roleId as never)?.permissions.has(permission), roleId).toBe(true);
       }
