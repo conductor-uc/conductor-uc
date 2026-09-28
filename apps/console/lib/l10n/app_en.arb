@@ -7207,5 +7207,35 @@
   "commonDateHint": "YYYY-MM-DD",
   "@commonDateHint": {
     "description": "Hint in a date field: the pattern to type a date in (year, month, day), written with this language's letters for year, month and day. The digits typed are always year-month-day."
+  },
+  "shellAppearance": "Appearance",
+  "@shellAppearance": {
+    "description": "Account menu: light or dark colors."
+  },
+  "shellThemeSystem": "As on this device",
+  "@shellThemeSystem": {
+    "description": "Appearance choice: follow the device's light or dark setting."
+  },
+  "shellThemeLight": "Light",
+  "@shellThemeLight": {
+    "description": "Appearance choice."
+  },
+  "shellThemeDark": "Dark",
+  "@shellThemeDark": {
+    "description": "Appearance choice."
+  },
+  "tableSelectAll": "Select all",
+  "@tableSelectAll": {
+    "description": "Screen-reader name of a table's select-all checkbox."
+  },
+  "tableSelectRow": "Select {row}",
+  "@tableSelectRow": {
+    "description": "Screen-reader name of a table row's checkbox.",
+    "placeholders": {
+      "row": {
+        "type": "String",
+        "example": "101 Alice Kim"
+      }
+    }
   }
 }

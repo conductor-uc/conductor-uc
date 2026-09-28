@@ -39,6 +39,9 @@ class PageHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context).textTheme;
+    // S9-17: on a narrow screen (a phone) the buttons go under the title and
+    // wrap, instead of pushing past the edge.
+    final narrow = MediaQuery.sizeOf(context).width < 600;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -46,12 +49,17 @@ class PageHeader extends StatelessWidget {
           children: [
             ?leading,
             Expanded(child: Text(title, style: theme.headlineSmall)),
-            for (final (i, action) in actions.indexed) ...[
-              if (i > 0) const SizedBox(width: 8),
-              action,
-            ],
+            if (!narrow)
+              for (final (i, action) in actions.indexed) ...[
+                if (i > 0) const SizedBox(width: 8),
+                action,
+              ],
           ],
         ),
+        if (narrow && actions.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(spacing: 8, runSpacing: 8, children: actions),
+        ],
         if (subtitle != null) ...[
           const SizedBox(height: 4),
           Text(subtitle!, style: theme.bodyMedium),

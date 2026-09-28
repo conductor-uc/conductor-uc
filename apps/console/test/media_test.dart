@@ -221,6 +221,8 @@ void main() {
 
   testWidgets('a recording can still be deleted', (tester) async {
     await openMedia(tester);
+    await tester.ensureVisible(find.byTooltip('Delete').last);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Delete').last);
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
@@ -235,6 +237,8 @@ void main() {
     await openMedia(tester, opened: opened);
     expect(find.byTooltip('Play'), findsNWidgets(2));
 
+    await tester.ensureVisible(find.byTooltip('Play').first);
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Play').first);
     await tester.pumpAndSettle();
 

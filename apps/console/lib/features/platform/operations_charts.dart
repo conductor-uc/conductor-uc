@@ -116,9 +116,7 @@ class ValueBarChart extends StatelessWidget {
                           width: tilt ? 72 : slot,
                           child: Text(
                             items[index].$1,
-                            textAlign: tilt
-                                ? TextAlign.right
-                                : TextAlign.center,
+                            textAlign: tilt ? TextAlign.end : TextAlign.center,
                             overflow: TextOverflow.ellipsis,
                             style: _axisStyle(theme),
                           ),

@@ -352,7 +352,7 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
                         ),
                       ),
                     Align(
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                       child: TextButton.icon(
                         key: const Key('call-handling-ring-add'),
                         onPressed: _ring.length >= _maxRing

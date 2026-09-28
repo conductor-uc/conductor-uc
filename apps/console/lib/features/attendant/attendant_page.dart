@@ -10,6 +10,7 @@ import '../../widgets/feedback.dart';
 import '../../widgets/page.dart';
 import '../monitoring/live_calls.dart';
 import '../monitoring/presence.dart';
+import '../monitoring/presence_board.dart' show presenceLook;
 import '../myphone/my_phone_api.dart' show myExtensionProvider;
 import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart' show tenantCountryProvider;
@@ -287,8 +288,19 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
       onPickUp: _pickUp,
       onHangUp: _hangUp,
     );
-    final directory = Column(
+    final grid = _ExtensionGrid(
+      filter: _search.text,
+      names: _names,
+      selected: selected,
+      canCall: ownPhone != null,
+      onDrop: _transfer,
+      onCall: _dial,
+    );
+    // On a wide screen the grid takes the height left; on a narrow one the
+    // whole page scrolls, so the grid is as tall as it needs (S9-17).
+    Widget directory({required bool fill}) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
       children: [
         TextField(
           key: const ValueKey('attendant-search'),
@@ -312,16 +324,7 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
           },
         ),
         const SizedBox(height: 12),
-        Expanded(
-          child: _ExtensionGrid(
-            filter: _search.text,
-            names: _names,
-            selected: selected,
-            canCall: ownPhone != null,
-            onDrop: _transfer,
-            onCall: _dial,
-          ),
-        ),
+        if (fill) Expanded(child: grid) else grid,
         const SizedBox(height: 12),
         _ParkingStrip(
           lots: lots,
@@ -360,20 +363,22 @@ class _AttendantPageState extends ConsumerState<AttendantPage> {
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) => constraints.maxWidth < 900
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(height: 320, child: calls),
-                          const SizedBox(height: 16),
-                          Expanded(child: directory),
-                        ],
+                    ? SingleChildScrollView(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            SizedBox(height: 320, child: calls),
+                            const SizedBox(height: 16),
+                            directory(fill: false),
+                          ],
+                        ),
                       )
                     : Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           SizedBox(width: 380, child: calls),
                           const SizedBox(width: 24),
-                          Expanded(child: directory),
+                          Expanded(child: directory(fill: true)),
                         ],
                       ),
               ),
@@ -549,7 +554,7 @@ class _CallCard extends ConsumerWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 4, 4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -666,6 +671,8 @@ class _ExtensionGrid extends ConsumerWidget {
     ];
     if (shown.isEmpty) return Text(l10n.attNoExtensions);
     return SingleChildScrollView(
+      // Inside the narrow page's own scroll view, the page scrolls instead.
+      primary: false,
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -712,34 +719,11 @@ class _ExtensionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
-    final (label, icon, color) = switch (state) {
-      'idle' => (
-        l10n.presenceAvailable,
-        Icons.check_circle_outline,
-        Colors.green.shade800,
-      ),
-      'ringing' => (
-        l10n.presenceRinging,
-        Icons.ring_volume_outlined,
-        Colors.orange.shade900,
-      ),
-      'on_call' => (l10n.presenceOnACall, Icons.call, Colors.red.shade700),
-      'dnd' => (
-        l10n.presenceDoNotDisturb,
-        Icons.do_not_disturb_on_outlined,
-        Colors.purple.shade700,
-      ),
-      'offline' => (
-        l10n.presenceOffline,
-        Icons.phone_disabled_outlined,
-        Colors.grey.shade700,
-      ),
-      _ => (
-        l10n.presenceUnknown,
-        Icons.help_outline,
-        theme.colorScheme.outline,
-      ),
-    };
+    // The same look as the presence board (S9-15), in the theme's shade.
+    final look = presenceLook(l10n, state ?? '', brightness: theme.brightness);
+    final label = state == null ? l10n.presenceUnknown : look.label;
+    final icon = look.icon;
+    final color = look.color ?? theme.colorScheme.outline;
     return Tooltip(
       message: onTap == null ? '' : l10n.attSendHere,
       child: InkWell(
@@ -747,7 +731,7 @@ class _ExtensionTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         child: Container(
           width: 196,
-          padding: const EdgeInsets.fromLTRB(10, 6, 2, 6),
+          padding: const EdgeInsetsDirectional.fromSTEB(10, 6, 2, 6),
           decoration: BoxDecoration(
             color: highlighted
                 ? theme.colorScheme.primaryContainer

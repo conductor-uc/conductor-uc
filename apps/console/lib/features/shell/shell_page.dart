@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/session_brand.dart';
+import '../../core/theme_mode.dart';
 import '../../core/acting.dart';
 import '../../core/api_client.dart';
 import '../../core/locale.dart';
@@ -293,6 +294,28 @@ class _AccountMenu extends ConsumerWidget {
               ),
           ],
           child: Text(l10n.shellLanguage),
+        ),
+        // S9-17: light, dark, or as the device is set.
+        SubmenuButton(
+          key: const ValueKey('theme-menu'),
+          leadingIcon: const Icon(Icons.dark_mode_outlined),
+          menuChildren: [
+            for (final (mode, label) in [
+              (ThemeMode.system, l10n.shellThemeSystem),
+              (ThemeMode.light, l10n.shellThemeLight),
+              (ThemeMode.dark, l10n.shellThemeDark),
+            ])
+              MenuItemButton(
+                key: ValueKey('theme-${mode.name}'),
+                trailingIcon: ref.watch(themeModeProvider) == mode
+                    ? const Icon(Icons.check)
+                    : null,
+                onPressed: () =>
+                    ref.read(themeModeProvider.notifier).choose(mode),
+                child: Text(label),
+              ),
+          ],
+          child: Text(l10n.shellAppearance),
         ),
         if (brand.supportEmail != null)
           MenuItemButton(
