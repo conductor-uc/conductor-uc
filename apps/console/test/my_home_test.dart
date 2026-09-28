@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:console/core/audio_recorder.dart';
 import 'package:console/features/media/file_source.dart';
 import 'package:console/dev/demo_backend.dart';
+import 'package:console/dev/demo_realtime.dart';
 import 'package:console/features/media/media_page.dart';
 import 'package:console/features/myphone/my_home.dart';
 import 'package:console/features/myphone/my_phone_api.dart';
@@ -251,6 +252,37 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('demo-101-secret'), findsOneWidget);
+    });
+  });
+
+  group('picking up a colleague\'s call (S9-18)', () {
+    testWidgets(
+      'shows the calls ringing in their pickup groups, and takes one on their phone',
+      (tester) async {
+        resetDemoRecordings();
+        addTearDown(resetDemoRecordings);
+        await _signIn(tester);
+        expect(find.byKey(const ValueKey('my-pickup')), findsOneWidget);
+        expect(find.textContaining('104 is ringing'), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('pick-up-demo-b2')));
+        await tester.pumpAndSettle();
+        expect(find.text('Your phone is taking the call.'), findsOneWidget);
+        // Taken: nothing is ringing any more.
+        expect(find.byKey(const ValueKey('my-pickup')), findsNothing);
+      },
+    );
+  });
+
+  group('pickup groups (S9-18)', () {
+    testWidgets('an administrator finds them under Calls, with their members', (
+      tester,
+    ) async {
+      await _signIn(tester, email: 'tenant@example.test');
+      await tapNav(tester, 'Pickup groups');
+      await tester.pumpAndSettle();
+      expect(find.text('Front desk'), findsOneWidget);
+      expect(find.text('New pickup group'), findsWidgets);
     });
   });
 

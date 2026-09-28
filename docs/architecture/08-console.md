@@ -54,7 +54,7 @@ The shell (S9-05): a navigation rail grouped under headings, a drawer below 720 
 |---|---|
 | Master | Dashboard · *Platform:* Resellers, Operations ([11](11-operations-console.md)), Certificates, Security · Audit · Users |
 | Reseller | Dashboard · *Customers:* Tenants · *Service:* Trunks, Domains, Brand · Users · Audit |
-| Tenant | Dashboard · *People:* People · *Calls:* Phone numbers, Call flows, Ring groups, Queues, Schedules, Conference rooms, Parking lots, Media, Outbound routes · *Activity:* Attendant, Monitoring, Call records, Recordings, Voicemail · *Settings:* Emergency locations · Users · *Advanced:* Extensions, Phones |
+| Tenant | Dashboard · *People:* People · *Calls:* Phone numbers, Call flows, Ring groups, Pickup groups, Queues, Schedules, Conference rooms, Parking lots, Media, Outbound routes · *Activity:* Attendant, Monitoring, Call records, Recordings, Voicemail · *Settings:* Emergency locations · Users · *Advanced:* Extensions, Phones |
 | A person with only a phone | Home · My call handling · My voicemail · My call history |
 
 - A master or reseller **acts as** a tenant (the tenant switcher, or **Act as** on a tenant): the shell shows whose console it is and a way back, every request names that tenant in its path, and the URL keeps it (`?as=`). Private-data sections are hidden from a reseller (H1).
@@ -119,6 +119,7 @@ Play · Menu (IVR) · Time condition · Extension · Ring group · Queue · Voic
 The end-user portal (S9-11, `lib/features/myphone/`), everything a person with only `self.*` permissions sees:
 
 - **Home**: their number; one switch that forwards every call to their mobile (the rest of their call handling kept); new messages and their greeting (record it with the microphone, as WAV, or upload one); their last calls; **Connect a phone or app** (server, port, and their own username and password on request, audited).
+- **Calls you can pick up** (S9-18): a colleague's phone ringing within their pickup groups, with **Pick up**, refreshed when presence changes; or they dial `*8`.
 - **My call handling**, **My voicemail**, **My call history** (searchable by number or name).
 - A card for each call they are on now, with the recording buttons their permissions allow; transfer, park and click-to-call are available over `/me` (S9-12) for the screens to use.
 

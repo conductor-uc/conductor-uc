@@ -17,6 +17,7 @@ import { globalProvisioningCredential as globalProvisioningCredentialFrom } from
 import { createDeviceRepo } from './repo/device.repo.js';
 import { createExtensionRepo } from './repo/extension.repo.js';
 import { createMediaAssetRepo } from './repo/media-asset.repo.js';
+import { createPickupGroupRepo } from './repo/pickup-group.repo.js';
 import { createRingGroupRepo } from './repo/ring-group.repo.js';
 import { createQueueRepo } from './repo/queue.repo.js';
 import { createAgentRepo } from './repo/agent.repo.js';
@@ -39,6 +40,10 @@ import { registerUserExtensionInternalRoutes } from './routes/user-extension-int
 import { registerCallHandlingRoutes } from './routes/call-handling.routes.js';
 import { registerScheduleInternalRoutes } from './routes/schedule-internal.routes.js';
 import { registerMediaAssetRoutes } from './routes/media-asset.routes.js';
+import {
+  registerPickupGroupRoutes,
+  registerPickupPeersInternalRoutes,
+} from './routes/pickup-group.routes.js';
 import { registerRingGroupRoutes } from './routes/ring-group.routes.js';
 import { registerQueueRoutes } from './routes/queue.routes.js';
 import { registerAgentRoutes } from './routes/agent.routes.js';
@@ -184,6 +189,14 @@ registerDidRoutes(app, didRepo);
 registerEmergencyLocationRoutes(app, emergencyLocationRepo);
 registerMediaAssetRoutes(app, mediaAssetRepo);
 registerRingGroupRoutes(app, ringGroupRepo);
+// S9-18 (G-125): pickup groups, and who may pick up whose calls, for call-control.
+const pickupGroupRepo = createPickupGroupRepo(db);
+registerPickupGroupRoutes(app, pickupGroupRepo);
+registerPickupPeersInternalRoutes(app, {
+  pickupGroups: pickupGroupRepo,
+  extensions: extensionRepo,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+});
 registerQueueRoutes(app, queueRepo, queueTierRepo);
 registerAgentRoutes(app, agentRepo);
 registerParkingLotRoutes(app, parkingLotRepo);

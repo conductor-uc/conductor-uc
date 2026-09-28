@@ -101,6 +101,7 @@ export const configSchema = Type.Object({
       '/v1/tenants/*/sip-endpoint=pbx',
       '/v1/tenants/*/dids=pbx',
       '/v1/tenants/*/ring-groups=pbx',
+      '/v1/tenants/*/pickup-groups=pbx',
       '/v1/tenants/*/queues=pbx',
       '/v1/tenants/*/agents=pbx',
       '/v1/tenants/*/conference-rooms=pbx',
@@ -138,6 +139,8 @@ export const configSchema = Type.Object({
       '/v1/tenants/*/me/live-calls=call',
       // S9-12: click-to-call, from a person's own phone.
       '/v1/tenants/*/me/dial=call',
+      // S9-18: picking up a call ringing within a person's pickup groups.
+      '/v1/tenants/*/me/pickup=call',
       // S9-13: agents signing in, out and on a break.
       '/v1/tenants/*/me/agent-status=call',
       '/v1/tenants/*/live-agents=call',

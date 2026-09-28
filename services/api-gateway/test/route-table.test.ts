@@ -171,6 +171,8 @@ describe('the default routing table', () => {
     ['/v1/tenants/t1/calls/c1/transfer', SERVICES.call],
     ['/v1/tenants/t1/me/live-calls/c1/transfer/complete', SERVICES.call],
     ['/v1/tenants/t1/me/dial', SERVICES.call],
+    ['/v1/tenants/t1/me/pickup', SERVICES.call],
+    ['/v1/tenants/t1/pickup-groups/g1', SERVICES.pbx],
     ['/v1/tenants/t1/me/agent-status', SERVICES.call],
     ['/v1/tenants/t1/live-agents/301/status', SERVICES.call],
   ])('%s goes to its service', (path, target) => {

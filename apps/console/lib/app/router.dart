@@ -261,6 +261,7 @@ Map<String, List<ResourceDef>> get _pbxPages => {
   '/phones': [devicesDef],
   '/phone-numbers': [didsDef],
   '/ring-groups': [ringGroupsDef],
+  '/pickup-groups': [pickupGroupsDef],
   '/queues': [queuesDef, agentsDef],
   '/conference-rooms': [conferenceRoomsDef],
   '/parking-lots': [parkingLotsDef],

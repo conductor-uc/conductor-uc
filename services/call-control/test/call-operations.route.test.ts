@@ -13,7 +13,10 @@ import { createCallOperations, occupiedSlots, type OperationsEsl } from '../src/
 import type { ParkingLotSlots } from '../src/clients.js';
 import type { EslApiResult } from '../src/esl/client.js';
 import { createCallRegistry, type CallRegistry } from '../src/redis/registry.js';
-import { registerCallOperationRoutes } from '../src/routes/call-operations.routes.js';
+import {
+  registerCallOperationRoutes,
+  registerPickupInternalRoutes,
+} from '../src/routes/call-operations.routes.js';
 
 const skipReason = await redisOrSkipReason();
 const SECRET = 'test-internal-header-secret';
@@ -88,6 +91,8 @@ describe.skipIf(skipReason !== undefined)(
     /** Parking lot leases, by lot id. */
     const leases = new Map<string, string>();
     let auditDown = false;
+    /** S9-18: each extension's pickup peers (pbx-config-service's answer), by number. */
+    const peers = new Map<string, string[]>();
 
     beforeAll(async () => {
       redisHandle = await startTestRedis();
@@ -100,30 +105,31 @@ describe.skipIf(skipReason !== undefined)(
         permissions: (actor, permission) =>
           Promise.resolve(held.get(actor.id)?.includes(permission) ?? false),
       });
-      registerCallOperationRoutes(app, {
-        operations: createCallOperations({
-          registry,
-          esl: (nodeId) => (nodeId === 'fs-1' ? node : undefined),
-          anyNode: () => Promise.resolve('fs-1'),
-          userExtension: (_tenantId, userId) => {
-            const number = numbers.get(userId);
-            return Promise.resolve(
-              number === undefined ? undefined : { extensionId: `EXT-${number}`, number },
-            );
-          },
-          tenantDomain: () => Promise.resolve(DOMAIN),
-          parkingLot: (_tenantId, lotId) => Promise.resolve(lots.get(lotId)),
-          parkingLotNode: (_tenantId, lotId) => Promise.resolve(leases.get(lotId)),
-          audit: (input) => {
-            if (auditDown) return Promise.reject(new Error('database down'));
-            steps.push({ kind: 'audit', input });
-            return Promise.resolve();
-          },
-          opensipsSipUri: 'opensips:5060',
-          ringTimeoutSeconds: 30,
-          logger: silentLogger(),
-        }),
+      const operations = createCallOperations({
+        registry,
+        esl: (nodeId) => (nodeId === 'fs-1' ? node : undefined),
+        anyNode: () => Promise.resolve('fs-1'),
+        userExtension: (_tenantId, userId) => {
+          const number = numbers.get(userId);
+          return Promise.resolve(
+            number === undefined ? undefined : { extensionId: `EXT-${number}`, number },
+          );
+        },
+        tenantDomain: () => Promise.resolve(DOMAIN),
+        parkingLot: (_tenantId, lotId) => Promise.resolve(lots.get(lotId)),
+        parkingLotNode: (_tenantId, lotId) => Promise.resolve(leases.get(lotId)),
+        pickupPeers: (_tenantId, number) => Promise.resolve(peers.get(number) ?? []),
+        audit: (input) => {
+          if (auditDown) return Promise.reject(new Error('database down'));
+          steps.push({ kind: 'audit', input });
+          return Promise.resolve();
+        },
+        opensipsSipUri: 'opensips:5060',
+        ringTimeoutSeconds: 30,
+        logger: silentLogger(),
       });
+      registerCallOperationRoutes(app, { operations });
+      registerPickupInternalRoutes(app, { operations, internalServiceToken: 'internal-token' });
       await app.ready();
     });
 
@@ -139,6 +145,7 @@ describe.skipIf(skipReason !== undefined)(
       numbers.clear();
       lots.clear();
       leases.clear();
+      peers.clear();
       auditDown = false;
     });
 
@@ -566,6 +573,72 @@ describe.skipIf(skipReason !== undefined)(
           `uuid_setvar ${phone} park_after_bridge false`,
         ]);
         expect((await registry.getCall(phone))?.['consultHeld']).toBe('');
+      });
+
+      it('S9-18: lists the calls ringing in their pickup groups, and picks up the oldest on their own phone', async () => {
+        const tenantId = crypto.randomUUID();
+        peers.set('201', ['102', '103']);
+        const first = await liveCall(tenantId, { ext: '102', state: 'ringing', bridged: false });
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        const second = await liveCall(tenantId, { ext: '103', state: 'ringing', bridged: false });
+        // Outside their groups, and their own: never offered.
+        await liveCall(tenantId, { ext: '104', state: 'ringing', bridged: false });
+        await liveCall(tenantId, { ext: '201', state: 'ringing', bridged: false });
+        node.vars.set(first.phone, new Map([['originating_leg_uuid', first.caller]]));
+        node.vars.set(second.phone, new Map([['originating_leg_uuid', second.caller]]));
+        const { headers } = person(tenantId, ['self.calls'], { number: '201' });
+
+        const list = await app.inject({
+          method: 'GET',
+          url: `/v1/tenants/${tenantId}/me/pickup`,
+          headers,
+        });
+        expect(list.statusCode).toBe(200);
+        expect(
+          list
+            .json<{ calls: { callUuid: string; extension: string }[] }>()
+            .calls.map((c) => c.extension),
+        ).toEqual(['102', '103']);
+
+        const picked = await post(`/v1/tenants/${tenantId}/me/pickup`, headers, {});
+        expect(picked.statusCode).toBe(200);
+        expect(commands().find((c) => c.startsWith('bgapi originate'))).toContain(
+          `&intercept(${first.caller})`,
+        );
+        expect(audits()[0]).toMatchObject({ action: 'call.pickup' });
+
+        // A call named that is not in their groups is no call of theirs.
+        const outside = await liveCall(tenantId, { ext: '104', state: 'ringing', bridged: false });
+        const refused = await post(`/v1/tenants/${tenantId}/me/pickup`, headers, {
+          callUuid: outside.phone,
+        });
+        expect(refused.statusCode).toBe(404);
+        expect(refused.json()).toMatchObject({ code: 'call_not_found' });
+      });
+
+      it('S9-18: nothing ringing in their groups is said', async () => {
+        const tenantId = crypto.randomUUID();
+        node = new FakeNode(steps);
+        const { headers } = person(tenantId, ['self.calls'], { number: '201' });
+        const none = await post(`/v1/tenants/${tenantId}/me/pickup`, headers, {});
+        expect(none.statusCode).toBe(404);
+        expect(none.json()).toMatchObject({ code: 'nothing_to_pick_up' });
+        expect(steps).toEqual([]);
+      });
+
+      it('S9-18: tells the dialplan which caller *8 intercepts, and on which node', async () => {
+        const tenantId = crypto.randomUUID();
+        peers.set('201', ['102']);
+        const call = await liveCall(tenantId, { ext: '102', state: 'ringing', bridged: false });
+        const target = (extension: string, token = 'internal-token') =>
+          app.inject({
+            method: 'GET',
+            url: `/internal/v1/tenants/${tenantId}/pickup-target/${extension}`,
+            headers: { authorization: `Bearer ${token}` },
+          });
+        expect((await target('201')).json()).toEqual({ callUuid: call.caller, nodeId: 'fs-1' });
+        expect((await target('305')).statusCode).toBe(404);
+        expect((await target('201', 'wrong')).statusCode).toBe(401);
       });
 
       it('click-to-call: rings their own phone, then dials the number from it', async () => {

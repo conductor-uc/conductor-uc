@@ -25,6 +25,8 @@ import type { TelephonyConfigDb } from '../schema.js';
 import type { VoicemailClient } from '../voicemail-client.js';
 import {
   AGENT_LOGIN_FEATURE_CODE,
+  PICKUP_FEATURE_CODE,
+  buildPickupDialplanDocument,
   AGENT_LOGOUT_FEATURE_CODE,
   buildAgentStatusDialplanDocument,
   buildCallcenterConfigurationDocument,
@@ -1036,6 +1038,37 @@ export function registerFsRoutes(
    * is not a known agent — dialing `*45`/`*46` from a phone with no agent
    * identity is simply not a feature this extension has.
    */
+  /**
+   * `*8` (S9-18, G-125): call-control names the caller's leg of the oldest call ringing within the
+   * dialing extension's pickup groups; the dialplan intercepts it. A call on another node cannot
+   * be intercepted from this one (as with a queue or a parking lot until S4-05), and nothing
+   * ringing, or call-control out of reach, is a miss: the phone hears the usual failure.
+   */
+  async function handlePickup(
+    tenantId: string,
+    callerContext: string,
+    callingNumber: string | undefined,
+    nodeId: string | undefined,
+  ): Promise<string> {
+    if (callingNumber === undefined || callingNumber === '') return NOT_FOUND_DOCUMENT;
+    let target;
+    try {
+      target = await callControlClient.pickupTarget(tenantId, callingNumber);
+    } catch (error) {
+      logger.error({ err: error, tenantId }, 'dialplan: could not ask call-control for a pickup');
+      return NOT_FOUND_DOCUMENT;
+    }
+    if (target === undefined) return NOT_FOUND_DOCUMENT;
+    if (nodeId !== undefined && nodeId !== '' && target.nodeId !== nodeId) {
+      logger.warn(
+        { tenantId, nodeId, ringingOn: target.nodeId },
+        'dialplan: the call to pick up is on another node; cross-node pickup is S4-05’s concern',
+      );
+      return NOT_FOUND_DOCUMENT;
+    }
+    return buildPickupDialplanDocument(callerContext, tenantId, target.callUuid);
+  }
+
   async function handleAgentStatusChange(
     tenantId: string,
     callerContext: string,
@@ -1671,6 +1704,12 @@ export function registerFsRoutes(
       // emergency check above.
       if (destinationNumber === VOICEMAIL_RETRIEVAL_FEATURE_CODE) {
         return handleVoicemailRetrieval(tenantId, callerContext, body['variable_sip_from_user']);
+      }
+
+      // S9-18 (G-125): pick up a call ringing within the caller's pickup
+      // groups, a feature code like the ones above.
+      if (destinationNumber === PICKUP_FEATURE_CODE) {
+        return handlePickup(tenantId, callerContext, body['variable_sip_from_user'], nodeId);
       }
 
       // S2-13: same "special case first" placement as the voicemail

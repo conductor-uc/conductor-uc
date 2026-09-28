@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+
 import {
   clientIpOf,
   ProblemError,
@@ -244,6 +246,69 @@ export function registerCallOperationRoutes(
   );
 
   /**
+   * S9-18 (G-125): the calls ringing within the person's pickup groups, and picking one up (the
+   * one named, or the oldest) on their own phone.
+   */
+  app.get(
+    '/v1/tenants/:tenantId/me/pickup',
+    {
+      config: mine,
+      schema: {
+        params: TenantParamsSchema,
+        response: {
+          200: Type.Object({
+            calls: Type.Array(
+              Type.Object({
+                callUuid: Type.String(),
+                extension: Type.String(),
+                from: Type.String(),
+                startedAt: Type.String(),
+              }),
+            ),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const me = selfActor(request);
+      return {
+        calls: await operations.pickupable({
+          tenantId: me.tenantId,
+          actor: { id: me.userId, orgId: me.tenantId },
+        }),
+      };
+    },
+  );
+
+  app.post(
+    '/v1/tenants/:tenantId/me/pickup',
+    {
+      config: mine,
+      schema: {
+        params: TenantParamsSchema,
+        body: Type.Optional(
+          Type.Object({
+            callUuid: Type.Optional(
+              Type.String({ minLength: 1, maxLength: 64, pattern: '^[0-9A-Za-z][0-9A-Za-z-]*$' }),
+            ),
+          }),
+        ),
+        response: { 200: PickedUpSchema },
+      },
+    },
+    async (request) => {
+      const me = selfActor(request);
+      const callUuid = request.body?.callUuid;
+      return operations.pickupMine({
+        tenantId: me.tenantId,
+        actor: { id: me.userId, orgId: me.tenantId },
+        ...(callUuid === undefined ? {} : { callUuid }),
+        ...meta(request),
+      });
+    },
+  );
+
+  /**
    * Click-to-call: rings the person's own phone, then dials `to` from it, as if they had dialed it
    * there (their caller ID, their tenant's routing and limits). Dialing a parking slot takes back
    * the call parked there.
@@ -266,6 +331,50 @@ export function registerCallOperationRoutes(
         actor: { id: me.userId, orgId: me.tenantId },
         ...meta(request),
       });
+    },
+  );
+}
+
+/**
+ * `GET /internal/v1/tenants/{t}/pickup-target/{extension}` (S9-18, service token): for `*8` dialed
+ * from [extension]'s phone, the caller's leg to intercept (the oldest call ringing within its
+ * pickup groups) and the node it is on; 404 `nothing_to_pick_up` when there is none. telephony-
+ * config's dialplan asks it and intercepts on the node that holds the call.
+ */
+export function registerPickupInternalRoutes(
+  app: Server,
+  deps: { readonly operations: CallOperations; readonly internalServiceToken: string },
+): void {
+  const expected = Buffer.from(`Bearer ${deps.internalServiceToken}`);
+  app.get(
+    '/internal/v1/tenants/:tenantId/pickup-target/:extension',
+    {
+      config: { public: true },
+      schema: {
+        params: Type.Object({
+          tenantId: Type.String({ minLength: 1, maxLength: 64 }),
+          extension: Type.String({ pattern: '^[0-9]{2,6}$' }),
+        }),
+        response: { 200: Type.Object({ callUuid: Type.String(), nodeId: Type.String() }) },
+      },
+    },
+    async (request) => {
+      const presented = Buffer.from(request.headers.authorization ?? '');
+      if (presented.length !== expected.length || !timingSafeEqual(presented, expected)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
+      }
+      const target = await deps.operations.pickupTarget(
+        request.params.tenantId,
+        request.params.extension,
+      );
+      if (target === undefined) {
+        throw ProblemError.notFound('No call is ringing in that pickup group.', {
+          code: 'nothing_to_pick_up',
+        });
+      }
+      return target;
     },
   );
 }
