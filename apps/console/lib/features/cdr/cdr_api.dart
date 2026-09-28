@@ -110,6 +110,16 @@ class CdrApi {
     return (response.data as Map).cast<String, dynamic>();
   }
 
+  /// S1-16: every call record the tenant still has, for its data export.
+  Future<Json> startFullExport() async {
+    final response = await _dio.post<Object?>(
+      _path('cdr-exports'),
+      data: {'all': true},
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   Future<Json> getExport(String id) async {
     final response = await _dio.get<Object?>(
       _path('cdr-exports/$id'),

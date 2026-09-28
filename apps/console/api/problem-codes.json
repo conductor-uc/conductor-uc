@@ -54,6 +54,8 @@
   "emergency_route_invalid",
   "emergency_route_not_found",
   "expires_at_in_past",
+  "export_not_found",
+  "export_range_missing",
   "extension_already_agent",
   "extension_lookup_unavailable",
   "extension_not_found",

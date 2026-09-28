@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { InvalidExportRangeError, toCsv, validateExportRange } from '../src/domain/export.js';
+import {
+  InvalidExportRangeError,
+  monthWindows,
+  toCsv,
+  validateExportRange,
+} from '../src/domain/export.js';
 
 describe('validateExportRange', () => {
   it('accepts a valid range', () => {
@@ -27,6 +32,24 @@ describe('validateExportRange', () => {
     expect(() => validateExportRange(new Date('2024-01-01'), new Date('2026-06-01'))).toThrow(
       expect.objectContaining({ code: 'export_range_too_long', params: { maxDays: 366 } }),
     );
+  });
+
+  it('S1-16: an unbounded range (the whole history) is not capped', () => {
+    expect(() =>
+      validateExportRange(new Date(0), new Date('2026-09-28T00:00:00Z'), { unbounded: true }),
+    ).not.toThrow();
+  });
+
+  it('S1-16: splits a range into calendar months, clipped at both ends', () => {
+    expect(
+      monthWindows(new Date('2026-01-15T00:00:00Z'), new Date('2026-03-02T00:00:00Z')).map(
+        ([a, b]) => [a.toISOString().slice(0, 10), b.toISOString().slice(0, 10)],
+      ),
+    ).toEqual([
+      ['2026-01-15', '2026-02-01'],
+      ['2026-02-01', '2026-03-01'],
+      ['2026-03-01', '2026-03-02'],
+    ]);
   });
 
   it('rejects invalid dates', () => {

@@ -113,6 +113,36 @@ describe.skipIf(skipReason !== undefined)('export consumer', () => {
     expect(lines).toHaveLength(3); // header + 2 matching rows
   });
 
+  it('S1-16: an unbounded export streams every record the tenant has, month by month', async () => {
+    const c = consumer();
+    await c.ensure();
+
+    const tenantId = crypto.randomUUID();
+    for (const at of [
+      '2025-11-30T23:59:00.000Z',
+      '2026-01-10T00:00:00.000Z',
+      '2026-03-01T00:00:00.000Z',
+    ]) {
+      await h.cdrs.ingest(sample(tenantId, { startAt: new Date(at) }), null);
+    }
+    // Another tenant's record never appears.
+    await h.cdrs.ingest(
+      sample(crypto.randomUUID(), { startAt: new Date('2026-01-11T00:00:00.000Z') }),
+      null,
+    );
+
+    const job = await h.exports.create({ tenantId }, new Date(0), new Date(), { unbounded: true });
+    await publish(job.id, tenantId);
+    await runOnceUntilHandled(c);
+
+    const finished = await h.exports.findById({ tenantId }, job.id);
+    expect(finished?.status).toBe('ready');
+    const csv = await h.storage.forTenant(tenantId).getObject(finished!.objectKey!);
+    const lines = csv.toString('utf8').trim().split('\r\n');
+    expect(lines).toHaveLength(4); // header + all 3
+    expect(lines[0]).toMatch(/^id,callUuid,/);
+  });
+
   it('skips cleanly, not an exception, when the export job no longer exists', async () => {
     const c = consumer();
     await c.ensure();

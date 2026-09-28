@@ -55,6 +55,7 @@ const _tenantAdmin = [
   'queue.agent.manage',
   'cdr.read',
   'cdr.export',
+  'data.export',
   'voicemail.access',
   'monitor.presence',
   'monitor.calls',

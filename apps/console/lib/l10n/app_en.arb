@@ -7626,5 +7626,75 @@
         "example": "28 Oct 2026"
       }
     }
+  },
+  "navExportData": "Export data",
+  "@navExportData": {
+    "description": "Navigation: the page to download an organization's settings, call records, recordings and voicemail."
+  },
+  "expSubtitle": "Download your organization's data: its settings, its call records, and its recordings and voicemail. Do this before it is deleted.",
+  "@expSubtitle": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Page subtitle."
+  },
+  "expSettingsTitle": "Settings",
+  "@expSettingsTitle": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Card title: the configuration (extensions, numbers, groups, queues and so on)."
+  },
+  "expSettingsHelp": "Extensions, phone numbers, groups, queues, schedules, call flows, trunks and routes, as one JSON file. Passwords are never included.",
+  "@expSettingsHelp": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Explanation of the settings download."
+  },
+  "expSettingsSaved": "Settings downloaded.",
+  "@expSettingsSaved": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Confirmation after downloading the settings."
+  },
+  "expCallsTitle": "Call records",
+  "@expCallsTitle": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Card title: the call history."
+  },
+  "expCallsHelp": "Every call record still kept, as one CSV file a spreadsheet opens. Preparing it can take a few minutes.",
+  "@expCallsHelp": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Explanation of the call records export."
+  },
+  "expFilesTitle": "Recordings and voicemail",
+  "@expFilesTitle": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Card title: the stored audio files."
+  },
+  "expFilesHelp": "Every call recording and voicemail message and greeting, in one zip file, in the folders they are kept in. A large one can take a while to prepare.",
+  "@expFilesHelp": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Explanation of the files export."
+  },
+  "expPrepare": "Prepare",
+  "@expPrepare": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Button: start building the file."
+  },
+  "expPrepareAgain": "Prepare again",
+  "@expPrepareAgain": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Button: build the file again, with anything new."
+  },
+  "expPreparing": "Preparing\u2026 You can leave this page and come back.",
+  "@expPreparing": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Shown while the file is being built."
+  },
+  "expReady": "Ready.",
+  "@expReady": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). The file is ready to download."
+  },
+  "expReadySize": "Ready: {size}.",
+  "@expReadySize": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). The file is ready, with its size.",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "120 MB"
+      }
+    }
+  },
+  "expFailed": "It could not be prepared. Try again.",
+  "@expFailed": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). The file could not be built."
+  },
+  "expDownload": "Download",
+  "@expDownload": {
+    "description": "Export data page (take an organization's data away, above all before it is deleted). Button: download the file."
   }
 }

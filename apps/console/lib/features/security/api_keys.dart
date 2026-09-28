@@ -236,6 +236,7 @@ bool privatePermission(String permission) => const {
   'call.control',
   'cdr.read',
   'cdr.export',
+  'data.export',
   'voicemail.access',
   'monitor.calls',
   'monitor.listen',

@@ -9,7 +9,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | Stage | Done | Partial | Not started |
 |---|---|---|---|
 | S0 Foundations (10) | 10 | 0 | 0 |
-| S1 Orgs, identity, single-node (16) | 15 | 1 | 0 |
+| S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (11) | 1 | 3 | 7 |
@@ -19,9 +19,9 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **72** | **13** | **42** |
+| **Total (127)** | **73** | **12** | **42** |
 
-Milestones: M1 (S1) reached except organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
+Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
 Services with an empty `src` (verified, no files): `analytics-service`, `chat-service`, `fax-service`, `provisioning-service`, `sms-service`. `example-service` is the S0-08 sample.
 
@@ -59,7 +59,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S1-13 | Done | `telephony-config` `routes/fs.routes.ts` (`/fs/directory`, `/fs/dialplan`) |
 | S1-14 | Done | `tests/sip` (`scenarios.test.ts`, `register.xml`, `answer_call.xml`); CI `sip` job |
 | S1-15 | Done | G-10: `packages/authz` `READ_TWINS` (21 `.read` permissions, `.manage` implies `.read`), support roles; identity `permission-lookup.ts` and `/me` expand implied reads; `@cuc/http` resolver; 55 GET routes declare the read; console `core/permissions.dart` (`holds`), sections and read-only screens (`test/read_only_test.dart`) |
-| S1-16 | Partial | The lifecycle (request, cancel, 30 days, `org.*.deleted`: #289). Each service removes a deleted org's data on `org.{tenant,reseller}.deleted` (`@cuc/events` `createOrgDeletedConsumer`, retried up to 50 times): identity (people, sessions, roles, grants, invitations, API keys; the audit trail stays), pbx-config, callflow, voicemail, recording, cdr, trunk, notification rows; telephony-config takes the tenant out of OpenSIPs (subscribers, trunks, routes, domain) and its read model (so FreeSWITCH no longer knows it); org-service purges the tenant's stored objects once (`@cuc/storage` `purgeTenant`: its bucket, or its prefix) and its domains, and a reseller's brand files, domains, hostnames and certificates. Not yet: the export (G-11 (2)) |
+| S1-16 | Done | Lifecycle (#289): request, cancel, 30 days, `org.*.deleted`. Purge (#290): every service removes a deleted org's data, org-service its stored objects once. Export (G-11 (2)): **Export data** in the console: settings as JSON (built in the browser from the lists the console shows, no secrets; anyone who reads configuration, a reseller acting as the tenant too), every call record as CSV (cdr-service `cdr-exports` `{all: true}`, streamed a month at a time), and the recordings and voicemail as a zip (org-service `/v1/tenants/{t}/file-exports`, `data.export`, built in the background with each file streamed in and the zip uploaded in parts; private, so the tenant's administrator or the master, never a reseller, H1); each can be rebuilt any time, every build and link audited. Confirmed live |
 
 ## Stage 2
 

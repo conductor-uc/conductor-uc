@@ -10,6 +10,7 @@ enum NavLabel {
   dashboard,
   audit,
   apiKeys,
+  exportData,
   users,
   myHome,
   myCallHandling,
@@ -50,6 +51,7 @@ extension NavLabelText on NavLabel {
     NavLabel.dashboard => l10n.navDashboard,
     NavLabel.audit => l10n.navAudit,
     NavLabel.apiKeys => l10n.navApiKeys,
+    NavLabel.exportData => l10n.navExportData,
     NavLabel.users => l10n.navUsers,
     NavLabel.myHome => l10n.navMyHome,
     NavLabel.myCallHandling => l10n.navMyCallHandling,
@@ -440,6 +442,15 @@ const sectionsByOrgType = <OrgType, List<Section>>{
     ),
     _tenantUsers,
     _apiKeys,
+    // S1-16 (G-11 (2)): settings for whoever reads them; calls and files for
+    // the tenant's own administrator (the page shows each to who may).
+    Section(
+      '/export',
+      NavLabel.exportData,
+      Icons.download_outlined,
+      requires: ['extension.read', 'cdr.export', 'data.export'],
+      group: NavGroup.settings,
+    ),
     Section(
       '/extensions',
       NavLabel.extensions,

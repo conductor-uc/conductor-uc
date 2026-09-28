@@ -90,6 +90,7 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
   'call.control',
   'cdr.read',
   'cdr.export',
+  'data.export',
   'voicemail.access',
   'monitor.presence',
   'monitor.calls',

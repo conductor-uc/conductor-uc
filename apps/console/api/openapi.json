@@ -1732,6 +1732,327 @@
         ]
       }
     },
+    "/v1/tenants/{tenantId}/file-exports": {
+      "post": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status",
+                    "fileCount",
+                    "sizeBytes",
+                    "createdAt",
+                    "downloadUrl",
+                    "errorMessage"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "processing"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "failed"
+                          ]
+                        }
+                      ]
+                    },
+                    "fileCount": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "sizeBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "downloadUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "errorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "startFileExport",
+        "tags": [
+          "FileExports"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "rows"
+                  ],
+                  "properties": {
+                    "rows": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "status",
+                          "fileCount",
+                          "sizeBytes",
+                          "createdAt",
+                          "downloadUrl",
+                          "errorMessage"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "pending"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "processing"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "ready"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "failed"
+                                ]
+                              }
+                            ]
+                          },
+                          "fileCount": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "sizeBytes": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "downloadUrl": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "errorMessage": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "listFileExports",
+        "tags": [
+          "FileExports"
+        ]
+      }
+    },
+    "/v1/tenants/{tenantId}/file-exports/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "tenantId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "id",
+                    "status",
+                    "fileCount",
+                    "sizeBytes",
+                    "createdAt",
+                    "downloadUrl",
+                    "errorMessage"
+                  ],
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "pending"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "processing"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "ready"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "enum": [
+                            "failed"
+                          ]
+                        }
+                      ]
+                    },
+                    "fileCount": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "sizeBytes": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "downloadUrl": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "errorMessage": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "getFileExport",
+        "tags": [
+          "FileExports"
+        ]
+      }
+    },
     "/v1/resellers/{id}/brand": {
       "put": {
         "requestBody": {
@@ -19469,10 +19790,6 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "from",
-                  "to"
-                ],
                 "properties": {
                   "from": {
                     "type": "string",
@@ -19481,6 +19798,9 @@
                   "to": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "all": {
+                    "type": "boolean"
                   }
                 }
               }

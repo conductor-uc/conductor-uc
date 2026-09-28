@@ -185,6 +185,20 @@ describe('BUILT_IN_ROLES', () => {
     }
   });
 
+  it('data.export (S1-16) belongs to tenant_admin and master_admin only', () => {
+    for (const [roleId, holds] of [
+      ['master_admin', true],
+      ['tenant_admin', true],
+      ['tenant_supervisor', false],
+      ['tenant_receptionist', false],
+      ['tenant_user', false],
+      ['reseller_admin', false],
+      ['master_support', false],
+    ] as const) {
+      expect(BUILT_IN_ROLES.get(roleId)?.permissions.has('data.export'), roleId).toBe(holds);
+    }
+  });
+
   it('tenant_user holds only the self-service permissions plus the two every signed-in person needs', () => {
     const tenantUser = BUILT_IN_ROLES.get('tenant_user');
     expect([...(tenantUser?.permissions ?? [])].sort()).toEqual(
