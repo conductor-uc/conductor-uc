@@ -43,6 +43,8 @@ class _DemoAdapter implements HttpClientAdapter {
     if (access != null) return access;
     final recording = _recordingControl(options);
     if (recording != null) return recording;
+    final operation = _callOperation(options);
+    if (operation != null) return operation;
     final monitor = await _monitor(options);
     if (monitor != null) return monitor;
     final pbx = _pbx.handle(options, userId: demoUserId(_email));
@@ -199,6 +201,36 @@ class _DemoAdapter implements HttpClientAdapter {
       '${_body(options)['action']}',
       mine: match.group(1) != 'calls',
     );
+    return status == 200
+        ? _json(body)
+        : _problem(status, '${body['code']}', '${body['detail']}');
+  }
+
+  /// Moving live calls and agents (S9-12, S9-13), for the attendant console:
+  /// the demo hub's calls change as the service's would ([demoCallAction]).
+  ResponseBody? _callOperation(RequestOptions options) {
+    final path = options.path;
+    final call = RegExp(
+      r'^/v1/tenants/[^/]+/calls/([^/]+)/(hangup|transfer|park|pickup)$',
+    ).firstMatch(path);
+    final dial = RegExp(r'^/v1/tenants/[^/]+/me/dial$').hasMatch(path);
+    final agent = RegExp(r'^/v1/tenants/[^/]+/live-agents/([^/]+)/status$')
+        .firstMatch(path);
+    // Hang up and pick up have no body.
+    Map<String, Object?> sent() => options.data == null
+        ? const {}
+        : _body(options).cast<String, Object?>();
+    final (int, Map<String, Object?>) result;
+    if (call != null && options.method == 'POST') {
+      result = demoCallAction(call.group(2)!, call.group(1), sent());
+    } else if (dial && options.method == 'POST') {
+      result = demoCallAction('dial', null, sent());
+    } else if (agent != null && options.method == 'PUT') {
+      result = demoAgentStatus(agent.group(1)!, '${_body(options)['status']}');
+    } else {
+      return null;
+    }
+    final (status, body) = result;
     return status == 200
         ? _json(body)
         : _problem(status, '${body['code']}', '${body['detail']}');

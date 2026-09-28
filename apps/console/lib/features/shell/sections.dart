@@ -35,6 +35,7 @@ enum NavLabel {
   schedules,
   media,
   monitoring,
+  attendant,
   recordings,
   voicemail,
   callRecords,
@@ -72,6 +73,7 @@ extension NavLabelText on NavLabel {
     NavLabel.schedules => l10n.navSchedules,
     NavLabel.media => l10n.navMedia,
     NavLabel.monitoring => l10n.navMonitoring,
+    NavLabel.attendant => l10n.navAttendant,
     NavLabel.recordings => l10n.navRecordings,
     NavLabel.voicemail => l10n.navVoicemail,
     NavLabel.callRecords => l10n.navCallRecords,
@@ -360,6 +362,16 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       Icons.call_made_outlined,
       requires: ['trunk.read', 'emergency_route.read'],
       group: NavGroup.calls,
+    ),
+    // S9-14: the receptionist's screen; live calls are private, so never a
+    // reseller (H1).
+    Section(
+      '/attendant',
+      NavLabel.attendant,
+      Icons.support_agent_outlined,
+      privateData: true,
+      requires: ['call.control'],
+      group: NavGroup.activity,
     ),
     Section(
       '/monitoring',

@@ -337,6 +337,67 @@ describe.skipIf(skipReason !== undefined)(
       expect(parsePayload(row?.payload)).toEqual({ callUuid, nodeId: 'fs-1', queueId: 'queue-1' });
     });
 
+    it('a parked leg says where it waits until it is taken back (S9-14)', async () => {
+      const handler = createChannelHandler({
+        db: h.db.kysely,
+        registry: h.registry,
+        logger: h.logger,
+        callSafetyTtlMs: 6 * 60 * 60 * 1000,
+        heartbeatTtlMs: 10_000,
+      });
+      const callUuid = crypto.randomUUID();
+      await h.registry.createCall(
+        {
+          callUuid,
+          nodeId: 'fs-1',
+          tenantId: 'tenant-p',
+          direction: 'inbound',
+          state: 'answered',
+          startedAt: String(Date.now()),
+          from: '+15550100',
+          to: '700',
+          extension: null,
+          controls: 'none',
+        },
+        60_000,
+      );
+      const valet = (action: string) =>
+        handler.handleEvent('fs-1', {
+          'Event-Name': 'CUSTOM',
+          'Event-Subclass': 'valet_parking::info',
+          Action: action,
+          'Valet-Lot-Name': 'lot-1@calls.platform.test',
+          'Valet-Extension': '701',
+          'Unique-ID': callUuid,
+        });
+      const live = async () =>
+        (await h.registry.callsForTenant('tenant-p')).find((c) => c.callUuid === callUuid);
+
+      await valet('hold');
+      expect(await live()).toMatchObject({ parked: { parkingLotId: 'lot-1', slot: 701 } });
+      const parked = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['tenant_id as tenantId', 'payload'])
+        .where('type', '=', 'call.channel.parked')
+        .executeTakeFirst();
+      expect(parked?.tenantId).toBe('tenant-p');
+      expect(parsePayload(parked?.payload)).toEqual({
+        callUuid,
+        nodeId: 'fs-1',
+        parkingLotId: 'lot-1',
+        slot: 701,
+      });
+
+      await valet('bridge');
+      expect(await live()).toMatchObject({ parked: null });
+      const unparked = await h.db.kysely
+        .selectFrom('outbox')
+        .select(['payload'])
+        .where('type', '=', 'call.channel.unparked')
+        .executeTakeFirst();
+      expect(parsePayload(unparked?.payload)).toEqual({ callUuid, nodeId: 'fs-1' });
+    });
+
     it('a call from a trunk (no tenant at CHANNEL_CREATE) joins its tenant live calls when a later event names it (S5-08)', async () => {
       const handler = createChannelHandler({
         db: h.db.kysely,

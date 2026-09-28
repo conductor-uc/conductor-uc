@@ -23,7 +23,16 @@ final _sockets = <DemoRealtimeSocket>{};
 /// internal call (two bridged legs) whose rule allows recording on demand, an
 /// outside caller ringing an extension, and an outbound call a rule records
 /// and allows pausing.
-List<Map<String, Object?>> demoLiveCalls(DateTime now) {
+List<Map<String, Object?>> demoLiveCalls(DateTime now) => [
+  for (final leg in _cannedCalls(now))
+    if (!_ended.contains(leg['callUuid']))
+      {...leg, ...?_changes[leg['callUuid']]},
+  for (final leg in _extra)
+    if (!_ended.contains(leg['callUuid']))
+      {...leg, ...?_changes[leg['callUuid']]},
+];
+
+List<Map<String, Object?>> _cannedCalls(DateTime now) {
   String ago(int seconds) =>
       now.subtract(Duration(seconds: seconds)).toUtc().toIso8601String();
   return [
@@ -66,6 +75,35 @@ List<Map<String, Object?>> demoLiveCalls(DateTime now) {
       'controls': 'none',
       'extension': null,
     },
+    // S9-14: the outside caller above, ringing extension 104's phone, and a
+    // caller waiting in the Support queue.
+    {
+      'callUuid': 'demo-b2',
+      'direction': 'outbound',
+      'state': 'ringing',
+      'from': '+15550142',
+      'to': '104',
+      'startedAt': ago(7),
+      'answeredAt': null,
+      'bridgedTo': null,
+      'recording': 'off',
+      'controls': 'none',
+      'extension': '104',
+    },
+    {
+      'callUuid': 'demo-q1',
+      'direction': 'inbound',
+      'state': 'answered',
+      'from': '+15550177',
+      'to': '+15550100',
+      'startedAt': ago(65),
+      'answeredAt': ago(64),
+      'bridgedTo': null,
+      'recording': 'off',
+      'controls': 'none',
+      'extension': null,
+      'queueId': 'q-1',
+    },
     {
       'callUuid': 'demo-c1',
       'direction': 'inbound',
@@ -80,6 +118,217 @@ List<Map<String, Object?>> demoLiveCalls(DateTime now) {
       'extension': '103',
     },
   ];
+}
+
+/// S9-14: what the attendant's buttons did to the demo's calls: legs gone,
+/// legs added, and changes to legs.
+final _ended = <String>{};
+final _extra = <Map<String, Object?>>[];
+final _changes = <String, Map<String, Object?>>{};
+var _nextLeg = 0;
+
+/// The caller a ringing phone's leg was placed for (a pickup takes it).
+const _callerOf = {'demo-b2': 'demo-b1'};
+
+/// Each demo queue agent's status, as the attendant's menu leaves it.
+final _agentStatus = <String, String>{};
+
+/// The demo tenant's queues, as the `queues` topic sends them (S9-13).
+List<Map<String, Object?>> demoQueues(DateTime now) {
+  final waiting = [
+    for (final leg in demoLiveCalls(now))
+      if (leg['queueId'] == 'q-1' && leg['bridgedTo'] == null) leg,
+  ];
+  return [
+    {
+      'queueId': 'q-1',
+      'waiting': waiting.length,
+      'longestWaitingSince': waiting.isEmpty
+          ? null
+          : waiting.first['startedAt'],
+      'answered': 0,
+      'callsAnswered': 12,
+      'callsAbandoned': 1,
+      'agents': [
+        {
+          'extension': '103',
+          'status': _agentStatus['103'] ?? 'available',
+          'activity': 'on_call',
+          'callsAnswered': 12,
+          'statusSince': null,
+        },
+      ],
+    },
+  ];
+}
+
+/// What an attendant's button does in the demo (S9-12, S9-13): `(status,
+/// body)` for the demo backend to answer with. The calls change as the
+/// service's would, and every open live view hears of it a moment later.
+(int, Map<String, Object?>) demoCallAction(
+  String action,
+  String? callUuid,
+  Map<String, Object?> body,
+) {
+  final legs = demoLiveCalls(DateTime.now());
+  Map<String, Object?>? find(String? id) =>
+      legs.where((l) => l['callUuid'] == id).firstOrNull;
+  (int, Map<String, Object?>) problem(int status, String code, String detail) =>
+      (status, {'code': code, 'detail': detail});
+  final notFound = problem(
+    404,
+    'call_not_found',
+    'There is no such call in progress.',
+  );
+  final leg = find(callUuid);
+  final events = <Map<String, Object?>>[];
+  final now = DateTime.now().toUtc().toIso8601String();
+
+  void end(String id) {
+    _ended.add(id);
+    events.add({
+      'type': 'call.ended',
+      'callUuid': id,
+      'hangupCause': 'NORMAL_CLEARING',
+    });
+  }
+
+  void change(String id, Map<String, Object?> changes) {
+    (_changes[id] ??= {}).addAll(changes);
+    events.add({'type': 'call.updated', 'callUuid': id, 'changes': changes});
+  }
+
+  Map<String, Object?> add(Map<String, Object?> newLeg) {
+    _extra.add(newLeg);
+    events.add({'type': 'call.started', 'call': newLeg});
+    return newLeg;
+  }
+
+  List<String> partners(Map<String, Object?> of) => [
+    for (final other in legs)
+      if (other['callUuid'] != of['callUuid'] &&
+          (other['bridgedTo'] == of['callUuid'] ||
+              of['bridgedTo'] == other['callUuid']))
+        '${other['callUuid']}',
+  ];
+
+  Map<String, Object?> phoneLeg(String from, String to, String? bridgedTo) => {
+    'callUuid': 'demo-x${_nextLeg++}',
+    'direction': 'outbound',
+    'state': 'answered',
+    'from': from,
+    'to': to,
+    'startedAt': now,
+    'answeredAt': now,
+    'bridgedTo': bridgedTo,
+    'recording': 'off',
+    'controls': 'none',
+    'extension': RegExp(r'^[0-9]{2,6}$').hasMatch(to) ? to : null,
+  };
+
+  final (int, Map<String, Object?>) answer;
+  switch (action) {
+    case 'hangup':
+      if (leg == null) return notFound;
+      partners(leg).forEach(end);
+      end('${leg['callUuid']}');
+      answer = (200, {'result': 'hungup'});
+    case 'transfer':
+      if (leg == null) return notFound;
+      partners(leg).forEach(end);
+      final to = '${body['to']}';
+      final added = add(phoneLeg('${leg['from']}', to, '${leg['callUuid']}'));
+      change('${leg['callUuid']}', {
+        'bridgedTo': added['callUuid'],
+        'state': 'answered',
+        'parked': null,
+      });
+      answer = (200, {'result': 'transferred', 'callUuid': leg['callUuid']});
+    case 'park':
+      if (leg == null) return notFound;
+      if (body['parkingLotId'] != 'park-1') {
+        return problem(
+          404,
+          'parking_lot_not_found',
+          'There is no such parking lot.',
+        );
+      }
+      final slot = 701 + legs.where((l) => l['parked'] != null).length;
+      partners(leg).forEach(end);
+      change('${leg['callUuid']}', {
+        'bridgedTo': null,
+        'parked': {'parkingLotId': 'park-1', 'slot': slot},
+      });
+      answer = (
+        200,
+        {'result': 'parked', 'parkingLotId': 'park-1', 'slot': slot},
+      );
+    case 'pickup':
+      if (leg == null) return notFound;
+      final caller = find(_callerOf[callUuid]);
+      if (leg['state'] != 'ringing' || caller == null) {
+        return problem(
+          409,
+          'call_not_ringing',
+          'This call is not ringing a phone.',
+        );
+      }
+      end('${leg['callUuid']}');
+      final mine = add(phoneLeg('${caller['from']}', '101', null));
+      change('${caller['callUuid']}', {
+        'state': 'answered',
+        'answeredAt': now,
+        'bridgedTo': mine['callUuid'],
+      });
+      answer = (200, {'result': 'picked_up', 'callUuid': mine['callUuid']});
+    case 'dial':
+      final to = '${body['to']}';
+      final parked = legs
+          .where((l) => (l['parked'] as Map?)?['slot'].toString() == to)
+          .firstOrNull;
+      final mine = add(phoneLeg('101', parked == null ? to : '101', null));
+      if (parked != null) {
+        change('${parked['callUuid']}', {
+          'parked': null,
+          'bridgedTo': mine['callUuid'],
+        });
+      }
+      answer = (200, {'result': 'dialing', 'callUuid': mine['callUuid']});
+    default:
+      return problem(400, 'bad_request', 'Unknown action.');
+  }
+  Timer(const Duration(milliseconds: 300), () {
+    for (final socket in [..._sockets]) {
+      for (final event in events) {
+        socket._callEvent(event);
+      }
+    }
+  });
+  return answer;
+}
+
+/// Sets a demo queue agent's status, and tells every open queues view.
+(int, Map<String, Object?>) demoAgentStatus(String extension, String status) {
+  if (extension != '103') {
+    return (
+      404,
+      {'code': 'not_an_agent', 'detail': 'That extension answers no queue.'},
+    );
+  }
+  _agentStatus[extension] = status;
+  Timer(const Duration(milliseconds: 300), () {
+    for (final socket in [..._sockets]) {
+      socket._queuesChanged();
+    }
+  });
+  return (
+    200,
+    {
+      'extension': extension,
+      'status': status,
+      'queueIds': ['q-1'],
+    },
+  );
 }
 
 /// The legs the demo person (`user@`, extension 101) is shown on their own
@@ -244,6 +493,30 @@ class DemoRealtimeSocket implements RealtimeSocket {
     if (!_messages.isClosed) _messages.add(jsonEncode(message));
   }
 
+  /// A change to the tenant's calls, to every calls topic (not a person's own).
+  void _callEvent(Map<String, Object?> event) {
+    for (final topic in _topics) {
+      if (topic.contains(':user:') && topic.endsWith(':calls')) continue;
+      if (!topic.endsWith(':calls') && !topic.endsWith(':supervised')) continue;
+      _reply({'type': 'event', 'topic': topic, 'event': event});
+    }
+    _queuesChanged();
+  }
+
+  void _queuesChanged() {
+    for (final topic in _topics) {
+      if (!topic.endsWith(':queues')) continue;
+      _reply({
+        'type': 'event',
+        'topic': topic,
+        'event': {
+          'type': 'queues.changed',
+          'queues': demoQueues(DateTime.now()),
+        },
+      });
+    }
+  }
+
   /// A recording change on [callUuid], to every calls topic that shows it.
   void _changed(String callUuid, Map<String, Object?> changes) {
     for (final topic in _topics) {
@@ -297,6 +570,12 @@ class DemoRealtimeSocket implements RealtimeSocket {
             'topic': topic,
             'data': {'calls': demoLiveCalls(DateTime.now())},
           });
+        } else if (topic.endsWith(':queues')) {
+          _reply({
+            'type': 'snapshot',
+            'topic': topic,
+            'data': {'queues': demoQueues(DateTime.now())},
+          });
         } else if (topic.endsWith(':presence')) {
           _reply({
             'type': 'snapshot',
@@ -319,4 +598,11 @@ class DemoRealtimeSocket implements RealtimeSocket {
 }
 
 /// Forgets the demo's recording changes (tests start each from the canned calls).
-void resetDemoRecordings() => _recording.clear();
+void resetDemoRecordings() {
+  _recording.clear();
+  _ended.clear();
+  _extra.clear();
+  _changes.clear();
+  _agentStatus.clear();
+  _nextLeg = 0;
+}

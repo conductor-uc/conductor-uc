@@ -284,6 +284,34 @@ describe('normalizeEslEvent', () => {
     });
   });
 
+  it('maps valet_parking::info: hold is parked in a lot and slot, bridge and exit leave it (S9-14)', () => {
+    const valet = (headers: Record<string, string>) =>
+      normalizeEslEvent('fs-1', {
+        'Event-Name': 'CUSTOM',
+        'Event-Subclass': 'valet_parking::info',
+        'Unique-ID': 'leg-1',
+        'Valet-Lot-Name': 'lot-1@calls.platform.test',
+        'Valet-Extension': '750',
+        ...headers,
+      });
+    expect(valet({ Action: 'hold' })).toEqual({
+      kind: 'parked',
+      callUuid: 'leg-1',
+      nodeId: 'fs-1',
+      parkingLotId: 'lot-1',
+      slot: 750,
+    });
+    expect(valet({ Action: 'bridge' })).toEqual({
+      kind: 'unparked',
+      callUuid: 'leg-1',
+      nodeId: 'fs-1',
+    });
+    expect(valet({ Action: 'exit' })).toMatchObject({ kind: 'unparked' });
+    expect(valet({ Action: 'hold', 'Valet-Extension': 'abc' })).toEqual({ kind: 'ignored' });
+    expect(valet({ Action: 'hold', 'Valet-Lot-Name': '' })).toEqual({ kind: 'ignored' });
+    expect(valet({ Action: 'something-new' })).toEqual({ kind: 'ignored' });
+  });
+
   /** A `callcenter::info` event with the headers FreeSWITCH 1.10.12 was seen sending (G-119 (3)). */
   const callcenter = (headers: Record<string, string>) =>
     normalizeEslEvent('fs-1', {

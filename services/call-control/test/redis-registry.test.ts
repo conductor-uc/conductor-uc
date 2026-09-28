@@ -247,6 +247,7 @@ describe.skipIf(skipReason !== undefined)('call registry (Redis, 04 §3)', () =>
         extension: null,
         controls: 'none',
         queueId: null,
+        parked: null,
       });
       expect(calls[1]).toMatchObject({ state: 'ringing', answeredAt: null, recording: 'off' });
     });

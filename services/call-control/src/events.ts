@@ -216,6 +216,25 @@ export const callEvents = defineEvents({
    * member-queue-start) or the agent answering (bridge-agent-start). The live views filter and
    * group by it; the leg keeps it until it ends.
    */
+  /** S9-14: a call parked in a lot's slot, for the attendant console's parked calls. */
+  'call.channel.parked': {
+    schemaVersion: 1,
+    description: "A channel is parked in a parking lot's slot (mod_valet_parking).",
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+      parkingLotId: Type.String({ minLength: 1 }),
+      slot: Type.Integer({ minimum: 0 }),
+    }),
+  },
+  'call.channel.unparked': {
+    schemaVersion: 1,
+    description: 'A parked channel was taken back from its slot, or is gone.',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+    }),
+  },
   'call.channel.queued': {
     schemaVersion: 1,
     description: "A channel is a leg of a queue's call (mod_callcenter).",

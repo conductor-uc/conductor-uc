@@ -52,6 +52,11 @@ const LiveCallSchema = Type.Object({
   controls: Type.Union([Type.Literal('none'), Type.Literal('on_demand'), Type.Literal('pause')]),
   /** G-119 (3): the queue the leg is in, from mod_callcenter. */
   queueId: Type.Union([Type.String(), Type.Null()]),
+  /** S9-14: the parking lot and slot the leg waits in, while it is parked. */
+  parked: Type.Union([
+    Type.Object({ parkingLotId: Type.String(), slot: Type.Integer() }),
+    Type.Null(),
+  ]),
 });
 
 const LiveCallsResponseSchema = Type.Object({ calls: Type.Array(LiveCallSchema) });

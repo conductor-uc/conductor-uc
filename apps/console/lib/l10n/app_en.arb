@@ -2726,5 +2726,337 @@
   "myTabHistory": "Call history",
   "@myTabHistory": {
     "description": "Tab on an administrator's own My phone pages: their call history."
+  },
+  "navAttendant": "Attendant",
+  "@navAttendant": {
+    "description": "Navigation menu item. The receptionist's screen for answering and moving calls."
+  },
+  "attSubtitle": "Answer, send on and park calls. Drag a call onto someone to send it to them.",
+  "@attSubtitle": {
+    "description": "Attendant console (receptionist's screen). Page subtitle."
+  },
+  "attChooseTenant": "Choose a customer to answer their calls.",
+  "@attChooseTenant": {
+    "description": "Attendant console (receptionist's screen). No tenant selected."
+  },
+  "attNotAllowed": "Your role doesn't include answering and moving calls.",
+  "@attNotAllowed": {
+    "description": "Attendant console (receptionist's screen). Missing permissions."
+  },
+  "attTransferred": "Sent to {party}.",
+  "@attTransferred": {
+    "description": "Attendant console (receptionist's screen). Confirmation after sending a call on.",
+    "placeholders": {
+      "party": {
+        "type": "String",
+        "example": "102 · Bob Osei"
+      }
+    }
+  },
+  "attParked": "Parked in {lot}.",
+  "@attParked": {
+    "description": "Attendant console (receptionist's screen). Confirmation after parking a call.",
+    "placeholders": {
+      "lot": {
+        "type": "String",
+        "example": "Front desk"
+      }
+    }
+  },
+  "attPickedUp": "Your phone is taking the call.",
+  "@attPickedUp": {
+    "description": "Attendant console (receptionist's screen). Confirmation after picking up a call ringing elsewhere."
+  },
+  "attHangUpTitle": "Hang up this call?",
+  "@attHangUpTitle": {
+    "description": "Attendant console (receptionist's screen). Confirmation dialog title."
+  },
+  "attHangUp": "Hang up",
+  "@attHangUp": {
+    "description": "Attendant console (receptionist's screen). Button: end a call."
+  },
+  "attHungUp": "Call ended.",
+  "@attHungUp": {
+    "description": "Attendant console (receptionist's screen). Confirmation after hanging up."
+  },
+  "attRingingYourPhone": "Ringing your phone…",
+  "@attRingingYourPhone": {
+    "description": "Attendant console (receptionist's screen). Shown while the receptionist's own phone rings to place a call."
+  },
+  "attShortcuts": "Keyboard shortcuts",
+  "@attShortcuts": {
+    "description": "Attendant console (receptionist's screen). Button and dialog title."
+  },
+  "attKeySearch": "Search the directory",
+  "@attKeySearch": {
+    "description": "Attendant console (receptionist's screen). Shortcut description."
+  },
+  "attKeySelect": "Choose a call",
+  "@attKeySelect": {
+    "description": "Attendant console (receptionist's screen). Shortcut description."
+  },
+  "attKeyTransfer": "Send the chosen call to…",
+  "@attKeyTransfer": {
+    "description": "Attendant console (receptionist's screen). Shortcut description."
+  },
+  "attKeyTransferFirst": "Send the chosen call to the first person found",
+  "@attKeyTransferFirst": {
+    "description": "Attendant console (receptionist's screen). Shortcut description (while searching)."
+  },
+  "attKeyPark": "Park the chosen call",
+  "@attKeyPark": {
+    "description": "Attendant console (receptionist's screen). Shortcut description."
+  },
+  "attKeyPickUp": "Pick up the chosen call on your phone",
+  "@attKeyPickUp": {
+    "description": "Attendant console (receptionist's screen). Shortcut description."
+  },
+  "attKeyHangUp": "Hang up the chosen call",
+  "@attKeyHangUp": {
+    "description": "Attendant console (receptionist's screen). Shortcut description."
+  },
+  "attKeyClear": "Unchoose the call",
+  "@attKeyClear": {
+    "description": "Attendant console (receptionist's screen). Shortcut description."
+  },
+  "attKeyHelp": "Show these shortcuts",
+  "@attKeyHelp": {
+    "description": "Attendant console (receptionist's screen). Shortcut description."
+  },
+  "attKeyEnter": "Enter",
+  "@attKeyEnter": {
+    "description": "Attendant console (receptionist's screen). Name of the Enter key on a keyboard."
+  },
+  "attKeyEsc": "Esc",
+  "@attKeyEsc": {
+    "description": "Attendant console (receptionist's screen). Name of the Escape key on a keyboard."
+  },
+  "attSearch": "Find someone",
+  "@attSearch": {
+    "description": "Attendant console (receptionist's screen). Directory search field label."
+  },
+  "attSearchHelp": "By name or extension. Press / to jump here.",
+  "@attSearchHelp": {
+    "description": "Attendant console (receptionist's screen). Help under the search field."
+  },
+  "attSearchHelpSelected": "Press Enter to send the chosen call to the first match.",
+  "@attSearchHelpSelected": {
+    "description": "Attendant console (receptionist's screen). Help under the search field while a call is chosen."
+  },
+  "attNoPhone": "No phone is linked to you, so you can't pick up calls or take back parked calls here.",
+  "@attNoPhone": {
+    "description": "Attendant console (receptionist's screen). Warning: the receptionist has no extension."
+  },
+  "attYourPhone": "Calls you take ring your phone, extension {number}.",
+  "@attYourPhone": {
+    "description": "Attendant console (receptionist's screen). Which phone the receptionist's calls ring.",
+    "placeholders": {
+      "number": {
+        "type": "String",
+        "example": "100"
+      }
+    }
+  },
+  "attUpdatesStopped": "Live updates are unavailable. Reconnecting…",
+  "@attUpdatesStopped": {
+    "description": "Attendant console (receptionist's screen). The live feed stopped."
+  },
+  "attIncoming": "Incoming",
+  "@attIncoming": {
+    "description": "Attendant console (receptionist's screen). Section: calls ringing."
+  },
+  "attWaiting": "Waiting in a queue",
+  "@attWaiting": {
+    "description": "Attendant console (receptionist's screen). Section: callers waiting in a queue."
+  },
+  "attOnHold": "Parked",
+  "@attOnHold": {
+    "description": "Attendant console (receptionist's screen). Section: parked calls."
+  },
+  "attInProgress": "In progress",
+  "@attInProgress": {
+    "description": "Attendant console (receptionist's screen). Section: answered calls."
+  },
+  "attNoCalls": "No calls right now",
+  "@attNoCalls": {
+    "description": "Attendant console (receptionist's screen). Empty calls column title."
+  },
+  "attNoCallsHelp": "New calls appear here as they come in.",
+  "@attNoCallsHelp": {
+    "description": "Attendant console (receptionist's screen). Empty calls column text."
+  },
+  "attSectionCount": "{title} ({count})",
+  "@attSectionCount": {
+    "description": "Attendant console (receptionist's screen). A section heading with how many calls it holds.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Incoming"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "attParkedIn": "Parked in space {slot}",
+  "@attParkedIn": {
+    "description": "Attendant console (receptionist's screen). Where a parked call waits.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "701"
+      }
+    }
+  },
+  "attTo": "to {party}",
+  "@attTo": {
+    "description": "Attendant console (receptionist's screen). Who a call is for.",
+    "placeholders": {
+      "party": {
+        "type": "String",
+        "example": "102 · Bob Osei"
+      }
+    }
+  },
+  "attTransfer": "Send to…",
+  "@attTransfer": {
+    "description": "Attendant console (receptionist's screen). Button: send (transfer) a call."
+  },
+  "attPark": "Park",
+  "@attPark": {
+    "description": "Attendant console (receptionist's screen). Button: park a call."
+  },
+  "attPickUp": "Pick up on my phone",
+  "@attPickUp": {
+    "description": "Attendant console (receptionist's screen). Button: take a call ringing someone else."
+  },
+  "attNoExtensions": "Nobody matches.",
+  "@attNoExtensions": {
+    "description": "Attendant console (receptionist's screen). Directory search found nothing."
+  },
+  "attAvailable": "Available",
+  "@attAvailable": {
+    "description": "Attendant console (receptionist's screen). Extension status."
+  },
+  "attRinging": "Ringing",
+  "@attRinging": {
+    "description": "Attendant console (receptionist's screen). Extension status."
+  },
+  "attOnACall": "On a call",
+  "@attOnACall": {
+    "description": "Attendant console (receptionist's screen). Extension status."
+  },
+  "attDoNotDisturb": "Do not disturb",
+  "@attDoNotDisturb": {
+    "description": "Attendant console (receptionist's screen). Extension status."
+  },
+  "attOffline": "Offline",
+  "@attOffline": {
+    "description": "Attendant console (receptionist's screen). Extension status: no phone connected."
+  },
+  "attUnknown": "Unknown",
+  "@attUnknown": {
+    "description": "Attendant console (receptionist's screen). Status not known."
+  },
+  "attSendHere": "Send the chosen call here",
+  "@attSendHere": {
+    "description": "Attendant console (receptionist's screen). Tooltip on an extension while a call is chosen."
+  },
+  "attCall": "Call {number}",
+  "@attCall": {
+    "description": "Attendant console (receptionist's screen). Button: call this extension from your phone.",
+    "placeholders": {
+      "number": {
+        "type": "String",
+        "example": "102"
+      }
+    }
+  },
+  "attLot": "{label} ({count})",
+  "@attLot": {
+    "description": "Attendant console (receptionist's screen). A parking lot and how many calls wait in it.",
+    "placeholders": {
+      "label": {
+        "type": "String",
+        "example": "Front desk"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "attTakeBack": "Take back",
+  "@attTakeBack": {
+    "description": "Attendant console (receptionist's screen). Button: take a parked call on your phone."
+  },
+  "attDropToPark": "Drop a call here to park it.",
+  "@attDropToPark": {
+    "description": "Attendant console (receptionist's screen). Empty parking lot hint."
+  },
+  "attQueueWaiting": "{count, plural, =0{Nobody waiting} =1{1 waiting} other{{count} waiting}}",
+  "@attQueueWaiting": {
+    "description": "Attendant console (receptionist's screen). Callers waiting in a queue.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "attQueueWaitingLongest": "{count, plural, =1{1 waiting, for {time}} other{{count} waiting, longest {time}}}",
+  "@attQueueWaitingLongest": {
+    "description": "Attendant console (receptionist's screen). Callers waiting in a queue and the longest wait.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String",
+        "example": "1:05"
+      }
+    }
+  },
+  "attAgentAvailable": "signed in",
+  "@attAgentAvailable": {
+    "description": "Attendant console (receptionist's screen). Queue agent status."
+  },
+  "attAgentOnBreak": "on a break",
+  "@attAgentOnBreak": {
+    "description": "Attendant console (receptionist's screen). Queue agent status."
+  },
+  "attAgentSignedOut": "signed out",
+  "@attAgentSignedOut": {
+    "description": "Attendant console (receptionist's screen). Queue agent status."
+  },
+  "attAgentChange": "Change this agent's status",
+  "@attAgentChange": {
+    "description": "Attendant console (receptionist's screen). Tooltip on a queue agent."
+  },
+  "attAgentSignIn": "Sign in",
+  "@attAgentSignIn": {
+    "description": "Attendant console (receptionist's screen). Menu item: sign a queue agent in."
+  },
+  "attAgentBreak": "On a break",
+  "@attAgentBreak": {
+    "description": "Attendant console (receptionist's screen). Menu item: put a queue agent on a break."
+  },
+  "attAgentSignOut": "Sign out",
+  "@attAgentSignOut": {
+    "description": "Attendant console (receptionist's screen). Menu item: sign a queue agent out."
+  },
+  "attNotANumber": "Enter an extension or a phone number.",
+  "@attNotANumber": {
+    "description": "Attendant console (receptionist's screen). Transfer destination is not a number."
+  },
+  "attTransferTitle": "Send this call to",
+  "@attTransferTitle": {
+    "description": "Attendant console (receptionist's screen). Transfer dialog title."
+  },
+  "attTransferTo": "Extension or number",
+  "@attTransferTo": {
+    "description": "Attendant console (receptionist's screen). Transfer dialog field label."
+  },
+  "attTransferHelp": "Type a name to find someone.",
+  "@attTransferHelp": {
+    "description": "Attendant console (receptionist's screen). Transfer dialog field help."
   }
 }
