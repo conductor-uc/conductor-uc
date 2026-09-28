@@ -47,6 +47,63 @@ describe('problem+json responses', () => {
     );
   });
 
+  it('says which rule a field broke, and its limit, so a client can word it (S9-02)', async () => {
+    const app = await testServer();
+    app.post(
+      '/v1/x',
+      {
+        config: contract,
+        schema: {
+          body: Type.Object({
+            password: Type.String({ minLength: 12 }),
+            size: Type.Integer({ maximum: 10 }),
+          }),
+        },
+      },
+      () => ({}),
+    );
+    await app.ready();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/x',
+      payload: { password: 'short', size: 99 },
+    });
+
+    expect(response.json<Problem>().errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: '/password',
+          keyword: 'minLength',
+          params: { limit: 12 },
+        }),
+        expect.objectContaining({
+          field: '/size',
+          keyword: 'maximum',
+          params: { comparison: '<=', limit: 10 },
+        }),
+      ]),
+    );
+    // The schema's parameters, never what was sent.
+    expect(JSON.stringify(response.json())).not.toContain('short');
+  });
+
+  it('names a missing field by its own path, with the required keyword', async () => {
+    const app = await testServer();
+    app.post(
+      '/v1/x',
+      { config: contract, schema: { body: Type.Object({ email: Type.String() }) } },
+      () => ({}),
+    );
+    await app.ready();
+
+    const response = await app.inject({ method: 'POST', url: '/v1/x', payload: {} });
+
+    expect(response.json<Problem>().errors).toEqual([
+      expect.objectContaining({ field: '/email', keyword: 'required' }),
+    ]);
+  });
+
   it('reports every field at once rather than the first', async () => {
     const app = await testServer();
     app.post(
@@ -166,22 +223,37 @@ describe('problem+json responses', () => {
 });
 
 describe('ProblemError', () => {
-  it('builds documents for the common statuses', () => {
-    expect(ProblemError.unauthorized().toProblem()).toMatchObject({
+  it('builds documents for the common statuses, with the code the caller names', () => {
+    const code = { code: 'the_case' };
+    expect(ProblemError.unauthorized(undefined, code).toProblem()).toMatchObject({
       status: 401,
-      code: 'unauthorized',
+      code: 'the_case',
     });
-    expect(ProblemError.forbidden().toProblem()).toMatchObject({ status: 403, code: 'forbidden' });
-    expect(ProblemError.notFound().toProblem()).toMatchObject({ status: 404, code: 'not_found' });
-    expect(ProblemError.preconditionRequired().toProblem()).toMatchObject({ status: 428 });
-    expect(ProblemError.rateLimited().toProblem()).toMatchObject({ status: 429 });
-    expect(ProblemError.unavailable().toProblem()).toMatchObject({ status: 503 });
+    expect(ProblemError.forbidden(undefined, code).toProblem()).toMatchObject({ status: 403 });
+    expect(ProblemError.notFound(undefined, code).toProblem()).toMatchObject({ status: 404 });
+    expect(ProblemError.preconditionRequired(undefined, code).toProblem()).toMatchObject({
+      status: 428,
+    });
+    expect(ProblemError.rateLimited(undefined, code).toProblem()).toMatchObject({ status: 429 });
+    expect(ProblemError.unavailable(undefined, code).toProblem()).toMatchObject({ status: 503 });
   });
 
   it('omits detail when it would only repeat the title', () => {
-    expect(ProblemError.notFound().toProblem()).not.toHaveProperty('detail');
-    expect(ProblemError.notFound('No such tenant.').toProblem()).toMatchObject({
+    const code = { code: 'tenant_not_found' };
+    expect(ProblemError.notFound(undefined, code).toProblem()).not.toHaveProperty('detail');
+    expect(ProblemError.notFound('No such tenant.', code).toProblem()).toMatchObject({
       detail: 'No such tenant.',
+    });
+  });
+
+  it('carries the values a client needs to say the same in its own language', () => {
+    const problem = ProblemError.conflict('Extension 101 is already in use.', {
+      code: 'extension_number_taken',
+      params: { number: '101' },
+    }).toProblem();
+    expect(problem).toMatchObject({
+      code: 'extension_number_taken',
+      params: { number: '101' },
     });
   });
 });

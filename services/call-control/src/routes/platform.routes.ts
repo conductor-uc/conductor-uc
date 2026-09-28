@@ -34,7 +34,7 @@ type SignedRequest = Parameters<typeof clientIpOf>[0] & {
 function actorOf(request: SignedRequest): NodeActor {
   const { actorId, actorType, orgId, requestId } = request.context;
   if (actorId === undefined || orgId === undefined) {
-    throw ProblemError.unauthorized('Sign in to continue.');
+    throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
   }
   const ip = clientIpOf(request);
   return {

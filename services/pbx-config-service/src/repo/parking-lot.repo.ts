@@ -44,6 +44,19 @@ export class ParkingLotNotFoundError extends Error {
 /** This lot's slot range overlaps another lot already in the same tenant. */
 export class ParkingLotSlotOverlapError extends Error {
   override readonly name = 'ParkingLotSlotOverlapError';
+
+  constructor(
+    message: string,
+    readonly params: {
+      readonly slotStart: number;
+      readonly slotEnd: number;
+      readonly lot: string;
+      readonly lotSlotStart: number;
+      readonly lotSlotEnd: number;
+    },
+  ) {
+    super(message);
+  }
 }
 
 interface ParkingLotRow {
@@ -82,6 +95,13 @@ async function assertNoSlotOverlap(
     if (slotRangesOverlap(range, { start: row.slot_start, end: row.slot_end })) {
       throw new ParkingLotSlotOverlapError(
         `Slots ${String(range.start)}-${String(range.end)} overlap lot '${row.label}' (${String(row.slot_start)}-${String(row.slot_end)}).`,
+        {
+          slotStart: range.start,
+          slotEnd: range.end,
+          lot: row.label,
+          lotSlotStart: row.slot_start,
+          lotSlotEnd: row.slot_end,
+        },
       );
     }
   }

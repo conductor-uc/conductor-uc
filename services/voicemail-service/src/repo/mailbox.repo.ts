@@ -33,10 +33,18 @@ export interface CreateMailboxInput {
 
 export class MailboxNotFoundError extends Error {
   override readonly name = 'MailboxNotFoundError';
+
+  constructor(readonly mailboxId: string) {
+    super(`No mailbox with id '${mailboxId}'.`);
+  }
 }
 
 export class MailboxAlreadyExistsError extends Error {
   override readonly name = 'MailboxAlreadyExistsError';
+
+  constructor(readonly extensionId: string) {
+    super(`Extension '${extensionId}' already has a mailbox.`);
+  }
 }
 
 const COLUMNS = [
@@ -135,7 +143,7 @@ export function createMailboxRepo(
         .where('extension_id', '=', extensionId)
         .executeTakeFirst();
       if (existing !== undefined) {
-        throw new MailboxAlreadyExistsError(`Extension '${extensionId}' already has a mailbox.`);
+        throw new MailboxAlreadyExistsError(extensionId);
       }
 
       const id = randomUUID();
@@ -192,7 +200,7 @@ export function createMailboxRepo(
         .select(COLUMNS)
         .where('id', '=', id)
         .executeTakeFirst();
-      if (existing === undefined) throw new MailboxNotFoundError(`No mailbox with id '${id}'.`);
+      if (existing === undefined) throw new MailboxNotFoundError(id);
 
       await db
         .scoped(ctx)
@@ -222,7 +230,7 @@ export function createMailboxRepo(
         .select('id')
         .where('id', '=', id)
         .executeTakeFirst();
-      if (existing === undefined) throw new MailboxNotFoundError(`No mailbox with id '${id}'.`);
+      if (existing === undefined) throw new MailboxNotFoundError(id);
 
       const validPin = validatePin(pin);
       const pinEnc = await encrypt(kek, validPin, pinAssociatedData(tenantId, id));
@@ -243,7 +251,7 @@ export function createMailboxRepo(
         .select('pin_enc')
         .where('id', '=', id)
         .executeTakeFirst();
-      if (row === undefined) throw new MailboxNotFoundError(`No mailbox with id '${id}'.`);
+      if (row === undefined) throw new MailboxNotFoundError(id);
 
       try {
         const stored = await decryptString(kek, row.pin_enc, pinAssociatedData(tenantId, id));
@@ -260,7 +268,7 @@ export function createMailboxRepo(
         .where('id', '=', id)
         .executeTakeFirst();
       if (Number(result.numDeletedRows) === 0) {
-        throw new MailboxNotFoundError(`No mailbox with id '${id}'.`);
+        throw new MailboxNotFoundError(id);
       }
       // Messages are left orphaned in the DB and in S3 (same as media-asset's
       // own `remove()` in S2-07 — no cascade/cleanup convention exists yet
@@ -279,7 +287,7 @@ export function createMailboxRepo(
         .select('id')
         .where('id', '=', id)
         .executeTakeFirst();
-      if (existing === undefined) throw new MailboxNotFoundError(`No mailbox with id '${id}'.`);
+      if (existing === undefined) throw new MailboxNotFoundError(id);
 
       const objectKey = greetingObjectKey(id);
       const uploadUrl = await storage
@@ -303,7 +311,7 @@ export function createMailboxRepo(
         .select(COLUMNS)
         .where('id', '=', id)
         .executeTakeFirst();
-      if (existing === undefined) throw new MailboxNotFoundError(`No mailbox with id '${id}'.`);
+      if (existing === undefined) throw new MailboxNotFoundError(id);
 
       await db
         .scoped(ctx)

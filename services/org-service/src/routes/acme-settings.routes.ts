@@ -51,6 +51,7 @@ export function registerAcmeSettingsRoutes(
     if (orgType !== 'master') {
       throw ProblemError.forbidden(
         "Only the platform operator can see or change the platform's certificate settings.",
+        { code: 'platform_operator_only' },
       );
     }
   }
@@ -80,6 +81,7 @@ export function registerAcmeSettingsRoutes(
       if (actorId === undefined || actorType === undefined || orgId === undefined) {
         throw ProblemError.unauthorized(
           'An identified actor is required to change these settings.',
+          { code: 'actor_required' },
         );
       }
 

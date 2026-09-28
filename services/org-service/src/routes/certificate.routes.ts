@@ -69,6 +69,7 @@ export function registerCertificateRoutes(app: Server, certs: CertificateRepo): 
       if (request.context.orgType !== 'master') {
         throw ProblemError.forbidden(
           "Only the platform operator can see the platform's certificates.",
+          { code: 'platform_operator_only' },
         );
       }
       return { rows: (await certs.list({ resellerId: null })).map(toResponse) };
@@ -89,7 +90,9 @@ export function registerCertificateInternalRoutes(
   function requireInternal(header: string | undefined): void {
     const presented = bearerToken(header);
     if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-      throw ProblemError.unauthorized('A valid internal service token is required.');
+      throw ProblemError.unauthorized('A valid internal service token is required.', {
+        code: 'internal_token_invalid',
+      });
     }
   }
 
@@ -114,7 +117,10 @@ export function registerCertificateInternalRoutes(
     async (request) => {
       requireInternal(request.headers.authorization);
       const proxy = await certs.sipProxyFor(request.params.id);
-      if (proxy === undefined) throw ProblemError.notFound('That tenant has no domain yet.');
+      if (proxy === undefined)
+        throw ProblemError.notFound('That tenant has no domain yet.', {
+          code: 'tenant_domain_not_found',
+        });
       return proxy;
     },
   );
@@ -171,7 +177,9 @@ export function registerCertificateInternalRoutes(
       requireInternal(request.headers.authorization);
       const material = await certs.getMaterial(request.params.fqdn);
       if (material === undefined)
-        throw ProblemError.notFound('No certificate is held for that name.');
+        throw ProblemError.notFound('No certificate is held for that name.', {
+          code: 'certificate_not_found',
+        });
       // The response carries a private key: nothing on the way may keep a copy.
       void reply.header('cache-control', 'no-store');
       return {
@@ -198,7 +206,8 @@ export function registerCertificateInternalRoutes(
     async (request) => {
       requireInternal(request.headers.authorization);
       const answer = await certs.getChallenge(request.params.token);
-      if (answer === undefined) throw ProblemError.notFound('No such challenge.');
+      if (answer === undefined)
+        throw ProblemError.notFound('No such challenge.', { code: 'acme_challenge_not_found' });
       return { keyAuthorization: answer };
     },
   );

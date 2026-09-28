@@ -94,7 +94,9 @@ export function registerOrgRoutes(
   async function requireMaster(): Promise<Org> {
     const master = await repo.findMaster();
     if (master === undefined) {
-      throw ProblemError.unavailable('The master org has not been bootstrapped yet.');
+      throw ProblemError.unavailable('The master org has not been bootstrapped yet.', {
+        code: 'master_not_bootstrapped',
+      });
     }
     return master;
   }
@@ -114,11 +116,18 @@ export function registerOrgRoutes(
     try {
       org = await repo.create({}, type, { parentId, slug: body.slug, name: body.name });
     } catch (error) {
-      if (error instanceof ParentNotFoundError) throw ProblemError.notFound(error.message);
+      if (error instanceof ParentNotFoundError) {
+        throw ProblemError.notFound(error.message, {
+          code: 'parent_org_not_found',
+          params: { orgId: parentId },
+        });
+      }
       if (error instanceof SlugTakenError) {
         throw ProblemError.conflict(error.message, { code: 'slug_taken' });
       }
-      if (error instanceof InvalidOrgHierarchyError) throw ProblemError.badRequest(error.message);
+      if (error instanceof InvalidOrgHierarchyError) {
+        throw ProblemError.badRequest(error.message, { code: 'invalid_org_hierarchy' });
+      }
       throw error;
     }
 
@@ -185,7 +194,7 @@ export function registerOrgRoutes(
     async (request) => {
       const org = await repo.findById(request.params.id);
       if (org === undefined || org.type !== 'reseller') {
-        throw ProblemError.notFound('No reseller with that id.');
+        throw ProblemError.notFound('No reseller with that id.', { code: 'reseller_not_found' });
       }
       return toResponse(org);
     },
@@ -262,7 +271,7 @@ export function registerOrgRoutes(
     async (request) => {
       const org = await repo.findById(request.params.id);
       if (org === undefined || org.type !== 'tenant') {
-        throw ProblemError.notFound('No tenant with that id.');
+        throw ProblemError.notFound('No tenant with that id.', { code: 'tenant_not_found' });
       }
       return toResponse(org);
     },
@@ -312,8 +321,12 @@ async function updateOrg(
   try {
     return await repo.update({}, id, patch);
   } catch (error) {
-    if (error instanceof OrgNotFoundError) throw ProblemError.notFound(error.message);
-    if (error instanceof InvalidOrgHierarchyError) throw ProblemError.badRequest(error.message);
+    if (error instanceof OrgNotFoundError) {
+      throw ProblemError.notFound(error.message, { code: 'org_not_found', params: { orgId: id } });
+    }
+    if (error instanceof InvalidOrgHierarchyError) {
+      throw ProblemError.badRequest(error.message, { code: 'invalid_org_hierarchy' });
+    }
     throw error;
   }
 }
@@ -328,8 +341,12 @@ async function transitionOrg(
   try {
     return await (action === 'suspend' ? repo.suspend({}, id) : repo.resume({}, id));
   } catch (error) {
-    if (error instanceof OrgNotFoundError) throw ProblemError.notFound(error.message);
-    if (error instanceof InvalidOrgHierarchyError) throw ProblemError.badRequest(error.message);
+    if (error instanceof OrgNotFoundError) {
+      throw ProblemError.notFound(error.message, { code: 'org_not_found', params: { orgId: id } });
+    }
+    if (error instanceof InvalidOrgHierarchyError) {
+      throw ProblemError.badRequest(error.message, { code: 'invalid_org_hierarchy' });
+    }
     if (error instanceof InvalidOrgStatusTransitionError) {
       throw ProblemError.conflict(error.message, { code: 'invalid_status_transition' });
     }
@@ -345,6 +362,9 @@ async function requireType(
 ): Promise<void> {
   const org = await repo.findById(id);
   if (org === undefined || org.type !== expectedType) {
-    throw ProblemError.notFound(`No ${expectedType} with that id.`);
+    throw ProblemError.notFound(`No ${expectedType} with that id.`, {
+      // Literal, so the codes can be found by reading the source (S9-02).
+      code: expectedType === 'reseller' ? 'reseller_not_found' : 'tenant_not_found',
+    });
   }
 }

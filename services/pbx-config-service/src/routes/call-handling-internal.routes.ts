@@ -38,7 +38,9 @@ export function registerCallHandlingInternalRoutes(
   function authorize(header: string | undefined): void {
     const presented = bearerToken(header);
     if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-      throw ProblemError.unauthorized('A valid internal service token is required.');
+      throw ProblemError.unauthorized('A valid internal service token is required.', {
+        code: 'internal_token_invalid',
+      });
     }
   }
 
@@ -53,7 +55,9 @@ export function registerCallHandlingInternalRoutes(
       const { tenantId, id } = request.params;
       const found = await callHandling.find({ tenantId }, id);
       if (found === undefined) {
-        throw ProblemError.notFound('No call handling is configured for that extension.');
+        throw ProblemError.notFound('No call handling is configured for that extension.', {
+          code: 'call_handling_not_found',
+        });
       }
       return found as unknown as Static<typeof CallHandlingSchema>;
     },

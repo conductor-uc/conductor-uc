@@ -40,7 +40,9 @@ export function registerPresenceRoutes(
         presented === undefined ||
         !secretEquals(deps.internalServiceToken, presented)
       ) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       return { extensions: await deps.presence.forTenant(request.params.tenantId) };
     },

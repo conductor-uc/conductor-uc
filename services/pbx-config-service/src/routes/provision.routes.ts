@@ -73,7 +73,8 @@ export function registerProvisionRoutes(
       }
 
       const file = parseYealinkFile(request.params.file);
-      if (file === undefined) throw ProblemError.notFound('No such file.');
+      if (file === undefined)
+        throw ProblemError.notFound('No such file.', { code: 'provisioning_file_not_found' });
 
       if (file.kind === 'common') {
         return reply.type('text/plain; charset=utf-8').send(renderYealinkCommonConfig());
@@ -82,17 +83,19 @@ export function registerProvisionRoutes(
       // unknown address gets the same answer as any other file that is not there.
       if (global) target = await devices.findProvisioningTargetByMac(file.mac);
       if (target === undefined || file.mac !== target.mac) {
-        throw ProblemError.notFound('No such file.');
+        throw ProblemError.notFound('No such file.', { code: 'provisioning_file_not_found' });
       }
 
       const ctx: DbContext = { tenantId: target.tenantId };
       const extension = await extensions.findById(ctx, target.extensionId);
-      if (extension === undefined) throw ProblemError.notFound('No such file.');
+      if (extension === undefined)
+        throw ProblemError.notFound('No such file.', { code: 'provisioning_file_not_found' });
       const credential = await extensions.reveal(ctx, target.extensionId);
       const server = await primaryDomain(target.tenantId);
       if (server === undefined) {
         throw ProblemError.conflict(
           'This tenant has no domain yet, so there is nothing to register to.',
+          { code: 'tenant_domain_not_found' },
         );
       }
 

@@ -57,7 +57,10 @@ export function registerAuditRoutes(app: Server, repo: AuditRepo, access: OrgAcc
     async (request) => {
       const limit = request.query.limit === undefined ? undefined : Number(request.query.limit);
       if (limit !== undefined && limit > 500) {
-        throw ProblemError.badRequest('limit must be at most 500.');
+        throw ProblemError.badRequest('limit must be at most 500.', {
+          code: 'audit_limit_too_large',
+          params: { max: 500 },
+        });
       }
       // Own org, or (master, reseller) one beneath the actor: never anyone else's.
       const org = await access.resolve(request.context, request.params.orgId);

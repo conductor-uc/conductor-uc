@@ -37,6 +37,10 @@ export interface CompleteMessageInput {
 
 export class MessageNotFoundError extends Error {
   override readonly name = 'MessageNotFoundError';
+
+  constructor(readonly messageId: string) {
+    super(`No message with id '${messageId}'.`);
+  }
 }
 
 /** The message is already ready: its audio arrived before. */
@@ -206,7 +210,7 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>) {
           .select(COLUMNS)
           .where('id', '=', id)
           .executeTakeFirst();
-        if (existing === undefined) throw new MessageNotFoundError(`No message with id '${id}'.`);
+        if (existing === undefined) throw new MessageNotFoundError(id);
         if (existing.status === 'ready') {
           throw new MessageAlreadyReadyError(`Message '${id}' is already ready.`);
         }
@@ -259,7 +263,7 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>) {
         .executeTakeFirst();
       if (Number(result.numUpdatedRows) === 0) {
         const exists = await this.findById(ctx, id);
-        if (exists === undefined) throw new MessageNotFoundError(`No message with id '${id}'.`);
+        if (exists === undefined) throw new MessageNotFoundError(id);
       }
     },
 
@@ -289,7 +293,7 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>) {
           .select(COLUMNS)
           .where('id', '=', id)
           .executeTakeFirst();
-        if (existing === undefined) throw new MessageNotFoundError(`No message with id '${id}'.`);
+        if (existing === undefined) throw new MessageNotFoundError(id);
 
         const wasUnread = !existing.isRead;
         await trx
@@ -321,7 +325,7 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>) {
           .select(COLUMNS)
           .where('id', '=', id)
           .executeTakeFirst();
-        if (existing === undefined) throw new MessageNotFoundError(`No message with id '${id}'.`);
+        if (existing === undefined) throw new MessageNotFoundError(id);
 
         await trx.deleteFrom('messages').where('id', '=', id).execute();
 

@@ -68,10 +68,12 @@ void main() {
     expect(find.textContaining('Wait 15 minutes'), findsOneWidget);
   });
 
-  testWidgets('any other refusal shows the server’s own words', (tester) async {
+  testWidgets('a refusal the console has no words for shows the server’s', (
+    tester,
+  ) async {
     await pumpDialog(
       tester,
-      (_) async => throw refusal(409, 'mfa_not_enrolled'),
+      (_) async => throw refusal(409, 'some_new_refusal'),
     );
     await submit(tester, '123456');
     expect(find.text('Refused.'), findsOneWidget);

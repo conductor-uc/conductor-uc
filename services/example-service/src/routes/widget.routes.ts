@@ -65,7 +65,8 @@ export function registerWidgetRoutes(app: Server, repo: WidgetRepo): void {
     },
     async (request) => {
       const found = await repo.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound(`No widget with that id.`);
+      if (found === undefined)
+        throw ProblemError.notFound(`No widget with that id.`, { code: 'widget_not_found' });
       return found;
     },
   );
@@ -86,7 +87,10 @@ export function registerWidgetRoutes(app: Server, repo: WidgetRepo): void {
         name = normalizeWidgetName(request.body.name);
       } catch (error) {
         if (error instanceof InvalidWidgetNameError) {
-          throw ProblemError.badRequest(error.message);
+          throw ProblemError.badRequest(error.message, {
+            code: 'widget_name_invalid',
+            params: { name: error.input },
+          });
         }
         throw error;
       }

@@ -7,15 +7,17 @@ const NAME_PATTERN = /^[\p{L}\p{N} .,'-]{1,128}$/u;
 
 export class Invalid{{Entity}}NameError extends Error {
   override readonly name = 'Invalid{{Entity}}NameError';
+
+  constructor(readonly input: string) {
+    super(`'${input}' is not a valid name: 1-128 characters, letters, numbers, and . , ' - only.`);
+  }
 }
 
 /** Trims and validates a proposed name, throwing if it cannot be accepted. */
 export function normalize{{Entity}}Name(input: string): string {
   const trimmed = input.trim();
   if (!NAME_PATTERN.test(trimmed)) {
-    throw new Invalid{{Entity}}NameError(
-      `'${input}' is not a valid name: 1-128 characters, letters, numbers, and . , ' - only.`,
-    );
+    throw new Invalid{{Entity}}NameError(input);
   }
   return trimmed;
 }

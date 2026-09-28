@@ -53,7 +53,8 @@ export function registerAcmeChallengeRoute(app: Server, lookup: ChallengeLookup)
     },
     async (request, reply) => {
       const answer = await lookup(request.params.token);
-      if (answer === undefined) throw ProblemError.notFound('No such challenge.');
+      if (answer === undefined)
+        throw ProblemError.notFound('No such challenge.', { code: 'acme_challenge_not_found' });
       return reply
         .type('text/plain; charset=utf-8')
         .header('cache-control', 'no-store')

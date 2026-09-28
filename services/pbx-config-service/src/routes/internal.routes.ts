@@ -171,13 +171,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const credential = await extensions.findCredential({ tenantId }, id);
       if (credential === undefined) {
-        throw ProblemError.notFound('No extension with that id in that tenant.');
+        throw ProblemError.notFound('No extension with that id in that tenant.', {
+          code: 'extension_not_found',
+        });
       }
       return credential satisfies Static<typeof CredentialResponseSchema>;
     },
@@ -199,13 +203,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const did = await dids.findById({ tenantId }, id);
       if (did === undefined) {
-        throw ProblemError.notFound('No DID with that id in that tenant.');
+        throw ProblemError.notFound('No DID with that id in that tenant.', {
+          code: 'did_not_found',
+        });
       }
       return {
         id: did.id,
@@ -235,13 +243,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const location = await emergencyLocations.findById({ tenantId }, id);
       if (location === undefined) {
-        throw ProblemError.notFound('No emergency location with that id in that tenant.');
+        throw ProblemError.notFound('No emergency location with that id in that tenant.', {
+          code: 'emergency_location_not_found',
+        });
       }
       return location satisfies Static<typeof EmergencyLocationResponseSchema>;
     },
@@ -263,13 +275,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const asset = await mediaAssets.findById({ tenantId }, id);
       if (asset === undefined) {
-        throw ProblemError.notFound('No media asset with that id in that tenant.');
+        throw ProblemError.notFound('No media asset with that id in that tenant.', {
+          code: 'media_asset_not_found',
+        });
       }
       return {
         id: asset.id,
@@ -307,7 +323,9 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
@@ -323,7 +341,8 @@ export function registerInternalRoutes(
           variant16kKey: asset.variant16kKey,
         } satisfies Static<typeof MediaAssetInternalResponseSchema>;
       } catch (error) {
-        if (error instanceof MediaAssetNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MediaAssetNotFoundError)
+          throw ProblemError.notFound(error.message, { code: 'media_asset_not_found' });
         throw error;
       }
     },
@@ -343,7 +362,9 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
@@ -359,7 +380,8 @@ export function registerInternalRoutes(
           variant16kKey: asset.variant16kKey,
         } satisfies Static<typeof MediaAssetInternalResponseSchema>;
       } catch (error) {
-        if (error instanceof MediaAssetNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MediaAssetNotFoundError)
+          throw ProblemError.notFound(error.message, { code: 'media_asset_not_found' });
         throw error;
       }
     },
@@ -379,13 +401,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const ringGroup = await ringGroups.findById({ tenantId }, id);
       if (ringGroup === undefined) {
-        throw ProblemError.notFound('No ring group with that id in that tenant.');
+        throw ProblemError.notFound('No ring group with that id in that tenant.', {
+          code: 'ring_group_not_found',
+        });
       }
       return {
         id: ringGroup.id,
@@ -413,13 +439,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const queue = await queues.findById({ tenantId }, id);
       if (queue === undefined) {
-        throw ProblemError.notFound('No queue with that id in that tenant.');
+        throw ProblemError.notFound('No queue with that id in that tenant.', {
+          code: 'queue_not_found',
+        });
       }
       return {
         id: queue.id,
@@ -445,13 +475,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const agent = await agents.findById({ tenantId }, id);
       if (agent === undefined) {
-        throw ProblemError.notFound('No agent with that id in that tenant.');
+        throw ProblemError.notFound('No agent with that id in that tenant.', {
+          code: 'agent_not_found',
+        });
       }
       return {
         id: agent.id,
@@ -484,7 +518,9 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, queueId } = request.params;
@@ -519,13 +555,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const lot = await parkingLots.findById({ tenantId }, id);
       if (lot === undefined) {
-        throw ProblemError.notFound('No parking lot with that id in that tenant.');
+        throw ProblemError.notFound('No parking lot with that id in that tenant.', {
+          code: 'parking_lot_not_found',
+        });
       }
       return {
         id: lot.id,
@@ -556,13 +596,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const room = await conferenceRooms.findById({ tenantId }, id);
       if (room === undefined) {
-        throw ProblemError.notFound('No conference room with that id in that tenant.');
+        throw ProblemError.notFound('No conference room with that id in that tenant.', {
+          code: 'conference_room_not_found',
+        });
       }
       return {
         id: room.id,
@@ -597,7 +641,9 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
@@ -606,7 +652,7 @@ export function registerInternalRoutes(
         return { valid };
       } catch (error) {
         if (error instanceof ConferenceRoomNotFoundError)
-          throw ProblemError.notFound(error.message);
+          throw ProblemError.notFound(error.message, { code: 'conference_room_not_found' });
         throw error;
       }
     },

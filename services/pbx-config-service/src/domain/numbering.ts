@@ -26,6 +26,13 @@ export class InvalidExtensionNumberError extends Error {
 
 export class ExtensionNumberTakenError extends Error {
   override readonly name = 'ExtensionNumberTakenError';
+
+  constructor(
+    message: string,
+    readonly params: { readonly number: string },
+  ) {
+    super(message);
+  }
 }
 
 /** Validates an extension number's shape: 2-6 digits. */
@@ -41,6 +48,8 @@ export function validateExtensionNumber(number: string): string {
 /** Checked in `repo/extension.repo.ts` against a real uniqueness query. */
 export function assertNumberAvailable(number: string, taken: boolean): void {
   if (taken) {
-    throw new ExtensionNumberTakenError(`Extension number '${number}' is already in use.`);
+    throw new ExtensionNumberTakenError(`Extension number '${number}' is already in use.`, {
+      number,
+    });
   }
 }

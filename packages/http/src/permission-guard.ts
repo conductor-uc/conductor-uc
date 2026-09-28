@@ -114,7 +114,7 @@ export function selfActor(request: {
 }): SelfActor {
   const { actorId, actorType, orgId, orgType } = request.context;
   if (actorId === undefined || actorType === undefined || orgId === undefined) {
-    throw ProblemError.unauthorized('Sign in to continue.');
+    throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
   }
   if (actorType !== 'user' || orgType !== 'tenant' || orgId !== request.params.tenantId) {
     throw ProblemError.forbidden('This is only available to a person in their own organization.', {
@@ -167,7 +167,9 @@ export function createRemotePermissionResolver(
         { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
       );
     } catch {
-      throw ProblemError.unavailable('Could not check your permissions. Try again shortly.');
+      throw ProblemError.unavailable('Could not check your permissions. Try again shortly.', {
+        code: 'permission_check_unavailable',
+      });
     }
     let permissions: ReadonlySet<string>;
     if (response.status === 404) {
@@ -176,7 +178,9 @@ export function createRemotePermissionResolver(
       const body = (await response.json()) as { permissions: string[] };
       permissions = new Set(body.permissions);
     } else {
-      throw ProblemError.unavailable('Could not check your permissions. Try again shortly.');
+      throw ProblemError.unavailable('Could not check your permissions. Try again shortly.', {
+        code: 'permission_check_unavailable',
+      });
     }
     // Only what a person holds is remembered. "Holds nothing" is asked again
     // every time, so a role given a moment ago works at once; taking a role

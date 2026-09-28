@@ -18,7 +18,9 @@ export async function requireObserver(
 ): Promise<void> {
   const { actorId, actorType, orgId, orgType } = context;
   if (orgType !== 'master' || actorId === undefined || orgId === undefined) {
-    throw ProblemError.forbidden('Only the master can see the platform.');
+    throw ProblemError.forbidden('Only the master can see the platform.', {
+      code: 'platform_master_only',
+    });
   }
   if (
     actorType === 'user' &&

@@ -62,8 +62,12 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidOutboundRouteError) return ProblemError.badRequest(error.message);
-  if (error instanceof OutboundRouteNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof InvalidOutboundRouteError) {
+    return ProblemError.badRequest(error.message, { code: 'outbound_route_invalid' });
+  }
+  if (error instanceof OutboundRouteNotFoundError) {
+    return ProblemError.notFound(error.message, { code: 'outbound_route_not_found' });
+  }
   throw error;
 }
 
@@ -95,7 +99,10 @@ export function registerOutboundRouteRoutes(app: Server, routes: OutboundRouteRe
     },
     async (request) => {
       const found = await routes.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No outbound route with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No outbound route with that id.', {
+          code: 'outbound_route_not_found',
+        });
       return toResponse(found);
     },
   );

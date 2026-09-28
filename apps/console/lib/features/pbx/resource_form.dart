@@ -34,6 +34,10 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
   final _values = <String, Object?>{};
   final _controllers = <String, TextEditingController>{};
   String? _error;
+
+  /// What the service said about each field on the last save (S9-02), shown
+  /// under the field until it is edited.
+  Map<String, String> _serverErrors = const {};
   bool _busy = false;
 
   bool get _editing => widget.row != null;
@@ -134,6 +138,7 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
     setState(() {
       _busy = true;
       _error = null;
+      _serverErrors = const {};
     });
     try {
       final key = widget.def.key;
@@ -148,7 +153,16 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
       }
       if (mounted) Navigator.of(context).pop(result);
     } catch (e) {
-      if (mounted) setState(() => _error = problemMessage(e));
+      if (!mounted) return;
+      final keys = {for (final f in _fields) f.key};
+      final byField = {
+        for (final entry in problemFieldMessages(e).entries)
+          if (keys.contains(entry.key)) entry.key: entry.value,
+      };
+      setState(() {
+        _serverErrors = byField;
+        _error = problemMessage(e, shownFields: byField.keys.toSet());
+      });
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -200,6 +214,20 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
     );
   }
 
+  /// The field's decoration, carrying what the service said about it.
+  InputDecoration _decoration(Field f, String label) => InputDecoration(
+    labelText: label,
+    helperText: f.help,
+    errorText: _serverErrors[f.key],
+  );
+
+  /// Forgets what the service said about [f] once it is changed.
+  void _edited(Field f) {
+    if (_serverErrors.containsKey(f.key)) {
+      setState(() => _serverErrors = {..._serverErrors}..remove(f.key));
+    }
+  }
+
   String? _requiredMessage(Field f, bool empty) =>
       f.required && empty ? 'Required' : null;
 
@@ -210,7 +238,8 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
         return TextFormField(
           controller: _controllers[f.key],
           obscureText: f.secret,
-          decoration: InputDecoration(labelText: label, helperText: f.help),
+          decoration: _decoration(f, label),
+          onChanged: (_) => _edited(f),
           validator: (v) => f.allowEmpty
               ? null
               : _requiredMessage(f, (v ?? '').trim().isEmpty),
@@ -218,7 +247,8 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
       case FieldKind.textList:
         return TextFormField(
           controller: _controllers[f.key],
-          decoration: InputDecoration(labelText: label, helperText: f.help),
+          decoration: _decoration(f, label),
+          onChanged: (_) => _edited(f),
           validator: (v) => _requiredMessage(
             f,
             !(v ?? '').split(',').any((w) => w.trim().isNotEmpty),
@@ -228,7 +258,8 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
         return TextFormField(
           controller: _controllers[f.key],
           keyboardType: TextInputType.number,
-          decoration: InputDecoration(labelText: label, helperText: f.help),
+          decoration: _decoration(f, label),
+          onChanged: (_) => _edited(f),
           validator: (v) {
             final text = (v ?? '').trim();
             if (text.isEmpty) return _requiredMessage(f, true);
@@ -243,8 +274,14 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
         return SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(f.label),
+          subtitle: _serverErrors[f.key] == null
+              ? null
+              : ErrorText(_serverErrors[f.key]!),
           value: _values[f.key] as bool,
-          onChanged: (v) => setState(() => _values[f.key] = v),
+          onChanged: (v) {
+            _edited(f);
+            setState(() => _values[f.key] = v);
+          },
         );
       case FieldKind.choice:
         return _dropdown(
@@ -322,8 +359,9 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
       validator: (v) => check(v ?? const []),
       builder: (state) => editor(initial, (next) {
         _values[f.key] = next;
+        _edited(f);
         state.didChange(next);
-      }, state.errorText),
+      }, state.errorText ?? _serverErrors[f.key]),
     );
   }
 
@@ -339,14 +377,17 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
       key: key,
       initialValue: options.any((o) => o.$1 == current) ? current : null,
       isExpanded: true,
-      decoration: InputDecoration(labelText: label, helperText: f.help),
+      decoration: _decoration(f, label),
       items: [
         if (!f.required)
           const DropdownMenuItem<String?>(value: null, child: Text('None')),
         for (final (value, text) in options)
           DropdownMenuItem<String?>(value: value, child: Text(text)),
       ],
-      onChanged: onChanged,
+      onChanged: (v) {
+        _edited(f);
+        onChanged(v);
+      },
       validator: (v) => _requiredMessage(f, v == null),
     );
   }
@@ -388,7 +429,7 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
         decoration: InputDecoration(
           labelText: label,
           helperText: f.help,
-          errorText: state.errorText,
+          errorText: state.errorText ?? _serverErrors[f.key],
         ),
         child: rows.when(
           loading: () => const LinearProgressIndicator(),
@@ -409,6 +450,7 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
                       on
                           ? selected.add('${r['id']}')
                           : selected.remove('${r['id']}');
+                      _edited(f);
                       state.didChange(selected);
                     }),
                   ),

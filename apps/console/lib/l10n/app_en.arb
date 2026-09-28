@@ -507,5 +507,282 @@
         "type": "int"
       }
     }
+  },
+  "problemFieldLine": "{field}: {message}",
+  "@problemFieldLine": {
+    "description": "One refused field in an error message. {field} names the field, {message} says what is wrong with it.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldRequired": "This is required.",
+  "@fieldRequired": {
+    "description": "A required field was left empty."
+  },
+  "fieldMinLength": "Use at least {limit, plural, =1{1 character} other{{limit} characters}}.",
+  "@fieldMinLength": {
+    "description": "Text is too short.",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldMaxLength": "Use at most {limit, plural, =1{1 character} other{{limit} characters}}.",
+  "@fieldMaxLength": {
+    "description": "Text is too long.",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldMinimum": "Use {limit} or more.",
+  "@fieldMinimum": {
+    "description": "A number is too small.",
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldMaximum": "Use {limit} or less.",
+  "@fieldMaximum": {
+    "description": "A number is too large.",
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldExclusiveMinimum": "Use more than {limit}.",
+  "@fieldExclusiveMinimum": {
+    "description": "A number must be larger than a limit.",
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldExclusiveMaximum": "Use less than {limit}.",
+  "@fieldExclusiveMaximum": {
+    "description": "A number must be smaller than a limit.",
+    "placeholders": {
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldMultipleOf": "Use a multiple of {step}.",
+  "@fieldMultipleOf": {
+    "description": "A number must be a multiple of a step.",
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldPattern": "This isn't in the expected format.",
+  "@fieldPattern": {
+    "description": "Text does not match the required pattern."
+  },
+  "fieldFormatEmail": "Enter an email address, such as name@example.com.",
+  "@fieldFormatEmail": {
+    "description": "An email field holds something else."
+  },
+  "fieldFormatUrl": "Enter a web address, such as https://example.com.",
+  "@fieldFormatUrl": {
+    "description": "A web address field holds something else."
+  },
+  "fieldFormatHostname": "Enter a host name, such as sip.example.com.",
+  "@fieldFormatHostname": {
+    "description": "A host name field holds something else."
+  },
+  "fieldFormatIpv4": "Enter an IPv4 address, such as 203.0.113.10.",
+  "@fieldFormatIpv4": {
+    "description": "An IPv4 address field holds something else."
+  },
+  "fieldFormatIpv6": "Enter an IPv6 address.",
+  "@fieldFormatIpv6": {
+    "description": "An IPv6 address field holds something else."
+  },
+  "fieldFormatDate": "Enter a date.",
+  "@fieldFormatDate": {
+    "description": "A date field holds something else."
+  },
+  "fieldFormatTime": "Enter a time.",
+  "@fieldFormatTime": {
+    "description": "A time field holds something else."
+  },
+  "fieldFormatDateTime": "Enter a date and time.",
+  "@fieldFormatDateTime": {
+    "description": "A date-and-time field holds something else."
+  },
+  "fieldOneOf": "Choose one of the options.",
+  "@fieldOneOf": {
+    "description": "A value is not one of the allowed options."
+  },
+  "fieldType": "{type, select, integer{Enter a whole number.} number{Enter a number.} boolean{Choose yes or no.} array{Choose one or more.} object{This isn't filled in correctly.} other{Enter text.}}",
+  "@fieldType": {
+    "description": "A value is the wrong kind. {type} is the kind expected.",
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "fieldMinItems": "Choose at least {limit, plural, =1{1 item} other{{limit} items}}.",
+  "@fieldMinItems": {
+    "description": "A list has too few items.",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldMaxItems": "Choose at most {limit, plural, =1{1 item} other{{limit} items}}.",
+  "@fieldMaxItems": {
+    "description": "A list has too many items.",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "fieldUniqueItems": "Each item can appear only once.",
+  "@fieldUniqueItems": {
+    "description": "A list has duplicates."
+  },
+  "fieldUnknown": "This field isn't part of this form.",
+  "@fieldUnknown": {
+    "description": "The server refused a field it does not know."
+  },
+  "problemValidationFailed": "Some details need fixing.",
+  "@problemValidationFailed": {
+    "description": "The request had fields that were refused; they are listed or highlighted."
+  },
+  "problemRouteNotFound": "This isn't available on this server.",
+  "@problemRouteNotFound": {
+    "description": "The server has no such address. Usually means the console and server versions differ."
+  },
+  "problemInternalError": "Something went wrong on the server. Try again, and if it keeps happening, contact support.",
+  "@problemInternalError": {
+    "description": "The server failed while handling the request."
+  },
+  "problemSignInRequired": "Sign in to continue.",
+  "@problemSignInRequired": {
+    "description": "The session has ended or the person is not signed in."
+  },
+  "problemPermissionCheckUnavailable": "We couldn't check your permissions just now. Try again shortly.",
+  "@problemPermissionCheckUnavailable": {
+    "description": "The permissions service did not answer."
+  },
+  "problemStepUpRequired": "Enter the current code from your authenticator app to confirm.",
+  "@problemStepUpRequired": {
+    "description": "A sensitive action needs the person's own two-step verification code."
+  },
+  "problemStepUpInvalid": "That code did not work, or it was already used. Wait for the next code in your authenticator app and try again.",
+  "@problemStepUpInvalid": {
+    "description": "The two-step code given to confirm an action was wrong or reused."
+  },
+  "problemStepUpLocked": "Too many wrong codes. Wait 15 minutes, then try again.",
+  "@problemStepUpLocked": {
+    "description": "Confirming actions is locked after repeated wrong codes."
+  },
+  "problemStepUpNotEnrolled": "This needs a code from your own authenticator app, and your account has no two-step verification set up.",
+  "@problemStepUpNotEnrolled": {
+    "description": "The person has no authenticator app to confirm with."
+  },
+  "problemOrgRequired": "Enter your organization ID to continue.",
+  "@problemOrgRequired": {
+    "description": "The web address does not say which organization this is."
+  },
+  "problemCannotResetSelf": "You can't reset your own two-step verification. Ask another administrator.",
+  "@problemCannotResetSelf": {
+    "description": "An administrator tried to reset their own authenticator."
+  },
+  "problemMfaNotEnrolled": "That person hasn't set up two-step verification.",
+  "@problemMfaNotEnrolled": {
+    "description": "Resetting two-step verification for someone who has none."
+  },
+  "problemAuthenticationRequired": "Your session has ended. Sign in again.",
+  "@problemAuthenticationRequired": {
+    "description": "The request had no sign-in."
+  },
+  "problemAccessTokenInvalid": "Your session has ended. Sign in again.",
+  "@problemAccessTokenInvalid": {
+    "description": "The sign-in expired or is no longer valid."
+  },
+  "problemUpstreamUnavailable": "That part of the system isn't answering right now. Try again in a moment.",
+  "@problemUpstreamUnavailable": {
+    "description": "A back-end service did not respond."
+  },
+  "problemInsufficientPermission": "You don't have permission to do that.",
+  "@problemInsufficientPermission": {
+    "description": "The person's role does not allow the action."
+  },
+  "problemPlatformOperatorOnly": "Only the platform operator can do that.",
+  "@problemPlatformOperatorOnly": {
+    "description": "A platform-wide setting or page was used by someone else."
+  },
+  "problemExtensionNumberTaken": "Extension {number} is already in use. Choose another number.",
+  "@problemExtensionNumberTaken": {
+    "description": "An extension with that number exists. {number} is the extension number.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "problemExtensionUserTaken": "That person already has an extension.",
+  "@problemExtensionUserTaken": {
+    "description": "A person can be linked to only one extension."
+  },
+  "problemDidNumberTaken": "That phone number has already been added.",
+  "@problemDidNumberTaken": {
+    "description": "The outside phone number exists already."
+  },
+  "problemDeviceMacTaken": "A phone with that MAC address has already been added.",
+  "@problemDeviceMacTaken": {
+    "description": "The device's hardware address is already registered. A MAC address is printed on a label on the phone."
+  },
+  "problemConferenceRoomNumberTaken": "Room number {number} is already in use. Choose another number.",
+  "@problemConferenceRoomNumberTaken": {
+    "description": "A conference room with that number exists. {number} is the room number.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "problemParkingLotSlotsOverlap": "Those slots overlap another parking lot's. Choose a different range.",
+  "@problemParkingLotSlotsOverlap": {
+    "description": "Parking slot numbers must not overlap between parking lots."
+  },
+  "problemExtensionAlreadyAgent": "That extension is already a queue agent.",
+  "@problemExtensionAlreadyAgent": {
+    "description": "The extension has already been added as an agent."
+  },
+  "problemAgentAlreadyTiered": "That agent is already in this queue.",
+  "@problemAgentAlreadyTiered": {
+    "description": "The agent was already added to the queue."
+  },
+  "problemRoleNameTaken": "A role named {name} already exists. Choose another name.",
+  "@problemRoleNameTaken": {
+    "description": "A custom role with that name exists. {name} is the role name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "problemEmailTaken": "That email already has an account here.",
+  "@problemEmailTaken": {
+    "description": "An account with that email exists in this organization."
   }
 }

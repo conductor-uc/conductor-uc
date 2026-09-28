@@ -156,7 +156,10 @@ describe.skipIf(skipReason !== undefined)('pbx-config-service HTTP routes', () =
       });
 
       expect(response.statusCode).toBe(409);
-      expect(response.json()).toMatchObject({ code: 'extension_number_taken' });
+      expect(response.json()).toMatchObject({
+        code: 'extension_number_taken',
+        params: { number: '101' },
+      });
     });
 
     it('400s a malformed number', async () => {

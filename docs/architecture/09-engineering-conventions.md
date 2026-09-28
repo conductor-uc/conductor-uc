@@ -31,6 +31,9 @@ services/<name>/
 - Tenant resources nest under `/v1/tenants/{tenantId}/…`. Reseller resources nest under `/v1/resellers/{resellerId}/…`.
 - Custom actions use the `:verb` suffix (`POST /v1/tenants/{t}:suspend`).
 - Errors use RFC 9457 `application/problem+json` with a stable `type` URI path (not a product domain: `/problems/validation`), a `code`, and field `errors[]`.
+  - **Every problem names its `code`** (S9-02, D-018): `snake_case` and specific to the case (`extension_number_taken`, never `conflict`). `@cuc/http`'s types require it. The code is an API contract: clients translate and branch on it, and `detail` is English, a fallback for a code a client doesn't know. Values the message names go in `params` (`{ number: '101' }`), never secrets.
+  - **Field errors say which rule failed:** a schema failure carries the JSON Schema `keyword` and its `params` (`minLength`, `{ limit: 12 }`), and a service's own field check carries a `code`. Nothing the caller sent is echoed back.
+  - `apps/console/api/problem-codes.json` lists every code in the services' source (`apps/console/tool/dump-problem-codes.mjs`); CI checks it is current, and the console's tests check that every code it translates is in it.
 - Pagination is cursor-based: `?limit=&cursor=`, and the response carries `nextCursor`.
 - Optimistic concurrency: `ETag` holds the row version, and `If-Match` is required on `PATCH`/`PUT`.
 - `Idempotency-Key` is supported on all `POST` creates (stored for 24 h in Redis).

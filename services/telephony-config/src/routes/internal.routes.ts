@@ -90,13 +90,17 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const { tenantId, id } = request.params;
       const trunk = await readModel.findTrunkById(id);
       if (trunk === undefined || trunk.tenantId !== tenantId) {
-        throw ProblemError.notFound('No trunk with that id in that tenant.');
+        throw ProblemError.notFound('No trunk with that id in that tenant.', {
+          code: 'trunk_not_found',
+        });
       }
 
       const needsRegistration = trunk.authMode === 'register' || trunk.authMode === 'both';

@@ -449,13 +449,10 @@ function toProblem(error: unknown): ProblemError {
       : ProblemError.badRequest(error.message, { code: 'org_required' });
   }
   if (error instanceof OrgClientError) {
-    return new ProblemError(
-      503,
-      '/problems/unavailable',
-      'Service unavailable',
-      'org_lookup_unavailable',
-      { detail: 'Could not work out which organization this is. Try again shortly.' },
-    );
+    return new ProblemError(503, '/problems/unavailable', 'Service unavailable', {
+      code: 'org_lookup_unavailable',
+      detail: 'Could not work out which organization this is. Try again shortly.',
+    });
   }
   if (error instanceof RefreshTokenReuseError) {
     return ProblemError.unauthorized(error.message, { code: 'refresh_token_reused' });

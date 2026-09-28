@@ -51,7 +51,7 @@ interface SignedRequest {
 function person(request: SignedRequest): { id: string; orgId: string } {
   const { actorId, actorType, orgId } = request.context;
   if (actorId === undefined || orgId === undefined) {
-    throw ProblemError.unauthorized('Sign in to continue.');
+    throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
   }
   if (actorType !== 'user') {
     throw ProblemError.forbidden('Only a signed-in person can change a live call’s recording.', {
@@ -127,7 +127,9 @@ export function registerRecordingControlRoutes(
         extension = await userExtension(me.tenantId, me.userId);
       } catch (error) {
         if (error instanceof UpstreamError) {
-          throw ProblemError.unavailable('Could not look up your extension. Try again shortly.');
+          throw ProblemError.unavailable('Could not look up your extension. Try again shortly.', {
+            code: 'extension_lookup_unavailable',
+          });
         }
         throw error;
       }

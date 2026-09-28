@@ -11,7 +11,10 @@ export const LimitQuerySchema = Type.String({ pattern: '^[0-9]{1,3}$' });
 export function parseLimit(value: string): number {
   const limit = Number(value);
   if (limit < 1 || limit > 200) {
-    throw ProblemError.badRequest('limit must be between 1 and 200.', { code: 'invalid_limit' });
+    throw ProblemError.badRequest('limit must be between 1 and 200.', {
+      code: 'invalid_limit',
+      params: { min: 1, max: 200 },
+    });
   }
   return limit;
 }

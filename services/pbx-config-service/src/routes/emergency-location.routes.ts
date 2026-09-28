@@ -67,8 +67,10 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidEmergencyLocationError) return ProblemError.badRequest(error.message);
-  if (error instanceof EmergencyLocationNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof InvalidEmergencyLocationError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_emergency_location' });
+  if (error instanceof EmergencyLocationNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'emergency_location_not_found' });
   if (error instanceof EmergencyLocationInUseError) {
     return ProblemError.conflict(error.message, { code: 'emergency_location_in_use' });
   }
@@ -107,7 +109,10 @@ export function registerEmergencyLocationRoutes(
     },
     async (request) => {
       const found = await locations.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No emergency location with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No emergency location with that id.', {
+          code: 'emergency_location_not_found',
+        });
       return toResponse(found);
     },
   );

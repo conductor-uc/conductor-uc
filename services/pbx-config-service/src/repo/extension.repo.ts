@@ -311,7 +311,9 @@ export function createExtensionRepo(
       } catch (error) {
         if (isDuplicateKeyError(error)) {
           if (userId !== null && isUserLinkClash(error)) throw new ExtensionUserTakenError(userId);
-          throw new ExtensionNumberTakenError(number);
+          throw new ExtensionNumberTakenError(`Extension number '${number}' is already in use.`, {
+            number,
+          });
         }
         throw error;
       }
@@ -421,7 +423,9 @@ export function createExtensionRepo(
           if (merged.user_id !== null && isUserLinkClash(error)) {
             throw new ExtensionUserTakenError(merged.user_id);
           }
-          throw new ExtensionNumberTakenError(number);
+          throw new ExtensionNumberTakenError(`Extension number '${number}' is already in use.`, {
+            number,
+          });
         }
         throw error;
       }

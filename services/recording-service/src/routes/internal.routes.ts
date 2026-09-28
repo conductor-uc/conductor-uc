@@ -182,14 +182,18 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
   function requireToken(request: { headers: { authorization?: string | undefined } }): void {
     const presented = bearerToken(request.headers.authorization);
     if (presented === undefined || !secretEquals(deps.internalServiceToken, presented)) {
-      throw ProblemError.unauthorized('A valid internal service token is required.');
+      throw ProblemError.unauthorized('A valid internal service token is required.', {
+        code: 'internal_token_invalid',
+      });
     }
   }
 
   async function findForUpload(id: string): Promise<Recording> {
-    if (!isRecordingId(id)) throw ProblemError.notFound('No recording with that id.');
+    if (!isRecordingId(id))
+      throw ProblemError.notFound('No recording with that id.', { code: 'recording_not_found' });
     const found = await recordings.findByIdForUpload({}, id);
-    if (found === undefined) throw ProblemError.notFound('No recording with that id.');
+    if (found === undefined)
+      throw ProblemError.notFound('No recording with that id.', { code: 'recording_not_found' });
     return found;
   }
 
@@ -240,7 +244,9 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
       const { tenantId, code, action, callUuid, recordingId, nodeId, context, actor } =
         request.body;
       if ((code === undefined) === (action === undefined)) {
-        throw ProblemError.badRequest('Give exactly one of code and action.');
+        throw ProblemError.badRequest('Give exactly one of code and action.', {
+          code: 'recording_control_ambiguous',
+        });
       }
       const ctx = { tenantId };
       const call = {
@@ -482,7 +488,9 @@ export function registerInternalRoutes(app: Server, deps: InternalRoutesDeps): v
           retentionDate: done.retentionDate === null ? null : done.retentionDate.toISOString(),
         };
       } catch (error) {
-        if (error instanceof RecordingNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof RecordingNotFoundError) {
+          throw ProblemError.notFound(error.message, { code: 'recording_not_found' });
+        }
         if (error instanceof RecordingStateError) {
           throw ProblemError.conflict(error.message, { code: 'invalid_state' });
         }

@@ -72,15 +72,10 @@ export async function registerRealtimeRoute(
       done();
     },
     handler: () => {
-      throw new ProblemError(
-        426,
-        '/problems/upgrade-required',
-        'Upgrade required',
-        'upgrade_required',
-        {
-          detail: 'This endpoint only accepts WebSocket connections.',
-        },
-      );
+      throw new ProblemError(426, '/problems/upgrade-required', 'Upgrade required', {
+        code: 'upgrade_required',
+        detail: 'This endpoint only accepts WebSocket connections.',
+      });
     },
     wsHandler: (socket, request) => {
       options.hub.accept(socket, {

@@ -37,8 +37,12 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidEmergencyRouteError) return ProblemError.badRequest(error.message);
-  if (error instanceof EmergencyRouteNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof InvalidEmergencyRouteError) {
+    return ProblemError.badRequest(error.message, { code: 'emergency_route_invalid' });
+  }
+  if (error instanceof EmergencyRouteNotFoundError) {
+    return ProblemError.notFound(error.message, { code: 'emergency_route_not_found' });
+  }
   throw error;
 }
 
@@ -64,7 +68,10 @@ export function registerEmergencyRouteRoutes(app: Server, routes: EmergencyRoute
     },
     async (request) => {
       const found = await routes.find(ctxFor(request));
-      if (found === undefined) throw ProblemError.notFound('No emergency route for this tenant.');
+      if (found === undefined)
+        throw ProblemError.notFound('No emergency route for this tenant.', {
+          code: 'emergency_route_not_found',
+        });
       return toResponse(found);
     },
   );

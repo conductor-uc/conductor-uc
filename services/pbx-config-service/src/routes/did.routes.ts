@@ -71,7 +71,8 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidE164Error) return ProblemError.badRequest(error.message);
+  if (error instanceof InvalidE164Error)
+    return ProblemError.badRequest(error.message, { code: 'invalid_did_number' });
   if (error instanceof DidNumberTakenError) {
     return ProblemError.conflict(error.message, { code: 'did_number_taken' });
   }
@@ -81,7 +82,8 @@ function toProblem(error: unknown): ProblemError {
   if (error instanceof ExtensionDestinationNotFoundError) {
     return ProblemError.badRequest(error.message, { code: 'destination_not_found' });
   }
-  if (error instanceof DidNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof DidNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'did_not_found' });
   throw error;
 }
 
@@ -113,7 +115,8 @@ export function registerDidRoutes(app: Server, dids: DidRepo): void {
     },
     async (request) => {
       const found = await dids.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No DID with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No DID with that id.', { code: 'did_not_found' });
       return toResponse(found);
     },
   );

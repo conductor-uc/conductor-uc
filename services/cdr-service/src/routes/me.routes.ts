@@ -78,7 +78,9 @@ export function registerMeRoutes(
         extension = await userExtension(me.tenantId, me.userId);
       } catch (error) {
         if (error instanceof PbxClientError) {
-          throw ProblemError.unavailable('Could not look up your extension. Try again shortly.');
+          throw ProblemError.unavailable('Could not look up your extension. Try again shortly.', {
+            code: 'extension_lookup_unavailable',
+          });
         }
         throw error;
       }

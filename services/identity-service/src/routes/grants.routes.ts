@@ -102,7 +102,7 @@ export function registerGrantRoutes(
       const orgId = await managedOrg(request);
       const { actorId, orgId: actorOrgId } = request.context;
       if (actorId === undefined || actorOrgId === undefined) {
-        throw ProblemError.unauthorized('Sign in to manage grants.');
+        throw ProblemError.unauthorized('Sign in to manage grants.', { code: 'sign_in_required' });
       }
       // A grant is a way to give someone access: never to yourself, and never
       // something you do not hold (the master holds every permission).
@@ -114,6 +114,7 @@ export function registerGrantRoutes(
       if (!isKnownPermission(request.body.permission)) {
         throw ProblemError.badRequest(`'${request.body.permission}' is not a permission.`, {
           code: 'unknown_permission',
+          params: { permission: request.body.permission },
         });
       }
       if (
@@ -146,7 +147,10 @@ export function registerGrantRoutes(
         await grants.revoke(await managedOrg(request), request.params.grantId);
       } catch (error) {
         if (error instanceof GrantNotFoundError) {
-          throw ProblemError.notFound(error.message);
+          throw ProblemError.notFound(error.message, {
+            code: 'grant_not_found',
+            params: { grantId: request.params.grantId },
+          });
         }
         throw error;
       }

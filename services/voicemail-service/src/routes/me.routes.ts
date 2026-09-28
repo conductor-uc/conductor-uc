@@ -15,6 +15,7 @@ import { InvalidEmailSettingsError, InvalidPinError } from '../domain/mailbox.js
 import { PbxClientError, type UserExtensionLookup } from '../pbx-client.js';
 import { MailboxNotFoundError, type Mailbox, type MailboxRepo } from '../repo/mailbox.repo.js';
 import { MessageNotFoundError, type MessageRepo } from '../repo/message.repo.js';
+import { emailSettingsInvalid, mailboxNotFound, messageNotFound, pinInvalid } from './problems.js';
 
 const TenantParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
 const MessageParamsSchema = Type.Object({
@@ -102,7 +103,9 @@ export function registerMeRoutes(
       extension = await userExtension(me.tenantId, me.userId);
     } catch (error) {
       if (error instanceof PbxClientError) {
-        throw ProblemError.unavailable('Could not look up your extension. Try again shortly.');
+        throw ProblemError.unavailable('Could not look up your extension. Try again shortly.', {
+          code: 'extension_lookup_unavailable',
+        });
       }
       throw error;
     }
@@ -128,7 +131,7 @@ export function registerMeRoutes(
   async function myMessage(ctx: DbContext, mailbox: Mailbox, messageId: string) {
     const message = await messages.findById(ctx, messageId);
     if (message?.mailboxId !== mailbox.id) {
-      throw ProblemError.notFound('No message with that id in your mailbox.');
+      throw messageNotFound('No message with that id in your mailbox.');
     }
     return message;
   }
@@ -205,7 +208,7 @@ export function registerMeRoutes(
       const { ctx, mailbox, userId } = await mine(request);
       const message = await myMessage(ctx, mailbox, request.params.messageId);
       if (message.status !== 'ready') {
-        throw ProblemError.notFound('No message with that id in your mailbox.');
+        throw messageNotFound('No message with that id in your mailbox.');
       }
       const url = await storage.forTenant(request.params.tenantId).presignGet(message.objectKey);
       await audit(request, request.params.tenantId, userId, 'voicemail.message.played', message.id);
@@ -222,7 +225,7 @@ export function registerMeRoutes(
       try {
         await messages.markRead(ctx, message.id);
       } catch (error) {
-        if (error instanceof MessageNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MessageNotFoundError) throw messageNotFound(error);
         throw error;
       }
       await audit(request, request.params.tenantId, userId, 'voicemail.message.read', message.id);
@@ -239,7 +242,7 @@ export function registerMeRoutes(
       try {
         await messages.remove(ctx, message.id);
       } catch (error) {
-        if (error instanceof MessageNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof MessageNotFoundError) throw messageNotFound(error);
         throw error;
       }
       await audit(
@@ -262,8 +265,8 @@ export function registerMeRoutes(
       try {
         await mailboxes.resetPin(ctx, mailbox.id, request.body.pin);
       } catch (error) {
-        if (error instanceof InvalidPinError) throw ProblemError.badRequest(error.message);
-        if (error instanceof MailboxNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof InvalidPinError) throw pinInvalid(error);
+        if (error instanceof MailboxNotFoundError) throw mailboxNotFound(error);
         throw error;
       }
       await audit(request, request.params.tenantId, userId, 'voicemail.pin.reset', mailbox.id);
@@ -287,9 +290,8 @@ export function registerMeRoutes(
       try {
         updated = await mailboxes.updateEmailSettings(ctx, mailbox.id, request.body);
       } catch (error) {
-        if (error instanceof InvalidEmailSettingsError)
-          throw ProblemError.badRequest(error.message);
-        if (error instanceof MailboxNotFoundError) throw ProblemError.notFound(error.message);
+        if (error instanceof InvalidEmailSettingsError) throw emailSettingsInvalid(error);
+        if (error instanceof MailboxNotFoundError) throw mailboxNotFound(error);
         throw error;
       }
       // The address is personal data: the audit record names the mailbox, not the address.

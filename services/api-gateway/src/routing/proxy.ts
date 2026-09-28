@@ -77,7 +77,9 @@ export function registerProxy(app: Server, options: ProxyOptions): void {
       const path = new URL(request.url, 'http://internal').pathname;
       const route = resolveRoute(options.table, path);
       if (route === undefined) {
-        throw ProblemError.notFound('No service is configured for this path.');
+        throw ProblemError.notFound('No service is configured for this path.', {
+          code: 'route_not_found',
+        });
       }
 
       const target = new URL(request.url, route.target);
@@ -107,7 +109,9 @@ export function registerProxy(app: Server, options: ProxyOptions): void {
           { err: error, target: target.origin, path },
           'proxy: upstream unreachable',
         );
-        throw ProblemError.unavailable('The upstream service did not respond.');
+        throw ProblemError.unavailable('The upstream service did not respond.', {
+          code: 'upstream_unavailable',
+        });
       }
 
       void reply.status(upstream.status);

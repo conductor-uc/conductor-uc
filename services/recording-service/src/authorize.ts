@@ -45,20 +45,17 @@ export async function resolveCaller(
 ): Promise<Caller> {
   const { actorId, orgId, orgType } = context;
   if (actorId === undefined || orgId === undefined || orgType === undefined) {
-    throw ProblemError.unauthorized('Sign in to continue.');
+    throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
   }
   let resolved: ActorAccess;
   try {
     resolved = await access.resolve({ orgId, actorId });
   } catch (error) {
     if (error instanceof AccessUnavailableError) {
-      throw new ProblemError(
-        503,
-        '/problems/unavailable',
-        'Service unavailable',
-        'permissions_unavailable',
-        { detail: 'Permissions could not be checked; nothing was done. Try again shortly.' },
-      );
+      throw new ProblemError(503, '/problems/unavailable', 'Service unavailable', {
+        code: 'permissions_unavailable',
+        detail: 'Permissions could not be checked; nothing was done. Try again shortly.',
+      });
     }
     throw error;
   }
@@ -166,6 +163,7 @@ export function visibilityFor(
 export function forbidden(permission: Permission): ProblemError {
   return ProblemError.forbidden(`You do not have the ${permission} permission for this.`, {
     code: 'insufficient_permission',
+    params: { permission },
   });
 }
 

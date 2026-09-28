@@ -45,6 +45,13 @@ export class RingGroupNotFoundError extends Error {
 /** A `member_extension_ids` (or `no_answer_destination_id`, when the type is `extension`) entry that does not name a real extension in this tenant. */
 export class RingGroupMemberNotFoundError extends Error {
   override readonly name = 'RingGroupMemberNotFoundError';
+
+  constructor(
+    message: string,
+    readonly params: { readonly extensionIds: readonly string[] },
+  ) {
+    super(message);
+  }
 }
 
 interface RingGroupRow {
@@ -100,6 +107,7 @@ async function assertExtensionsExist(
   if (missing.length > 0) {
     throw new RingGroupMemberNotFoundError(
       `No extension(s) with id(s) ${missing.join(', ')} in this tenant.`,
+      { extensionIds: missing },
     );
   }
 }

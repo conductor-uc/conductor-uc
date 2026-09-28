@@ -1056,8 +1056,9 @@ void main() {
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 100));
         expect(asked, ['POST /v1/tenants/tenant-1/calls/a/whisper']);
+        // The console's words for the code (S9-02), not the service's.
         expect(
-          find.text('You do not have permission to do that.'),
+          find.text("You don't have permission to do that."),
           findsOneWidget,
         );
         expect(find.text('Ringing your phone…'), findsNothing);

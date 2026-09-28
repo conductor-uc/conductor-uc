@@ -48,7 +48,9 @@ export function registerInternalRoutes(
     async (request, reply) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       // Not atomic with the insert below: it guards against re-running a
@@ -140,7 +142,9 @@ function registerInternalAdminsRoute(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const admins = await users.listActiveAdmins(request.params.orgId);
       return {

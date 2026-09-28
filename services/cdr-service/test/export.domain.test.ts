@@ -10,6 +10,9 @@ describe('validateExportRange', () => {
 
   it('rejects to <= from', () => {
     expect(() => validateExportRange(new Date('2026-01-31'), new Date('2026-01-01'))).toThrow(
+      expect.objectContaining({ code: 'export_range_reversed' }),
+    );
+    expect(() => validateExportRange(new Date('2026-01-31'), new Date('2026-01-01'))).toThrow(
       InvalidExportRangeError,
     );
     expect(() => validateExportRange(new Date('2026-01-01'), new Date('2026-01-01'))).toThrow(
@@ -21,9 +24,15 @@ describe('validateExportRange', () => {
     expect(() => validateExportRange(new Date('2024-01-01'), new Date('2026-06-01'))).toThrow(
       InvalidExportRangeError,
     );
+    expect(() => validateExportRange(new Date('2024-01-01'), new Date('2026-06-01'))).toThrow(
+      expect.objectContaining({ code: 'export_range_too_long', params: { maxDays: 366 } }),
+    );
   });
 
   it('rejects invalid dates', () => {
+    expect(() => validateExportRange(new Date('not a date'), new Date())).toThrow(
+      expect.objectContaining({ code: 'invalid_export_timestamp' }),
+    );
     expect(() => validateExportRange(new Date('not a date'), new Date())).toThrow(
       InvalidExportRangeError,
     );

@@ -63,9 +63,15 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidRingGroupError) return ProblemError.badRequest(error.message);
-  if (error instanceof RingGroupNotFoundError) return ProblemError.notFound(error.message);
-  if (error instanceof RingGroupMemberNotFoundError) return ProblemError.badRequest(error.message);
+  if (error instanceof InvalidRingGroupError)
+    return ProblemError.badRequest(error.message, { code: 'invalid_ring_group' });
+  if (error instanceof RingGroupNotFoundError)
+    return ProblemError.notFound(error.message, { code: 'ring_group_not_found' });
+  if (error instanceof RingGroupMemberNotFoundError)
+    return ProblemError.badRequest(error.message, {
+      code: 'ring_group_member_not_found',
+      params: error.params,
+    });
   throw error;
 }
 
@@ -97,7 +103,10 @@ export function registerRingGroupRoutes(app: Server, ringGroups: RingGroupRepo):
     },
     async (request) => {
       const found = await ringGroups.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No ring group with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No ring group with that id.', {
+          code: 'ring_group_not_found',
+        });
       return toResponse(found);
     },
   );

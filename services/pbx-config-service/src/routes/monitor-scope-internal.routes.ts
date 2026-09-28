@@ -49,12 +49,16 @@ export function registerMonitorScopeInternalRoutes(
         presented === undefined ||
         !secretEquals(internalServiceToken, presented)
       ) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const ctx = { tenantId: request.params.tenantId };
       const extension = await extensions.findByNumber(ctx, request.params.number);
       if (extension === undefined) {
-        throw ProblemError.notFound('No extension with that number in that tenant.');
+        throw ProblemError.notFound('No extension with that number in that tenant.', {
+          code: 'extension_not_found',
+        });
       }
       const agent = await agents.findByExtensionId(ctx, extension.id);
       const tiers = agent === undefined ? [] : await queueTiers.listForAgent(ctx, agent.id);
@@ -94,7 +98,9 @@ export function registerMonitorScopeInternalRoutes(
         presented === undefined ||
         !secretEquals(internalServiceToken, presented)
       ) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const ctx = { tenantId: request.params.tenantId };
       const extensionIds = new Set(request.body.extensionIds);

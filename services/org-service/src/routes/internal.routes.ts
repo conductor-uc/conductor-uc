@@ -72,11 +72,16 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const domain = await domains.findPrimaryTenantDomain(request.params.id);
-      if (domain === undefined) throw ProblemError.notFound('No primary domain for that tenant.');
+      if (domain === undefined)
+        throw ProblemError.notFound('No primary domain for that tenant.', {
+          code: 'tenant_domain_not_found',
+        });
       return { fqdn: domain.fqdn } satisfies Static<typeof DomainResponseSchema>;
     },
   );
@@ -98,10 +103,15 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const tenantId = await domains.findTenantByFqdn(request.params.fqdn);
-      if (tenantId === undefined) throw ProblemError.notFound('No tenant has that domain.');
+      if (tenantId === undefined)
+        throw ProblemError.notFound('No tenant has that domain.', {
+          code: 'domain_tenant_not_found',
+        });
       return { tenantId };
     },
   );
@@ -122,11 +132,13 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const org = await orgs.findById(request.params.id);
       if (org === undefined || org.type !== 'tenant' || org.resellerId === null) {
-        throw ProblemError.notFound('No such tenant.');
+        throw ProblemError.notFound('No such tenant.', { code: 'tenant_not_found' });
       }
       return { resellerId: org.resellerId } satisfies Static<typeof ResellerResponseSchema>;
     },
@@ -149,11 +161,13 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const org = await orgs.findById(request.params.id);
       if (org === undefined || org.type !== 'tenant') {
-        throw ProblemError.notFound('No such tenant.');
+        throw ProblemError.notFound('No such tenant.', { code: 'tenant_not_found' });
       }
       return { country: org.country } satisfies Static<typeof CountryResponseSchema>;
     },
@@ -179,16 +193,24 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const host = request.params.host.toLowerCase();
       if (host === platformConsoleHostname) {
         const master = await orgs.findMaster();
-        if (master === undefined) throw ProblemError.notFound('No such console hostname.');
+        if (master === undefined)
+          throw ProblemError.notFound('No such console hostname.', {
+            code: 'console_hostname_not_found',
+          });
         return { orgId: master.id, type: 'master' as const };
       }
       const resellerId = await brands.findResellerIdForHostname(host);
-      if (resellerId === undefined) throw ProblemError.notFound('No such console hostname.');
+      if (resellerId === undefined)
+        throw ProblemError.notFound('No such console hostname.', {
+          code: 'console_hostname_not_found',
+        });
       return { orgId: resellerId, type: 'reseller' as const };
     },
   );
@@ -209,10 +231,12 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const org = await orgs.findById(request.params.id);
-      if (org === undefined) throw ProblemError.notFound('No such org.');
+      if (org === undefined) throw ProblemError.notFound('No such org.', { code: 'org_not_found' });
 
       const resellerId =
         org.type === 'reseller' ? org.id : org.type === 'tenant' ? org.resellerId : null;
@@ -253,10 +277,12 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const org = await orgs.findById(request.params.id);
-      if (org === undefined) throw ProblemError.notFound('No such org.');
+      if (org === undefined) throw ProblemError.notFound('No such org.', { code: 'org_not_found' });
       return {
         orgId: org.id,
         type: org.type,
@@ -287,11 +313,13 @@ export function registerInternalRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const org = await orgs.findById(request.params.id);
       if (org === undefined || org.type !== 'tenant') {
-        throw ProblemError.notFound('No such tenant.');
+        throw ProblemError.notFound('No such tenant.', { code: 'tenant_not_found' });
       }
       return { limits: org.limits } satisfies Static<typeof LimitsResponseSchema>;
     },

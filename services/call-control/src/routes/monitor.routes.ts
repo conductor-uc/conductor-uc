@@ -24,7 +24,7 @@ interface SignedRequest {
 function person(request: SignedRequest) {
   const { actorId, actorType, orgId, orgType } = request.context;
   if (actorId === undefined || orgId === undefined || orgType === undefined) {
-    throw ProblemError.unauthorized('Sign in to continue.');
+    throw ProblemError.unauthorized('Sign in to continue.', { code: 'sign_in_required' });
   }
   if (actorType !== 'user') {
     throw ProblemError.forbidden('Only a signed-in person can monitor a live call.', {

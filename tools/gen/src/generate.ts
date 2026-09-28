@@ -48,6 +48,8 @@ interface Placeholders {
   readonly kebabEntity: string;
   readonly Entity: string;
   readonly table: string;
+  /** `ring-group` → `ring_group`: the prefix of the entity's problem codes (S9-02). */
+  readonly snakeEntity: string;
   readonly domain: string;
 }
 
@@ -82,6 +84,7 @@ function placeholdersFor(options: GenerateOptions): Placeholders {
     kebabEntity: entityKebab,
     Entity: toPascalCase(entityKebab),
     table: toSnakeCase(pluralize(entityKebab)),
+    snakeEntity: toSnakeCase(entityKebab),
     domain,
   };
 }
@@ -94,6 +97,7 @@ const PLACEHOLDER_KEYS: readonly (keyof Placeholders)[] = [
   'kebabEntity',
   'Entity',
   'table',
+  'snakeEntity',
   'domain',
 ];
 

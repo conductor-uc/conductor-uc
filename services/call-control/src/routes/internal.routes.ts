@@ -130,7 +130,9 @@ export function registerInternalRoutes(
     },
     async (request) => {
       if (!authorized(request.headers.authorization)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const { tenantId, kind, resourceId } = request.params;
       const result = await affinity.acquire(tenantId, kind, resourceId, {
@@ -148,7 +150,9 @@ export function registerInternalRoutes(
     { config: { public: true }, schema: { params: ParamsSchema } },
     async (request, reply) => {
       if (!authorized(request.headers.authorization)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const { tenantId, kind, resourceId } = request.params;
       await affinity.release(tenantId, kind, resourceId);
@@ -164,7 +168,9 @@ export function registerInternalRoutes(
     },
     async (request) => {
       if (!authorized(request.headers.authorization)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const { tenantId, kind, resourceId } = request.params;
       const nodeId = await affinity.getOwner(tenantId, kind, resourceId);
@@ -189,7 +195,9 @@ export function registerInternalRoutes(
     },
     async (request) => {
       if (!authorized(request.headers.authorization)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       return { calls: await registry.callsForTenant(request.params.tenantId) };
     },
@@ -209,7 +217,9 @@ export function registerInternalRoutes(
     },
     async (request) => {
       if (!authorized(request.headers.authorization)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       return { nodes: await nodes.list() };
     },
@@ -223,10 +233,13 @@ export function registerInternalRoutes(
     },
     async (request) => {
       if (!authorized(request.headers.authorization)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const node = await nodes.get(request.params.nodeId);
-      if (node === undefined) throw ProblemError.notFound('No such node.');
+      if (node === undefined)
+        throw ProblemError.notFound('No such node.', { code: 'node_not_found' });
       return node;
     },
   );
@@ -243,10 +256,13 @@ export function registerInternalRoutes(
       },
       async (request) => {
         if (!authorized(request.headers.authorization)) {
-          throw ProblemError.unauthorized('A valid internal service token is required.');
+          throw ProblemError.unauthorized('A valid internal service token is required.', {
+            code: 'internal_token_invalid',
+          });
         }
         const result = await nodes.setDraining(request.params.nodeId, draining);
-        if (result === undefined) throw ProblemError.notFound('No such node.');
+        if (result === undefined)
+          throw ProblemError.notFound('No such node.', { code: 'node_not_found' });
         return result;
       },
     );

@@ -54,12 +54,16 @@ export function registerAccessRoutes(
     async (request) => {
       const presented = bearerToken(request.headers.authorization);
       if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
 
       const access = await lookup.accessOf(request.params.userId, request.params.orgId);
       if (access === undefined) {
-        throw ProblemError.notFound('No such active user in that organization.');
+        throw ProblemError.notFound('No such active user in that organization.', {
+          code: 'user_not_found',
+        });
       }
       return {
         roles: access.roles.map((role) => ({ id: role.id, permissions: [...role.permissions] })),

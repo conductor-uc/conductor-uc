@@ -146,8 +146,15 @@ function ctxFor(request: {
 }
 
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidTrunkConfigError) return ProblemError.badRequest(error.message);
-  if (error instanceof InvalidCidrError) return ProblemError.badRequest(error.message);
+  if (error instanceof InvalidTrunkConfigError) {
+    return ProblemError.badRequest(error.message, { code: 'trunk_config_invalid' });
+  }
+  if (error instanceof InvalidCidrError) {
+    return ProblemError.badRequest(error.message, {
+      code: 'trunk_ip_cidr_invalid',
+      params: { cidr: error.cidr },
+    });
+  }
   if (error instanceof TrunkNameTakenError) {
     return ProblemError.conflict(error.message, { code: 'trunk_name_taken' });
   }
@@ -157,8 +164,12 @@ function toProblem(error: unknown): ProblemError {
   if (error instanceof TrunkHasNoCredentialError) {
     return ProblemError.conflict(error.message, { code: 'trunk_has_no_credential' });
   }
-  if (error instanceof TrunkNotFoundError) return ProblemError.notFound(error.message);
-  if (error instanceof TrunkIpNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof TrunkNotFoundError) {
+    return ProblemError.notFound(error.message, { code: 'trunk_not_found' });
+  }
+  if (error instanceof TrunkIpNotFoundError) {
+    return ProblemError.notFound(error.message, { code: 'trunk_ip_not_found' });
+  }
   throw error;
 }
 
@@ -200,7 +211,8 @@ export function registerTrunkRoutes(
     },
     async (request) => {
       const found = await trunks.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No trunk with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No trunk with that id.', { code: 'trunk_not_found' });
       return toResponse(found);
     },
   );
@@ -319,7 +331,8 @@ export function registerTrunkRoutes(
     },
     async (request) => {
       const found = await trunks.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No trunk with that id.');
+      if (found === undefined)
+        throw ProblemError.notFound('No trunk with that id.', { code: 'trunk_not_found' });
 
       const status = await telephony.findStatus(request.params.tenantId, request.params.id);
       return { registrationStatus: status?.status ?? 'not_registered' };
@@ -343,6 +356,7 @@ export function registerTrunkRoutes(
       if (actorId === undefined || actorType === undefined || orgId === undefined) {
         throw ProblemError.unauthorized(
           'An identified actor is required to reveal a trunk credential.',
+          { code: 'trunk_reveal_actor_required' },
         );
       }
 

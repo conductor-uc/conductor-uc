@@ -41,11 +41,17 @@ export function registerPermissionsInternalRoutes(
         presented === undefined ||
         !secretEquals(internalServiceToken, presented)
       ) {
-        throw ProblemError.unauthorized('A valid internal service token is required.');
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
       }
       const held = await lookup.ofUser(request.params.userId, request.params.orgId);
       // Not "no permissions": a person who cannot sign in at all is not found.
-      if (held.size === 0) throw ProblemError.notFound('No such active user in that organization.');
+      if (held.size === 0) {
+        throw ProblemError.notFound('No such active user in that organization.', {
+          code: 'user_not_found',
+        });
+      }
       return { permissions: [...held].sort() };
     },
   );

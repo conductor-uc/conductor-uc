@@ -125,27 +125,46 @@ function toVersionResponse(version: FlowVersionSummary) {
   };
 }
 
+/** One code per condition (S9-02): a flow the tenant does not have. */
+function flowNotFound(detail: string, flowId?: string): ProblemError {
+  return ProblemError.notFound(detail, {
+    code: 'flow_not_found',
+    ...(flowId === undefined ? {} : { params: { flowId } }),
+  });
+}
+
+function flowVersionNotFound(flowId: string, versionNumber: number): ProblemError {
+  return ProblemError.notFound(
+    `Flow '${flowId}' has no published version number ${String(versionNumber)}.`,
+    { code: 'flow_version_not_found', params: { flowId, versionNumber } },
+  );
+}
+
 function toProblem(error: unknown): ProblemError {
-  if (error instanceof InvalidFlowNameError) return ProblemError.badRequest(error.message);
-  if (error instanceof FlowNotFoundError) return ProblemError.notFound(error.message);
-  if (error instanceof FlowVersionNotFoundError) return ProblemError.notFound(error.message);
+  if (error instanceof InvalidFlowNameError) {
+    return ProblemError.badRequest(error.message, {
+      code: 'flow_name_invalid',
+      params: { name: error.input },
+    });
+  }
+  if (error instanceof FlowNotFoundError) return flowNotFound(error.message, error.flowId);
+  if (error instanceof FlowVersionNotFoundError) {
+    return flowVersionNotFound(error.flowId, error.versionNumber);
+  }
   if (error instanceof InvalidDraftGraphError) {
     // 422, not 400: the request body itself was well-formed JSON matching the
     // graph shape — what's invalid is the *graph*, the same distinction
     // RFC 9457 draws between a malformed request and a semantically invalid one.
-    return new ProblemError(
-      422,
-      '/problems/invalid-draft-graph',
-      'Invalid draft graph',
-      'invalid_draft_graph',
-      {
-        detail: error.message,
-        errors: error.issues.map((issue) => ({
-          field: issue.nodeId ?? '',
-          message: issue.message,
-        })),
-      },
-    );
+    return new ProblemError(422, '/problems/invalid-draft-graph', 'Invalid draft graph', {
+      code: 'invalid_draft_graph',
+      detail: error.message,
+      errors: error.issues.map((issue) => ({
+        field: issue.nodeId ?? '',
+        message: issue.message,
+        // The validator's rule (`unreachable_node`, `digit_conflict`, ...).
+        code: issue.kind,
+      })),
+    });
   }
   throw error;
 }
@@ -182,7 +201,7 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
     },
     async (request) => {
       const found = await flows.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound('No flow with that id.');
+      if (found === undefined) throw flowNotFound('No flow with that id.');
       return toFlowResponse(found);
     },
   );
@@ -213,9 +232,7 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
       const versionNumber = Number(request.params.versionNumber);
       const version = await flows.findVersion(ctxFor(request), request.params.id, versionNumber);
       if (version === undefined) {
-        throw ProblemError.notFound(
-          `Flow '${request.params.id}' has no published version number ${String(versionNumber)}.`,
-        );
+        throw flowVersionNotFound(request.params.id, versionNumber);
       }
       return {
         ...toVersionResponse(version),

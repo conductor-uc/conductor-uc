@@ -65,7 +65,10 @@ export function register{{Entity}}Routes(app: Server, repo: {{Entity}}Repo): voi
     },
     async (request) => {
       const found = await repo.findById(ctxFor(request), request.params.id);
-      if (found === undefined) throw ProblemError.notFound(`No {{entity}} with that id.`);
+      if (found === undefined)
+        throw ProblemError.notFound(`No {{entity}} with that id.`, {
+          code: '{{snakeEntity}}_not_found',
+        });
       return found;
     },
   );
@@ -86,7 +89,10 @@ export function register{{Entity}}Routes(app: Server, repo: {{Entity}}Repo): voi
         name = normalize{{Entity}}Name(request.body.name);
       } catch (error) {
         if (error instanceof Invalid{{Entity}}NameError) {
-          throw ProblemError.badRequest(error.message);
+          throw ProblemError.badRequest(error.message, {
+            code: '{{snakeEntity}}_name_invalid',
+            params: { name: error.input },
+          });
         }
         throw error;
       }
