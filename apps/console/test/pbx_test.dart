@@ -20,12 +20,7 @@ Future<void> openSection(
   await tester.enterText(find.widgetWithText(TextField, 'Password'), 'pw');
   await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
   await tester.pumpAndSettle();
-  await tester.tap(
-    find.descendant(
-      of: find.byType(NavigationRail),
-      matching: find.text(section),
-    ),
-  );
+  await tapNav(tester, section);
   await tester.pumpAndSettle();
 }
 
@@ -133,12 +128,7 @@ void main() {
     'someone who cannot reveal secrets still gets the server details',
     (tester) async {
       await completeSignIn(tester, 'limited@example.test');
-      await tester.tap(
-        find.descendant(
-          of: find.byType(NavigationRail),
-          matching: find.text('Extensions'),
-        ),
-      );
+      await tapNav(tester, 'Extensions');
       await tester.pumpAndSettle();
       await tapIn(tester, '102', find.byTooltip('Connect a phone'));
 
@@ -226,12 +216,7 @@ void main() {
     tester,
   ) async {
     await completeSignIn(tester, 'limited@example.test');
-    await tester.tap(
-      find.descendant(
-        of: find.byType(NavigationRail),
-        matching: find.text('Phones'),
-      ),
-    );
+    await tapNav(tester, 'Phones');
     await tester.pumpAndSettle();
     await tapIn(tester, '001565aabbcc', find.byTooltip('Set up this phone'));
 

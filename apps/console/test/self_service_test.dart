@@ -9,6 +9,7 @@ import 'package:console/core/realtime.dart';
 import 'package:console/features/shell/sections.dart';
 import 'package:console/features/voicemail/voicemail_api.dart';
 import 'package:console/l10n/l10n.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -46,13 +47,13 @@ Future<List<String>> signInTo(WidgetTester tester, String email) async {
 }
 
 ProviderContainer containerOf(WidgetTester tester) =>
-    ProviderScope.containerOf(tester.element(find.byType(NavigationRail)));
+    ProviderScope.containerOf(tester.element(find.byType(AppNavigation)));
 
 Future<void> open(WidgetTester tester, String section) async {
   // An administrator's navigation is longer than the window.
   await tester.ensureVisible(navItem(section));
   await tester.pumpAndSettle();
-  await tester.tap(navItem(section));
+  await tapNav(tester, section);
   await tester.pumpAndSettle();
 }
 
@@ -234,7 +235,7 @@ void main() {
           'Voicemail',
           'Call records',
           'Call flows',
-          'Settings',
+          'Emergency locations',
           'My phone',
         ]) {
           expect(navItem(label), findsNothing, reason: label);
@@ -533,7 +534,7 @@ void main() {
       tester,
     ) async {
       await completeSignIn(tester, 'reseller@example.test');
-      await tester.tap(navItem('Tenants'));
+      await tapNav(tester, 'Tenants');
       await tester.pumpAndSettle();
       await actAs(tester, 'Acme Dental');
       expect(navItem('Extensions'), findsOneWidget);
@@ -579,7 +580,7 @@ void main() {
       tester,
     ) async {
       await completeSignIn(tester, 'reseller@example.test');
-      await tester.tap(navItem('Tenants'));
+      await tapNav(tester, 'Tenants');
       await tester.pumpAndSettle();
       await actAs(tester, 'Acme Dental');
       await open(tester, 'Extensions');

@@ -14,7 +14,29 @@ import 'session.dart';
 /// Null while the answer is on its way, and when it could not be had (the
 /// service is down, or the user's role lacks `org.view`): the console then
 /// falls back to showing what the org type gets, rather than an empty shell.
-final permissionsProvider = FutureProvider<Set<String>?>((ref) async {
+final permissionsProvider = FutureProvider<Set<String>?>(
+  (ref) async => (await ref.watch(meProvider.future))?.permissions,
+);
+
+/// Who is signed in and where (S9-05), from the same `GET /me`: their
+/// permissions, and their name, address and org's name for the header.
+class Me {
+  const Me({
+    required this.permissions,
+    this.displayName,
+    this.email,
+    this.orgName,
+  });
+
+  final Set<String> permissions;
+  final String? displayName;
+  final String? email;
+  final String? orgName;
+}
+
+/// Null while it is on its way, or when it could not be had (see
+/// [permissionsProvider]).
+final meProvider = FutureProvider<Me?>((ref) async {
   final session = ref.watch(sessionProvider);
   if (session == null) return null;
   try {
@@ -28,7 +50,16 @@ final permissionsProvider = FutureProvider<Set<String>?>((ref) async {
           ),
         );
     final body = response.data as Map;
-    return {...(body['permissions'] as List).cast<String>()};
+    String? text(String key) =>
+        body[key] is String && (body[key] as String).isNotEmpty
+        ? body[key] as String
+        : null;
+    return Me(
+      permissions: {...(body['permissions'] as List).cast<String>()},
+      displayName: text('displayName'),
+      email: text('email'),
+      orgName: text('orgName'),
+    );
   } catch (_) {
     return null;
   }

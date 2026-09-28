@@ -97,7 +97,9 @@ void main() {
         expect(themeOf(tester).colorScheme.primary, sampleBrand.primary);
         expect(find.text('Sample Reseller'), findsWidgets);
 
-        await tester.tap(find.widgetWithText(TextButton, 'Sign out'));
+        await tester.tap(find.byKey(const ValueKey('account-menu')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sign out'));
         await tester.pumpAndSettle();
         expect(themeOf(tester).colorScheme.primary, isNot(sampleBrand.primary));
         expect(find.text('Sample Reseller'), findsNothing);

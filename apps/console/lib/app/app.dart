@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/locale.dart';
 import '../l10n/l10n.dart';
 
 import 'brand.dart';
@@ -27,6 +28,7 @@ class ConsoleApp extends ConsumerWidget {
       routerConfig: ref.watch(routerProvider),
       // S9-01 (D-018): every string comes from lib/l10n; English until
       // translations arrive.
+      locale: ref.watch(localeProvider),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       builder: (context, child) {

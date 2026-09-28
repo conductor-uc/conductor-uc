@@ -37,8 +37,7 @@ enum NavLabel {
   recordings,
   voicemail,
   callRecords,
-  reports,
-  settings,
+  emergencyLocations,
 }
 
 extension NavLabelText on NavLabel {
@@ -73,8 +72,35 @@ extension NavLabelText on NavLabel {
     NavLabel.recordings => l10n.navRecordings,
     NavLabel.voicemail => l10n.navVoicemail,
     NavLabel.callRecords => l10n.navCallRecords,
-    NavLabel.reports => l10n.navReports,
-    NavLabel.settings => l10n.navSettings,
+    NavLabel.emergencyLocations => l10n.navEmergencyLocations,
+  };
+}
+
+/// The headings the navigation is grouped under (S9-05), so a tenant's twenty
+/// screens read as a few areas rather than one long list.
+enum NavGroup {
+  platform,
+  customers,
+  service,
+  people,
+  calls,
+  activity,
+  settings,
+  you,
+  admin,
+}
+
+extension NavGroupText on NavGroup {
+  String of(AppLocalizations l10n) => switch (this) {
+    NavGroup.platform => l10n.navGroupPlatform,
+    NavGroup.customers => l10n.navGroupCustomers,
+    NavGroup.service => l10n.navGroupService,
+    NavGroup.people => l10n.navGroupPeople,
+    NavGroup.calls => l10n.navGroupCalls,
+    NavGroup.activity => l10n.navGroupActivity,
+    NavGroup.settings => l10n.navGroupSettings,
+    NavGroup.you => l10n.navGroupYou,
+    NavGroup.admin => l10n.navGroupAdmin,
   };
 }
 
@@ -85,7 +111,11 @@ class Section {
     this.icon, {
     this.privateData = false,
     this.requires = const [],
+    this.group,
   });
+
+  /// The heading it sits under; null sits at the top, ungrouped.
+  final NavGroup? group;
 
   final String path;
 
@@ -119,12 +149,23 @@ const _audit = Section(
   NavLabel.audit,
   Icons.fact_check_outlined,
   requires: ['audit.read'],
+  group: NavGroup.admin,
 );
 const _users = Section(
   '/users',
   NavLabel.users,
   Icons.people_outline,
   requires: ['user.read'],
+  group: NavGroup.admin,
+);
+
+/// A tenant's people are the first thing it manages, not an afterthought.
+const _tenantUsers = Section(
+  '/users',
+  NavLabel.users,
+  Icons.people_outline,
+  requires: ['user.read'],
+  group: NavGroup.people,
 );
 
 /// The three screens of a person's own phone (end-user self-service). They are
@@ -161,6 +202,7 @@ const myPhoneEntry = Section(
   Icons.phone_in_talk_outlined,
   privateData: true,
   requires: ['self.settings', 'self.voicemail', 'self.history'],
+  group: NavGroup.you,
 );
 
 /// Top-level sections by org type (08 §3).
@@ -172,6 +214,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       NavLabel.resellers,
       Icons.storefront_outlined,
       requires: ['reseller.read'],
+      group: NavGroup.platform,
     ),
     // S4-12: the services, media nodes, SIP edge, event bus and data stores.
     Section(
@@ -179,12 +222,14 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       NavLabel.operations,
       Icons.monitor_heart_outlined,
       requires: ['platform.observe'],
+      group: NavGroup.platform,
     ),
     Section(
       '/certificates',
       NavLabel.certificates,
       Icons.verified_user_outlined,
       requires: ['domain.read'],
+      group: NavGroup.platform,
     ),
     // Whether the platform's administrators must use two-step verification.
     Section(
@@ -192,6 +237,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       NavLabel.security,
       Icons.lock_outline,
       requires: ['platform.observe'],
+      group: NavGroup.platform,
     ),
     _audit,
     _users,
@@ -203,102 +249,118 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       NavLabel.tenants,
       Icons.apartment_outlined,
       requires: ['tenant.read', 'tenant.create'],
+      group: NavGroup.customers,
     ),
     Section(
       '/trunks',
       NavLabel.trunks,
       Icons.cable_outlined,
       requires: ['trunk.read'],
+      group: NavGroup.service,
     ),
     Section(
       '/domains',
       NavLabel.domains,
       Icons.dns_outlined,
       requires: ['domain.read'],
+      group: NavGroup.service,
     ),
     Section(
       '/brand',
       NavLabel.brand,
       Icons.palette_outlined,
       requires: ['brand.read'],
+      group: NavGroup.service,
     ),
     _users,
     _audit,
   ],
   OrgType.tenant: [
     _dashboard,
-    _users,
+    _tenantUsers,
     Section(
       '/extensions',
       NavLabel.extensions,
       Icons.dialpad_outlined,
       requires: ['extension.read'],
+      group: NavGroup.people,
     ),
     Section(
       '/phones',
       NavLabel.phones,
       Icons.phone_android_outlined,
       requires: ['extension.read'],
+      group: NavGroup.people,
     ),
     Section(
       '/phone-numbers',
       NavLabel.phoneNumbers,
       Icons.phone_outlined,
       requires: ['did.read'],
+      group: NavGroup.calls,
     ),
     Section(
       '/call-flows',
       NavLabel.callFlows,
       Icons.account_tree_outlined,
       requires: ['callflow.read'],
+      group: NavGroup.calls,
     ),
     Section(
       '/ring-groups',
       NavLabel.ringGroups,
       Icons.groups_outlined,
       requires: ['group.read'],
+      group: NavGroup.calls,
     ),
     Section(
       '/outbound-routes',
       NavLabel.outboundRoutes,
       Icons.call_made_outlined,
       requires: ['trunk.read', 'emergency_route.read'],
+      group: NavGroup.calls,
     ),
     Section(
       '/queues',
       NavLabel.queues,
       Icons.queue_outlined,
       requires: ['queue.read'],
+      group: NavGroup.calls,
     ),
     Section(
       '/conference-rooms',
       NavLabel.conferenceRooms,
       Icons.video_call_outlined,
       requires: ['conference_room.read'],
+      group: NavGroup.calls,
     ),
     Section(
       '/parking-lots',
       NavLabel.parkingLots,
       Icons.local_parking_outlined,
       requires: ['parking_lot.read'],
+      group: NavGroup.calls,
     ),
     Section(
       '/schedules',
       NavLabel.schedules,
       Icons.schedule_outlined,
       requires: ['schedule.read'],
+      group: NavGroup.calls,
     ),
     Section(
       '/media',
       NavLabel.media,
       Icons.library_music_outlined,
       requires: ['media.read'],
+      group: NavGroup.calls,
     ),
     Section(
       '/monitoring',
       NavLabel.monitoring,
       Icons.visibility_outlined,
       requires: ['monitor.presence'],
+      group: NavGroup.activity,
     ),
     Section(
       '/recordings',
@@ -311,6 +373,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
         'recording.delete',
         'recording.policy.read',
       ],
+      group: NavGroup.activity,
     ),
     Section(
       '/voicemail',
@@ -318,6 +381,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       Icons.voicemail_outlined,
       privateData: true,
       requires: ['voicemail.access'],
+      group: NavGroup.activity,
     ),
     Section(
       '/call-records',
@@ -325,18 +389,14 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       Icons.history_outlined,
       privateData: true,
       requires: ['cdr.read'],
-    ),
-    Section(
-      '/reports',
-      NavLabel.reports,
-      Icons.bar_chart_outlined,
-      requires: ['cdr.read', 'analytics.view', 'billing.read'],
+      group: NavGroup.activity,
     ),
     Section(
       '/settings',
-      NavLabel.settings,
+      NavLabel.emergencyLocations,
       Icons.settings_outlined,
       requires: ['emergency_location.read'],
+      group: NavGroup.settings,
     ),
   ],
 };

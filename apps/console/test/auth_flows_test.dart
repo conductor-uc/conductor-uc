@@ -8,6 +8,7 @@ import 'package:console/core/session.dart';
 import 'package:console/dev/demo_backend.dart';
 import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -33,10 +34,8 @@ Future<void> signInStep(WidgetTester tester, String email) async {
   await tester.pumpAndSettle();
 }
 
-Finder navItem(String label) => find.descendant(
-  of: find.byType(NavigationRail),
-  matching: find.text(label),
-);
+Finder navItem(String label) =>
+    find.descendant(of: find.byType(AppNavigation), matching: find.text(label));
 
 void main() {
   group('two-step verification', () {
@@ -177,7 +176,9 @@ void main() {
         final api = demoApi();
         await pumpApp(tester, appWith(api: api));
         await signInStep(tester, 'tenant@example.test');
-        await tester.tap(find.widgetWithText(TextButton, 'Sign out'));
+        await tester.tap(find.byKey(const ValueKey('account-menu')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Sign out'));
         await tester.pumpAndSettle();
 
         final container = ProviderContainer(

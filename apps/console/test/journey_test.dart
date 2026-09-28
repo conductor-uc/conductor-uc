@@ -1,5 +1,6 @@
 import 'package:console/dev/demo_backend.dart';
 import 'package:console_api/console_api.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -13,15 +14,13 @@ import 'support.dart';
 /// services. Each persona signs in the way a person does, so the second
 /// factor, the role-based navigation, and acting as a tenant are all exercised.
 
-Finder navItem(String label) => find.descendant(
-  of: find.byType(NavigationRail),
-  matching: find.text(label),
-);
+Finder navItem(String label) =>
+    find.descendant(of: find.byType(AppNavigation), matching: find.text(label));
 
 Finder field(String label) => find.widgetWithText(TextFormField, label);
 
 Future<void> openNav(WidgetTester tester, String label) async {
-  await tester.tap(navItem(label));
+  await tapNav(tester, label);
   await tester.pumpAndSettle();
 }
 
@@ -31,7 +30,9 @@ Future<void> save(WidgetTester tester) async {
 }
 
 Future<void> signOut(WidgetTester tester) async {
-  await tester.tap(find.widgetWithText(TextButton, 'Sign out'));
+  await tester.tap(find.byKey(const ValueKey('account-menu')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Sign out'));
   await tester.pumpAndSettle();
 }
 

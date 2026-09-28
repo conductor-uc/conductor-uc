@@ -1,9 +1,16 @@
 import 'package:console/app/router.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 
 import 'support.dart';
+
+/// The app's router, to read or change the address.
+GoRouter routerOf(WidgetTester tester) =>
+    ProviderScope.containerOf(tester.element(find.byType(AppNavigation)))
+        .read(routerProvider);
 
 Future<void> signInAs(WidgetTester tester, String email) async {
   await completeSignIn(tester, email);
@@ -15,15 +22,13 @@ Future<void> signInAs(WidgetTester tester, String email) async {
       : null;
   if (list == null) return;
   await tester.tap(
-    find.descendant(of: find.byType(NavigationRail), matching: find.text(list)),
+    find.descendant(of: find.byType(AppNavigation), matching: find.text(list)),
   );
   await tester.pumpAndSettle();
 }
 
-Finder navItem(String label) => find.descendant(
-  of: find.byType(NavigationRail),
-  matching: find.text(label),
-);
+Finder navItem(String label) =>
+    find.descendant(of: find.byType(AppNavigation), matching: find.text(label));
 
 Future<void> actAs(WidgetTester tester, String tenant) async {
   final tile = find.ancestor(
@@ -49,7 +54,10 @@ void main() {
 
     await actAs(tester, 'Acme Dental');
     expect(find.text('Acting as Acme Dental'), findsOneWidget);
+    // S9-05: a visit starts at the tenant's home.
+    expect(find.text('Dashboard'), findsWidgets);
     expect(navItem('Extensions'), findsOneWidget);
+    await tapNav(tester, 'Extensions');
     expect(find.text('Alice Kim'), findsOneWidget); // the tenant's own screen
     // Master can see private-data sections.
     expect(navItem('Recordings'), findsOneWidget);
@@ -66,7 +74,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Acting as'), findsNothing);
     expect(navItem('Resellers'), findsOneWidget);
-    await tester.tap(navItem('Resellers'));
+    await tapNav(tester, 'Resellers');
     await tester.pumpAndSettle();
     expect(find.text('Northwind Telecom'), findsOneWidget);
   });
@@ -84,7 +92,7 @@ void main() {
 
     // Nor by typing the URL.
     final container = ProviderScope.containerOf(
-      tester.element(find.byType(NavigationRail)),
+      tester.element(find.byType(AppNavigation)),
     );
     container.read(routerProvider).go('/recordings');
     await tester.pumpAndSettle();
@@ -118,10 +126,61 @@ void main() {
   testWidgets('signing out ends the visit', (tester) async {
     await signInAs(tester, 'reseller@example.test');
     await actAs(tester, 'Acme Dental');
-    await tester.tap(find.widgetWithText(TextButton, 'Sign out'));
+    await tester.tap(find.byKey(const ValueKey('account-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Sign out'));
     await tester.pumpAndSettle();
     await submitSignIn(tester, 'reseller@example.test');
     expect(find.textContaining('Acting as'), findsNothing);
     expect(navItem('Tenants'), findsOneWidget);
+  });
+
+  testWidgets(
+    'the tenant being visited is in the address, and stays there (S9-05)',
+    (tester) async {
+      await signInAs(tester, 'master@example.test');
+      await tester.tap(find.text('Northwind Telecom'));
+      await tester.pumpAndSettle();
+      await actAs(tester, 'Acme Dental');
+      final router = routerOf(tester);
+      expect(router.state.uri.queryParameters['as'], 't-1');
+
+      await tapNav(tester, 'Extensions');
+      expect(router.state.uri.queryParameters['as'], 't-1');
+
+      await tester.tap(find.text('Exit'));
+      await tester.pumpAndSettle();
+      expect(find.text('Acting as Acme Dental'), findsNothing);
+      expect(router.state.uri.queryParameters, isNot(contains('as')));
+    },
+  );
+
+  testWidgets(
+    'a link with a tenant in it opens the visit (a reload, a shared link)',
+    (tester) async {
+      await signInAs(tester, 'master@example.test');
+      routerOf(tester).go('/extensions?as=t-2');
+      await tester.pumpAndSettle();
+      expect(find.text('Acting as Blue Bottle Cafe'), findsOneWidget);
+      expect(navItem('Resellers'), findsNothing);
+    },
+  );
+
+  testWidgets('Switch moves the visit to another tenant of the same reseller', (
+    tester,
+  ) async {
+    await signInAs(tester, 'master@example.test');
+    await tester.tap(find.text('Northwind Telecom'));
+    await tester.pumpAndSettle();
+    await actAs(tester, 'Acme Dental');
+    await tester.tap(find.text('Switch'));
+    await tester.pumpAndSettle();
+    // Not the one already visited, nor a suspended one, nor another reseller's.
+    expect(find.text('Blue Bottle Cafe'), findsOneWidget);
+    expect(find.text('Old Company'), findsNothing);
+    expect(find.text('Lakeside Realty'), findsNothing);
+    await tester.tap(find.text('Blue Bottle Cafe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Acting as Blue Bottle Cafe'), findsOneWidget);
   });
 }

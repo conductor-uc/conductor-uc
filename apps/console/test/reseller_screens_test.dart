@@ -19,12 +19,7 @@ Future<void> signInAndOpen(
 ) async {
   await pumpApp(tester, appWith(api: demoApi()));
   await submitSignIn(tester, email);
-  await tester.tap(
-    find.descendant(
-      of: find.byType(NavigationRail),
-      matching: find.text(section),
-    ),
-  );
+  await tapNav(tester, section);
   await tester.pumpAndSettle();
 }
 
@@ -349,12 +344,7 @@ void main() {
           ),
         );
         await submitSignIn(tester, 'master@example.test');
-        await tester.tap(
-          find.descendant(
-            of: find.byType(NavigationRail),
-            matching: find.text('Resellers'),
-          ),
-        );
+        await tapNav(tester, 'Resellers');
         await tester.pumpAndSettle();
         await tester.tap(find.text('Northwind Telecom'));
         await tester.pumpAndSettle();

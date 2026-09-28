@@ -8,6 +8,7 @@ import 'package:console/dev/demo_backend.dart';
 import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
 import 'package:console/l10n/l10n.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -112,3 +113,16 @@ Widget localizedApp(Widget child) => ProviderScope(
     home: Scaffold(body: child),
   ),
 );
+
+/// Opens [label] from the navigation, scrolling it into view first: the
+/// grouped navigation is taller than the test window.
+Future<void> tapNav(WidgetTester tester, String label) async {
+  final item = find.descendant(
+    of: find.byType(AppNavigation),
+    matching: find.text(label),
+  );
+  await tester.ensureVisible(item);
+  await tester.pumpAndSettle();
+  await tester.tap(item);
+  await tester.pumpAndSettle();
+}

@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'act_as_test.dart' show navItem, signInAs;
+import 'support.dart';
 
 Future<void> openCertificates(WidgetTester tester) async {
   await signInAs(tester, 'master@example.test');
-  await tester.tap(navItem('Certificates'));
+  await tapNav(tester, 'Certificates');
   await tester.pumpAndSettle();
 }
 
@@ -118,7 +119,7 @@ void main() {
     (tester) async {
       await signInAs(tester, 'master@example.test');
       // The operator says where the platform is reached.
-      await tester.tap(navItem('Certificates'));
+      await tapNav(tester, 'Certificates');
       await tester.pumpAndSettle();
       await tester.enterText(
         find.widgetWithText(TextField, 'Public address'),
@@ -139,7 +140,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('without http://'), findsNothing);
 
-      await tester.tap(navItem('Resellers'));
+      await tapNav(tester, 'Resellers');
       await tester.pumpAndSettle();
       await tester.tap(find.text('Northwind Telecom'));
       await tester.pumpAndSettle();

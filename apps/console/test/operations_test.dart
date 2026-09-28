@@ -4,6 +4,7 @@ import 'package:console/features/platform/operations_api.dart';
 import 'package:console/features/platform/operations_page.dart';
 import 'package:console/features/platform/operations_widgets.dart';
 import 'package:dio/dio.dart';
+import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -369,7 +370,7 @@ void main() {
       tester,
     ) async {
       await completeSignIn(tester, 'master@example.test');
-      await tester.tap(navItem('Operations'));
+      await tapNav(tester, 'Operations');
       await tester.pumpAndSettle();
       expect(find.text('Services ready'), findsWidgets);
       await openTab(tester, 'Media nodes');
@@ -385,7 +386,7 @@ void main() {
       tester,
     ) async {
       await completeSignIn(tester, 'master-support@example.test');
-      await tester.tap(navItem('Operations'));
+      await tapNav(tester, 'Operations');
       await tester.pumpAndSettle();
       await openTab(tester, 'Media nodes');
       expect(find.text('fs1'), findsOneWidget);
@@ -398,7 +399,7 @@ void main() {
     ) async {
       await completeSignIn(tester, 'master@example.test');
       final container = ProviderScope.containerOf(
-        tester.element(find.byType(NavigationRail)),
+        tester.element(find.byType(AppNavigation)),
       );
       container.read(routerProvider).go('/platform-health');
       await tester.pumpAndSettle();

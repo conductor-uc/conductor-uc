@@ -195,7 +195,10 @@ registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo, stepUp);
 registerSecuritySettingsRoutes(app, securitySettingsRepo, stepUp);
 registerGrantRoutes(app, grantRepo, orgAccess, permissionLookup);
 registerPermissionsInternalRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
-registerMeRoutes(app, roleRepo, grantRepo);
+registerMeRoutes(app, roleRepo, grantRepo, {
+  users: userRepo,
+  lineage: (orgId) => orgClient.lineage(orgId),
+});
 registerAccessRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
 registerAuditRoutes(app, auditRepo, orgAccess);
 
