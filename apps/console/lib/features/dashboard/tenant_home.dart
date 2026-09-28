@@ -106,7 +106,8 @@ class TenantHome extends ConsumerWidget {
           title: l10n.homeStepAnsweredTitle,
           why: l10n.homeStepAnsweredWhy,
           action: l10n.homeStepAnsweredAction,
-          path: '/phone-numbers',
+          // S9-09: set up without the call flow editor.
+          path: '/phone-numbers/setup',
           done: numbers == null ? null : numbers.isNotEmpty && unrouted.isEmpty,
         ),
       ],

@@ -2388,5 +2388,162 @@
   "flowsOpenFromNumber": "Open its call flow",
   "@flowsOpenFromNumber": {
     "description": "Tooltip on a phone number that a call flow answers: opens that flow."
+  },
+  "mainNumberTitle": "Set up your main number",
+  "@mainNumberTitle": {
+    "description": "Set up your main number page. Heading."
+  },
+  "mainNumberSubtitle": "When you're open, who answers, and what happens when you're closed. We'll build the call flow for you; you can change it later in Call flows.",
+  "@mainNumberSubtitle": {
+    "description": "Set up your main number page. Line under the heading."
+  },
+  "mainNumberFinish": "Finish",
+  "@mainNumberFinish": {
+    "description": "Set up your main number page. Button that sets everything up."
+  },
+  "mainNumberWhich": "Which number",
+  "@mainNumberWhich": {
+    "description": "Set up your main number page. Section: the phone number being set up."
+  },
+  "mainNumberNoNumbers": "There are no phone numbers yet. Your provider adds them; add one in Phone numbers once you have it.",
+  "@mainNumberNoNumbers": {
+    "description": "Set up your main number page. Shown when there is no number to set up."
+  },
+  "mainNumberHoursTitle": "When you're open",
+  "@mainNumberHoursTitle": {
+    "description": "Set up your main number page. Section: business hours."
+  },
+  "mainNumberUseSchedule": "Use hours I've already set",
+  "@mainNumberUseSchedule": {
+    "description": "Set up your main number page. Choice: an existing schedule."
+  },
+  "mainNumberSetHours": "Set my hours now",
+  "@mainNumberSetHours": {
+    "description": "Set up your main number page. Choice: type the hours here."
+  },
+  "mainNumberAlwaysOpen": "We're always open",
+  "@mainNumberAlwaysOpen": {
+    "description": "Set up your main number page. Choice: answer the same way at any time."
+  },
+  "mainNumberOpens": "Opens",
+  "@mainNumberOpens": {
+    "description": "Set up your main number page. Field: opening time."
+  },
+  "mainNumberCloses": "Closes",
+  "@mainNumberCloses": {
+    "description": "Set up your main number page. Field: closing time."
+  },
+  "mainNumberTimeFormat": "Use 24-hour time, such as 09:00 or 17:30.",
+  "@mainNumberTimeFormat": {
+    "description": "Set up your main number page. The time is not in HH:MM form."
+  },
+  "mainNumberNeedsDays": "Choose at least one day you're open.",
+  "@mainNumberNeedsDays": {
+    "description": "Set up your main number page. No open days were chosen."
+  },
+  "mainNumberWhoOpen": "Who answers when you're open",
+  "@mainNumberWhoOpen": {
+    "description": "Set up your main number page. Section: who answers in open hours."
+  },
+  "mainNumberWhoAlways": "Who answers",
+  "@mainNumberWhoAlways": {
+    "description": "Set up your main number page. Section: who answers, when always open."
+  },
+  "mainNumberMenu": "A menu",
+  "@mainNumberMenu": {
+    "description": "Set up your main number page. Choice: callers press a number to choose."
+  },
+  "mainNumberMenuHelp": "\"Press 1 for sales, 2 for support\": a greeting, then each number rings someone.",
+  "@mainNumberMenuHelp": {
+    "description": "Set up your main number page. Explains the menu choice."
+  },
+  "mainNumberGreeting": "Greeting to play",
+  "@mainNumberGreeting": {
+    "description": "Set up your main number page. Field: the recording that lists the options."
+  },
+  "mainNumberNeedsGreeting": "A menu needs a recorded greeting that lists the options. Record or upload one first.",
+  "@mainNumberNeedsGreeting": {
+    "description": "Set up your main number page. Shown when there is no recording for a menu."
+  },
+  "mainNumberPress": "Press {digit}",
+  "@mainNumberPress": {
+    "description": "Set up your main number page. A menu option's key.",
+    "placeholders": {
+      "digit": {
+        "type": "String"
+      }
+    }
+  },
+  "mainNumberRings": "Rings",
+  "@mainNumberRings": {
+    "description": "Set up your main number page. Field: whether a menu option rings a person or a group."
+  },
+  "mainNumberAddOption": "Add an option",
+  "@mainNumberAddOption": {
+    "description": "Set up your main number page. Button that adds another menu option."
+  },
+  "mainNumberClosedTitle": "When you're closed, or no one answers",
+  "@mainNumberClosedTitle": {
+    "description": "Set up your main number page. Section: after hours and unanswered calls."
+  },
+  "mainNumberUnansweredTitle": "When no one answers",
+  "@mainNumberUnansweredTitle": {
+    "description": "Set up your main number page. Section: unanswered calls, when always open."
+  },
+  "mainNumberTakeMessage": "Take a message",
+  "@mainNumberTakeMessage": {
+    "description": "Set up your main number page. Switch: send to voicemail."
+  },
+  "mainNumberTakeMessageHelp": "Otherwise the call ends with a goodbye.",
+  "@mainNumberTakeMessageHelp": {
+    "description": "Set up your main number page. Explains what happens without voicemail."
+  },
+  "mainNumberWhoseVoicemail": "Whose voicemail",
+  "@mainNumberWhoseVoicemail": {
+    "description": "Set up your main number page. Field: which voicemail box takes the message."
+  },
+  "mainNumberScheduleName": "Hours for {number}",
+  "@mainNumberScheduleName": {
+    "description": "Set up your main number page. Name of the schedule made from the hours typed here. {number} is the phone number.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "mainNumberFlowName": "Main number {number}",
+  "@mainNumberFlowName": {
+    "description": "Set up your main number page. Name of the call flow made here. {number} is the phone number.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "mainNumberDone": "{number} is set up. This is its call flow, in case you want to change it.",
+  "@mainNumberDone": {
+    "description": "Set up your main number page. Notice after finishing, shown in the call flow editor.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "mainNumberDraftOnly": "{number} points at this new call flow. Someone who can publish call flows needs to put it live.",
+  "@mainNumberDraftOnly": {
+    "description": "Set up your main number page. Notice after finishing when the person may not publish.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "mainNumberSetUp": "Set up main number",
+  "@mainNumberSetUp": {
+    "description": "Set up your main number page. Button on Phone numbers that opens this page."
+  },
+  "mainNumberNeedsOption": "Choose who at least one menu option rings.",
+  "@mainNumberNeedsOption": {
+    "description": "Set up your main number page. No menu option was given someone to ring."
   }
 }

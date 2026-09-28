@@ -24,6 +24,7 @@ import '../features/trunks/trunks_page.dart';
 import '../features/cdr/call_records_page.dart';
 import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
+import '../features/pbx/main_number_page.dart';
 import '../features/pbx/resource.dart';
 import '../features/people/people.dart';
 import '../features/pbx/resource_page.dart';
@@ -164,6 +165,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/resellers/:id',
             builder: (context, state) =>
                 ResellerPage(resellerId: state.pathParameters['id']!),
+          ),
+          // S9-09: the main number, set up without the call flow editor.
+          GoRoute(
+            path: '/phone-numbers/setup',
+            builder: (context, state) =>
+                MainNumberPage(numberId: state.uri.queryParameters['number']),
           ),
           // S9-07: adding or changing a person is a page of its own.
           GoRoute(
