@@ -82,6 +82,12 @@ export interface AffinityManager {
   handOver(nodeId: string): Promise<number>;
   /** S4-02: the leases a node holds now, whichever replica renews them. */
   leasesHeldBy(nodeId: string): Promise<AffinityLease[]>;
+  /**
+   * S4-04 (04 §5): after Redis lost its data, sets again every lease this replica was renewing,
+   * to the node it was on (`SET NX`: a lease someone else has since taken is theirs, and this
+   * replica stops renewing it). Returns how many were restored.
+   */
+  restore(): Promise<number>;
   /** Clears every renewal timer without releasing the underlying leases — process shutdown, not resource teardown (a lease this replica was renewing simply lapses on its own 30 s TTL if nothing else renews it). */
   stop(): void;
 }
@@ -99,7 +105,10 @@ export function createAffinityManager(options: AffinityManagerOptions): Affinity
   // *this* manager just acquired gets one — 04 §3.3 puts the renewal duty on
   // "call-control" generically, and one replica actively renewing per lease
   // is what that requires, not every replica renewing every lease.
-  const renewals = new Map<string, { nodeId: string; timer: ReturnType<typeof setInterval> }>();
+  const renewals = new Map<
+    string,
+    { nodeId: string; lease: AffinityLease; timer: ReturnType<typeof setInterval> }
+  >();
 
   async function chooseNode(preferredNodeId: string | undefined): Promise<string> {
     const liveNodeIds = await callRegistry.liveNodeIds();
@@ -179,7 +188,7 @@ export function createAffinityManager(options: AffinityManagerOptions): Affinity
           }
         });
     }, renewIntervalMs);
-    renewals.set(trackingKey, { nodeId, timer });
+    renewals.set(trackingKey, { nodeId, lease: { tenantId, kind, resourceId }, timer });
   }
 
   return {
@@ -235,6 +244,24 @@ export function createAffinityManager(options: AffinityManagerOptions): Affinity
 
     async leasesHeldBy(nodeId) {
       return registry.leasesHeldBy(nodeId);
+    },
+
+    async restore() {
+      let restored = 0;
+      for (const [trackingKey, tracked] of [...renewals.entries()]) {
+        if (await registry.acquire(tracked.lease, tracked.nodeId, leaseTtlMs)) {
+          restored += 1;
+          continue;
+        }
+        const owner = await registry.getOwner(tracked.lease);
+        if (owner !== tracked.nodeId) {
+          clearInterval(tracked.timer);
+          renewals.delete(trackingKey);
+        }
+      }
+      if (restored > 0)
+        logger.info({ restored }, 'affinity: leases set again after Redis lost them');
+      return restored;
     },
 
     async handOver(nodeId) {

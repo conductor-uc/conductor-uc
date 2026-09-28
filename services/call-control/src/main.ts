@@ -47,6 +47,7 @@ import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerPlatformRoutes } from './routes/platform.routes.js';
 import type { CallControlDb } from './schema.js';
 import { createNodeFailureWatcher } from './node-failure.js';
+import { createRegistryRebuild } from './registry-rebuild.js';
 
 const config = loadServiceConfig();
 const logger = createLogger({
@@ -185,6 +186,17 @@ const nodeFailure = createNodeFailureWatcher({
   startupGraceMs: config.HEARTBEAT_TTL_MS * 2,
 });
 nodeFailure.start();
+
+// S4-04 (04 §5): Redis is not the record; if it loses the registry, the calls
+// are read back from the nodes and this replica's leases set again.
+const registryRebuild = createRegistryRebuild({
+  registry,
+  affinity,
+  nodes: () => new Map([...eslClientsById].filter(([nodeId]) => heartbeatIntervals.has(nodeId))),
+  callSafetyTtlMs: config.CALL_SAFETY_TTL_MS,
+  logger,
+});
+registryRebuild.start();
 
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
@@ -360,6 +372,7 @@ async function shutdown(signal: string): Promise<void> {
   for (const interval of heartbeatIntervals.values()) clearInterval(interval);
   affinity.stop();
   await nodeFailure.stop();
+  await registryRebuild.stop();
   await Promise.all(eslClients.map((client) => client.stop()));
   relay.stop();
   await Promise.race([

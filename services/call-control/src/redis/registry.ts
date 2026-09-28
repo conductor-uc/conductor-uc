@@ -49,6 +49,15 @@ export interface CallRegistry {
   claimNodeLoss(nodeId: string, replicaId: string, ttlMs: number): Promise<boolean>;
   /** S4-04: forgets a node's (now empty) call set once its calls are handled. */
   forgetNodeCalls(nodeId: string): Promise<void>;
+  /**
+   * S4-04 (04 §5): the registry's epoch, a marker with no TTL that is only
+   * missing when Redis lost its data (or is new). Null when missing.
+   */
+  getEpoch(): Promise<string | null>;
+  /** Sets the epoch if it is missing; true for the replica that set it, which rebuilds. */
+  claimEpoch(epoch: string): Promise<boolean>;
+  /** Whether `call:{uuid}` exists: the rebuild never overwrites a call live events recreated. */
+  hasCall(callUuid: string): Promise<boolean>;
   getCall(callUuid: string): Promise<Record<string, string> | undefined>;
   /**
    * Records whose call this is when CHANNEL_CREATE could not say (a call from a
@@ -365,6 +374,18 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
 
     async forgetNodeCalls(nodeId) {
       await redis.del(k(`node:${nodeId}:calls`));
+    },
+
+    async getEpoch() {
+      return redis.get(k('registry:epoch'));
+    },
+
+    async claimEpoch(epoch) {
+      return (await redis.set(k('registry:epoch'), epoch, 'NX')) === 'OK';
+    },
+
+    async hasCall(callUuid) {
+      return (await redis.exists(k(`call:${callUuid}`))) === 1;
     },
 
     async getCall(callUuid) {

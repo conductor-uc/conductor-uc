@@ -99,6 +99,8 @@ Redis is not a system of record. After a Redis failover with data loss:
 
 This rebuild MUST be idempotent and MUST complete within 30 s for 10 nodes at 1,000 calls each (S4-04 acceptance).
 
+**As built (S4-04).** The registry carries an epoch (`registry:epoch`, no TTL), missing only when Redis lost its data (or is new). Every 2 s each call-control replica looks (`registry-rebuild.ts`). When it is missing, one replica claims a new one (`SET NX`) and, for each node it is connected to, lists the channels (`show channels as json`) and dumps each (`uuid_dump <uuid> json`, the same fields a channel event carries, so the event normalizer makes the record), then sets its answer, hold and bridge; a call live events have already recreated is left as it is, so the rebuild is idempotent. When the epoch has changed since a replica last looked, it sets again every lease it was renewing (`SET NX`; a lease taken meanwhile is left to its new owner). Unlike step 3 above, leases are restored from the replicas' own renewals rather than read from the nodes: a lease whose replica also restarted is acquired again by the next call, as after a drain. Nodes re-announce themselves through their heartbeats (every 3 s). Confirmed live: with a call up, every key of call-control's keyspace deleted, the call was back in the live list, answered and bridged, 0.6 s later. The 10 × 1,000 target is not load-tested yet (S4-09).
+
 ## 6. Rolling upgrades
 
 To upgrade a node (as built in S4-02, [G-123](../decisions.md)):
