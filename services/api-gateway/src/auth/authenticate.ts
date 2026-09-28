@@ -2,11 +2,18 @@ import { ProblemError } from '@cuc/http';
 import type { Server } from '@cuc/http';
 
 import type { AccessTokenVerifier } from './access-token-verifier.js';
+import { InvalidApiKeyError, type ApiKeyVerifier } from './api-key-verifier.js';
 import { InvalidAccessTokenError } from './access-token-verifier.js';
 import { isPublicPath } from '../routing/route-table.js';
 
 export interface AuthenticationOptions {
   readonly verifier: AccessTokenVerifier;
+  /**
+   * S1-08 (G-14): verifies `Authorization: Bearer key_…` (or `ApiKey key_…`).
+   * Absent when the gateway has no `INTERNAL_SERVICE_TOKEN` to ask
+   * identity-service with; a key is then answered 503.
+   */
+  readonly apiKeys?: ApiKeyVerifier;
   readonly publicPrefixes: readonly string[];
   /**
    * Exact paths that authenticate on their own, after this hook: the realtime
@@ -43,6 +50,40 @@ export function registerAuthentication(app: Server, options: AuthenticationOptio
 
     const [scheme, credential] = splitScheme(header);
 
+    // An API key (07 §1): `key_<id>_<secret>`, sent as a bearer credential.
+    if (
+      (scheme === 'bearer' || scheme === 'apikey') &&
+      credential !== undefined &&
+      credential.startsWith('key_')
+    ) {
+      if (options.apiKeys === undefined) {
+        throw ProblemError.unavailable('API keys cannot be checked right now.', {
+          code: 'api_key_check_unavailable',
+        });
+      }
+      let key;
+      try {
+        key = await options.apiKeys.verify(credential);
+      } catch (error) {
+        if (error instanceof InvalidApiKeyError) {
+          throw ProblemError.unauthorized('The API key is invalid, revoked or expired.', {
+            code: 'api_key_invalid',
+          });
+        }
+        throw error;
+      }
+      request.context = {
+        ...request.context,
+        actorId: key.keyId,
+        actorType: 'apikey',
+        orgId: key.orgId,
+        orgType: key.orgType,
+        ...(key.resellerId === null ? {} : { resellerId: key.resellerId }),
+        ...(key.orgType === 'tenant' ? { tenantId: key.orgId } : {}),
+      };
+      return;
+    }
+
     if (scheme === 'bearer' && credential !== undefined) {
       let claims;
       try {
@@ -69,13 +110,8 @@ export function registerAuthentication(app: Server, options: AuthenticationOptio
     }
 
     if (scheme === 'apikey') {
-      // Gap G-14 (docs/decisions.md): identity-service has no api-keys
-      // endpoint yet (06 lists it as future scope), so there is nothing here
-      // to verify a key against. A distinct 501 rather than a 401 makes that
-      // an obviously different failure from "your key is wrong."
-      throw new ProblemError(501, '/problems/not-implemented', 'Not implemented', {
-        code: 'api_key_auth_not_implemented',
-        detail: 'API-key authentication is not available yet.',
+      throw ProblemError.unauthorized('The API key is invalid, revoked or expired.', {
+        code: 'api_key_invalid',
       });
     }
 

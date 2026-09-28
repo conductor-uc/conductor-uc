@@ -32,6 +32,11 @@ async function server(resolve: PermissionResolver) {
     { config: { permission: 'monitor.listen', dataClass: 'private', scopedPermission: true } },
     () => ({ handlerDecides: true }),
   );
+  app.post(
+    '/v1/orgs/:orgId/users',
+    { config: { permission: 'user.manage', dataClass: 'config' } },
+    () => ({ created: true }),
+  );
   app.get(
     '/v1/tenants/:tenantId/me/extension',
     { config: { permission: 'self.settings', dataClass: 'config' } },
@@ -110,7 +115,7 @@ describe('permission guard', () => {
     expect(resolve).not.toHaveBeenCalled();
   });
 
-  it('does not ask about services, nodes or API keys', async () => {
+  it('does not ask about services or nodes', async () => {
     const resolve = vi.fn(holds());
     const app = await server(resolve);
     const response = await app.inject({
@@ -120,6 +125,76 @@ describe('permission guard', () => {
     });
     expect(response.statusCode).toBe(200);
     expect(resolve).not.toHaveBeenCalled();
+  });
+
+  describe('API keys (S1-08, G-14)', () => {
+    const tenantKey = { ...tenantUser, actorId: 'k1', actorType: 'apikey' as const };
+
+    it('checks a key against its own permissions, as a key', async () => {
+      const resolve = vi.fn(holds('extension.manage'));
+      const app = await server(resolve);
+      const allowed = await app.inject({
+        method: 'GET',
+        url: '/v1/tenants/t1/extensions',
+        headers: signedHeaders(tenantKey),
+      });
+      expect(allowed.statusCode).toBe(200);
+      expect(resolve).toHaveBeenCalledWith(
+        { id: 'k1', orgId: 't1', orgType: 'tenant', type: 'apikey' },
+        'extension.manage',
+      );
+      const refused = await app.inject({
+        method: 'GET',
+        url: '/v1/tenants/t1/cdrs',
+        headers: signedHeaders(tenantKey),
+      });
+      expect(refused.json()).toMatchObject({ code: 'permission_denied' });
+    });
+
+    it('never lets a key manage people, roles, grants or keys (H4), whatever it holds', async () => {
+      const resolve = vi.fn(holds('user.manage'));
+      const app = await server(resolve);
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/orgs/t1/users',
+        headers: signedHeaders(tenantKey),
+      });
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ code: 'api_key_not_allowed' });
+      expect(resolve).not.toHaveBeenCalled();
+    });
+
+    it('refuses a key on a scoped route and on self-service, which are about a person', async () => {
+      const app = await server(holds('monitor.listen', 'self.settings'));
+      const scoped = await app.inject({
+        method: 'POST',
+        url: '/v1/tenants/t1/calls/c1/listen',
+        headers: signedHeaders(tenantKey),
+      });
+      expect(scoped.json()).toMatchObject({ code: 'people_only' });
+      const self = await app.inject({
+        method: 'GET',
+        url: '/v1/tenants/t1/me/extension',
+        headers: signedHeaders(tenantKey),
+      });
+      expect(self.statusCode).toBe(403);
+    });
+
+    it("keeps a key to its own tenant (H2), and a reseller's key from private data (H1)", async () => {
+      const app = await server(holds('extension.manage', 'cdr.read'));
+      const other = await app.inject({
+        method: 'GET',
+        url: '/v1/tenants/t2/extensions',
+        headers: signedHeaders(tenantKey),
+      });
+      expect(other.json()).toMatchObject({ code: 'tenant_boundary' });
+      const reseller = await app.inject({
+        method: 'GET',
+        url: '/v1/tenants/t1/cdrs',
+        headers: signedHeaders({ ...tenantKey, orgId: 'r1', orgType: 'reseller' }),
+      });
+      expect(reseller.json()).toMatchObject({ code: 'reseller_private_data_denied' });
+    });
   });
 
   it('S5-09: leaves a scoped-permission route to its handler, without asking the resolver', async () => {
@@ -246,6 +321,20 @@ describe('createRemotePermissionResolver', () => {
 
     clock = 1001;
     await resolve(actor, 'self.settings');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it('asks about an API key at its own address, and caches it apart from a person with the same id', async () => {
+    const fetchImpl = vi.fn(() =>
+      Promise.resolve(Response.json({ permissions: ['extension.read'] })),
+    );
+    const resolve = resolver(fetchImpl);
+    expect(await resolve({ ...actor, type: 'apikey' }, 'extension.read')).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'http://identity/internal/v1/orgs/t1/api-keys/u1/permissions',
+      { headers: { authorization: 'Bearer tok' } },
+    );
+    await resolve(actor, 'extension.read');
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 

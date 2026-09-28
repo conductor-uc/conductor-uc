@@ -112,7 +112,7 @@ describe('authentication requirement (G-112)', () => {
 
     expect(response.statusCode).toBe(200);
     expect(resolve).toHaveBeenCalledWith(
-      { id: 'u1', orgId: 't1', orgType: 'tenant' },
+      { id: 'u1', orgId: 't1', orgType: 'tenant', type: 'user' },
       'extension.manage',
     );
     expect(handled()).toBe(1);

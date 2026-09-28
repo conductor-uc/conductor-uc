@@ -52,11 +52,12 @@ The shell (S9-05): a navigation rail grouped under headings, a drawer below 720 
 
 | Org type | Sections |
 |---|---|
-| Master | Dashboard · *Platform:* Resellers, Operations ([11](11-operations-console.md)), Certificates, Security · Audit · Users |
-| Reseller | Dashboard · *Customers:* Tenants · *Service:* Trunks, Domains, Brand · Users · Audit |
-| Tenant | Dashboard · *People:* People · *Calls:* Phone numbers, Call flows, Ring groups, Pickup groups, Queues, Schedules, Conference rooms, Parking lots, Media, Outbound routes · *Activity:* Attendant, Monitoring, Call records, Recordings, Voicemail · *Settings:* Emergency locations · Users · *Advanced:* Extensions, Phones |
+| Master | Dashboard · *Platform:* Resellers, Operations ([11](11-operations-console.md)), Certificates, Security · Audit · Users · API keys |
+| Reseller | Dashboard · *Customers:* Tenants · *Service:* Trunks, Domains, Brand · Users · Audit · API keys |
+| Tenant | Dashboard · *People:* People · *Calls:* Phone numbers, Call flows, Ring groups, Pickup groups, Queues, Schedules, Conference rooms, Parking lots, Media, Outbound routes · *Activity:* Attendant, Monitoring, Call records, Recordings, Voicemail · *Settings:* Emergency locations · Users · API keys · *Advanced:* Extensions, Phones |
 | A person with only a phone | Home · My call handling · My voicemail · My call history |
 
+- **API keys** (S1-08, G-14, `lib/features/security/api_keys.dart`, for holders of `apikey.manage`): the org's keys with their public id (`key_<id>_…`), how many permissions, when made, last used and ending; **New API key** asks for a name, what it may do (only what the person holds, never managing people or access, and for a reseller never private data) and an optional end date, then shows the key once with **Copy**; **Revoke** asks first.
 - A master or reseller **acts as** a tenant (the tenant switcher, or **Act as** on a tenant): the shell shows whose console it is and a way back, every request names that tenant in its path, and the URL keeps it (`?as=`). Private-data sections are hidden from a reseller (H1).
 - An administrator who also has a phone gets **My phone** under *You*, with the same screens as tabs.
 

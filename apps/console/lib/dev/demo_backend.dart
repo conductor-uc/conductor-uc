@@ -9,6 +9,12 @@ import 'demo_operations.dart';
 import 'demo_pbx.dart';
 import 'demo_realtime.dart';
 
+/// The demo org's API keys (S1-08), newest first.
+final demoApiKeys = <Map<String, Object?>>[];
+
+/// Forgets the demo's API keys (tests start each from none).
+void resetDemoApiKeys() => demoApiKeys.clear();
+
 /// A stand-in for api-gateway so the console can be clicked through without a
 /// backend (`--dart-define=DEMO=true`). Development only: the real client is
 /// used whenever DEMO is unset, and this is tree-shaken out of that build.
@@ -45,6 +51,8 @@ class _DemoAdapter implements HttpClientAdapter {
     if (recording != null) return recording;
     final operation = _callOperation(options);
     if (operation != null) return operation;
+    final keys = _apiKeys(options);
+    if (keys != null) return keys;
     final monitor = await _monitor(options);
     if (monitor != null) return monitor;
     final pbx = _pbx.handle(options, userId: demoUserId(_email));
@@ -204,6 +212,50 @@ class _DemoAdapter implements HttpClientAdapter {
     return status == 200
         ? _json(body)
         : _problem(status, '${body['code']}', '${body['detail']}');
+  }
+
+  /// S1-08: the signed-in org's API keys, kept for the session. A new key's
+  /// secret is made up here and shown once, as the service does.
+  ResponseBody? _apiKeys(RequestOptions options) {
+    final match = RegExp(r'^/v1/orgs/[^/]+/api-keys(?:/([^/]+))?$')
+        .firstMatch(options.path);
+    if (match == null) return null;
+    final method = options.method.toUpperCase();
+    final id = match.group(1);
+    if (method == 'GET' && id == null) return _json({'rows': demoApiKeys});
+    if (method == 'POST' && id == null) {
+      final body = _body(options);
+      final n = demoApiKeys.length + 1;
+      final prefix = n.toRadixString(16).padLeft(12, '0');
+      final key = <String, Object?>{
+        'id': 'apikey-$n',
+        'name': '${body['name']}',
+        'prefix': prefix,
+        'permissions': [...(body['permissions'] as List)]..sort(),
+        'createdBy': 'demo-user',
+        'createdAt': DateTime.now().toUtc().toIso8601String(),
+        'expiresAt': body['expiresAt'],
+        'lastUsedAt': null,
+        'revokedAt': null,
+        'active': true,
+      };
+      demoApiKeys.insert(0, key);
+      return _json({'apiKey': key, 'key': 'key_${prefix}_${'x' * 32}'}, 201);
+    }
+    if (method == 'DELETE' && id != null) {
+      final key = demoApiKeys.where((k) => k['id'] == id).firstOrNull;
+      if (key == null || key['active'] != true) {
+        return _problem(
+          404,
+          'api_key_not_found',
+          'There is no such active API key.',
+        );
+      }
+      key['active'] = false;
+      key['revokedAt'] = DateTime.now().toUtc().toIso8601String();
+      return ResponseBody.fromString('', 204);
+    }
+    return null;
   }
 
   /// Moving live calls and agents (S9-12, S9-13), for the attendant console:

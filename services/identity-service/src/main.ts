@@ -38,6 +38,8 @@ import { registerAccessRoutes } from './routes/access.routes.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { registerLinkRoutes } from './routes/links.routes.js';
 import { registerPermissionsInternalRoutes } from './routes/permissions.routes.js';
+import { registerApiKeyInternalRoutes, registerApiKeyRoutes } from './routes/api-keys.routes.js';
+import { createApiKeyRepo } from './repo/api-key.repo.js';
 import { registerJwksRoute } from './routes/jwks.routes.js';
 import { registerRoleRoutes } from './routes/roles.routes.js';
 import { registerSecuritySettingsRoutes } from './routes/security-settings.routes.js';
@@ -201,6 +203,10 @@ registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo, stepUp);
 registerSecuritySettingsRoutes(app, securitySettingsRepo, stepUp);
 registerGrantRoutes(app, grantRepo, orgAccess, permissionLookup);
 registerPermissionsInternalRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
+// S1-08 (G-14): API keys, and what api-gateway and every permission guard ask about them.
+const apiKeyRepo = createApiKeyRepo(db);
+registerApiKeyRoutes(app, apiKeyRepo, orgAccess, permissionLookup);
+registerApiKeyInternalRoutes(app, apiKeyRepo, config.INTERNAL_SERVICE_TOKEN);
 registerMeRoutes(app, roleRepo, grantRepo, {
   users: userRepo,
   lineage: (orgId) => orgClient.lineage(orgId),

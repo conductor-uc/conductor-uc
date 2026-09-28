@@ -49,3 +49,6 @@ app.*.map.json
 
 # S9-01: generated from lib/l10n/*.arb by `flutter pub get` (l10n.yaml).
 /lib/l10n/app_localizations*.dart
+
+# Golden test failure output (flutter_test writes it next to the tests).
+test/failures/

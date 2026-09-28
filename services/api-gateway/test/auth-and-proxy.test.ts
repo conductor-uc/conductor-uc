@@ -15,6 +15,7 @@ import {
 } from './helpers.js';
 
 const SECRET = 'test-internal-header-secret';
+const GOOD_KEY = `key_0123456789ab_${'a'.repeat(32)}`;
 
 describe('api-gateway: auth + proxy', () => {
   let redisHandle: TestRedisHandle;
@@ -54,6 +55,16 @@ describe('api-gateway: auth + proxy', () => {
           clientIp: request.context.clientIp ?? null,
           forwardedHost: request.headers['x-forwarded-host'] ?? null,
         };
+      });
+      // S1-08: identity-service's key check; one key is good.
+      fake.post('/internal/v1/api-keys/verify', { config: { public: true } }, (request, reply) => {
+        if (request.headers.authorization !== 'Bearer test-service-token') {
+          return reply.code(401).send({ code: 'internal_token_invalid' });
+        }
+        if ((request.body as { key?: string }).key !== GOOD_KEY) {
+          return reply.code(401).send({ code: 'api_key_invalid' });
+        }
+        return { keyId: 'key-7', orgId: 'tenant-9', orgType: 'tenant', resellerId: 'reseller-3' };
       });
       fake.post(
         '/v1/orgs/:id/echo-cookie',
@@ -131,6 +142,7 @@ describe('api-gateway: auth + proxy', () => {
         CDR_SERVICE_URL: tenantServices['cdr']!.url,
         TRUNK_SERVICE_URL: tenantServices['trunk']!.url,
         RECORDING_SERVICE_URL: tenantServices['recording']!.url,
+        INTERNAL_SERVICE_TOKEN: 'test-service-token',
         RATE_LIMIT_IP_MAX: '100000',
         RATE_LIMIT_ACTOR_MAX: '100000',
         // `inject` connects from 127.0.0.1: these tests play a load balancer
@@ -301,15 +313,37 @@ describe('api-gateway: auth + proxy', () => {
     expect(response.statusCode).toBe(401);
   });
 
-  it('reports API-key auth as not implemented, distinctly from a bad credential', async () => {
-    const response = await app.inject({
-      method: 'GET',
-      url: '/v1/tenants/t1',
-      headers: { authorization: 'ApiKey some-key' },
-    });
+  it('S1-08: forwards an API key as a signed `apikey` actor of its own org', async () => {
+    for (const authorization of [`Bearer ${GOOD_KEY}`, `ApiKey ${GOOD_KEY}`]) {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/tenants/t1',
+        headers: { authorization },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        context: {
+          actorId: 'key-7',
+          actorType: 'apikey',
+          orgId: 'tenant-9',
+          orgType: 'tenant',
+          resellerId: 'reseller-3',
+          tenantId: 'tenant-9',
+        },
+      });
+    }
+  });
 
-    expect(response.statusCode).toBe(501);
-    expect(response.json()).toMatchObject({ code: 'api_key_auth_not_implemented' });
+  it('S1-08: refuses an unknown, revoked or malformed API key as such', async () => {
+    for (const authorization of [`Bearer key_0123456789ab_${'b'.repeat(32)}`, 'ApiKey some-key']) {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/v1/tenants/t1',
+        headers: { authorization },
+      });
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toMatchObject({ code: 'api_key_invalid' });
+    }
   });
 
   it('forwards a verified actor as a signed internal context a real downstream accepts', async () => {

@@ -7393,5 +7393,160 @@
   "attTalkFirstCall": "Call them",
   "@attTalkFirstCall": {
     "description": "Attendant console (receptionist's screen). Dialog button: call the chosen person while the caller waits."
+  },
+  "navApiKeys": "API keys",
+  "@navApiKeys": {
+    "description": "Navigation: the page for API keys, which let other software work with this organization."
+  },
+  "keySubtitle": "Let other software work with your organization. Each key does only what you give it.",
+  "@keySubtitle": {
+    "description": "API keys page (software access for an organization). Page subtitle."
+  },
+  "keyNew": "New API key",
+  "@keyNew": {
+    "description": "API keys page (software access for an organization). Button and dialog title."
+  },
+  "keyEmpty": "No API keys yet.",
+  "@keyEmpty": {
+    "description": "API keys page (software access for an organization). Empty list."
+  },
+  "keyName": "Name",
+  "@keyName": {
+    "description": "API keys page (software access for an organization). Field label: what the key is for."
+  },
+  "keyNameHelp": "What will use it, for example \"Billing export\".",
+  "@keyNameHelp": {
+    "description": "API keys page (software access for an organization). Field help."
+  },
+  "keyNameRequired": "Give the key a name.",
+  "@keyNameRequired": {
+    "description": "API keys page (software access for an organization). Validation."
+  },
+  "keyPermissions": "What it may do",
+  "@keyPermissions": {
+    "description": "API keys page (software access for an organization). Heading above the permission choices."
+  },
+  "keyPermissionsHelp": "Only what you can do yourself is offered. A key never manages people or access.",
+  "@keyPermissionsHelp": {
+    "description": "API keys page (software access for an organization). Explanation under the permission heading."
+  },
+  "keyPermissionsRequired": "Choose at least one thing it may do.",
+  "@keyPermissionsRequired": {
+    "description": "API keys page (software access for an organization). Validation."
+  },
+  "keyPermissionCount": "{count, plural, =1{1 permission} other{{count} permissions}}",
+  "@keyPermissionCount": {
+    "description": "API keys page (software access for an organization). How many permissions a key has.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "keyCreated": "Created {date}",
+  "@keyCreated": {
+    "description": "API keys page (software access for an organization). When a key was made.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "28 Sep 2026"
+      }
+    }
+  },
+  "keyLastUsed": "last used {when}",
+  "@keyLastUsed": {
+    "description": "API keys page (software access for an organization). When a key was last used.",
+    "placeholders": {
+      "when": {
+        "type": "String",
+        "example": "28 Sep 2026 14:02"
+      }
+    }
+  },
+  "keyNeverUsed": "never used",
+  "@keyNeverUsed": {
+    "description": "API keys page (software access for an organization). A key that has not been used yet."
+  },
+  "keyNoEndDate": "No end date",
+  "@keyNoEndDate": {
+    "description": "API keys page (software access for an organization). A key that works until revoked."
+  },
+  "keyEnds": "Ends {date}",
+  "@keyEnds": {
+    "description": "API keys page (software access for an organization). When a key stops working.",
+    "placeholders": {
+      "date": {
+        "type": "String",
+        "example": "28 Sep 2027"
+      }
+    }
+  },
+  "keySetEnd": "Set an end date",
+  "@keySetEnd": {
+    "description": "API keys page (software access for an organization). Button: choose when the key stops working."
+  },
+  "keyClearEnd": "No end date",
+  "@keyClearEnd": {
+    "description": "API keys page (software access for an organization). Button: remove the end date."
+  },
+  "keyCreate": "Create key",
+  "@keyCreate": {
+    "description": "API keys page (software access for an organization). Dialog button."
+  },
+  "keyShownOnceTitle": "Copy your new key now",
+  "@keyShownOnceTitle": {
+    "description": "API keys page (software access for an organization). Dialog title after creating a key."
+  },
+  "keyShownOnce": "This is the only time the key is shown. Store it somewhere safe; if it is lost, revoke it and make a new one.",
+  "@keyShownOnce": {
+    "description": "API keys page (software access for an organization). Warning in the new key dialog."
+  },
+  "keyCopy": "Copy",
+  "@keyCopy": {
+    "description": "API keys page (software access for an organization). Button: copy the key."
+  },
+  "keyCopied": "Key copied.",
+  "@keyCopied": {
+    "description": "API keys page (software access for an organization). Confirmation after copying."
+  },
+  "keyDone": "I have stored it",
+  "@keyDone": {
+    "description": "API keys page (software access for an organization). Button closing the new key dialog."
+  },
+  "keyRevoke": "Revoke",
+  "@keyRevoke": {
+    "description": "API keys page (software access for an organization). Button: stop a key working for good."
+  },
+  "keyRevokeTitle": "Revoke {name}?",
+  "@keyRevokeTitle": {
+    "description": "API keys page (software access for an organization). Confirmation title.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Billing export"
+      }
+    }
+  },
+  "keyRevokeMessage": "Software using this key stops working within a minute. This cannot be undone.",
+  "@keyRevokeMessage": {
+    "description": "API keys page (software access for an organization). Confirmation message."
+  },
+  "keyRevoked": "{name} is revoked.",
+  "@keyRevoked": {
+    "description": "API keys page (software access for an organization). Confirmation after revoking.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Billing export"
+      }
+    }
+  },
+  "keyStatusRevoked": "Revoked",
+  "@keyStatusRevoked": {
+    "description": "API keys page (software access for an organization). Status chip."
+  },
+  "keyStatusExpired": "Ended",
+  "@keyStatusExpired": {
+    "description": "API keys page (software access for an organization). Status chip: past its end date."
   }
 }
