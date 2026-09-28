@@ -126,3 +126,12 @@ Future<void> tapNav(WidgetTester tester, String label) async {
   await tester.tap(item);
   await tester.pumpAndSettle();
 }
+
+/// Opens a form's "Advanced settings" (S9-04), where fields most people never
+/// change are folded away.
+Future<void> openAdvanced(WidgetTester tester) async {
+  final heading = find.text('Advanced settings');
+  await tester.ensureVisible(heading);
+  await tester.tap(heading);
+  await tester.pumpAndSettle();
+}

@@ -21,7 +21,7 @@ Future<List<Sent>> openMedia(
   final sent = <Sent>[];
   await openSection(
     tester,
-    'Media',
+    'Greetings and music',
     overrides: [
       filePickerProvider.overrideWithValue(() async => picks),
       openRecordingProvider.overrideWithValue((url) async => opened?.add(url)),

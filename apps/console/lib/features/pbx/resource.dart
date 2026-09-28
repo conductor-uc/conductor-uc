@@ -186,6 +186,10 @@ class ResourceDef {
   final String Function(Map<String, dynamic> row)? title;
   final String? blurb;
 
+  /// [key] as an ICU select value (`ring-groups` → `ring_groups`), for the
+  /// per-resource phrases in the ARB ("New ring group").
+  String get selectKey => key.replaceAll('-', '_');
+
   String titleOf(Map<String, dynamic> row) {
     final custom = title;
     if (custom != null) return custom(row);
@@ -197,6 +201,8 @@ class ResourceDef {
   }
 }
 
+/// Every kind of place a call can be sent (a number's destination, where an
+/// unanswered call goes), in the order people choose from.
 const destinationTypes = [
   'extension',
   'ring_group',
@@ -216,312 +222,433 @@ const destinationResource = {
   'voicemail': 'extensions',
 };
 
-const extensionsDef = ResourceDef(
-  key: 'extensions',
-  permission: 'extension.manage',
-  singular: 'Extension',
-  plural: 'Extensions',
-  icon: Icons.dialpad_outlined,
-  blurb: 'Internal numbers that phones and softphones register as.',
-  title: _extensionTitle,
-  fields: [
-    Field('number', 'Number', FieldKind.text, required: true, showInList: true),
-    Field(
-      'displayName',
-      'Name',
-      FieldKind.text,
-      required: true,
-      showInList: true,
-    ),
-    Field('callerIdName', 'Caller ID name', FieldKind.text),
-    Field(
-      'callerIdNumber',
-      'Caller ID number',
-      FieldKind.text,
-      format: FieldFormat.phone,
-    ),
-    Field(
-      'voicemailEnabled',
-      'Voicemail',
-      FieldKind.toggle,
-      showInList: true,
-      initial: false,
-    ),
-    Field(
-      'emergencyLocationId',
-      'Emergency location',
-      FieldKind.ref,
-      required: true,
-      ref: 'emergency-locations',
-      showInList: true,
-      help: 'Where emergency services are sent for calls from this extension.',
-    ),
-    Field(
-      'userId',
-      'Person',
-      FieldKind.ref,
-      ref: 'users',
-      needs: 'user.read',
-      notForReseller: true,
-      help:
-          'Whose phone this is. They can then manage its call handling, '
-          'voicemail and call history themselves. One extension per person.',
-    ),
-  ],
-);
+/// The destinations in plain words, with a line explaining each (S9-08).
+Map<String, String> _destinationLabels(AppLocalizations l) => {
+  'extension': l.destExtension,
+  'ring_group': l.destRingGroup,
+  'flow': l.destFlow,
+  'queue': l.destQueue,
+  'conference': l.destConference,
+  'voicemail': l.destVoicemail,
+};
+
+Map<String, String> _destinationHelp(AppLocalizations l) => {
+  'extension': l.destExtensionHelp,
+  'ring_group': l.destRingGroupHelp,
+  'flow': l.destFlowHelp,
+  'queue': l.destQueueHelp,
+  'conference': l.destConferenceHelp,
+  'voicemail': l.destVoicemailHelp,
+};
+
+/// A choice of destination and the picker for which one, as a pair.
+List<Field> _destinationFields(
+  AppLocalizations l, {
+  required String typeKey,
+  required String idKey,
+  required String label,
+  String? help,
+  bool required = false,
+  bool showInList = false,
+  bool advanced = false,
+}) => [
+  Field(
+    typeKey,
+    label,
+    FieldKind.choice,
+    required: required,
+    choices: destinationTypes,
+    choiceLabels: _destinationLabels(l),
+    choiceHelp: _destinationHelp(l),
+    help: help,
+    showInList: showInList,
+    advanced: advanced,
+  ),
+  Field(
+    idKey,
+    l.destWhich,
+    FieldKind.dynamicRef,
+    required: required,
+    refByField: typeKey,
+    refMap: destinationResource,
+    showInList: showInList,
+    advanced: advanced,
+  ),
+];
+
+// The definitions below are getters, not constants: their words come from
+// the ARB in the viewer's language (S9-08, D-018), so they are built when
+// asked for. They are cheap to build.
+
+ResourceDef get extensionsDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'extensions',
+    permission: 'extension.manage',
+    singular: l.extSingular,
+    plural: l.extPlural,
+    icon: Icons.dialpad_outlined,
+    blurb: l.extBlurb,
+    title: _extensionTitle,
+    fields: [
+      Field(
+        'number',
+        l.extNumber,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+        help: l.extNumberHelp,
+      ),
+      Field(
+        'displayName',
+        l.extName,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+        help: l.extNameHelp,
+      ),
+      Field(
+        'voicemailEnabled',
+        l.extVoicemail,
+        FieldKind.toggle,
+        showInList: true,
+        initial: false,
+        help: l.extVoicemailHelp,
+      ),
+      Field(
+        'emergencyLocationId',
+        l.extLocation,
+        FieldKind.ref,
+        required: true,
+        ref: 'emergency-locations',
+        showInList: true,
+        help: l.extLocationHelp,
+      ),
+      Field(
+        'userId',
+        l.extUser,
+        FieldKind.ref,
+        ref: 'users',
+        needs: 'user.read',
+        notForReseller: true,
+        help: l.extUserHelp,
+      ),
+      Field('callerIdName', l.extCallerIdName, FieldKind.text, advanced: true),
+      Field(
+        'callerIdNumber',
+        l.extCallerIdNumber,
+        FieldKind.text,
+        format: FieldFormat.phone,
+        advanced: true,
+        help: l.extCallerIdNumberHelp,
+      ),
+    ],
+  );
+}
 
 String _extensionTitle(Map<String, dynamic> row) =>
     '${row['number']} · ${row['displayName']}';
 
-const didsDef = ResourceDef(
-  key: 'dids',
-  permission: 'did.manage',
-  singular: 'Phone number',
-  plural: 'Phone numbers',
-  icon: Icons.phone_outlined,
-  blurb: 'Numbers callers dial, and where each one rings.',
-  title: _didTitle,
-  fields: [
-    Field(
-      'e164',
-      'Number',
-      FieldKind.text,
-      required: true,
-      showInList: true,
-      format: FieldFormat.phone,
-      help:
-          'As you would dial it, such as (415) 555-0100, or with its '
-          'country code, such as +44 20 7946 0958.',
-    ),
-    Field(
-      'trunkId',
-      'Trunk',
-      FieldKind.ref,
-      required: true,
-      ref: 'trunks',
-      showInList: true,
-    ),
-    Field(
-      'destinationType',
-      'Rings',
-      FieldKind.choice,
-      required: true,
-      choices: destinationTypes,
-      showInList: true,
-    ),
-    Field(
-      'destinationId',
-      'Destination',
-      FieldKind.dynamicRef,
-      required: true,
-      refByField: 'destinationType',
-      refMap: destinationResource,
-      showInList: true,
-    ),
-  ],
-);
+ResourceDef get didsDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'dids',
+    permission: 'did.manage',
+    singular: l.didSingular,
+    plural: l.didPlural,
+    icon: Icons.phone_outlined,
+    blurb: l.didBlurb,
+    title: _didTitle,
+    fields: [
+      Field(
+        'e164',
+        l.didNumber,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+        format: FieldFormat.phone,
+        help: l.didNumberHelp,
+      ),
+      ..._destinationFields(
+        l,
+        typeKey: 'destinationType',
+        idKey: 'destinationId',
+        label: l.didAnswers,
+        required: true,
+        showInList: true,
+      ),
+      Field(
+        'trunkId',
+        l.didTrunk,
+        FieldKind.ref,
+        required: true,
+        ref: 'trunks',
+        showInList: true,
+        help: l.didTrunkHelp,
+      ),
+    ],
+  );
+}
 
 String _didTitle(Map<String, dynamic> row) => '${row['e164']}';
 
-const _noAnswerFields = [
-  Field(
-    'noAnswerDestinationType',
-    'If no answer',
-    FieldKind.choice,
-    choices: destinationTypes,
-    help: 'Optional. Where the call goes when nobody picks up.',
-  ),
-  Field(
-    'noAnswerDestinationId',
-    'Then send to',
-    FieldKind.dynamicRef,
-    refByField: 'noAnswerDestinationType',
-    refMap: destinationResource,
-  ),
-];
+ResourceDef get ringGroupsDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'ring-groups',
+    permission: 'group.manage',
+    singular: l.rgSingular,
+    plural: l.rgPlural,
+    icon: Icons.groups_outlined,
+    blurb: l.rgBlurb,
+    fields: [
+      Field(
+        'label',
+        l.fieldName,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+      ),
+      Field(
+        'memberExtensionIds',
+        l.rgMembers,
+        FieldKind.refList,
+        required: true,
+        ref: 'extensions',
+        showInList: true,
+        help: l.rgMembersHelp,
+      ),
+      Field(
+        'strategy',
+        l.rgStrategy,
+        FieldKind.choice,
+        required: true,
+        choices: const ['simultaneous', 'sequential', 'round_robin', 'random'],
+        choiceLabels: {
+          'simultaneous': l.rgSimultaneous,
+          'sequential': l.rgSequential,
+          'round_robin': l.rgRoundRobin,
+          'random': l.rgRandom,
+        },
+        choiceHelp: {
+          'simultaneous': l.rgSimultaneousHelp,
+          'sequential': l.rgSequentialHelp,
+          'round_robin': l.rgRoundRobinHelp,
+          'random': l.rgRandomHelp,
+        },
+        showInList: true,
+        initial: 'simultaneous',
+      ),
+      Field(
+        'ringTimeoutSeconds',
+        l.rgRingFor,
+        FieldKind.integer,
+        required: true,
+        min: 5,
+        max: 300,
+        initial: 20,
+        showInList: true,
+        help: l.rgRingForHelp,
+      ),
+      ..._destinationFields(
+        l,
+        typeKey: 'noAnswerDestinationType',
+        idKey: 'noAnswerDestinationId',
+        label: l.noAnswerType,
+        help: l.noAnswerTypeHelp,
+      ),
+    ],
+  );
+}
 
-const ringGroupsDef = ResourceDef(
-  key: 'ring-groups',
-  permission: 'group.manage',
-  singular: 'Ring group',
-  plural: 'Ring groups',
-  icon: Icons.groups_outlined,
-  blurb: 'Ring several extensions for one call.',
-  fields: [
-    Field('label', 'Name', FieldKind.text, required: true, showInList: true),
-    Field(
-      'strategy',
-      'Strategy',
-      FieldKind.choice,
-      required: true,
-      choices: ['simultaneous', 'sequential', 'round_robin', 'random'],
-      showInList: true,
-      initial: 'simultaneous',
-    ),
-    Field(
-      'memberExtensionIds',
-      'Members',
-      FieldKind.refList,
-      required: true,
-      ref: 'extensions',
-      showInList: true,
-      help: 'At least one.',
-    ),
-    Field(
-      'ringTimeoutSeconds',
-      'Ring for (seconds)',
-      FieldKind.integer,
-      required: true,
-      min: 5,
-      max: 300,
-      initial: 20,
-      showInList: true,
-    ),
-    ..._noAnswerFields,
-  ],
-);
+ResourceDef get queuesDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'queues',
+    permission: 'queue.manage',
+    singular: l.qSingular,
+    plural: l.qPlural,
+    icon: Icons.queue_outlined,
+    blurb: l.qBlurb,
+    fields: [
+      Field(
+        'label',
+        l.fieldName,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+      ),
+      Field(
+        'strategy',
+        l.qStrategy,
+        FieldKind.choice,
+        required: true,
+        choices: const [
+          'longest-idle-agent',
+          'ring-all',
+          'round-robin',
+          'top-down',
+          'agent-with-least-talk-time',
+          'agent-with-fewest-calls',
+          'sequentially-by-agent-order',
+          'random',
+        ],
+        choiceLabels: {
+          'ring-all': l.qRingAll,
+          'longest-idle-agent': l.qLongestIdle,
+          'round-robin': l.qRoundRobin,
+          'top-down': l.qTopDown,
+          'agent-with-least-talk-time': l.qLeastTalk,
+          'agent-with-fewest-calls': l.qFewestCalls,
+          'sequentially-by-agent-order': l.qSequential,
+          'random': l.qRandom,
+        },
+        choiceHelp: {
+          'ring-all': l.qRingAllHelp,
+          'longest-idle-agent': l.qLongestIdleHelp,
+          'round-robin': l.qRoundRobinHelp,
+          'top-down': l.qTopDownHelp,
+          'agent-with-least-talk-time': l.qLeastTalkHelp,
+          'agent-with-fewest-calls': l.qFewestCallsHelp,
+          'sequentially-by-agent-order': l.qSequentialHelp,
+          'random': l.qRandomHelp,
+        },
+        initial: 'longest-idle-agent',
+        showInList: true,
+      ),
+      Field(
+        'maxWaitSeconds',
+        l.qMaxWait,
+        FieldKind.integer,
+        required: true,
+        min: 0,
+        initial: 300,
+        showInList: true,
+        help: l.qMaxWaitHelp,
+      ),
+      ..._destinationFields(
+        l,
+        typeKey: 'noAgentDestinationType',
+        idKey: 'noAgentDestinationId',
+        label: l.qNoAgentType,
+        help: l.qNoAgentTypeHelp,
+      ),
+      Field(
+        'mohMediaAssetId',
+        l.qMusic,
+        FieldKind.ref,
+        ref: 'media-assets',
+        help: l.qMusicHelp,
+      ),
+      Field(
+        'announcePosition',
+        l.qAnnounce,
+        FieldKind.toggle,
+        required: true,
+        initial: false,
+      ),
+      Field(
+        'announceFrequencySeconds',
+        l.qAnnounceEvery,
+        FieldKind.integer,
+        min: 1,
+        advanced: true,
+      ),
+    ],
+  );
+}
 
-const queuesDef = ResourceDef(
-  key: 'queues',
-  permission: 'queue.manage',
-  singular: 'Queue',
-  plural: 'Queues',
-  icon: Icons.queue_outlined,
-  blurb: 'Hold callers until an agent is free.',
-  fields: [
-    Field('label', 'Name', FieldKind.text, required: true, showInList: true),
-    Field(
-      'strategy',
-      'Strategy',
-      FieldKind.choice,
-      required: true,
-      choices: [
-        'ring-all',
-        'longest-idle-agent',
-        'round-robin',
-        'top-down',
-        'agent-with-least-talk-time',
-        'agent-with-fewest-calls',
-        'sequentially-by-agent-order',
-        'random',
-      ],
-      initial: 'longest-idle-agent',
-      showInList: true,
-    ),
-    Field(
-      'mohMediaAssetId',
-      'Hold music',
-      FieldKind.ref,
-      ref: 'media-assets',
-      help: 'A ready media asset. Blank uses the default.',
-    ),
-    Field(
-      'maxWaitSeconds',
-      'Longest wait (seconds)',
-      FieldKind.integer,
-      required: true,
-      min: 0,
-      initial: 300,
-      showInList: true,
-    ),
-    Field(
-      'announcePosition',
-      'Announce position',
-      FieldKind.toggle,
-      required: true,
-      initial: false,
-    ),
-    Field(
-      'announceFrequencySeconds',
-      'Announce every (seconds)',
-      FieldKind.integer,
-      min: 1,
-    ),
-    Field(
-      'noAgentDestinationType',
-      'If no agent',
-      FieldKind.choice,
-      choices: destinationTypes,
-      help: 'Optional. Where callers go when no agent is available.',
-    ),
-    Field(
-      'noAgentDestinationId',
-      'Then send to',
-      FieldKind.dynamicRef,
-      refByField: 'noAgentDestinationType',
-      refMap: destinationResource,
-    ),
-  ],
-);
+ResourceDef get agentsDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'agents',
+    permission: 'queue.manage',
+    singular: l.agSingular,
+    plural: l.agPlural,
+    icon: Icons.headset_mic_outlined,
+    blurb: l.agBlurb,
+    fields: [
+      Field(
+        'extensionId',
+        l.agExtension,
+        FieldKind.ref,
+        required: true,
+        ref: 'extensions',
+        showInList: true,
+      ),
+      Field(
+        'wrapUpSeconds',
+        l.agWrapUp,
+        FieldKind.integer,
+        min: 0,
+        showInList: true,
+        help: l.agWrapUpHelp,
+      ),
+      Field(
+        'maxNoAnswer',
+        l.agMaxNoAnswer,
+        FieldKind.integer,
+        min: 0,
+        showInList: true,
+        advanced: true,
+      ),
+      Field(
+        'rejectDelaySeconds',
+        l.agRejectDelay,
+        FieldKind.integer,
+        min: 0,
+        advanced: true,
+      ),
+    ],
+  );
+}
 
-const agentsDef = ResourceDef(
-  key: 'agents',
-  permission: 'queue.manage',
-  singular: 'Agent',
-  plural: 'Agents',
-  icon: Icons.headset_mic_outlined,
-  blurb: 'Extensions that take queue calls.',
-  fields: [
-    Field(
-      'extensionId',
-      'Extension',
-      FieldKind.ref,
-      required: true,
-      ref: 'extensions',
-      showInList: true,
-    ),
-    Field(
-      'maxNoAnswer',
-      'Give up after (misses)',
-      FieldKind.integer,
-      min: 0,
-      showInList: true,
-    ),
-    Field(
-      'wrapUpSeconds',
-      'Wrap-up (seconds)',
-      FieldKind.integer,
-      min: 0,
-      showInList: true,
-    ),
-    Field(
-      'rejectDelaySeconds',
-      'Retry delay (seconds)',
-      FieldKind.integer,
-      min: 0,
-    ),
-  ],
-);
-
-const conferenceRoomsDef = ResourceDef(
-  key: 'conference-rooms',
-  permission: 'conference_room.manage',
-  singular: 'Conference room',
-  plural: 'Conference rooms',
-  icon: Icons.video_call_outlined,
-  fields: [
-    Field('label', 'Name', FieldKind.text, required: true, showInList: true),
-    Field('number', 'Number', FieldKind.text, required: true, showInList: true),
-    Field(
-      'pin',
-      'PIN',
-      FieldKind.text,
-      writeOnly: true,
-      help: 'Optional. Leave blank on edit to keep the current PIN.',
-    ),
-    Field('video', 'Video', FieldKind.toggle, showInList: true, initial: false),
-    Field('layout', 'Video layout', FieldKind.text),
-    Field(
-      'maxMembers',
-      'Most people',
-      FieldKind.integer,
-      required: true,
-      min: 2,
-      initial: 20,
-      showInList: true,
-    ),
-  ],
-);
+ResourceDef get conferenceRoomsDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'conference-rooms',
+    permission: 'conference_room.manage',
+    singular: l.crSingular,
+    plural: l.crPlural,
+    icon: Icons.video_call_outlined,
+    blurb: l.crBlurb,
+    fields: [
+      Field(
+        'label',
+        l.fieldName,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+      ),
+      Field(
+        'number',
+        l.crNumber,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+        help: l.crNumberHelp,
+      ),
+      Field('pin', l.crPin, FieldKind.text, writeOnly: true, help: l.crPinHelp),
+      Field(
+        'maxMembers',
+        l.crMaxMembers,
+        FieldKind.integer,
+        required: true,
+        min: 2,
+        initial: 20,
+        showInList: true,
+      ),
+      Field(
+        'video',
+        l.crVideo,
+        FieldKind.toggle,
+        showInList: true,
+        initial: false,
+      ),
+      Field('layout', l.crLayout, FieldKind.text, advanced: true),
+    ],
+  );
+}
 
 /// Time zones offered where a form asks for one. The service accepts any IANA
 /// name; these are the common ones.
@@ -550,329 +677,412 @@ const commonTimezones = [
   'Pacific/Auckland',
 ];
 
-const schedulesDef = ResourceDef(
-  key: 'schedules',
-  permission: 'schedule.manage',
-  singular: 'Schedule',
-  plural: 'Schedules',
-  icon: Icons.schedule_outlined,
-  blurb: 'Open hours and holidays, to route calls differently after hours.',
-  fields: [
-    Field('label', 'Name', FieldKind.text, required: true, showInList: true),
-    Field(
-      'timezone',
-      'Time zone',
-      FieldKind.choice,
-      required: true,
-      choices: commonTimezones,
-      initial: 'UTC',
-      showInList: true,
-    ),
-    Field(
-      'rules',
-      'Open hours',
-      FieldKind.weeklyHours,
-      showInList: true,
-      initial: [
-        {
-          'days': [1, 2, 3, 4, 5],
-          'start': '09:00',
-          'end': '17:00',
-        },
-      ],
-    ),
-    Field(
-      'holidays',
-      'Holidays',
-      FieldKind.dateList,
-      showInList: true,
-      initial: <Map<String, dynamic>>[],
-    ),
-  ],
-);
+ResourceDef get schedulesDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'schedules',
+    permission: 'schedule.manage',
+    singular: l.schSingular,
+    plural: l.schPlural,
+    icon: Icons.schedule_outlined,
+    blurb: l.schBlurb,
+    fields: [
+      Field(
+        'label',
+        l.fieldName,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+      ),
+      Field(
+        'timezone',
+        l.schTimezone,
+        FieldKind.choice,
+        required: true,
+        choices: commonTimezones,
+        initial: 'UTC',
+        showInList: true,
+      ),
+      Field(
+        'rules',
+        l.schRules,
+        FieldKind.weeklyHours,
+        showInList: true,
+        initial: const [
+          {
+            'days': [1, 2, 3, 4, 5],
+            'start': '09:00',
+            'end': '17:00',
+          },
+        ],
+      ),
+      Field(
+        'holidays',
+        l.schHolidays,
+        FieldKind.dateList,
+        showInList: true,
+        initial: const <Map<String, dynamic>>[],
+      ),
+    ],
+  );
+}
 
-const parkingLotsDef = ResourceDef(
-  key: 'parking-lots',
-  permission: 'parking_lot.manage',
-  singular: 'Parking lot',
-  plural: 'Parking lots',
-  icon: Icons.local_parking_outlined,
-  fields: [
-    Field('label', 'Name', FieldKind.text, required: true, showInList: true),
-    Field(
-      'slotStart',
-      'First slot',
-      FieldKind.integer,
-      required: true,
-      min: 0,
-      showInList: true,
-      initial: 701,
-    ),
-    Field(
-      'slotEnd',
-      'Last slot',
-      FieldKind.integer,
-      required: true,
-      min: 0,
-      showInList: true,
-      initial: 720,
-      check: _lastSlotAfterFirst,
-    ),
-    Field(
-      'timeoutSeconds',
-      'Return after (seconds)',
-      FieldKind.integer,
-      required: true,
-      min: 1,
-      initial: 120,
-    ),
-    Field(
-      'returnDestinationType',
-      'Then send to',
-      FieldKind.choice,
-      choices: destinationTypes,
-    ),
-    Field(
-      'returnDestinationId',
-      'Destination',
-      FieldKind.dynamicRef,
-      refByField: 'returnDestinationType',
-      refMap: destinationResource,
-    ),
-  ],
-);
+ResourceDef get parkingLotsDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'parking-lots',
+    permission: 'parking_lot.manage',
+    singular: l.plSingular,
+    plural: l.plPlural,
+    icon: Icons.local_parking_outlined,
+    blurb: l.plBlurb,
+    fields: [
+      Field(
+        'label',
+        l.fieldName,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+      ),
+      Field(
+        'slotStart',
+        l.plFirst,
+        FieldKind.integer,
+        required: true,
+        min: 0,
+        showInList: true,
+        initial: 701,
+      ),
+      Field(
+        'slotEnd',
+        l.plLast,
+        FieldKind.integer,
+        required: true,
+        min: 0,
+        showInList: true,
+        initial: 720,
+        check: _lastSlotAfterFirst,
+      ),
+      Field(
+        'timeoutSeconds',
+        l.plTimeout,
+        FieldKind.integer,
+        required: true,
+        min: 1,
+        initial: 120,
+        help: l.plTimeoutHelp,
+      ),
+      ..._destinationFields(
+        l,
+        typeKey: 'returnDestinationType',
+        idKey: 'returnDestinationId',
+        label: l.plReturnType,
+        advanced: true,
+      ),
+    ],
+  );
+}
 
-const emergencyLocationsDef = ResourceDef(
-  key: 'emergency-locations',
-  permission: 'emergency_location.manage',
-  singular: 'Emergency location',
-  plural: 'Emergency locations',
-  icon: Icons.local_hospital_outlined,
-  blurb: 'Dispatchable addresses. Every extension needs one.',
-  fields: [
-    Field('label', 'Name', FieldKind.text, required: true, showInList: true),
-    Field(
-      'addressLine1',
-      'Address',
-      FieldKind.text,
-      required: true,
-      showInList: true,
-    ),
-    Field('addressLine2', 'Address line 2', FieldKind.text),
-    Field('city', 'City', FieldKind.text, required: true, showInList: true),
-    Field('state', 'State', FieldKind.text, required: true, showInList: true),
-    Field('postalCode', 'Postal code', FieldKind.text, required: true),
-    Field('country', 'Country', FieldKind.text, required: true, initial: 'US'),
-  ],
-);
+ResourceDef get emergencyLocationsDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'emergency-locations',
+    permission: 'emergency_location.manage',
+    singular: l.elSingular,
+    plural: l.elPlural,
+    icon: Icons.local_hospital_outlined,
+    blurb: l.elBlurb,
+    fields: [
+      Field(
+        'label',
+        l.fieldName,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+        help: l.elNameHelp,
+      ),
+      Field(
+        'addressLine1',
+        l.elAddress,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+      ),
+      Field('addressLine2', l.elAddress2, FieldKind.text),
+      Field('city', l.elCity, FieldKind.text, required: true, showInList: true),
+      Field(
+        'state',
+        l.elState,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+      ),
+      Field('postalCode', l.elPostal, FieldKind.text, required: true),
+      Field(
+        'country',
+        l.elCountry,
+        FieldKind.text,
+        required: true,
+        initial: 'US',
+        help: l.elCountryHelp,
+      ),
+    ],
+  );
+}
 
-const mediaAssetsDef = ResourceDef(
-  key: 'media-assets',
-  permission: 'media.manage',
-  singular: 'Media file',
-  plural: 'Media',
-  icon: Icons.library_music_outlined,
-  blurb: 'Prompts, hold music, and greetings. Upload a recording and it is checked and converted before it can be used.',
-  readOnly: true,
-  fields: [
-    Field('label', 'Name', FieldKind.text, showInList: true),
-    Field('kind', 'Kind', FieldKind.text, showInList: true),
-    Field('status', 'Status', FieldKind.text, showInList: true, status: true),
-    Field('contentType', 'Type', FieldKind.text, showInList: true),
-  ],
-);
+ResourceDef get mediaAssetsDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'media-assets',
+    permission: 'media.manage',
+    singular: l.mdSingular,
+    plural: l.mdPlural,
+    icon: Icons.library_music_outlined,
+    blurb: l.mdBlurb,
+    readOnly: true,
+    fields: [
+      Field('label', l.fieldName, FieldKind.text, showInList: true),
+      Field('kind', l.mdKind, FieldKind.text, showInList: true),
+      Field(
+        'status',
+        l.mdStatus,
+        FieldKind.text,
+        showInList: true,
+        status: true,
+      ),
+      Field('contentType', l.mdType, FieldKind.text, showInList: true),
+    ],
+  );
+}
 
 /// A carrier connection. A reseller adds and edits its tenants' trunks; a
 /// DID picks one. Its registration status and IP allowlist have their own
 /// dialog (`trunks_page.dart`).
-const trunksDef = ResourceDef(
-  key: 'trunks',
-  permission: 'trunk.manage',
-  singular: 'Trunk',
-  plural: 'Trunks',
-  icon: Icons.cable_outlined,
-  blurb: 'Carrier connections a tenant\'s numbers and outbound calls use.',
-  fields: [
-    Field('name', 'Name', FieldKind.text, required: true, showInList: true),
-    Field(
-      'authMode',
-      'Authentication',
-      FieldKind.choice,
-      required: true,
-      choices: ['register', 'ip', 'both'],
-      choiceLabels: {
-        'register': 'Register with a username and secret',
-        'ip': 'Carrier IP addresses only',
-        'both': 'Both',
-      },
-      initial: 'register',
-      showInList: true,
-      help: 'IP-only trunks take no username or secret; the others need both.',
-    ),
-    Field('host', 'Host', FieldKind.text, required: true, showInList: true),
-    Field(
-      'port',
-      'Port',
-      FieldKind.integer,
-      required: true,
-      min: 1,
-      max: 65535,
-      initial: 5060,
-      showInList: true,
-    ),
-    Field(
-      'transport',
-      'Transport',
-      FieldKind.choice,
-      required: true,
-      choices: ['udp', 'tcp', 'tls'],
-      initial: 'udp',
-      showInList: true,
-    ),
-    Field('username', 'Username', FieldKind.text, check: _usernameForRegister),
-    Field(
-      'secret',
-      'Secret',
-      FieldKind.text,
-      secret: true,
-      writeOnly: true,
-      help: 'Never shown again. Leave blank on edit to keep the current one.',
-    ),
-    Field('fromDomain', 'From domain', FieldKind.text),
-    Field(
-      'codecs',
-      'Codecs',
-      FieldKind.textList,
-      required: true,
-      initial: ['PCMU', 'PCMA'],
-      help: 'Comma-separated, in order of preference.',
-      showInList: true,
-    ),
-    Field(
-      'maxChannels',
-      'Channel limit',
-      FieldKind.integer,
-      min: 1,
-      help: 'Blank for no limit.',
-    ),
-  ],
-);
+ResourceDef get trunksDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'trunks',
+    permission: 'trunk.manage',
+    singular: l.trSingular,
+    plural: l.trPlural,
+    icon: Icons.cable_outlined,
+    blurb: l.trBlurb,
+    fields: [
+      Field(
+        'name',
+        l.fieldName,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+      ),
+      Field(
+        'authMode',
+        l.trAuth,
+        FieldKind.choice,
+        required: true,
+        choices: const ['register', 'ip', 'both'],
+        choiceLabels: {
+          'register': l.trRegister,
+          'ip': l.trIp,
+          'both': l.trBoth,
+        },
+        choiceHelp: {
+          'register': l.trRegisterHelp,
+          'ip': l.trIpHelp,
+          'both': l.trBothHelp,
+        },
+        initial: 'register',
+        showInList: true,
+      ),
+      Field('host', l.trHost, FieldKind.text, required: true, showInList: true),
+      Field(
+        'username',
+        l.trUsername,
+        FieldKind.text,
+        check: _usernameForRegister,
+      ),
+      Field(
+        'secret',
+        l.trSecret,
+        FieldKind.text,
+        secret: true,
+        writeOnly: true,
+        help: l.trSecretHelp,
+      ),
+      Field(
+        'port',
+        l.trPort,
+        FieldKind.integer,
+        required: true,
+        min: 1,
+        max: 65535,
+        initial: 5060,
+        showInList: true,
+        advanced: true,
+      ),
+      Field(
+        'transport',
+        l.trTransport,
+        FieldKind.choice,
+        required: true,
+        choices: const ['udp', 'tcp', 'tls'],
+        choiceLabels: {'udp': 'UDP', 'tcp': 'TCP', 'tls': l.trTls},
+        initial: 'udp',
+        showInList: true,
+        advanced: true,
+      ),
+      Field('fromDomain', l.trFromDomain, FieldKind.text, advanced: true),
+      Field(
+        'codecs',
+        l.trCodecs,
+        FieldKind.textList,
+        required: true,
+        initial: const ['PCMU', 'PCMA'],
+        help: l.trCodecsHelp,
+        showInList: true,
+        advanced: true,
+      ),
+      Field(
+        'maxChannels',
+        l.trMaxChannels,
+        FieldKind.integer,
+        min: 1,
+        help: l.trMaxChannelsHelp,
+        advanced: true,
+      ),
+    ],
+  );
+}
 
 /// How a tenant's outbound calls pick a trunk: the first route, lowest
 /// priority number first, whose prefix the dialed number starts with. The
 /// service lists them in that order, so changing the priority reorders them.
-const outboundRoutesDef = ResourceDef(
-  key: 'outbound-routes',
-  permission: 'trunk.manage',
-  singular: 'Outbound route',
-  plural: 'Outbound routes',
-  icon: Icons.call_made_outlined,
-  blurb: 'Which trunks carry outgoing calls. The lowest priority number is tried first.',
-  title: _outboundRouteTitle,
-  fields: [
-    Field(
-      'priority',
-      'Priority',
-      FieldKind.integer,
-      required: true,
-      min: 0,
-      initial: 10,
-      showInList: true,
-      help: 'Lower numbers are tried first.',
-    ),
-    Field(
-      'pattern',
-      'Number prefix',
-      FieldKind.text,
-      required: true,
-      allowEmpty: true,
-      emptyLabel: 'Everything else',
-      showInList: true,
-      help: "Starts with +, such as +1 or +44. Leave empty for all other numbers.",
-    ),
-    Field(
-      'trunkIds',
-      'Trunks',
-      FieldKind.refList,
-      required: true,
-      ref: 'trunks',
-      showInList: true,
-      help: 'At least one.',
-    ),
-    Field(
-      'strip',
-      'Digits to remove',
-      FieldKind.integer,
-      min: 0,
-      initial: 0,
-      nullable: false,
-      showInList: true,
-      help: 'Taken off the front of the number before dialing.',
-    ),
-    Field(
-      'prepend',
-      'Digits to add',
-      FieldKind.text,
-      showInList: true,
-      help: 'Put on the front of the number before dialing.',
-    ),
-  ],
-);
+ResourceDef get outboundRoutesDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'outbound-routes',
+    permission: 'trunk.manage',
+    singular: l.orSingular,
+    plural: l.orPlural,
+    icon: Icons.call_made_outlined,
+    blurb: l.orBlurb,
+    title: _outboundRouteTitle,
+    fields: [
+      Field(
+        'priority',
+        l.orPriority,
+        FieldKind.integer,
+        required: true,
+        min: 0,
+        initial: 10,
+        showInList: true,
+        help: l.orPriorityHelp,
+      ),
+      Field(
+        'pattern',
+        l.orPattern,
+        FieldKind.text,
+        required: true,
+        allowEmpty: true,
+        emptyLabel: l.orPatternEmpty,
+        showInList: true,
+        help: l.orPatternHelp,
+      ),
+      Field(
+        'trunkIds',
+        l.orTrunks,
+        FieldKind.refList,
+        required: true,
+        ref: 'trunks',
+        showInList: true,
+        help: l.orTrunksHelp,
+      ),
+      Field(
+        'strip',
+        l.orStrip,
+        FieldKind.integer,
+        min: 0,
+        initial: 0,
+        nullable: false,
+        showInList: true,
+        help: l.orStripHelp,
+        advanced: true,
+      ),
+      Field(
+        'prepend',
+        l.orPrepend,
+        FieldKind.text,
+        showInList: true,
+        help: l.orPrependHelp,
+        advanced: true,
+      ),
+    ],
+  );
+}
 
 String _outboundRouteTitle(Map<String, dynamic> row) {
   final pattern = row['pattern'];
   return pattern is String && pattern.isNotEmpty
-      ? 'Calls to $pattern'
-      : 'All other outgoing calls';
+      ? currentL10n.orTitlePattern(pattern)
+      : currentL10n.orTitleAll;
 }
 
 /// Callflows are listed by their own page; the definition exists so other
 /// resources can pick a flow as a destination.
-const flowsDef = ResourceDef(
+ResourceDef get flowsDef => ResourceDef(
   key: 'flows',
   permission: 'callflow.edit',
-  singular: 'Call flow',
-  plural: 'Call flows',
+  singular: currentL10n.cfSingular,
+  plural: currentL10n.cfPlural,
   icon: Icons.account_tree_outlined,
   readOnly: true,
-  fields: [],
+  fields: const [],
 );
 
 /// A desk phone that sets itself up from the platform. The phone's own
 /// settings are the extension it registers as; its address (MAC) is fixed once
 /// it exists, because the phone asks for its file by that name.
-const devicesDef = ResourceDef(
-  key: 'devices',
-  permission: 'extension.manage',
-  singular: 'Phone',
-  plural: 'Phones',
-  icon: Icons.phone_android_outlined,
-  blurb: 'Yealink desk phones that fetch their own settings.',
-  title: _deviceTitle,
-  fields: [
-    Field(
-      'mac',
-      'MAC address',
-      FieldKind.text,
-      required: true,
-      showInList: true,
-      scope: FieldScope.create,
-      format: FieldFormat.mac,
-      help: 'Printed on the back of the phone, such as 00:15:65:aa:bb:cc.',
-    ),
-    Field(
-      'extensionId',
-      'Extension',
-      FieldKind.ref,
-      required: true,
-      ref: 'extensions',
-      showInList: true,
-      help: 'The extension this phone registers as.',
-    ),
-    Field('model', 'Model', FieldKind.text, showInList: true),
-    Field('label', 'Label', FieldKind.text, showInList: true),
-  ],
-);
+ResourceDef get devicesDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'devices',
+    permission: 'extension.manage',
+    singular: l.dvSingular,
+    plural: l.dvPlural,
+    icon: Icons.phone_android_outlined,
+    blurb: l.dvBlurb,
+    title: _deviceTitle,
+    fields: [
+      Field(
+        'mac',
+        l.dvMac,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+        scope: FieldScope.create,
+        format: FieldFormat.mac,
+        help: l.dvMacHelp,
+      ),
+      Field(
+        'extensionId',
+        l.dvExtension,
+        FieldKind.ref,
+        required: true,
+        ref: 'extensions',
+        showInList: true,
+        help: l.dvExtensionHelp,
+      ),
+      Field('model', l.dvModel, FieldKind.text, showInList: true),
+      Field(
+        'label',
+        l.dvLabel,
+        FieldKind.text,
+        showInList: true,
+        help: l.dvLabelHelp,
+      ),
+    ],
+  );
+}
 
 String _deviceTitle(Map<String, dynamic> row) {
   final label = row['label'];
@@ -880,7 +1090,7 @@ String _deviceTitle(Map<String, dynamic> row) {
   return '${row['mac']}';
 }
 
-const allResources = <ResourceDef>[
+List<ResourceDef> get allResources => [
   extensionsDef,
   devicesDef,
   didsDef,
@@ -900,12 +1110,12 @@ const allResources = <ResourceDef>[
 /// The people of the tenant, for a picker (an extension's owner). Not a PBX
 /// resource: they are read from identity (`/v1/orgs/{id}/users`), so this is
 /// not in [allResources].
-const peopleDef = ResourceDef(
+ResourceDef get peopleDef => ResourceDef(
   key: 'users',
-  singular: 'Person',
-  plural: 'People',
+  singular: currentL10n.pdSingular,
+  plural: currentL10n.pdPlural,
   icon: Icons.people_outline,
-  fields: [],
+  fields: const [],
   title: _personTitle,
 );
 
@@ -918,9 +1128,8 @@ String _personTitle(Map<String, dynamic> row) {
   return '${email ?? row['id']}';
 }
 
-ResourceDef resourceByKey(String key) => key == peopleDef.key
-    ? peopleDef
-    : allResources.firstWhere((r) => r.key == key);
+ResourceDef resourceByKey(String key) =>
+    key == 'users' ? peopleDef : allResources.firstWhere((r) => r.key == key);
 
 /// A parking lot's slots run from the first to the last.
 String? _lastSlotAfterFirst(Map<String, Object?> values) {

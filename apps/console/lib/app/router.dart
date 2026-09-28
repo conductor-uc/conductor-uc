@@ -231,7 +231,8 @@ Widget _pageFor(Section section) {
   return SectionPage(section: section);
 }
 
-const _pbxPages = <String, List<ResourceDef>>{
+/// Built when asked: the definitions carry the viewer's language (S9-08).
+Map<String, List<ResourceDef>> get _pbxPages => {
   '/extensions': [extensionsDef],
   '/phones': [devicesDef],
   '/phone-numbers': [didsDef],

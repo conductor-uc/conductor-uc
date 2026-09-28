@@ -112,9 +112,9 @@ void main() {
       await openNav(tester, 'Extensions');
       await tester.tap(find.text('New extension'));
       await tester.pumpAndSettle();
-      await tester.enterText(field('Number *'), '110');
+      await tester.enterText(field('Extension number *'), '110');
       await tester.enterText(field('Name *'), 'Front Desk');
-      await pickFromDropdown(tester, 'Emergency location *', 'Head office');
+      await pickFromDropdown(tester, 'Emergency address *', 'Head office');
       await save(tester);
       expect(find.text('Front Desk'), findsOneWidget);
 
@@ -127,7 +127,7 @@ void main() {
       await save(tester);
       expect(find.text('Reception'), findsOneWidget);
 
-      await openNav(tester, 'Media');
+      await openNav(tester, 'Greetings and music');
       expect(find.text('Welcome greeting'), findsOneWidget);
 
       // A flow, built on the canvas: one hang-up step is where calls start, and
@@ -151,12 +151,12 @@ void main() {
       await openNav(tester, 'Phone numbers');
       await tester.tap(find.text('New phone number'));
       await tester.pumpAndSettle();
-      await tester.enterText(field('Number *'), '+14155550111');
-      await pickFromDropdown(tester, 'Trunk *', 'Primary trunk');
-      await pickFromDropdown(tester, 'Rings *', 'flow');
-      await pickFromDropdown(tester, 'Destination *', 'After hours');
+      await tester.enterText(field('Phone number *'), '+14155550111');
+      await pickFromDropdown(tester, 'Carrier line *', 'Primary trunk');
+      await pickFromDropdown(tester, 'Who answers *', 'A call flow');
+      await pickFromDropdown(tester, 'Which one *', 'After hours');
       await save(tester);
-      expect(find.text('+14155550111'), findsOneWidget);
+      expect(find.text('(415) 555-0111'), findsOneWidget);
     },
   );
 }

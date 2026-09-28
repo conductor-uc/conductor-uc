@@ -9,6 +9,7 @@ import '../../widgets/page.dart';
 import 'pbx_api.dart';
 import 'resource.dart';
 import 'schedule_fields.dart';
+import 'used_by.dart';
 
 /// Create or edit one row of [def], drawn from its fields. Pops the saved row
 /// (the service's response) when a change was saved, and null on cancel.
@@ -240,9 +241,7 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
         Padding(padding: const EdgeInsets.only(bottom: 12), child: _input(f));
     return AlertDialog(
       title: Text(
-        _editing
-            ? 'Edit ${def.singular.toLowerCase()}'
-            : 'New ${def.singular.toLowerCase()}',
+        _editing ? l10n.resEdit(def.selectKey) : l10n.resNew(def.selectKey),
       ),
       content: SizedBox(
         width: 480,
@@ -255,6 +254,8 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_editing && widget.save == null)
+                  _UsedBy(def: def, id: '${widget.row!['id']}'),
                 if (_fields.any((f) => f.required))
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -698,6 +699,43 @@ class _ResourceFormDialogState extends ConsumerState<ResourceFormDialog> {
           },
         ),
       ),
+    );
+  }
+}
+
+/// What points at the row being edited (S9-08), so changing it isn't a
+/// surprise: "Used by: Phone number (415) 555-0100".
+class _UsedBy extends ConsumerWidget {
+  const _UsedBy({required this.def, required this.id});
+
+  final ResourceDef def;
+  final String id;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    return FutureBuilder<List<String>>(
+      future: usedBy(ref, def.key, id),
+      builder: (context, snapshot) {
+        final uses = snapshot.data ?? const [];
+        if (uses.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.link, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${l10n.resUsedBy}: ${[...uses.take(5), if (uses.length > 5) l10n.resUsedByMore(uses.length - 5)].join(', ')}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

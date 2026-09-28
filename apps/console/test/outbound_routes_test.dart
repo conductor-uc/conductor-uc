@@ -54,7 +54,8 @@ void main() {
       await tester.tap(find.text('New outbound route'));
       await tester.pumpAndSettle();
       await tester.enterText(field('Priority *'), '50');
-      await tester.enterText(field('Number prefix *'), '+44');
+      await tester.enterText(field('Number starts with *'), '+44');
+      await openAdvanced(tester);
       await tester.enterText(field('Digits to add'), '0');
       await tester.tap(find.widgetWithText(FilterChip, 'Overflow trunk'));
       await tester.pumpAndSettle();
@@ -113,7 +114,7 @@ void main() {
       await openRoutes(tester);
       await tester.tap(find.text('New outbound route'));
       await tester.pumpAndSettle();
-      await tester.enterText(field('Number prefix *'), '44abc');
+      await tester.enterText(field('Number starts with *'), '44abc');
       await tester.tap(find.widgetWithText(FilterChip, 'Primary trunk'));
       await tester.pumpAndSettle();
       await save(tester);
@@ -124,7 +125,7 @@ void main() {
       expect(tableRows(tester), hasLength(2));
 
       // Fixing it and saving again works.
-      await tester.enterText(field('Number prefix *'), '+44');
+      await tester.enterText(field('Number starts with *'), '+44');
       await save(tester);
       expect(find.text('+44'), findsOneWidget);
     });
@@ -139,6 +140,7 @@ void main() {
         '100',
       );
       await tester.enterText(field('Priority *'), '5');
+      await openAdvanced(tester);
       await tester.enterText(field('Digits to remove'), '1');
       await save(tester);
       expect(tableRows(tester), [
@@ -150,7 +152,7 @@ void main() {
     testWidgets('can be removed after confirming', (tester) async {
       await openRoutes(tester);
       await tapIn(tester, '+1', find.byTooltip('Delete'));
-      expect(find.text('Delete outbound route?'), findsOneWidget);
+      expect(find.text('Delete this outbound route?'), findsOneWidget);
       expect(find.text('Calls to +1'), findsOneWidget);
       await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
       await tester.pumpAndSettle();

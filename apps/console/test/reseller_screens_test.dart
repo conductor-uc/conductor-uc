@@ -69,18 +69,19 @@ void main() {
       await openTrunks(tester);
       await tester.tap(find.text('New trunk'));
       await tester.pumpAndSettle();
+      await openAdvanced(tester);
       expect(
         tester.widget<TextFormField>(field('Port *')).controller!.text,
         '5060',
       );
       expect(
-        tester.widget<TextFormField>(field('Codecs *')).controller!.text,
+        tester.widget<TextFormField>(field('Audio codecs *')).controller!.text,
         'PCMU, PCMA',
       );
       await tester.enterText(field('Name *'), 'Backup trunk');
-      await tester.enterText(field('Host *'), 'sip.backup.example');
+      await tester.enterText(field('Carrier address *'), 'sip.backup.example');
       await tester.enterText(field('Username'), 'acme-backup');
-      await tester.enterText(field('Secret'), 'hunter2');
+      await tester.enterText(field('Password'), 'hunter2');
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
       expect(find.text('Backup trunk'), findsOneWidget);
@@ -93,7 +94,8 @@ void main() {
       await openTrunks(tester);
       await tester.tap(find.text('New trunk'));
       await tester.pumpAndSettle();
-      await tester.enterText(field('Codecs *'), ' , ');
+      await openAdvanced(tester);
+      await tester.enterText(field('Audio codecs *'), ' , ');
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
       expect(find.text('This is required.'), findsNWidgets(3));
@@ -105,10 +107,11 @@ void main() {
       await openTrunks(tester);
       await tapVisible(tester, find.byTooltip('Edit').first);
       expect(
-        tester.widget<TextFormField>(field('Secret')).controller!.text,
+        tester.widget<TextFormField>(field('Password')).controller!.text,
         '',
       );
-      await tester.enterText(field('Codecs *'), 'G722, PCMU');
+      await openAdvanced(tester);
+      await tester.enterText(field('Audio codecs *'), 'G722, PCMU');
       await tester.tap(find.widgetWithText(FilledButton, 'Save'));
       await tester.pumpAndSettle();
       expect(find.text('G722, PCMU'), findsOneWidget);

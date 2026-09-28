@@ -174,9 +174,9 @@
   "@navSchedules": {
     "description": "Navigation menu item. Business hours and holidays."
   },
-  "navMedia": "Media",
+  "navMedia": "Greetings and music",
   "@navMedia": {
-    "description": "Navigation menu item. Recorded greetings and hold music."
+    "description": "Navigation menu item. Recorded greetings, menu prompts and hold music."
   },
   "navMonitoring": "Monitoring",
   "@navMonitoring": {
@@ -1467,5 +1467,827 @@
         "type": "String"
       }
     }
+  },
+  "destExtension": "A person",
+  "@destExtension": {
+    "description": "Configuration screen text. A place a call can be sent: the choice's name."
+  },
+  "destExtensionHelp": "Rings one person's phone.",
+  "@destExtensionHelp": {
+    "description": "Configuration screen text. Explains the choice 'A person'."
+  },
+  "destRingGroup": "A group of phones",
+  "@destRingGroup": {
+    "description": "Configuration screen text. A place a call can be sent: the choice's name."
+  },
+  "destRingGroupHelp": "Rings several phones, together or in turn.",
+  "@destRingGroupHelp": {
+    "description": "Configuration screen text. Explains the choice 'A group of phones'."
+  },
+  "destFlow": "A call flow",
+  "@destFlow": {
+    "description": "Configuration screen text. A place a call can be sent: the choice's name."
+  },
+  "destFlowHelp": "A menu, business hours, or anything built in Call flows.",
+  "@destFlowHelp": {
+    "description": "Configuration screen text. Explains the choice 'A call flow'."
+  },
+  "destQueue": "A queue",
+  "@destQueue": {
+    "description": "Configuration screen text. A place a call can be sent: the choice's name."
+  },
+  "destQueueHelp": "Callers wait in line for the next free agent.",
+  "@destQueueHelp": {
+    "description": "Configuration screen text. Explains the choice 'A queue'."
+  },
+  "destConference": "A conference room",
+  "@destConference": {
+    "description": "Configuration screen text. A place a call can be sent: the choice's name."
+  },
+  "destConferenceHelp": "Joins the caller to a conference call.",
+  "@destConferenceHelp": {
+    "description": "Configuration screen text. Explains the choice 'A conference room'."
+  },
+  "destVoicemail": "Voicemail",
+  "@destVoicemail": {
+    "description": "Configuration screen text. A place a call can be sent: the choice's name."
+  },
+  "destVoicemailHelp": "Goes straight to someone's voicemail.",
+  "@destVoicemailHelp": {
+    "description": "Configuration screen text. Explains the choice 'Voicemail'."
+  },
+  "destWhich": "Which one",
+  "@destWhich": {
+    "description": "Configuration screen text. Picker for the specific person, group or flow chosen above."
+  },
+  "extSingular": "Extension",
+  "@extSingular": {
+    "description": "Configuration screen text. One internal number."
+  },
+  "extPlural": "Extensions",
+  "@extPlural": {
+    "description": "Configuration screen text. Internal numbers."
+  },
+  "extBlurb": "Internal numbers. Most people get theirs in People; add one here for a shared phone, such as a lobby or meeting room.",
+  "@extBlurb": {
+    "description": "Configuration screen text. What the Extensions screen is for."
+  },
+  "extNumber": "Extension number",
+  "@extNumber": {
+    "description": "Configuration screen text. Field: the internal number."
+  },
+  "extNumberHelp": "2 to 6 digits. The number colleagues dial.",
+  "@extNumberHelp": {
+    "description": "Configuration screen text. Help for the extension number."
+  },
+  "extName": "Name",
+  "@extName": {
+    "description": "Configuration screen text. Field: who or what the extension rings."
+  },
+  "extNameHelp": "Who or what it rings, such as Front desk.",
+  "@extNameHelp": {
+    "description": "Configuration screen text. Help for the extension name."
+  },
+  "extCallerIdName": "Name shown when calling out",
+  "@extCallerIdName": {
+    "description": "Configuration screen text. Field: the caller ID name outside people see."
+  },
+  "extCallerIdNumber": "Number shown when calling out",
+  "@extCallerIdNumber": {
+    "description": "Configuration screen text. Field: the caller ID number outside people see."
+  },
+  "extCallerIdNumberHelp": "Leave blank to show the company's main number.",
+  "@extCallerIdNumberHelp": {
+    "description": "Configuration screen text. Help for the caller ID number."
+  },
+  "extVoicemail": "Take voicemail when unanswered",
+  "@extVoicemail": {
+    "description": "Configuration screen text. Switch: unanswered calls go to voicemail."
+  },
+  "extVoicemailHelp": "Needs a voicemail box, which People adds.",
+  "@extVoicemailHelp": {
+    "description": "Configuration screen text. Help for the voicemail switch."
+  },
+  "extLocation": "Emergency address",
+  "@extLocation": {
+    "description": "Configuration screen text. Field: where emergency services are sent for calls from this extension."
+  },
+  "extLocationHelp": "Where emergency services are sent when someone dials 911 from it.",
+  "@extLocationHelp": {
+    "description": "Configuration screen text. Help for the emergency address."
+  },
+  "extUser": "Belongs to",
+  "@extUser": {
+    "description": "Configuration screen text. Field: the person who owns this extension."
+  },
+  "extUserHelp": "They can then change its forwarding and hear its voicemail themselves. One extension per person.",
+  "@extUserHelp": {
+    "description": "Configuration screen text. Help for the owner field."
+  },
+  "didSingular": "Phone number",
+  "@didSingular": {
+    "description": "Configuration screen text. One outside phone number."
+  },
+  "didPlural": "Phone numbers",
+  "@didPlural": {
+    "description": "Configuration screen text. Outside phone numbers."
+  },
+  "didBlurb": "The numbers your customers dial, and who answers each one.",
+  "@didBlurb": {
+    "description": "Configuration screen text. What the Phone numbers screen is for."
+  },
+  "didNumber": "Phone number",
+  "@didNumber": {
+    "description": "Configuration screen text. Field: the outside number."
+  },
+  "didNumberHelp": "As you'd dial it, such as (415) 555-0100, or with its country code, such as +44 20 7946 0958.",
+  "@didNumberHelp": {
+    "description": "Configuration screen text. Help for the phone number field."
+  },
+  "didTrunk": "Carrier line",
+  "@didTrunk": {
+    "description": "Configuration screen text. Field: the carrier connection this number arrives on."
+  },
+  "didTrunkHelp": "The connection to the phone company this number arrives on. Your provider sets these up.",
+  "@didTrunkHelp": {
+    "description": "Configuration screen text. Help for the carrier line field."
+  },
+  "didAnswers": "Who answers",
+  "@didAnswers": {
+    "description": "Configuration screen text. Field: where calls to this number go."
+  },
+  "rgSingular": "Ring group",
+  "@rgSingular": {
+    "description": "Configuration screen text. Several phones that ring for one call."
+  },
+  "rgPlural": "Ring groups",
+  "@rgPlural": {
+    "description": "Configuration screen text. Plural of ring group."
+  },
+  "rgBlurb": "Several phones that ring for one call, like everyone at the front desk.",
+  "@rgBlurb": {
+    "description": "Configuration screen text. What ring groups are for."
+  },
+  "fieldName": "Name",
+  "@fieldName": {
+    "description": "Configuration screen text. Field: what something is called."
+  },
+  "rgStrategy": "How they ring",
+  "@rgStrategy": {
+    "description": "Configuration screen text. Field: the order the group's phones ring in."
+  },
+  "rgSimultaneous": "All at once",
+  "@rgSimultaneous": {
+    "description": "Configuration screen text. A way for a ring group to ring."
+  },
+  "rgSimultaneousHelp": "Every phone rings; the first to answer takes the call.",
+  "@rgSimultaneousHelp": {
+    "description": "Configuration screen text. Explains 'All at once'."
+  },
+  "rgSequential": "One after another",
+  "@rgSequential": {
+    "description": "Configuration screen text. A way for a ring group to ring."
+  },
+  "rgSequentialHelp": "In the order listed, until someone answers.",
+  "@rgSequentialHelp": {
+    "description": "Configuration screen text. Explains 'One after another'."
+  },
+  "rgRoundRobin": "Taking turns",
+  "@rgRoundRobin": {
+    "description": "Configuration screen text. A way for a ring group to ring."
+  },
+  "rgRoundRobinHelp": "Starts with the next person each time, so calls are shared out.",
+  "@rgRoundRobinHelp": {
+    "description": "Configuration screen text. Explains 'Taking turns'."
+  },
+  "rgRandom": "In random order",
+  "@rgRandom": {
+    "description": "Configuration screen text. A way for a ring group to ring."
+  },
+  "rgRandomHelp": "A different order every call.",
+  "@rgRandomHelp": {
+    "description": "Configuration screen text. Explains 'In random order'."
+  },
+  "rgMembers": "Who's in it",
+  "@rgMembers": {
+    "description": "Configuration screen text. Field: the extensions in the ring group."
+  },
+  "rgMembersHelp": "At least one.",
+  "@rgMembersHelp": {
+    "description": "Configuration screen text. Help for the ring group members."
+  },
+  "rgRingFor": "Ring for (seconds)",
+  "@rgRingFor": {
+    "description": "Configuration screen text. Field: how long the group rings."
+  },
+  "rgRingForHelp": "5 to 300 seconds before giving up.",
+  "@rgRingForHelp": {
+    "description": "Configuration screen text. Help for how long the group rings."
+  },
+  "noAnswerType": "If no one answers",
+  "@noAnswerType": {
+    "description": "Configuration screen text. Field: where an unanswered call goes."
+  },
+  "noAnswerTypeHelp": "Optional. Where the call goes when nobody picks up.",
+  "@noAnswerTypeHelp": {
+    "description": "Configuration screen text. Help for the unanswered-call field."
+  },
+  "qSingular": "Queue",
+  "@qSingular": {
+    "description": "Configuration screen text. A line callers wait in."
+  },
+  "qPlural": "Queues",
+  "@qPlural": {
+    "description": "Configuration screen text. Plural of queue."
+  },
+  "qBlurb": "Callers wait on hold in line until the next agent is free: for support or sales lines.",
+  "@qBlurb": {
+    "description": "Configuration screen text. What queues are for."
+  },
+  "qStrategy": "Who gets the next call",
+  "@qStrategy": {
+    "description": "Configuration screen text. Field: how a queue chooses the agent."
+  },
+  "qRingAll": "Every free agent at once",
+  "@qRingAll": {
+    "description": "Configuration screen text. A way for a queue to choose an agent."
+  },
+  "qRingAllHelp": "All free agents ring; the first to answer takes it.",
+  "@qRingAllHelp": {
+    "description": "Configuration screen text. Explains 'Every free agent at once'."
+  },
+  "qLongestIdle": "Whoever has waited longest",
+  "@qLongestIdle": {
+    "description": "Configuration screen text. A way for a queue to choose an agent."
+  },
+  "qLongestIdleHelp": "Shares calls fairly. Usually the best choice.",
+  "@qLongestIdleHelp": {
+    "description": "Configuration screen text. Explains 'Whoever has waited longest'."
+  },
+  "qRoundRobin": "Taking turns",
+  "@qRoundRobin": {
+    "description": "Configuration screen text. A way for a queue to choose an agent."
+  },
+  "qRoundRobinHelp": "Each agent in turn.",
+  "@qRoundRobinHelp": {
+    "description": "Configuration screen text. Explains 'Taking turns'."
+  },
+  "qTopDown": "Always in the same order",
+  "@qTopDown": {
+    "description": "Configuration screen text. A way for a queue to choose an agent."
+  },
+  "qTopDownHelp": "The first free agent in the list takes it.",
+  "@qTopDownHelp": {
+    "description": "Configuration screen text. Explains 'Always in the same order'."
+  },
+  "qLeastTalk": "Whoever has talked least",
+  "@qLeastTalk": {
+    "description": "Configuration screen text. A way for a queue to choose an agent."
+  },
+  "qLeastTalkHelp": "Evens out time on the phone.",
+  "@qLeastTalkHelp": {
+    "description": "Configuration screen text. Explains 'Whoever has talked least'."
+  },
+  "qFewestCalls": "Whoever has taken fewest calls",
+  "@qFewestCalls": {
+    "description": "Configuration screen text. A way for a queue to choose an agent."
+  },
+  "qFewestCallsHelp": "Evens out the number of calls.",
+  "@qFewestCallsHelp": {
+    "description": "Configuration screen text. Explains 'Whoever has taken fewest calls'."
+  },
+  "qSequential": "In order, continuing from the last",
+  "@qSequential": {
+    "description": "Configuration screen text. A way for a queue to choose an agent."
+  },
+  "qSequentialHelp": "Like taking turns, but in the order of the list.",
+  "@qSequentialHelp": {
+    "description": "Configuration screen text. Explains 'In order, continuing from the last'."
+  },
+  "qRandom": "At random",
+  "@qRandom": {
+    "description": "Configuration screen text. A way for a queue to choose an agent."
+  },
+  "qRandomHelp": "Any free agent.",
+  "@qRandomHelp": {
+    "description": "Configuration screen text. Explains 'At random'."
+  },
+  "qMusic": "Hold music",
+  "@qMusic": {
+    "description": "Configuration screen text. Field: what callers hear while waiting."
+  },
+  "qMusicHelp": "Plays while callers wait. Leave blank for the standard music.",
+  "@qMusicHelp": {
+    "description": "Configuration screen text. Help for hold music."
+  },
+  "qMaxWait": "Longest wait (seconds)",
+  "@qMaxWait": {
+    "description": "Configuration screen text. Field: how long a caller waits before going elsewhere."
+  },
+  "qMaxWaitHelp": "After this, callers go where 'If no one is free' says. 0 waits for as long as it takes.",
+  "@qMaxWaitHelp": {
+    "description": "Configuration screen text. Help for the longest wait."
+  },
+  "qAnnounce": "Tell callers their place in line",
+  "@qAnnounce": {
+    "description": "Configuration screen text. Switch: announce the caller's position."
+  },
+  "qAnnounceEvery": "How often (seconds)",
+  "@qAnnounceEvery": {
+    "description": "Configuration screen text. Field: how often the position is announced."
+  },
+  "qNoAgentType": "If no one is free",
+  "@qNoAgentType": {
+    "description": "Configuration screen text. Field: where callers go when there is no agent."
+  },
+  "qNoAgentTypeHelp": "Optional. Where callers go when no agent is available, or they've waited the longest wait.",
+  "@qNoAgentTypeHelp": {
+    "description": "Configuration screen text. Help for the no-agent field."
+  },
+  "agSingular": "Agent",
+  "@agSingular": {
+    "description": "Configuration screen text. A person who answers queue calls."
+  },
+  "agPlural": "Agents",
+  "@agPlural": {
+    "description": "Configuration screen text. Plural of agent."
+  },
+  "agBlurb": "The people who answer queue calls. Add them to queues with Agents and tiers.",
+  "@agBlurb": {
+    "description": "Configuration screen text. What agents are."
+  },
+  "agExtension": "Person",
+  "@agExtension": {
+    "description": "Configuration screen text. Field: the agent's extension."
+  },
+  "agMaxNoAnswer": "Stop offering calls after (missed calls)",
+  "@agMaxNoAnswer": {
+    "description": "Configuration screen text. Field: how many unanswered calls before the agent is paused."
+  },
+  "agWrapUp": "Break after each call (seconds)",
+  "@agWrapUp": {
+    "description": "Configuration screen text. Field: time between queue calls."
+  },
+  "agWrapUpHelp": "Time to finish notes before the next call.",
+  "@agWrapUpHelp": {
+    "description": "Configuration screen text. Help for the break after each call."
+  },
+  "agRejectDelay": "Try them again after (seconds)",
+  "@agRejectDelay": {
+    "description": "Configuration screen text. Field: wait before offering another call after one was missed."
+  },
+  "crSingular": "Conference room",
+  "@crSingular": {
+    "description": "Configuration screen text. A number people dial to talk together."
+  },
+  "crPlural": "Conference rooms",
+  "@crPlural": {
+    "description": "Configuration screen text. Plural of conference room."
+  },
+  "crBlurb": "A number people dial to talk together.",
+  "@crBlurb": {
+    "description": "Configuration screen text. What conference rooms are for."
+  },
+  "crNumber": "Room number",
+  "@crNumber": {
+    "description": "Configuration screen text. Field: the number dialed to join."
+  },
+  "crNumberHelp": "The extension people dial to join.",
+  "@crNumberHelp": {
+    "description": "Configuration screen text. Help for the room number."
+  },
+  "crPin": "PIN",
+  "@crPin": {
+    "description": "Configuration screen text. Field: digits needed to join."
+  },
+  "crPinHelp": "Optional. Callers enter it to join. Leave blank when editing to keep it.",
+  "@crPinHelp": {
+    "description": "Configuration screen text. Help for the room PIN."
+  },
+  "crVideo": "Allow video",
+  "@crVideo": {
+    "description": "Configuration screen text. Switch: video calls may join."
+  },
+  "crLayout": "Video layout",
+  "@crLayout": {
+    "description": "Configuration screen text. Field: how video participants are arranged."
+  },
+  "crMaxMembers": "Most people at once",
+  "@crMaxMembers": {
+    "description": "Configuration screen text. Field: the most participants."
+  },
+  "schSingular": "Schedule",
+  "@schSingular": {
+    "description": "Configuration screen text. Opening hours and holidays."
+  },
+  "schPlural": "Schedules",
+  "@schPlural": {
+    "description": "Configuration screen text. Plural of schedule."
+  },
+  "schBlurb": "Your opening hours and holidays, so calls can go somewhere else when you're closed.",
+  "@schBlurb": {
+    "description": "Configuration screen text. What schedules are for."
+  },
+  "schTimezone": "Time zone",
+  "@schTimezone": {
+    "description": "Configuration screen text. Field: the time zone the hours are in."
+  },
+  "schRules": "Open hours",
+  "@schRules": {
+    "description": "Configuration screen text. Field: weekly opening hours."
+  },
+  "schHolidays": "Closed on",
+  "@schHolidays": {
+    "description": "Configuration screen text. Field: holiday dates."
+  },
+  "plSingular": "Parking lot",
+  "@plSingular": {
+    "description": "Configuration screen text. Numbers calls can be parked on."
+  },
+  "plPlural": "Parking lots",
+  "@plPlural": {
+    "description": "Configuration screen text. Plural of parking lot."
+  },
+  "plBlurb": "Put a call on hold at one phone and pick it up at another: \"call for you on 701\".",
+  "@plBlurb": {
+    "description": "Configuration screen text. What parking is for."
+  },
+  "plFirst": "First parking number",
+  "@plFirst": {
+    "description": "Configuration screen text. Field: the first number in the range."
+  },
+  "plLast": "Last parking number",
+  "@plLast": {
+    "description": "Configuration screen text. Field: the last number in the range."
+  },
+  "plTimeout": "If nobody picks it up (seconds)",
+  "@plTimeout": {
+    "description": "Configuration screen text. Field: how long before a parked call rings back."
+  },
+  "plTimeoutHelp": "The call comes back after this long.",
+  "@plTimeoutHelp": {
+    "description": "Configuration screen text. Help for the parking timeout."
+  },
+  "plReturnType": "Then send it to",
+  "@plReturnType": {
+    "description": "Configuration screen text. Field: where an unpicked parked call goes."
+  },
+  "elSingular": "Emergency location",
+  "@elSingular": {
+    "description": "Configuration screen text. An address for emergency calls."
+  },
+  "elPlural": "Emergency locations",
+  "@elPlural": {
+    "description": "Configuration screen text. Plural of emergency location."
+  },
+  "elBlurb": "The street addresses emergency services are sent to. Every phone needs one.",
+  "@elBlurb": {
+    "description": "Configuration screen text. What emergency locations are."
+  },
+  "elNameHelp": "Such as Head office.",
+  "@elNameHelp": {
+    "description": "Configuration screen text. Help for the location's name."
+  },
+  "elAddress": "Street address",
+  "@elAddress": {
+    "description": "Configuration screen text. Field: the street address."
+  },
+  "elAddress2": "Suite or floor",
+  "@elAddress2": {
+    "description": "Configuration screen text. Field: the second address line."
+  },
+  "elCity": "City",
+  "@elCity": {
+    "description": "Configuration screen text. Field: the city."
+  },
+  "elState": "State or province",
+  "@elState": {
+    "description": "Configuration screen text. Field: the state or province."
+  },
+  "elPostal": "ZIP or postal code",
+  "@elPostal": {
+    "description": "Configuration screen text. Field: the postal code."
+  },
+  "elCountry": "Country",
+  "@elCountry": {
+    "description": "Configuration screen text. Field: the country."
+  },
+  "elCountryHelp": "Two letters, such as US or CA.",
+  "@elCountryHelp": {
+    "description": "Configuration screen text. Help for the country."
+  },
+  "mdSingular": "Recording",
+  "@mdSingular": {
+    "description": "Configuration screen text. One audio file: a greeting, prompt or hold music."
+  },
+  "mdPlural": "Greetings and music",
+  "@mdPlural": {
+    "description": "Configuration screen text. Audio files used by calls."
+  },
+  "mdBlurb": "Greetings, menu prompts and hold music. Upload a recording and it's checked and converted before it can be used.",
+  "@mdBlurb": {
+    "description": "Configuration screen text. What the media screen is for."
+  },
+  "mdKind": "Used for",
+  "@mdKind": {
+    "description": "Configuration screen text. Column: what the recording is for."
+  },
+  "mdStatus": "Status",
+  "@mdStatus": {
+    "description": "Configuration screen text. Column: whether the recording is ready."
+  },
+  "mdType": "Format",
+  "@mdType": {
+    "description": "Configuration screen text. Column: the audio file format."
+  },
+  "trSingular": "Trunk",
+  "@trSingular": {
+    "description": "Configuration screen text. A connection to a phone carrier."
+  },
+  "trPlural": "Trunks",
+  "@trPlural": {
+    "description": "Configuration screen text. Plural of trunk."
+  },
+  "trBlurb": "Connections to phone carriers that a customer's numbers and outgoing calls use.",
+  "@trBlurb": {
+    "description": "Configuration screen text. What trunks are for."
+  },
+  "trAuth": "How it connects",
+  "@trAuth": {
+    "description": "Configuration screen text. Field: how the carrier recognizes the trunk."
+  },
+  "trRegister": "Signs in with a username and password",
+  "@trRegister": {
+    "description": "Configuration screen text. A way a trunk connects."
+  },
+  "trRegisterHelp": "The carrier gave you a username and password.",
+  "@trRegisterHelp": {
+    "description": "Configuration screen text. Explains 'Signs in with a username and password'."
+  },
+  "trIp": "By its IP address",
+  "@trIp": {
+    "description": "Configuration screen text. A way a trunk connects."
+  },
+  "trIpHelp": "The carrier recognizes calls from your platform's address.",
+  "@trIpHelp": {
+    "description": "Configuration screen text. Explains 'By its IP address'."
+  },
+  "trBoth": "Both",
+  "@trBoth": {
+    "description": "Configuration screen text. A way a trunk connects."
+  },
+  "trBothHelp": "Signs in, and the carrier also checks the address.",
+  "@trBothHelp": {
+    "description": "Configuration screen text. Explains 'Both'."
+  },
+  "trHost": "Carrier address",
+  "@trHost": {
+    "description": "Configuration screen text. Field: the carrier's server address."
+  },
+  "trPort": "Port",
+  "@trPort": {
+    "description": "Configuration screen text. Field: the carrier's port."
+  },
+  "trTransport": "Connection type",
+  "@trTransport": {
+    "description": "Configuration screen text. Field: UDP, TCP or TLS."
+  },
+  "trTls": "TLS (encrypted)",
+  "@trTls": {
+    "description": "Configuration screen text. The encrypted connection type."
+  },
+  "trUsername": "Username",
+  "@trUsername": {
+    "description": "Configuration screen text. Field: the carrier username."
+  },
+  "trSecret": "Password",
+  "@trSecret": {
+    "description": "Configuration screen text. Field: the carrier password."
+  },
+  "trSecretHelp": "Never shown again. Leave blank when editing to keep it.",
+  "@trSecretHelp": {
+    "description": "Configuration screen text. Help for the carrier password."
+  },
+  "trFromDomain": "From domain",
+  "@trFromDomain": {
+    "description": "Configuration screen text. Field: the domain the carrier expects calls from."
+  },
+  "trCodecs": "Audio codecs",
+  "@trCodecs": {
+    "description": "Configuration screen text. Field: audio formats, in order of preference."
+  },
+  "trCodecsHelp": "Comma-separated, in order of preference, such as PCMU, PCMA.",
+  "@trCodecsHelp": {
+    "description": "Configuration screen text. Help for codecs."
+  },
+  "trMaxChannels": "Most calls at once",
+  "@trMaxChannels": {
+    "description": "Configuration screen text. Field: the channel limit."
+  },
+  "trMaxChannelsHelp": "Blank for no limit.",
+  "@trMaxChannelsHelp": {
+    "description": "Configuration screen text. Help for the channel limit."
+  },
+  "orSingular": "Outbound route",
+  "@orSingular": {
+    "description": "Configuration screen text. A rule for which trunk carries outgoing calls."
+  },
+  "orPlural": "Outbound routes",
+  "@orPlural": {
+    "description": "Configuration screen text. Plural of outbound route."
+  },
+  "orBlurb": "Which carrier lines carry outgoing calls. The lowest priority number is tried first.",
+  "@orBlurb": {
+    "description": "Configuration screen text. What outbound routes are for."
+  },
+  "orPriority": "Priority",
+  "@orPriority": {
+    "description": "Configuration screen text. Field: the order routes are tried in."
+  },
+  "orPriorityHelp": "Lower numbers are tried first.",
+  "@orPriorityHelp": {
+    "description": "Configuration screen text. Help for priority."
+  },
+  "orPattern": "Number starts with",
+  "@orPattern": {
+    "description": "Configuration screen text. Field: the dialed number's prefix."
+  },
+  "orPatternEmpty": "Everything else",
+  "@orPatternEmpty": {
+    "description": "Configuration screen text. Shown for a route with no prefix: it takes all other numbers."
+  },
+  "orPatternHelp": "Starts with +, such as +1 or +44. Leave empty for all other numbers.",
+  "@orPatternHelp": {
+    "description": "Configuration screen text. Help for the prefix."
+  },
+  "orTrunks": "Carrier lines",
+  "@orTrunks": {
+    "description": "Configuration screen text. Field: trunks to use, in order."
+  },
+  "orTrunksHelp": "At least one.",
+  "@orTrunksHelp": {
+    "description": "Configuration screen text. Help for the trunks."
+  },
+  "orStrip": "Digits to remove",
+  "@orStrip": {
+    "description": "Configuration screen text. Field: digits removed from the front."
+  },
+  "orStripHelp": "Taken off the front of the number before dialing.",
+  "@orStripHelp": {
+    "description": "Configuration screen text. Help for digits to remove."
+  },
+  "orPrepend": "Digits to add",
+  "@orPrepend": {
+    "description": "Configuration screen text. Field: digits added to the front."
+  },
+  "orPrependHelp": "Put on the front of the number before dialing.",
+  "@orPrependHelp": {
+    "description": "Configuration screen text. Help for digits to add."
+  },
+  "orTitlePattern": "Calls to {pattern}",
+  "@orTitlePattern": {
+    "description": "Configuration screen text. How a route for numbers starting with {pattern} is named.",
+    "placeholders": {
+      "pattern": {
+        "type": "String"
+      }
+    }
+  },
+  "orTitleAll": "All other outgoing calls",
+  "@orTitleAll": {
+    "description": "Configuration screen text. How the catch-all route is named."
+  },
+  "cfSingular": "Call flow",
+  "@cfSingular": {
+    "description": "Configuration screen text. A visual design of how calls are answered."
+  },
+  "cfPlural": "Call flows",
+  "@cfPlural": {
+    "description": "Configuration screen text. Plural of call flow."
+  },
+  "dvSingular": "Phone",
+  "@dvSingular": {
+    "description": "Configuration screen text. A desk phone."
+  },
+  "dvPlural": "Phones",
+  "@dvPlural": {
+    "description": "Configuration screen text. Desk phones."
+  },
+  "dvBlurb": "Desk phones that set themselves up. Most are added with their person, in People.",
+  "@dvBlurb": {
+    "description": "Configuration screen text. What the Phones screen is for."
+  },
+  "dvMac": "MAC address",
+  "@dvMac": {
+    "description": "Configuration screen text. Field: the phone's hardware address."
+  },
+  "dvMacHelp": "On the label on the back of the phone, such as 00:15:65:AA:BB:CC.",
+  "@dvMacHelp": {
+    "description": "Configuration screen text. Help for the MAC address."
+  },
+  "dvExtension": "Signs in as",
+  "@dvExtension": {
+    "description": "Configuration screen text. Field: the extension the phone uses."
+  },
+  "dvExtensionHelp": "The extension this phone rings for.",
+  "@dvExtensionHelp": {
+    "description": "Configuration screen text. Help for the phone's extension."
+  },
+  "dvModel": "Model",
+  "@dvModel": {
+    "description": "Configuration screen text. Field: the phone's model."
+  },
+  "dvLabel": "Label",
+  "@dvLabel": {
+    "description": "Configuration screen text. Field: a name for the phone."
+  },
+  "dvLabelHelp": "A name for it, such as Lobby phone.",
+  "@dvLabelHelp": {
+    "description": "Configuration screen text. Help for the phone's label."
+  },
+  "pdSingular": "Person",
+  "@pdSingular": {
+    "description": "Configuration screen text. Someone who can sign in."
+  },
+  "pdPlural": "People",
+  "@pdPlural": {
+    "description": "Configuration screen text. People who can sign in."
+  },
+  "resNew": "{resource, select, extensions{New extension} devices{New phone} dids{New phone number} ring_groups{New ring group} queues{New queue} agents{New agent} conference_rooms{New conference room} parking_lots{New parking lot} schedules{New schedule} emergency_locations{New emergency location} media_assets{New recording} trunks{New trunk} outbound_routes{New outbound route} flows{New call flow} users{New person} other{New item}}",
+  "@resNew": {
+    "description": "Button that adds one more. Configuration screen text, per kind of thing (select on {resource}: extensions, devices, dids, ring_groups, queues, agents, conference_rooms, parking_lots, schedules, emergency_locations, media_assets, trunks, outbound_routes, flows, users). Word each for its noun's gender and case.",
+    "placeholders": {
+      "resource": {
+        "type": "String"
+      }
+    }
+  },
+  "resEdit": "{resource, select, extensions{Edit extension} devices{Edit phone} dids{Edit phone number} ring_groups{Edit ring group} queues{Edit queue} agents{Edit agent} conference_rooms{Edit conference room} parking_lots{Edit parking lot} schedules{Edit schedule} emergency_locations{Edit emergency location} media_assets{Edit recording} trunks{Edit trunk} outbound_routes{Edit outbound route} flows{Edit call flow} users{Edit person} other{Edit item}}",
+  "@resEdit": {
+    "description": "Heading of the form for changing one. Configuration screen text, per kind of thing (select on {resource}: extensions, devices, dids, ring_groups, queues, agents, conference_rooms, parking_lots, schedules, emergency_locations, media_assets, trunks, outbound_routes, flows, users). Word each for its noun's gender and case.",
+    "placeholders": {
+      "resource": {
+        "type": "String"
+      }
+    }
+  },
+  "resEmpty": "{resource, select, extensions{No extensions yet.} devices{No phones yet.} dids{No phone numbers yet.} ring_groups{No ring groups yet.} queues{No queues yet.} agents{No agents yet.} conference_rooms{No conference rooms yet.} parking_lots{No parking lots yet.} schedules{No schedules yet.} emergency_locations{No emergency locations yet.} media_assets{No recordings yet.} trunks{No trunks yet.} outbound_routes{No outbound routes yet.} flows{No call flows yet.} users{No people yet.} other{No items yet.}}",
+  "@resEmpty": {
+    "description": "Shown when the list is empty. Configuration screen text, per kind of thing (select on {resource}: extensions, devices, dids, ring_groups, queues, agents, conference_rooms, parking_lots, schedules, emergency_locations, media_assets, trunks, outbound_routes, flows, users). Word each for its noun's gender and case.",
+    "placeholders": {
+      "resource": {
+        "type": "String"
+      }
+    }
+  },
+  "resDeleteTitle": "{resource, select, extensions{Delete this extension?} devices{Delete this phone?} dids{Delete this phone number?} ring_groups{Delete this ring group?} queues{Delete this queue?} agents{Delete this agent?} conference_rooms{Delete this conference room?} parking_lots{Delete this parking lot?} schedules{Delete this schedule?} emergency_locations{Delete this emergency location?} media_assets{Delete this recording?} trunks{Delete this trunk?} outbound_routes{Delete this outbound route?} flows{Delete this call flow?} users{Delete this person?} other{Delete this item?}}",
+  "@resDeleteTitle": {
+    "description": "Heading of the confirmation before deleting one. Configuration screen text, per kind of thing (select on {resource}: extensions, devices, dids, ring_groups, queues, agents, conference_rooms, parking_lots, schedules, emergency_locations, media_assets, trunks, outbound_routes, flows, users). Word each for its noun's gender and case.",
+    "placeholders": {
+      "resource": {
+        "type": "String"
+      }
+    }
+  },
+  "resUsedBy": "Used by",
+  "@resUsedBy": {
+    "description": "Configuration screen text. Heading of the list of things that point at this one."
+  },
+  "resUsedByItem": "{kind}: {name}",
+  "@resUsedByItem": {
+    "description": "Configuration screen text. One thing that points at this one. {kind} is its type, {name} its name.",
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "resUsedByMore": "and {count} more",
+  "@resUsedByMore": {
+    "description": "Configuration screen text. When more things point at this one than are listed.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mediaReady": "Ready",
+  "@mediaReady": {
+    "description": "Configuration screen text. A recording ready to use."
+  },
+  "mediaPending": "Waiting for upload",
+  "@mediaPending": {
+    "description": "Configuration screen text. A recording not yet uploaded."
+  },
+  "mediaProcessing": "Processing…",
+  "@mediaProcessing": {
+    "description": "Configuration screen text. A recording being converted."
+  },
+  "mediaFailed": "Failed",
+  "@mediaFailed": {
+    "description": "Configuration screen text. A recording that could not be processed."
   }
 }

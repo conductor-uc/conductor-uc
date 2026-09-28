@@ -32,7 +32,7 @@ void main() {
   ) async {
     await bigWindow(tester);
     await openSection(tester, 'Phone numbers');
-    await tapIn(tester, '+14155550100', find.byTooltip('Delete'));
+    await tapIn(tester, '(415) 555-0100', find.byTooltip('Delete'));
     await tester.tap(find.widgetWithText(FilledButton, 'Delete'));
     await tester.pumpAndSettle();
     await tapNav(tester, 'Dashboard');
