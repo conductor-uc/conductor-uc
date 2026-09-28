@@ -272,12 +272,30 @@ export const callEvents = defineEvents({
       weight: Type.Integer({ minimum: 1, maximum: 999 }),
     }),
   },
-  // `call.lost` (04 §4's failure sequence: a node's calls, abandoned on
-  // heartbeat expiry) is deliberately NOT defined here — the plan's own
-  // dependency table lists it as S4-04's deliverable ("Failover handling:
-  // dialog teardown, call.lost, synthetic CDRs, lease release, Redis
-  // rebuild"), which depends on S2-11 existing, not the other way around.
-  // This service's heartbeat keys (`redis/registry.ts`) are the primitive
-  // S4-04 builds node-death detection on; this task does not add the
-  // detection loop itself.
+  /**
+   * S4-04 (04 §4): a leg whose media node died, found by the node-failure
+   * watcher once the node's heartbeat has expired. One per leg, instead of the
+   * hangup the node can no longer send: the live views drop the call,
+   * cdr-service writes its record (`disposition: node_failure`), and
+   * telephony-config ends its dialog at the edge (by `sipCallId`), which sends
+   * the other party a BYE.
+   */
+  'call.lost': {
+    schemaVersion: 1,
+    description: 'A call leg was lost with the media node that carried it.',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+      direction: Type.Union([Type.Literal('inbound'), Type.Literal('outbound')]),
+      /** Unix milliseconds, as the registry keeps them. */
+      startedAt: Type.Integer({ minimum: 0 }),
+      answeredAt: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+      /** When the watcher found the node gone: the leg's end, as far as anyone can tell. */
+      detectedAt: Type.Integer({ minimum: 0 }),
+      from: Type.String(),
+      to: Type.String(),
+      extension: Type.Union([Type.String(), Type.Null()]),
+      sipCallId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    }),
+  },
 });

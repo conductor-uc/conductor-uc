@@ -23,6 +23,23 @@ import { Type, defineEvents } from '@cuc/api-contracts';
 export const telephonyEvents = defineEvents({
   // S1-16 (G-11): org-service's deletions.
   ...ORG_DELETED_EVENTS,
+  /** Mirrors call-control's contract (S4-04): a leg lost with its media node; its dialog is ended here. */
+  'call.lost': {
+    schemaVersion: 1,
+    description: 'A call leg was lost with the media node that carried it.',
+    data: Type.Object({
+      callUuid: Type.String({ minLength: 1 }),
+      nodeId: Type.String({ minLength: 1 }),
+      direction: Type.Union([Type.Literal('inbound'), Type.Literal('outbound')]),
+      startedAt: Type.Integer({ minimum: 0 }),
+      answeredAt: Type.Union([Type.Integer({ minimum: 0 }), Type.Null()]),
+      detectedAt: Type.Integer({ minimum: 0 }),
+      from: Type.String(),
+      to: Type.String(),
+      extension: Type.Union([Type.String(), Type.Null()]),
+      sipCallId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    }),
+  },
   'org.tenant.created': {
     schemaVersion: 1,
     description: 'A tenant org was created under a reseller.',
