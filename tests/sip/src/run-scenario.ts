@@ -179,6 +179,7 @@ export interface SeedResult {
   readonly tenantVoicemail: { readonly id: string; readonly fqdn: string };
   readonly tenantFlow: { readonly id: string; readonly fqdn: string };
   readonly tenantPresence: { readonly id: string; readonly fqdn: string };
+  readonly tenantCalls: { readonly id: string; readonly fqdn: string };
   readonly extensions: Record<string, SeedExtension>;
 }
 

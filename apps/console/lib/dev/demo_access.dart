@@ -12,6 +12,7 @@ const demoSelfService = [
   'self.voicemail',
   'self.history',
   'self.recording',
+  'self.calls',
 ];
 
 /// The id the demo gives the signed-in person, by email: the one an extension
@@ -46,6 +47,7 @@ const _tenantAdmin = [
   'recording.download',
   'recording.delete',
   'recording.control',
+  'call.control',
   'cdr.read',
   'cdr.export',
   'voicemail.access',
@@ -119,6 +121,7 @@ const _tenantSupervisor = [
   'monitor.whisper',
   'monitor.barge',
   'recording.control',
+  'call.control',
   'analytics.view',
   ...demoSelfService,
 ];

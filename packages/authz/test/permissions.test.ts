@@ -113,12 +113,14 @@ describe('PERMISSION_CATALOG', () => {
       'self.voicemail',
       'self.history',
       'self.recording',
+      'self.calls',
     ]);
     for (const permission of SELF_PERMISSIONS) expect(isKnownPermission(permission)).toBe(true);
     expect(dataClassOf('self.settings')).toBe('config');
     expect(dataClassOf('self.voicemail')).toBe('private');
     expect(dataClassOf('self.history')).toBe('private');
     expect(dataClassOf('self.recording')).toBe('private');
+    expect(dataClassOf('self.calls')).toBe('private');
   });
 
   it('includes recording.control — S5-15, not in 07 §3.3: controlling a live recording is private (H1), with no read twin', () => {
@@ -126,6 +128,13 @@ describe('PERMISSION_CATALOG', () => {
     expect(dataClassOf('recording.control')).toBe('private');
     expect(Object.hasOwn(READ_TWINS, 'recording.control')).toBe(false);
     expect(Object.values(READ_TWINS)).not.toContain('recording.control');
+  });
+
+  it('includes call.control — S9-12, not in 07 §3.3: moving a live call is private (H1), with no read twin', () => {
+    expect(isKnownPermission('call.control')).toBe(true);
+    expect(dataClassOf('call.control')).toBe('private');
+    expect(Object.hasOwn(READ_TWINS, 'call.control')).toBe(false);
+    expect(Object.values(READ_TWINS)).not.toContain('call.control');
   });
 });
 

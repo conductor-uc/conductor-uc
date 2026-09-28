@@ -127,6 +127,21 @@ describe('BUILT_IN_ROLES', () => {
     }
   });
 
+  it('call.control (S9-12) belongs to tenant_admin and tenant_supervisor (and master_admin), never to support, a reseller or a plain user', () => {
+    for (const roleId of ['master_admin', 'tenant_admin', 'tenant_supervisor']) {
+      expect(BUILT_IN_ROLES.get(roleId as never)?.permissions.has('call.control'), roleId).toBe(
+        true,
+      );
+    }
+    for (const roleId of ['master_support', 'reseller_admin', 'reseller_support', 'tenant_user']) {
+      expect(BUILT_IN_ROLES.get(roleId as never)?.permissions.has('call.control'), roleId).toBe(
+        false,
+      );
+    }
+    // Everyone with a phone may move their own calls.
+    expect(BUILT_IN_ROLES.get('tenant_user')?.permissions.has('self.calls')).toBe(true);
+  });
+
   it('tenant_user holds only the self-service permissions plus the two every signed-in person needs', () => {
     const tenantUser = BUILT_IN_ROLES.get('tenant_user');
     expect([...(tenantUser?.permissions ?? [])].sort()).toEqual(
