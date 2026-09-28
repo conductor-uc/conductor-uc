@@ -133,8 +133,30 @@ describe.skipIf(skipReason !== undefined)('M2 pilot journey', () => {
   }
   const secrets = new Map<string, string>();
 
+  it('1. the master signs in with a password on a new platform, then requires two-step verification (D-012 as amended)', async () => {
+    const first = await master.call<Tokens>(
+      'POST',
+      '/v1/auth/login',
+      { orgId: stack.masterOrgId, email: MASTER_EMAIL, password: MASTER_PASSWORD },
+      { auth: false },
+    );
+    expect(first.status, first.text).toBe(200);
+    expect(first.json.status).toBe('ok');
+    master.access = first.json.accessToken;
+
+    const on = await master.call<{ requireMasterMfa: boolean }>(
+      'PUT',
+      '/v1/platform/security-settings',
+      { requireMasterMfa: true },
+    );
+    expect(on.status, on.text).toBe(200);
+    expect(on.json.requireMasterMfa).toBe(true);
+    master.jar.clear();
+  });
+
   it('1. the master signs in, enrolling an authenticator, with the refresh token in a cookie only', async () => {
     await signIn(master, stack.masterOrgId, MASTER_EMAIL, MASTER_PASSWORD, secrets);
+    expect(secrets.has(MASTER_EMAIL)).toBe(true);
     expect(master.jar.has('refresh')).toBe(true);
     const restored = new Browser(stack.gateway);
     for (const [k, v] of master.jar) restored.jar.set(k, v);
