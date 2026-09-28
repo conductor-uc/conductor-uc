@@ -37,6 +37,7 @@ interface LiveLeg {
   readonly state: string;
   readonly extension: string | null;
   readonly bridgedTo: string | null;
+  readonly parked?: { readonly parkingLotId: string; readonly slot: number } | null;
 }
 
 interface AuditEvent {
@@ -281,7 +282,11 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
         expect(parked.status, JSON.stringify(parked.json)).toBe(200);
         expect(parked.json).toEqual({ result: 'parked', parkingLotId: lotId, slot: 750 });
         expect((await person.result()).successfulCalls).toBe(1);
-        await new Promise((resolve) => setTimeout(resolve, 1500));
+        // S9-14: the live calls say where the caller waits (mod_valet_parking's own event).
+        await waitForLeg(
+          '801 shown parked in slot 750',
+          (leg) => leg.parked?.parkingLotId === lotId && leg.parked.slot === 750,
+        );
 
         const retriever = await runForeground({
           scenario: 'uac_call.xml',
@@ -293,6 +298,8 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
         });
         // Only answered if the slot held 801's call (`parking.test.ts` explains why).
         expect(retriever.successfulCalls, retriever.stdout).toBe(1);
+        // Taken back: no longer parked.
+        expect((await legs()).some((leg) => leg.parked != null)).toBe(false);
         await caller.result();
       } finally {
         await tenantAdminCurlJson(

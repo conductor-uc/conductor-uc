@@ -842,7 +842,10 @@ void main() {
       expect(rows.map((r) => r.take(3).toList()), [
         ['103', '+15550199', 'On hold'],
         ['101', '102', 'Talking'],
+        // S9-14: a caller waiting in a queue, and the outside caller's ring on 104.
+        ['+15550177', '+15550100', 'Talking'],
         ['+15550142', '+15550100', 'Ringing'],
+        ['+15550142', '104', 'Ringing'],
       ]);
       expect(rows.first[4], 'Recording');
 

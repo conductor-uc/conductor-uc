@@ -19,6 +19,8 @@ class LiveCall {
     this.recording = 'off',
     this.controls = 'none',
     this.extension,
+    this.queueId,
+    this.parked,
   });
 
   factory LiveCall.fromJson(Map<String, dynamic> json) => LiveCall(
@@ -34,6 +36,8 @@ class LiveCall {
     recording: json['recording'] as String? ?? 'off',
     controls: json['controls'] as String? ?? 'none',
     extension: json['extension'] as String?,
+    queueId: json['queueId'] as String?,
+    parked: ParkedAt.fromJson(json['parked']),
   );
 
   final String callUuid;
@@ -62,6 +66,12 @@ class LiveCall {
   /// (a phone that called in, or the extension a leg rang); null otherwise.
   final String? extension;
 
+  /// The queue this leg is in (a caller waiting or talking, or the agent).
+  final String? queueId;
+
+  /// Where the leg waits while it is parked (S9-14); null otherwise.
+  final ParkedAt? parked;
+
   LiveCall apply(Map<String, dynamic> changes) => LiveCall(
     callUuid: callUuid,
     direction: direction,
@@ -78,7 +88,30 @@ class LiveCall {
     recording: changes['recording'] as String? ?? recording,
     controls: changes['controls'] as String? ?? controls,
     extension: extension,
+    queueId: changes.containsKey('queueId')
+        ? changes['queueId'] as String?
+        : queueId,
+    parked: changes.containsKey('parked')
+        ? ParkedAt.fromJson(changes['parked'])
+        : parked,
   );
+}
+
+/// A parking lot and slot a call waits in.
+class ParkedAt {
+  const ParkedAt(this.parkingLotId, this.slot);
+
+  final String parkingLotId;
+
+  /// The number to dial to take the call back.
+  final int slot;
+
+  static ParkedAt? fromJson(Object? json) {
+    if (json is! Map) return null;
+    final lot = json['parkingLotId'];
+    final slot = json['slot'];
+    return lot is String && slot is int ? ParkedAt(lot, slot) : null;
+  }
 }
 
 /// A call as the live calls table shows it: the two legs of a bridged call
@@ -124,6 +157,19 @@ class LiveCallRow {
   String get controls => legs
       .map((l) => l.controls)
       .firstWhere((c) => c != 'none', orElse: () => 'none');
+
+  /// Where the call waits, when one of its legs is parked.
+  ParkedAt? get parked =>
+      legs.map((l) => l.parked).whereType<ParkedAt>().firstOrNull;
+
+  /// The queue the call is in, when a queue handles it.
+  String? get queueId =>
+      legs.map((l) => l.queueId).whereType<String>().firstOrNull;
+
+  /// The leg ringing a phone, when one is: the one a pickup takes.
+  LiveCall? get ringingPhone => legs
+      .where((l) => l.state == 'ringing' && l.extension != null)
+      .firstOrNull;
 }
 
 /// What the live calls panel shows: the calls, or why there are none to show.

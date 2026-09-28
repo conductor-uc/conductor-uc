@@ -71,6 +71,20 @@ export type ChannelAction =
       readonly state: string;
     }
   | {
+      /** S9-14: a call parked in a lot's slot (`mod_valet_parking`). */
+      readonly kind: 'parked';
+      readonly callUuid: string;
+      readonly nodeId: string;
+      readonly parkingLotId: string;
+      readonly slot: number;
+    }
+  | {
+      /** S9-14: a parked call taken back, or gone. */
+      readonly kind: 'unparked';
+      readonly callUuid: string;
+      readonly nodeId: string;
+    }
+  | {
       /** G-119 (3): a leg of a queue call: the caller joining the queue, or the agent answering. */
       readonly kind: 'queued';
       readonly callUuid: string;
@@ -156,6 +170,35 @@ function normalizeRecordingEvent(
   }
 }
 
+/** The CUSTOM subclass of {@link normalizeValetEvent}. */
+export const VALET_EVENT_SUBCLASS = 'valet_parking::info';
+
+/**
+ * S9-14: `mod_valet_parking`'s own event. `Action: hold` is a call parked in slot
+ * `Valet-Extension` of lot `Valet-Lot-Name` (`<parking lot id>@<tenant domain>`, telephony-config's
+ * naming); `bridge` is it taken back, `exit` it gone (hung up or timed out). `Unique-ID` is the
+ * parked channel. Anything else, or one missing what it needs, is ignored.
+ */
+function normalizeValetEvent(nodeId: string, raw: Readonly<Record<string, string>>): ChannelAction {
+  const callUuid = raw['Unique-ID'];
+  if (callUuid === undefined || !CHANNEL_UUID.test(callUuid)) return { kind: 'ignored' };
+  switch (raw['Action']) {
+    case 'hold': {
+      const parkingLotId = QUEUE_NAME.exec(raw['Valet-Lot-Name'] ?? '')?.[1];
+      const slot = Number(raw['Valet-Extension']);
+      if (parkingLotId === undefined || !Number.isInteger(slot) || slot < 0) {
+        return { kind: 'ignored' };
+      }
+      return { kind: 'parked', callUuid, nodeId, parkingLotId, slot };
+    }
+    case 'bridge':
+    case 'exit':
+      return { kind: 'unparked', callUuid, nodeId };
+    default:
+      return { kind: 'ignored' };
+  }
+}
+
 /** The CUSTOM subclass of {@link normalizeRecordingEvent}. */
 export const RECORDING_EVENT_SUBCLASS = 'cuc::recording';
 
@@ -201,6 +244,9 @@ export function normalizeEslEvent(
   }
   if (eventName === 'CUSTOM' && raw['Event-Subclass'] === RECORDING_EVENT_SUBCLASS) {
     return normalizeRecordingEvent(nodeId, raw);
+  }
+  if (eventName === 'CUSTOM' && raw['Event-Subclass'] === VALET_EVENT_SUBCLASS) {
+    return normalizeValetEvent(nodeId, raw);
   }
 
   const callUuid = raw['Unique-ID'];

@@ -228,6 +228,36 @@ export function createChannelHandler(options: ChannelHandlerOptions): ChannelHan
           return;
         }
 
+        case 'parked': {
+          const tenantId = await tenantFor(action.callUuid, null);
+          await enqueueEvent(db, callEvents, {
+            type: 'call.channel.parked',
+            data: {
+              callUuid: action.callUuid,
+              nodeId: action.nodeId,
+              parkingLotId: action.parkingLotId,
+              slot: action.slot,
+            },
+            ...orgContextOf(tenantId),
+          });
+          await registry.updateCall(action.callUuid, {
+            parkedLot: action.parkingLotId,
+            parkedSlot: String(action.slot),
+          });
+          return;
+        }
+
+        case 'unparked': {
+          const tenantId = await tenantFor(action.callUuid, null);
+          await enqueueEvent(db, callEvents, {
+            type: 'call.channel.unparked',
+            data: { callUuid: action.callUuid, nodeId: action.nodeId },
+            ...orgContextOf(tenantId),
+          });
+          await registry.updateCall(action.callUuid, { parkedLot: '', parkedSlot: '' });
+          return;
+        }
+
         case 'queueAgentStatusChanged':
         case 'queueAgentStateChanged': {
           const agent = await agentOf(action.agentName);

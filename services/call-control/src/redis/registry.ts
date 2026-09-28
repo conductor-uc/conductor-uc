@@ -168,6 +168,8 @@ export interface LiveCall {
   readonly controls: RecordingControls;
   /** G-119 (3): the queue this leg is in (a caller waiting or talking, or the agent answering). */
   readonly queueId: string | null;
+  /** S9-14: where the leg is parked, while it is. */
+  readonly parked: { readonly parkingLotId: string; readonly slot: number } | null;
 }
 
 /**
@@ -203,6 +205,12 @@ export function toLiveCall(
     extension: hash['ext'] === undefined || hash['ext'] === '' ? null : hash['ext'],
     controls: parseRecordingControls(hash['controls']),
     queueId: hash['queue'] === undefined || hash['queue'] === '' ? null : hash['queue'],
+    parked:
+      hash['parkedLot'] !== undefined &&
+      hash['parkedLot'] !== '' &&
+      Number.isInteger(Number(hash['parkedSlot'] ?? ''))
+        ? { parkingLotId: hash['parkedLot'], slot: Number(hash['parkedSlot']) }
+        : null,
   };
 }
 

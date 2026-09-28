@@ -37,6 +37,7 @@ function call(overrides: Partial<LiveCall> = {}): LiveCall {
     controls: 'none',
     extension: null,
     queueId: null,
+    parked: null,
     ...overrides,
   };
 }
@@ -149,6 +150,7 @@ describe('live call events', () => {
           controls: 'none',
           extension: null,
           queueId: null,
+          parked: null,
         },
       },
     });
@@ -301,6 +303,21 @@ describe('live call events', () => {
         'call.channel.queued',
         { ...base, queueId: 'q1' },
         { type: 'call.updated', callUuid: 'c1', changes: { queueId: 'q1' } },
+      ],
+      [
+        // S9-14: mod_valet_parking parked the leg, then it left its slot.
+        'call.channel.parked',
+        { ...base, parkingLotId: 'lot-1', slot: 701 },
+        {
+          type: 'call.updated',
+          callUuid: 'c1',
+          changes: { parked: { parkingLotId: 'lot-1', slot: 701 } },
+        },
+      ],
+      [
+        'call.channel.unparked',
+        base,
+        { type: 'call.updated', callUuid: 'c1', changes: { parked: null } },
       ],
       [
         'call.channel.hungup',

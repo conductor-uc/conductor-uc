@@ -45,10 +45,15 @@ export interface LiveCall {
    * from call-control's `call.channel.queued`; null for a call no queue handled.
    */
   readonly queueId: string | null;
+  /** S9-14: the parking lot and slot the leg waits in, while it is parked; null otherwise. */
+  readonly parked: { readonly parkingLotId: string; readonly slot: number } | null;
 }
 
 export type LiveCallChanges = Partial<
-  Pick<LiveCall, 'state' | 'answeredAt' | 'bridgedTo' | 'recording' | 'controls' | 'queueId'>
+  Pick<
+    LiveCall,
+    'state' | 'answeredAt' | 'bridgedTo' | 'recording' | 'controls' | 'queueId' | 'parked'
+  >
 >;
 
 /** One change on the `calls` topic (`event` in an `{type:"event"}` message). */
@@ -114,6 +119,7 @@ export function callEventFromEnvelope(
             controls: controls ?? 'none',
             extension: extensionOf(data['extension']),
             queueId: null,
+            parked: null,
           },
         },
       };
@@ -155,6 +161,13 @@ export function callEventFromEnvelope(
       const queueId = stringField(data, 'queueId');
       return queueId === undefined || queueId === '' ? undefined : updated({ queueId });
     }
+    // S9-14: mod_valet_parking parked the leg, or it left its slot.
+    case 'call.channel.parked': {
+      const parked = parkedOf(data);
+      return parked === null ? undefined : updated({ parked });
+    }
+    case 'call.channel.unparked':
+      return updated({ parked: null });
     case 'call.channel.hungup':
       return {
         tenantId,
@@ -189,6 +202,7 @@ export function liveCallFromSnapshot(entry: unknown): LiveCall | undefined {
     controls,
     extension,
     queueId,
+    parked,
   } = record;
   if (callUuid === undefined || from === undefined || to === undefined) return undefined;
   if (direction !== 'inbound' && direction !== 'outbound') return undefined;
@@ -207,7 +221,21 @@ export function liveCallFromSnapshot(entry: unknown): LiveCall | undefined {
     controls: controlsOf(controls) ?? 'none',
     extension: extensionOf(extension),
     queueId: typeof queueId === 'string' && queueId !== '' ? queueId : null,
+    parked: typeof parked === 'object' && parked !== null ? parkedOf(parked) : null,
   };
+}
+
+/** `{parkingLotId, slot}` when `value` says where a leg is parked, else null. */
+function parkedOf(value: object): LiveCall['parked'] {
+  const record = value as Record<string, unknown>;
+  const parkingLotId = record['parkingLotId'];
+  const slot = record['slot'];
+  return typeof parkingLotId === 'string' &&
+    parkingLotId !== '' &&
+    typeof slot === 'number' &&
+    Number.isInteger(slot)
+    ? { parkingLotId, slot }
+    : null;
 }
 
 function controlsOf(value: unknown): LiveCall['controls'] | undefined {

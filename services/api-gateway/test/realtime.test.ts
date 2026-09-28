@@ -899,6 +899,7 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
               controls: 'none',
               extension: null,
               queueId: null,
+              parked: null,
             },
           ],
         },

@@ -68,12 +68,14 @@ export interface EslClient {
 // `CUSTOM callcenter::info` (S2-13): a custom event class must be named by
 // its own subclass to subscribe to it — `mod_event_socket`'s documented
 // convention, not something the other (stock) event names above need.
+// `valet_parking::info` (S9-14): a call parked in a slot (`Action: hold`), or taken from it or
+// gone (`bridge`, `exit`), for the attendant console's parked calls.
 // `cuc::recording` (S5-15): a recording paused or resumed, fired by
 // `recording_control.lua` and by this service (`sendEvent`), since
 // `uuid_record mask`/`unmask` raise no event of their own.
 // `BACKGROUND_JOB` (S5-09): the result of a `bgapi`, kept here and never passed on.
 const SUBSCRIBE_COMMAND =
-  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_UNHOLD RECORD_START RECORD_STOP CHANNEL_HANGUP_COMPLETE HEARTBEAT BACKGROUND_JOB CUSTOM callcenter::info cuc::recording';
+  'event json CHANNEL_CREATE CHANNEL_ANSWER CHANNEL_BRIDGE CHANNEL_HOLD CHANNEL_UNHOLD RECORD_START RECORD_STOP CHANNEL_HANGUP_COMPLETE HEARTBEAT BACKGROUND_JOB CUSTOM callcenter::info cuc::recording valet_parking::info';
 
 type ConnectionState = 'connecting' | 'authenticating' | 'subscribing' | 'ready';
 
