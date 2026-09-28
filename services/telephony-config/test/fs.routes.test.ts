@@ -2777,6 +2777,46 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       });
     });
 
+    it('S9-19: a parked call hears the tenant hold music, or the neutral tone without one', async () => {
+      const dial = async (tenantId: string) =>
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/fs/dialplan?nodeId=fs-1',
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+              authorization: BASIC_AUTH,
+            },
+            payload: internalPayload(tenantId, { 'Caller-Destination-Number': '705' }),
+          })
+        ).body;
+
+      const plain = crypto.randomUUID();
+      await seedTenant(plain);
+      await seedLot(plain);
+      const withoutMusic = await dial(plain);
+      expect(withoutMusic).toContain(
+        '<action application="export" data="hold_music=tone_stream://%(250,4750,440);loops=-1"/>',
+      );
+      expect(withoutMusic).toContain(
+        '<action application="set" data="valet_hold_music=${hold_music}"/>',
+      );
+      // Exported right after the tenant, before anything plays.
+      expect(withoutMusic.indexOf('hold_music=')).toBeGreaterThan(
+        withoutMusic.indexOf(`cuc_tenant_id=${plain}`),
+      );
+      expect(withoutMusic.indexOf('hold_music=')).toBeLessThan(withoutMusic.indexOf('valet_park'));
+
+      const musical = crypto.randomUUID();
+      await seedTenant(musical);
+      await seedLot(musical);
+      h.pbxConfig.holdMusicAssets[musical] = 'moh-asset-1';
+      const withMusic = await dial(musical);
+      expect(withMusic).toMatch(
+        new RegExp(`hold_music=http_cache://[^"]*/fs/media/${musical}/moh-asset-1/8k.wav`),
+      );
+    });
+
     it('a real extension wins over a coincidentally-numbered slot', async () => {
       const tenantId = crypto.randomUUID();
       await seedTenant(tenantId);

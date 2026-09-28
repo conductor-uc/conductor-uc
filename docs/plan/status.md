@@ -17,7 +17,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
-| S9 Console usability and localization (21) | 18 | 0 | 3 |
+| S9 Console usability and localization (21) | 19 | 0 | 2 |
 | Release readiness (7) | 2 | 3 | 2 |
 | **Total (127)** | **70** | **13** | **44** |
 
@@ -197,7 +197,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S9-16 | Done | New-tenant wizard; reseller and master homes that say what needs attention (#278) |
 | S9-17 | Done | Every string in the ARB (#279); accessibility, right to left, dark mode (#280); 08 rewritten (#281) |
 | S9-18 | Done | Pickup groups (pbx-config `/pickup-groups`, `pbx.pickup_group.*`); a person picks up a call ringing within their groups from their home or with `*8` (call-control `/me/pickup`, `pickup-target`; telephony-config answers and intercepts); SIPp-tested |
-| S9-19 | Not started | Planned 2026-09-28 (G-125) |
+| S9-19 | Done | Waiting callers hear the tenant's hold music (telephony-config exports `hold_music` on every tenant call: the latest ready `moh` asset, or a neutral tone), parked and during an attended transfer; an attended transfer's waiting caller rings the person back after 5 minutes (a `sched_api` task on the node, cancelled on complete or cancel). Confirmed live |
 | S9-20 | Not started | Planned 2026-09-28 (G-126) |
 | S9-21 | Not started | Planned 2026-09-28 (G-127) |
 

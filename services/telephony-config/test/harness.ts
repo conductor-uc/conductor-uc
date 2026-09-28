@@ -132,6 +132,8 @@ function fakeCallflowClient(): FakeCallflowClient {
 }
 
 export interface FakePbxConfigClient extends PbxConfigClient {
+  /** S9-19: each tenant's hold music asset id; missing means none. */
+  holdMusicAssets: Record<string, string>;
   credentials: Record<string, DigestCredential>;
   dids: Record<string, DidConfig>;
   emergencyLocations: Record<string, EmergencyLocationConfig>;
@@ -156,6 +158,10 @@ export interface FakePbxConfigClient extends PbxConfigClient {
 /** A digest-credential/DID/emergency-location/media-asset/ring-group/queue/agent/tier/parking-lot/conference-room lookup whose answers are set per test — no live pbx-config-service needed. */
 function fakePbxConfigClient(): FakePbxConfigClient {
   const state: FakePbxConfigClient = {
+    holdMusicAssets: {},
+    holdMusic(tenantId) {
+      return Promise.resolve(state.holdMusicAssets[tenantId] ?? null);
+    },
     credentials: {},
     dids: {},
     emergencyLocations: {},

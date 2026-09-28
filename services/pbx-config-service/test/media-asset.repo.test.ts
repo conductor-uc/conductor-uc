@@ -189,4 +189,32 @@ describe.skipIf(skipReason !== undefined)('media asset repo', () => {
           throw error;
         }),
   });
+
+  it('S9-19: the hold music is the most recently changed ready moh asset; a prompt or an unfinished upload is not', async () => {
+    const tenantId = crypto.randomUUID();
+    const ctx = ctxFor(tenantId);
+    expect(await h.mediaAssets.holdMusic(ctx)).toBeUndefined();
+    const ready = async (kind: string, label: string) => {
+      const { asset } = await h.mediaAssets.create(ctx, { ...VALID_INPUT, kind, label });
+      await h.mediaAssets.finalize(ctx, asset.id);
+      await h.mediaAssets.complete(ctx, asset.id, {
+        durationMs: 1000,
+        sha256: 'a'.repeat(64),
+        sizeBytes: 100,
+        variant8kKey: `media-assets/${asset.id}/8k.wav`,
+        variant16kKey: `media-assets/${asset.id}/16k.wav`,
+      });
+      return asset.id;
+    };
+    await ready('prompt', 'Welcome');
+    await h.mediaAssets.create(ctx, { ...VALID_INPUT, kind: 'moh', label: 'Still uploading' });
+    expect(await h.mediaAssets.holdMusic(ctx)).toBeUndefined();
+    const older = await ready('moh', 'Jazz');
+    expect((await h.mediaAssets.holdMusic(ctx))?.id).toBe(older);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const newer = await ready('moh', 'Piano');
+    expect((await h.mediaAssets.holdMusic(ctx))?.id).toBe(newer);
+    // Another tenant's has nothing to do with it.
+    expect(await h.mediaAssets.holdMusic(ctxFor(crypto.randomUUID()))).toBeUndefined();
+  });
 });

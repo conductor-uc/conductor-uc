@@ -127,6 +127,23 @@ export function createMediaAssetRepo(db: Database<PbxConfigServiceDb>, storage: 
         .then((rows) => rows.map(toAsset));
     },
 
+    /**
+     * S9-19 (G-125): the tenant's hold music, the most recently changed ready
+     * asset of kind `moh`; undefined when there is none (callers then hear a
+     * neutral tone).
+     */
+    async holdMusic(ctx: DbContext): Promise<MediaAsset | undefined> {
+      const row = await db
+        .scoped(ctx)
+        .selectFrom('media_assets')
+        .select(COLUMNS)
+        .where('kind', '=', 'moh')
+        .where('status', '=', 'ready')
+        .orderBy('updated_at', 'desc')
+        .executeTakeFirst();
+      return row === undefined ? undefined : toAsset(row);
+    },
+
     findById(ctx: DbContext, id: string): Promise<MediaAsset | undefined> {
       return db
         .scoped(ctx)
