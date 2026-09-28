@@ -11,6 +11,7 @@ import '../pbx/pbx_api.dart';
 import '../platform/operations_api.dart';
 import '../shell/sections.dart';
 import '../users/users_api.dart';
+import 'tenant_home.dart';
 
 /// One figure on the dashboard, and where it leads.
 class _Tile {
@@ -155,6 +156,19 @@ class DashboardPage extends ConsumerWidget {
           ),
         );
       }
+    }
+
+    // S9-06: a tenant's home says what is left to do and what needs them,
+    // with the figures below.
+    if (session.orgType == OrgType.tenant || acting != null) {
+      return TenantHome(
+        visible: visible,
+        glance: Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          children: [for (final t in tiles) _TileCard(tile: t)],
+        ),
+      );
     }
 
     return PageFrame(

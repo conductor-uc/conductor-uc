@@ -1065,5 +1065,152 @@
   "languageName": "English",
   "@languageName": {
     "description": "This language's own name, as its speakers write it. Translators: put your language's name here."
+  },
+  "homeTitle": "Home",
+  "@homeTitle": {
+    "description": "Heading of an organization's home page when its name is not known."
+  },
+  "homeSubtitle": "Your phone system at a glance: what's left to set up, and what needs you.",
+  "@homeSubtitle": {
+    "description": "Line under the home page heading."
+  },
+  "homeSetupTitle": "Get your phone system ready",
+  "@homeSetupTitle": {
+    "description": "Heading of the setup checklist on the home page."
+  },
+  "homeSetupProgress": "{done} of {total} done",
+  "@homeSetupProgress": {
+    "description": "How far through the setup checklist the organization is.",
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "homeStepLocationTitle": "Add your address for emergency calls",
+  "@homeStepLocationTitle": {
+    "description": "Setup step: the street address sent with emergency calls."
+  },
+  "homeStepLocationWhy": "Emergency services get this address when someone dials 911. Every phone needs one.",
+  "@homeStepLocationWhy": {
+    "description": "Why the emergency address step matters."
+  },
+  "homeStepLocationAction": "Add address",
+  "@homeStepLocationAction": {
+    "description": "Button for the emergency address step."
+  },
+  "homeStepExtensionsTitle": "Give your people extensions",
+  "@homeStepExtensionsTitle": {
+    "description": "Setup step: internal numbers for the organization's people."
+  },
+  "homeStepExtensionsWhy": "An extension is someone's own number inside the company, with their voicemail.",
+  "@homeStepExtensionsWhy": {
+    "description": "Why the extensions step matters. Explains what an extension is."
+  },
+  "homeStepExtensionsAction": "Add extensions",
+  "@homeStepExtensionsAction": {
+    "description": "Button for the extensions step."
+  },
+  "homeStepPhoneTitle": "Connect a phone",
+  "@homeStepPhoneTitle": {
+    "description": "Setup step: a desk phone or phone app signed in to an extension."
+  },
+  "homeStepPhoneWhy": "A desk phone or a phone app, signed in to someone's extension.",
+  "@homeStepPhoneWhy": {
+    "description": "Why the phone step matters."
+  },
+  "homeStepPhoneAction": "Add a phone",
+  "@homeStepPhoneAction": {
+    "description": "Button for the phone step."
+  },
+  "homeStepNumberTitle": "Add a phone number",
+  "@homeStepNumberTitle": {
+    "description": "Setup step: an outside number people can call."
+  },
+  "homeStepNumberWhy": "The number your customers dial to reach you.",
+  "@homeStepNumberWhy": {
+    "description": "Why the phone number step matters."
+  },
+  "homeStepNumberAction": "Add number",
+  "@homeStepNumberAction": {
+    "description": "Button for the phone number step."
+  },
+  "homeStepAnsweredTitle": "Choose who answers your numbers",
+  "@homeStepAnsweredTitle": {
+    "description": "Setup step: where calls to each phone number go."
+  },
+  "homeStepAnsweredWhy": "Send each number to a person, a group of phones, or a menu.",
+  "@homeStepAnsweredWhy": {
+    "description": "Why deciding who answers matters."
+  },
+  "homeStepAnsweredAction": "Choose",
+  "@homeStepAnsweredAction": {
+    "description": "Button for the who-answers step."
+  },
+  "homeAttentionTitle": "Needs attention",
+  "@homeAttentionTitle": {
+    "description": "Heading of the home page card listing problems to fix."
+  },
+  "homeAttentionNone": "Nothing needs your attention.",
+  "@homeAttentionNone": {
+    "description": "Shown when there is nothing to fix."
+  },
+  "homeAttentionUnrouted": "{count, plural, =1{1 phone number doesn't ring anywhere} other{{count} phone numbers don't ring anywhere}}",
+  "@homeAttentionUnrouted": {
+    "description": "Phone numbers with nowhere to send calls.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "homeAttentionUnpublished": "{count, plural, =1{1 call flow hasn't been published} other{{count} call flows haven't been published}}",
+  "@homeAttentionUnpublished": {
+    "description": "Call flows that were never put live.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "homeAttentionFailedMedia": "{count, plural, =1{1 recording couldn't be processed} other{{count} recordings couldn't be processed}}",
+  "@homeAttentionFailedMedia": {
+    "description": "Greetings or hold music that failed to upload or convert.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "homeRecentCallsTitle": "Recent calls",
+  "@homeRecentCallsTitle": {
+    "description": "Heading of the home page card with the latest calls."
+  },
+  "homeRecentCallsNone": "No calls yet.",
+  "@homeRecentCallsNone": {
+    "description": "Shown when there are no calls to list."
+  },
+  "homeSeeAll": "See all",
+  "@homeSeeAll": {
+    "description": "Link to the full list."
+  },
+  "homeGlanceTitle": "At a glance",
+  "@homeGlanceTitle": {
+    "description": "Heading above the counts of what is set up."
+  },
+  "homeCallParties": "{from} → {to}",
+  "@homeCallParties": {
+    "description": "Who called whom, in a list of recent calls. The arrow points from the caller to the one called; turn it around for right-to-left languages.",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
   }
 }
