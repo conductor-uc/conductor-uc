@@ -91,6 +91,45 @@ export function registerMeRoutes(
   );
 
   /**
+   * S9-11: a person's own SIP sign-in, to set up their own desk phone or
+   * phone app. Their own extension only, and audited as a reveal is, since
+   * it is a credential (07 §3.2).
+   */
+  app.post(
+    '/v1/tenants/:tenantId/me/extension/reveal',
+    {
+      config: { permission: 'self.settings', dataClass: 'secret' },
+      schema: {
+        params: TenantParamsSchema,
+        response: {
+          200: Type.Object({
+            username: Type.String(),
+            password: Type.String(),
+            realm: Type.String(),
+          }),
+        },
+      },
+    },
+    async (request) => {
+      const { ctx, extension, userId } = await myExtension(request);
+      const revealed = await extensions.reveal(ctx, extension.id);
+      await publishAuditEvent(bus, {
+        actorType: 'user',
+        actorId: userId,
+        actorOrgId: request.params.tenantId,
+        targetOrgId: request.params.tenantId,
+        action: 'extension.credential.revealed',
+        resource: extension.id,
+        dataClass: 'secret',
+        reason: 'self-service',
+        ip: clientIpOf(request),
+        requestId: request.context.requestId,
+      });
+      return revealed;
+    },
+  );
+
+  /**
    * The people a person can forward to: every extension's id, number and
    * display name in their own tenant, nothing else. Call handling names another
    * extension by id, and an ordinary user cannot list extensions (that is

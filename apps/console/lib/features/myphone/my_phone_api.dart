@@ -48,6 +48,36 @@ class MyPhoneApi implements MailboxOps {
 
   Future<Json> callHandling() => _get('call-handling');
 
+  /// Where my phone or app signs in: server, port, transports (S9-11).
+  Future<Json> sipEndpoint() => _get('sip-endpoint');
+
+  /// My own SIP username and password, to set up a phone or app (S9-11).
+  /// Audited, as a credential.
+  Future<Json> revealMySignIn() async {
+    final response = await _dio.post<Object?>(
+      _path('extension/reveal'),
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  /// Where to put my new greeting (a WAV), then that it is there (S9-11).
+  Future<Json> presignGreeting() async {
+    final response = await _dio.post<Object?>(
+      _path('voicemail/greeting/presign'),
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
+  Future<Json> completeGreeting() async {
+    final response = await _dio.post<Object?>(
+      _path('voicemail/greeting/complete'),
+      options: _options,
+    );
+    return (response.data as Map).cast<String, dynamic>();
+  }
+
   Future<Json> saveCallHandling(Json body) async {
     final response = await _dio.put<Object?>(
       _path('call-handling'),
@@ -111,6 +141,7 @@ class MyPhoneApi implements MailboxOps {
   /// own extension's; only these narrowings can be asked for.
   Future<MyCallsPage> calls({
     String? direction,
+    String? search,
     DateTime? from,
     DateTime? to,
     String? cursor,
@@ -120,6 +151,7 @@ class MyPhoneApi implements MailboxOps {
       'calls',
       query: {
         'direction': ?direction,
+        if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
         if (from != null)
           'from': DateTime(
             from.year,

@@ -1917,7 +1917,7 @@ class DemoPbx {
   /// number from the request: everything is worked out from who signed in.
   ResponseBody? _myPhone(RequestOptions options, String? userId) {
     final match = RegExp(
-      r'^/v1/tenants/[^/]+/me/(extension|directory|call-handling|voicemail|calls)(?:/(.*))?$',
+      r'^/v1/tenants/[^/]+/me/(extension|directory|call-handling|voicemail|calls|sip-endpoint)(?:/(.*))?$',
     ).firstMatch(options.path);
     if (match == null) return null;
     final method = options.method.toUpperCase();
@@ -1925,6 +1925,17 @@ class DemoPbx {
     if (extension == null) return _noExtension();
     final tail = match.group(2);
     switch (match.group(1)) {
+      case 'sip-endpoint':
+        return _phone(
+          RequestOptions(path: '/v1/tenants/demo/sip-endpoint', method: 'GET'),
+        );
+      case 'extension' when tail == 'reveal' && method == 'POST':
+        return _phone(
+          RequestOptions(
+            path: '/v1/tenants/demo/extensions/${extension['id']}/reveal',
+            method: 'POST',
+          ),
+        );
       case 'extension':
         return _json({
           for (final k in const [
@@ -1962,6 +1973,22 @@ class DemoPbx {
           );
         }
         final id = '${box.first['id']}';
+        // A new greeting: an address to put it at, then a note that it is
+        // there. The demo keeps no audio; the greeting is simply ready.
+        if (tail == 'greeting/presign' && method == 'POST') {
+          return _json({
+            'uploadUrl': 'https://storage.demo.example/greetings/$id.wav',
+            'objectKey': 'greetings/$id.wav',
+          }, 201);
+        }
+        if (tail == 'greeting/complete' && method == 'POST') {
+          box.first['greetingStatus'] = 'ready';
+          final view = _mailboxView(box.first);
+          return _json({
+            for (final e in view.entries)
+              if (e.key != 'id' && e.key != 'extensionId') e.key: e.value,
+          });
+        }
         final suffix = switch (tail) {
           null => '',
           'messages' => '/messages',
@@ -2018,7 +2045,8 @@ class DemoPbx {
                     !DateTime.parse('${c['startAt']}').isBefore(from)) &&
                 (to == null ||
                     !DateTime.parse('${c['startAt']}').isAfter(to)) &&
-                (q['direction'] == null || c['direction'] == q['direction']))
+                (q['direction'] == null || c['direction'] == q['direction']) &&
+                _matchesSearch(c, q['search']))
               (i, c),
         ];
         final page = matching.take(limit).toList();
@@ -2048,6 +2076,19 @@ class DemoPbx {
         });
     }
     return null;
+  }
+
+  /// Whether a call's numbers or caller name contain [search], as the
+  /// service's own `search` does.
+  static bool _matchesSearch(Map<String, dynamic> call, Object? search) {
+    final text = '${search ?? ''}'.trim().toLowerCase();
+    if (text.isEmpty) return true;
+    return [
+      call['fromNumber'],
+      call['fromName'],
+      call['toNumber'],
+      call['dialedNumber'],
+    ].any((v) => v != null && '$v'.toLowerCase().contains(text));
   }
 
   ResponseBody? handle(RequestOptions options, {String? userId}) {

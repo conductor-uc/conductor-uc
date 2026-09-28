@@ -1,13 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../cdr/call_records_page.dart'
     show directionLabels, dispositionLabels, partyLabel;
 import '../pbx/call_handling_dialog.dart';
 import '../pbx/pbx_api.dart';
+import '../shell/sections.dart' show myPhoneSections;
 import '../voicemail/voicemail_page.dart' show MessagesView;
 import 'my_live_calls.dart';
 import 'my_phone_api.dart';
@@ -38,37 +42,58 @@ class _MyPhoneFrame extends ConsumerWidget {
   final List<Widget> actions;
   final List<Widget> children;
 
-  static const _tabs = [
-    ('/my-phone/call-handling', 'Call handling'),
-    ('/my-phone/voicemail', 'Voicemail'),
-    ('/my-phone/history', 'Call history'),
-  ];
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The navigation already lists all three for a person with only a phone.
-    final tabs = !isSelfOnly(ref.watch(knownPermissionsProvider));
     return PageFrame(
       children: [
         PageHeader(title: title, subtitle: subtitle, actions: actions),
-        if (tabs) ...[
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            children: [
-              for (final (path, label) in _tabs)
-                ChoiceChip(
-                  label: Text(label),
-                  selected: path == current,
-                  onSelected: (_) => context.go(path),
-                ),
-            ],
-          ),
-        ],
+        MyPhoneTabs(current: current),
         const SizedBox(height: 16),
         const MyLiveCalls(),
         ...children,
       ],
+    );
+  }
+}
+
+/// The My phone screens as tabs, for an administrator who reaches them from
+/// one navigation entry. A person with only a phone has them all in the
+/// navigation already, so gets none.
+class MyPhoneTabs extends ConsumerWidget {
+  const MyPhoneTabs({super.key, required this.current});
+
+  final String current;
+
+  /// Shorter than the navigation's names: the tabs sit under "My phone".
+  static String _label(AppLocalizations l10n, String path) => switch (path) {
+    '/my-phone/home' => l10n.myTabHome,
+    '/my-phone/call-handling' => l10n.myTabCallHandling,
+    '/my-phone/voicemail' => l10n.myTabVoicemail,
+    _ => l10n.myTabHistory,
+  };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (isSelfOnly(ref.watch(knownPermissionsProvider))) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final s in myPhoneSections)
+              ChoiceChip(
+                label: Text(_label(context.l10n, s.path)),
+                selected: s.path == current,
+                onSelected: (_) => context.go(s.path),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -78,12 +103,8 @@ class _NothingLinked extends StatelessWidget {
   const _NothingLinked();
 
   @override
-  Widget build(BuildContext context) => const Center(
-    child: Text(
-      'No phone is linked to your account yet. Ask an administrator to '
-      'link your extension.',
-    ),
-  );
+  Widget build(BuildContext context) =>
+      Center(child: Text(context.l10n.myPhoneNothingLinked));
 }
 
 /// A page's body for one request, with the "no extension linked" case said in
@@ -233,25 +254,11 @@ class MyVoicemailPage extends ConsumerWidget {
       ),
       data: (box) => Column(
         children: [
-          // Tabs for an administrator; the messages view supplies its own frame.
-          if (!isSelfOnly(ref.watch(knownPermissionsProvider)))
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Wrap(
-                  spacing: 8,
-                  children: [
-                    for (final (path, label) in _MyPhoneFrame._tabs)
-                      ChoiceChip(
-                        label: Text(label),
-                        selected: path == '/my-phone/voicemail',
-                        onSelected: (_) => context.go(path),
-                      ),
-                  ],
-                ),
-              ),
-            ),
+          // The messages view supplies its own frame, so the tabs go here.
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 12, 24, 0),
+            child: MyPhoneTabs(current: '/my-phone/voicemail'),
+          ),
           const Padding(
             padding: EdgeInsets.fromLTRB(24, 12, 24, 0),
             child: MyLiveCalls(),
@@ -273,10 +280,16 @@ class MyCallHistoryPage extends ConsumerStatefulWidget {
 
 class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
   String? _direction;
+  final _search = TextEditingController();
+  Timer? _typing;
   final _rows = <Json>[];
   String? _next;
   Object? _error;
   var _loading = true;
+
+  /// Which load is the latest: an answer to an earlier search that arrives
+  /// late is dropped.
+  var _generation = 0;
 
   @override
   void initState() {
@@ -284,9 +297,17 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
     _load(reset: true);
   }
 
+  @override
+  void dispose() {
+    _typing?.cancel();
+    _search.dispose();
+    super.dispose();
+  }
+
   Future<void> _load({bool reset = false}) async {
     final api = ref.read(myPhoneApiProvider);
     if (api == null) return;
+    final generation = ++_generation;
     setState(() {
       _loading = true;
       if (reset) {
@@ -296,15 +317,19 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
       }
     });
     try {
-      final page = await api.calls(direction: _direction, cursor: _next);
-      if (!mounted) return;
+      final page = await api.calls(
+        direction: _direction,
+        search: _search.text,
+        cursor: _next,
+      );
+      if (!mounted || generation != _generation) return;
       setState(() {
         _rows.addAll(page.rows);
         _next = page.nextCursor;
         _loading = false;
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && generation == _generation) {
         setState(() {
           _error = e;
           _loading = false;
@@ -321,23 +346,47 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
       title: 'My call history',
       subtitle: 'Calls to and from your extension, newest first.',
       children: [
-        SizedBox(
-          width: 220,
-          child: DropdownButtonFormField<String?>(
-            key: const ValueKey('my-calls-direction'),
-            initialValue: _direction,
-            isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Direction'),
-            items: [
-              const DropdownMenuItem(value: null, child: Text('All')),
-              for (final e in directionLabels.entries)
-                DropdownMenuItem(value: e.key, child: Text(e.value)),
-            ],
-            onChanged: (v) {
-              _direction = v;
-              _load(reset: true);
-            },
-          ),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            SizedBox(
+              width: 280,
+              child: TextField(
+                key: const ValueKey('my-calls-search'),
+                controller: _search,
+                decoration: InputDecoration(
+                  labelText: context.l10n.myHistorySearch,
+                  prefixIcon: const Icon(Icons.search),
+                ),
+                onChanged: (_) {
+                  _typing?.cancel();
+                  _typing = Timer(
+                    const Duration(milliseconds: 300),
+                    () => _load(reset: true),
+                  );
+                },
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: DropdownButtonFormField<String?>(
+                key: const ValueKey('my-calls-direction'),
+                initialValue: _direction,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Direction'),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All')),
+                  for (final e in directionLabels.entries)
+                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                ],
+                onChanged: (v) {
+                  _direction = v;
+                  _load(reset: true);
+                },
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         Expanded(
@@ -349,7 +398,11 @@ class _MyCallHistoryPageState extends ConsumerState<MyCallHistoryPage> {
               ? Center(
                   child: _loading
                       ? const CircularProgressIndicator()
-                      : const Text('No calls yet.'),
+                      : Text(
+                          _search.text.trim().isEmpty
+                              ? context.l10n.homeRecentCallsNone
+                              : context.l10n.myHistoryNoMatch,
+                        ),
                 )
               : SingleChildScrollView(
                   child: Column(

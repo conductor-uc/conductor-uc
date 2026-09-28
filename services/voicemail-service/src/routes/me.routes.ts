@@ -305,4 +305,42 @@ export function registerMeRoutes(
       return summary(ctx, updated);
     },
   );
+
+  // S9-11: a person records or uploads their own greeting, as an
+  // administrator can for any mailbox: an address to put the audio at, then
+  // a note that it is there.
+  app.post(
+    '/v1/tenants/:tenantId/me/voicemail/greeting/presign',
+    {
+      config: contract,
+      schema: {
+        params: TenantParamsSchema,
+        response: { 201: Type.Object({ uploadUrl: Type.String(), objectKey: Type.String() }) },
+      },
+    },
+    async (request, reply) => {
+      const { ctx, mailbox } = await mine(request);
+      return reply.status(201).send(await mailboxes.presignGreeting(ctx, mailbox.id));
+    },
+  );
+
+  app.post(
+    '/v1/tenants/:tenantId/me/voicemail/greeting/complete',
+    {
+      config: contract,
+      schema: { params: TenantParamsSchema, response: { 200: MyMailboxSchema } },
+    },
+    async (request) => {
+      const { ctx, mailbox, userId } = await mine(request);
+      const updated = await mailboxes.completeGreeting(ctx, mailbox.id);
+      await audit(
+        request,
+        request.params.tenantId,
+        userId,
+        'voicemail.greeting.updated',
+        mailbox.id,
+      );
+      return summary(ctx, updated);
+    },
+  );
 }

@@ -158,7 +158,10 @@ describe('the default routing table', () => {
     ['/v1/tenants/t1/me/extension', SERVICES.pbx],
     ['/v1/tenants/t1/me/directory', SERVICES.pbx],
     ['/v1/tenants/t1/me/call-handling', SERVICES.pbx],
+    ['/v1/tenants/t1/me/extension/reveal', SERVICES.pbx],
+    ['/v1/tenants/t1/me/sip-endpoint', SERVICES.pbx],
     ['/v1/tenants/t1/me/voicemail', SERVICES.voicemail],
+    ['/v1/tenants/t1/me/voicemail/greeting/presign', SERVICES.voicemail],
     ['/v1/tenants/t1/me/voicemail/messages/m1/play-url', SERVICES.voicemail],
     ['/v1/tenants/t1/me/calls', SERVICES.cdr],
     // S5-15: the live call recording buttons, not call history.

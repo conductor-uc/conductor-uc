@@ -110,7 +110,7 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in voicemail-se
     const routes = app.registeredRoutes.filter(
       (r) => r.url.includes('/me/') && r.method !== 'HEAD',
     );
-    expect(routes.length).toBe(7);
+    expect(routes.length).toBe(9);
     for (const route of routes) {
       expect(route.permission, `${route.method} ${route.url}`).toBe('self.voicemail');
       expect(route.dataClass, `${route.method} ${route.url}`).toBe('private');
@@ -286,6 +286,33 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in voicemail-se
         'voicemail.message.read',
         'voicemail.message.deleted',
       ]);
+    });
+
+    it('puts up my own greeting, and only mine (S9-11)', async () => {
+      const tenantId = crypto.randomUUID();
+      const a = await mailboxFor(tenantId, 'user-a');
+      const b = await mailboxFor(tenantId, 'user-b');
+
+      const presigned = await app.inject({
+        method: 'POST',
+        url: me(tenantId, '/greeting/presign'),
+        headers: person(tenantId, 'user-a'),
+      });
+      expect(presigned.statusCode).toBe(201);
+      const { objectKey } = presigned.json<{ objectKey: string }>();
+      await storeAudio(h, tenantId, objectKey, 'wav bytes');
+
+      const done = await app.inject({
+        method: 'POST',
+        url: me(tenantId, '/greeting/complete'),
+        headers: person(tenantId, 'user-a'),
+      });
+      expect(done.statusCode).toBe(200);
+      expect(done.json<{ greetingStatus: string }>().greetingStatus).not.toBe('none');
+      expect((await h.mailboxes.findById({ tenantId }, b.mailbox.id))?.greetingStatus).toBe('none');
+      expect(audits()).toContainEqual(
+        expect.objectContaining({ action: 'voicemail.greeting.updated', resource: a.mailbox.id }),
+      );
     });
 
     it('resets only my PIN; the PIN is never in the audit record', async () => {

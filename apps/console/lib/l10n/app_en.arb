@@ -2545,5 +2545,186 @@
   "mainNumberNeedsOption": "Choose who at least one menu option rings.",
   "@mainNumberNeedsOption": {
     "description": "Set up your main number page. No menu option was given someone to ring."
+  },
+  "navMyHome": "Home",
+  "@navMyHome": {
+    "description": "Navigation menu item. A person's own home page: their number, voicemail and recent calls."
+  },
+  "commonClose": "Close",
+  "@commonClose": {
+    "description": "Button. Closes a dialog."
+  },
+  "myPhoneNothingLinked": "No phone is linked to your account yet. Ask an administrator to link your extension.",
+  "@myPhoneNothingLinked": {
+    "description": "A person's own phone pages. Shown when no extension is linked to the person."
+  },
+  "myHomeHello": "Hello, {name}",
+  "@myHomeHello": {
+    "description": "A person's own home page (My phone). Greeting at the top.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Sam Rivera"
+      }
+    }
+  },
+  "myHomeYourNumber": "Your extension is {number}.",
+  "@myHomeYourNumber": {
+    "description": "A person's own home page (My phone). The person's internal number.",
+    "placeholders": {
+      "number": {
+        "type": "String",
+        "example": "101"
+      }
+    }
+  },
+  "myHomeForwardTitle": "Forward to my mobile",
+  "@myHomeForwardTitle": {
+    "description": "A person's own home page (My phone). Card title: send every call to the person's mobile."
+  },
+  "myHomeMobile": "My mobile number",
+  "@myHomeMobile": {
+    "description": "A person's own home page (My phone). Field label."
+  },
+  "myHomeMobileHelp": "With the area code.",
+  "@myHomeMobileHelp": {
+    "description": "A person's own home page (My phone). Help under the mobile number field."
+  },
+  "myHomeForwardSwitch": "Send my calls to my mobile",
+  "@myHomeForwardSwitch": {
+    "description": "A person's own home page (My phone). Switch label."
+  },
+  "myHomeForwardOnHelp": "Calls ring your mobile instead of your phone here.",
+  "@myHomeForwardOnHelp": {
+    "description": "A person's own home page (My phone). Under the switch while forwarding is on."
+  },
+  "myHomeForwardOffHelp": "Calls ring your phone here as usual.",
+  "@myHomeForwardOffHelp": {
+    "description": "A person's own home page (My phone). Under the switch while forwarding is off."
+  },
+  "myHomeForwardOn": "Your calls now go to your mobile.",
+  "@myHomeForwardOn": {
+    "description": "A person's own home page (My phone). Confirmation after turning forwarding on."
+  },
+  "myHomeForwardOff": "Your calls ring your phone here again.",
+  "@myHomeForwardOff": {
+    "description": "A person's own home page (My phone). Confirmation after turning forwarding off."
+  },
+  "myHomeMoreForwarding": "More ways to handle calls",
+  "@myHomeMoreForwarding": {
+    "description": "A person's own home page (My phone). Link to the full call handling page."
+  },
+  "myHomeNewMessages": "{count, plural, =0{No new messages} =1{1 new message} other{{count} new messages}}",
+  "@myHomeNewMessages": {
+    "description": "A person's own home page (My phone). Unread voicemail count.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "myHomeGreetingYours": "Callers hear your own greeting.",
+  "@myHomeGreetingYours": {
+    "description": "A person's own home page (My phone). Voicemail greeting status."
+  },
+  "myHomeGreetingProcessing": "Your new greeting is being prepared.",
+  "@myHomeGreetingProcessing": {
+    "description": "A person's own home page (My phone). Voicemail greeting status: uploaded, still being converted."
+  },
+  "myHomeGreetingStandard": "Callers hear the standard greeting.",
+  "@myHomeGreetingStandard": {
+    "description": "A person's own home page (My phone). Voicemail greeting status: none recorded."
+  },
+  "myHomeListen": "Listen to messages",
+  "@myHomeListen": {
+    "description": "A person's own home page (My phone). Button to open voicemail."
+  },
+  "myHomeRecordGreeting": "Record a greeting",
+  "@myHomeRecordGreeting": {
+    "description": "A person's own home page (My phone). Button and dialog title: record a voicemail greeting with the microphone."
+  },
+  "myHomeUploadGreeting": "Upload a greeting",
+  "@myHomeUploadGreeting": {
+    "description": "A person's own home page (My phone). Button: choose a WAV file as the voicemail greeting."
+  },
+  "myHomeGreetingWavOnly": "Choose a WAV file.",
+  "@myHomeGreetingWavOnly": {
+    "description": "A person's own home page (My phone). The chosen greeting file is not a WAV."
+  },
+  "myHomeGreetingSaved": "Your greeting is saved.",
+  "@myHomeGreetingSaved": {
+    "description": "A person's own home page (My phone). Confirmation after saving a greeting."
+  },
+  "myHomeRecordHelp": "Press Start, say your greeting, then press Stop and save. For example: “You’ve reached Sam. Leave a message and I’ll call you back.”",
+  "@myHomeRecordHelp": {
+    "description": "A person's own home page (My phone). Instructions in the record greeting dialog."
+  },
+  "myHomeMicrophoneRefused": "The browser didn’t allow the microphone. Allow it for this site and try again.",
+  "@myHomeMicrophoneRefused": {
+    "description": "A person's own home page (My phone). Recording could not start."
+  },
+  "myHomeStartRecording": "Start",
+  "@myHomeStartRecording": {
+    "description": "A person's own home page (My phone). Button: start recording."
+  },
+  "myHomeStopAndSave": "Stop and save",
+  "@myHomeStopAndSave": {
+    "description": "A person's own home page (My phone). Button: stop recording and save the greeting."
+  },
+  "myHomeConnectTitle": "Connect a phone or app",
+  "@myHomeConnectTitle": {
+    "description": "A person's own home page (My phone). Card and dialog title: set up a desk phone or softphone app with the person's extension."
+  },
+  "myHomeConnectHelp": "Use your extension on a desk phone, or in a phone app on your mobile or computer.",
+  "@myHomeConnectHelp": {
+    "description": "A person's own home page (My phone). Card text."
+  },
+  "myHomeConnectShow": "Show me how",
+  "@myHomeConnectShow": {
+    "description": "A person's own home page (My phone). Button: open the connection details."
+  },
+  "myHomeConnectDialogHelp": "Enter these in the account settings of your phone or app. Keep the password to yourself.",
+  "@myHomeConnectDialogHelp": {
+    "description": "A person's own home page (My phone). Dialog text above the connection details."
+  },
+  "myHomeServer": "Server",
+  "@myHomeServer": {
+    "description": "A person's own home page (My phone). Connection detail: the address a phone signs in to (also called domain or registrar)."
+  },
+  "myHomePort": "Port",
+  "@myHomePort": {
+    "description": "A person's own home page (My phone). Connection detail: the network port."
+  },
+  "myHomeUsername": "Username",
+  "@myHomeUsername": {
+    "description": "A person's own home page (My phone). Connection detail: the phone's sign-in name."
+  },
+  "myHomeShowSignIn": "Show my username and password",
+  "@myHomeShowSignIn": {
+    "description": "A person's own home page (My phone). Button: reveal the person's own phone sign-in."
+  },
+  "myHistorySearch": "Search by number or name",
+  "@myHistorySearch": {
+    "description": "A person's own call history. Search field label."
+  },
+  "myHistoryNoMatch": "No calls match your search.",
+  "@myHistoryNoMatch": {
+    "description": "A person's own call history. Nothing matched the search."
+  },
+  "myTabHome": "Home",
+  "@myTabHome": {
+    "description": "Tab on an administrator's own My phone pages: their home."
+  },
+  "myTabCallHandling": "Call handling",
+  "@myTabCallHandling": {
+    "description": "Tab on an administrator's own My phone pages: their call handling (forwarding, do not disturb)."
+  },
+  "myTabVoicemail": "Voicemail",
+  "@myTabVoicemail": {
+    "description": "Tab on an administrator's own My phone pages: their voicemail."
+  },
+  "myTabHistory": "Call history",
+  "@myTabHistory": {
+    "description": "Tab on an administrator's own My phone pages: their call history."
   }
 }
