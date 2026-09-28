@@ -384,4 +384,92 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
       expect(await audited('call.transfer.complete')).not.toEqual([]);
     });
   }, 120_000);
+
+  /** S9-18: a pickup group of 802 and 803; removed afterwards. */
+  async function withPickupGroup(run: () => Promise<void>): Promise<void> {
+    const created = await dockerCurlJson(
+      'POST',
+      `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/pickup-groups`,
+      { label: 'S9-18 front desk', memberExtensionIds: [id802, await extensionId('803')] },
+      await tenantAdminHeaders(tenantId, seed.resellerId),
+    );
+    expect(created.status, JSON.stringify(created.json)).toBe(201);
+    try {
+      await run();
+    } finally {
+      await dockerCurlJson(
+        'DELETE',
+        `${PBX_CONFIG_SERVICE_URL}/v1/tenants/${tenantId}/pickup-groups/${(created.json as { id: string }).id}`,
+        undefined,
+        await tenantAdminHeaders(tenantId, seed.resellerId),
+      );
+    }
+  }
+
+  it('S9-18: 802 sees the call ringing 803, its pickup group, and takes it from the portal', async () => {
+    await withSingleFsNode(async () => {
+      await withPickupGroup(async () => {
+        await registered('801', '802', '803');
+        const person = phone('802', PERSON);
+        const colleague = phone('803', COLLEAGUE, 'ring_until_cancelled.xml');
+        await Promise.all([person.ready(), colleague.ready()]);
+        const caller = await call801('803');
+        const ringing = await waitForLeg(
+          '803 ringing',
+          (leg) => leg.extension === '803' && leg.state === 'ringing',
+        );
+
+        const offered = await dockerCurlJson(
+          'GET',
+          `${GATEWAY_URL}/v1/tenants/${tenantId}/me/pickup`,
+          undefined,
+          { authorization: `Bearer ${token}` },
+        );
+        expect(offered.status, JSON.stringify(offered.json)).toBe(200);
+        expect(offered.json).toMatchObject({
+          calls: [{ callUuid: ringing.callUuid, extension: '803' }],
+        });
+
+        const picked = await act('me/pickup', {});
+        expect(picked.status, JSON.stringify(picked.json)).toBe(200);
+        expect((await colleague.result()).successfulCalls).toBe(1);
+        const { callUuid } = picked.json as { callUuid: string };
+        await waitForLeg(
+          '802 talking to 801',
+          (leg, all) => leg.callUuid === callUuid && talksTo(leg, all, '801'),
+        );
+        await fsCliAll(`uuid_kill ${callUuid}`);
+        expect((await person.result()).successfulCalls).toBe(1);
+        await caller.result();
+      });
+    });
+  }, 120_000);
+
+  it('S9-18: 802 dials *8 and answers the call ringing 803', async () => {
+    await withSingleFsNode(async () => {
+      await withPickupGroup(async () => {
+        await registered('801', '802', '803');
+        const colleague = phone('803', COLLEAGUE, 'ring_until_cancelled.xml');
+        await colleague.ready();
+        const caller = await call801('803');
+        await waitForLeg(
+          '803 ringing',
+          (leg) => leg.extension === '803' && leg.state === 'ringing',
+        );
+
+        // uac_call.xml succeeds only if FreeSWITCH answers the *8 call: the intercept joined it.
+        const picker = await runForeground({
+          scenario: 'uac_call.xml',
+          csvLine: `802;${fqdn};*8`,
+          au: '802',
+          ap: password('802'),
+          authUri: fqdn,
+          containerName: RETRIEVER,
+        });
+        expect(picker.successfulCalls, picker.stdout).toBe(1);
+        expect((await colleague.result()).successfulCalls).toBe(1);
+        await caller.result();
+      });
+    });
+  }, 120_000);
 });

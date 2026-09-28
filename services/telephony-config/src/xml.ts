@@ -1294,6 +1294,39 @@ export function buildQueueDialplanDocument(
  * by routing through a tiny Lua script instead — see its own doc comment
  * for why `status` travels as `0`/`1`, not the literal string.
  */
+/**
+ * S9-18 (G-125): `*8` picks up a call ringing within the caller's pickup groups: call-control
+ * names the caller's leg, and `intercept` joins this call to it, which stops the other phone
+ * ringing. Only on the node that holds the call (a leg cannot be intercepted from another node).
+ */
+export const PICKUP_FEATURE_CODE = '*8';
+
+export function buildPickupDialplanDocument(
+  callerContext: string,
+  tenantId: string,
+  interceptUuid: string,
+): string {
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="pickup">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(PICKUP_FEATURE_CODE)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
+    // Answered first: `intercept` joins two channels, and one still only
+    // pre-answered never tells the picking phone it is connected (confirmed
+    // live: the phone got early media and no 200 OK).
+    '          <action application="answer"/>\n' +
+    `          <action application="intercept" data="${escapeXml(interceptUuid)}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
 export const AGENT_LOGIN_FEATURE_CODE = '*45';
 export const AGENT_LOGOUT_FEATURE_CODE = '*46';
 

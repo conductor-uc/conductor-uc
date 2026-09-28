@@ -227,6 +227,32 @@ export function createParkingLotLookup(options: ClientOptions): ParkingLotLookup
 }
 
 /**
+ * S9-18 (G-125): the extension numbers whose ringing calls [number] may pick up: every other
+ * member of its pickup groups (pbx-config-service's
+ * `GET /internal/v1/tenants/:t/extensions/by-number/:number/pickup-peers`). Empty when none;
+ * throws {@link UpstreamError} when it cannot be asked.
+ */
+export type PickupPeersLookup = (tenantId: string, number: string) => Promise<string[]>;
+
+export function createPickupPeersLookup(options: ClientOptions): PickupPeersLookup {
+  return async (tenantId, number) => {
+    const response = await call(
+      options,
+      `/internal/v1/tenants/${encodeURIComponent(tenantId)}/extensions/by-number/${encodeURIComponent(number)}/pickup-peers`,
+      { method: 'GET' },
+    );
+    if (!response.ok) {
+      throw new UpstreamError(`pbx-config-service answered ${String(response.status)}`);
+    }
+    const body = (await response.json()) as { numbers?: unknown };
+    if (!Array.isArray(body.numbers) || !body.numbers.every((n) => typeof n === 'string')) {
+      throw new UpstreamError('pbx-config-service gave an answer this service cannot read');
+    }
+    return body.numbers;
+  };
+}
+
+/**
  * S5-09: a tenant's SIP domain (org-service's `GET /internal/v1/tenants/:id/domain`), which a
  * supervisor's phone is registered under, so the call to it can be routed through OpenSIPs.
  * `undefined` when the tenant has none; throws {@link UpstreamError} when it cannot be asked.

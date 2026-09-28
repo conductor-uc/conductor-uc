@@ -68,6 +68,22 @@ export const pbxEvents = defineEvents({
     description: "A tenant's uploaded media asset is ready for the transcode worker to pick up.",
     data: Type.Object({ mediaAssetId: Type.String({ minLength: 1 }) }),
   },
+  /** S9-18: a pickup group changed. Nothing is projected from it: call-control asks when someone picks up. */
+  'pbx.pickup_group.created': {
+    schemaVersion: 1,
+    description: 'A pickup group was created.',
+    data: Type.Object({ pickupGroupId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.pickup_group.updated': {
+    schemaVersion: 1,
+    description: 'A pickup group was renamed or its members changed.',
+    data: Type.Object({ pickupGroupId: Type.String({ minLength: 1 }) }),
+  },
+  'pbx.pickup_group.deleted': {
+    schemaVersion: 1,
+    description: 'A pickup group was deleted.',
+    data: Type.Object({ pickupGroupId: Type.String({ minLength: 1 }) }),
+  },
   'pbx.ring_group.created': {
     schemaVersion: 1,
     description: 'A ring/hunt group was created.',

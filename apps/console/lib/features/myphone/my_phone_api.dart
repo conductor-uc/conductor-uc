@@ -51,6 +51,22 @@ class MyPhoneApi implements MailboxOps {
   /// Where my phone or app signs in: server, port, transports (S9-11).
   Future<Json> sipEndpoint() => _get('sip-endpoint');
 
+  /// S9-18: the calls ringing within my pickup groups, oldest first.
+  Future<List<Json>> pickupable() async => [
+    for (final c in ((await _get('pickup'))['calls'] as List? ?? const []))
+      (c as Map).cast<String, dynamic>(),
+  ];
+
+  /// S9-18: takes [callUuid] (or the oldest ringing in my groups) on my own
+  /// phone, which rings first.
+  Future<void> pickup([String? callUuid]) async {
+    await _dio.post<Object?>(
+      _path('pickup'),
+      data: {'callUuid': ?callUuid},
+      options: _options.copyWith(receiveTimeout: const Duration(seconds: 60)),
+    );
+  }
+
   /// My own SIP username and password, to set up a phone or app (S9-11).
   /// Audited, as a credential.
   Future<Json> revealMySignIn() async {

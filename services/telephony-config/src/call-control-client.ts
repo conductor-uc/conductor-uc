@@ -43,6 +43,14 @@ export interface CallControlClient {
     resourceId: string,
     options: { readonly preferredNodeId?: string; readonly reloadCommands?: readonly string[] },
   ): Promise<AcquireAffinityResult>;
+  /**
+   * S9-18 (G-125): for `*8` dialed from [extension]: the caller's leg to intercept (the oldest call
+   * ringing within its pickup groups) and its node; undefined when nothing is ringing there.
+   */
+  pickupTarget(
+    tenantId: string,
+    extension: string,
+  ): Promise<{ readonly callUuid: string; readonly nodeId: string } | undefined>;
 }
 
 export function createCallControlClient(options: CallControlClientOptions): CallControlClient {
@@ -85,6 +93,31 @@ export function createCallControlClient(options: CallControlClientOptions): Call
       }
 
       return (await response.json()) as AcquireAffinityResult;
+    },
+
+    async pickupTarget(tenantId, extension) {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/pickup-target/${encodeURIComponent(extension)}`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new CallControlClientError(
+          `Could not reach call-control: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (response.status === 404) return undefined;
+      if (!response.ok) {
+        throw new CallControlClientError(
+          `call-control rejected the pickup lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+      const body = (await response.json()) as { callUuid?: unknown; nodeId?: unknown };
+      return typeof body.callUuid === 'string' && typeof body.nodeId === 'string'
+        ? { callUuid: body.callUuid, nodeId: body.nodeId }
+        : undefined;
     },
   };
 }

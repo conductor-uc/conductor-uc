@@ -132,6 +132,17 @@ export interface PbxConfigServiceDb extends EventTables {
    * choice trunk-service's own `outbound_routes.trunk_ids` already made
    * (`repo/outbound-route.repo.ts`'s `parseTrunkIds`).
    */
+  /** S9-18 (G-125): whose ringing calls each member may pick up. */
+  pickup_groups: {
+    id: string;
+    tenant_id: string;
+    label: string;
+    /** JSON array of `extensions.id`. */
+    member_extension_ids: string;
+    created_at: Date;
+    updated_at: Date;
+    version: number;
+  };
   ring_groups: {
     id: string;
     tenant_id: string;

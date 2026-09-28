@@ -2523,6 +2523,52 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       });
     });
 
+    describe('/fs/dialplan (*8 pickup, S9-18)', () => {
+      const pickup = (tenantId: string, from: string, nodeId = 'fs-1') =>
+        app.inject({
+          method: 'POST',
+          url: `/fs/dialplan?nodeId=${nodeId}`,
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            authorization: BASIC_AUTH,
+          },
+          payload: form({
+            section: 'dialplan',
+            'Caller-Context': 'internal',
+            'variable_sip_h_X-Call-Direction': 'internal',
+            'variable_sip_h_X-Tenant-Id': tenantId,
+            'Caller-Destination-Number': '*8',
+            variable_sip_from_user: from,
+          }),
+        });
+
+      it('intercepts the caller call-control names, on the node that holds it', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        h.callControl.pickupTargets[`${tenantId}:101`] = {
+          callUuid: 'caller-leg-1',
+          nodeId: 'fs-1',
+        };
+        const response = await pickup(tenantId, '101');
+        expect(response.statusCode).toBe(200);
+        expect(response.body).toContain(
+          '<action application="answer"/>\n          <action application="intercept" data="caller-leg-1"/>',
+        );
+        expect(response.body).toContain(`cuc_tenant_id=${tenantId}`);
+      });
+
+      it('nothing ringing in the group, or a call on another node, is a miss', async () => {
+        const tenantId = crypto.randomUUID();
+        await seedTenant(tenantId);
+        expect((await pickup(tenantId, '101')).body).toContain('<result status="not found"/>');
+        h.callControl.pickupTargets[`${tenantId}:101`] = {
+          callUuid: 'caller-leg-1',
+          nodeId: 'fs-2',
+        };
+        expect((await pickup(tenantId, '101')).body).toContain('<result status="not found"/>');
+      });
+    });
+
     describe('/fs/dialplan (agent login/logout feature codes)', () => {
       function internalPayload(tenantId: string, fields: Record<string, string>) {
         return form({

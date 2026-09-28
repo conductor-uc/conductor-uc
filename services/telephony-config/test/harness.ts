@@ -216,6 +216,8 @@ export interface FakeCallControlClient extends CallControlClient {
     resourceId: string;
     preferredNodeId: string | undefined;
   }[];
+  /** S9-18: `*8`'s answers, keyed by `${tenantId}:${extension}`; missing means nothing ringing. */
+  pickupTargets: Record<string, { callUuid: string; nodeId: string }>;
 }
 
 /** An affinity-acquire stand-in — no live call-control needed. Defaults to "acquired locally on whatever node asked". */
@@ -223,6 +225,10 @@ function fakeCallControlClient(): FakeCallControlClient {
   const state: FakeCallControlClient = {
     acquireResults: {},
     acquireCalls: [],
+    pickupTargets: {},
+    pickupTarget(tenantId, extension) {
+      return Promise.resolve(state.pickupTargets[`${tenantId}:${extension}`]);
+    },
     acquireAffinity(tenantId, kind, resourceId, options) {
       state.acquireCalls.push({
         tenantId,

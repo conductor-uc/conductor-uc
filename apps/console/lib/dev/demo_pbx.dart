@@ -1,3 +1,5 @@
+import 'demo_realtime.dart' show demoCallAction, demoLiveCalls;
+
 import 'dart:convert';
 import 'dart:math' as math;
 
@@ -41,6 +43,14 @@ class DemoPbx {
         _ext('ext-1', '101', 'Alice Kim', userId: 'user-4'),
         _ext('ext-2', '102', 'Bob Osei'),
         _ext('ext-3', '103', 'Carol Diaz'),
+      ],
+      // S9-18: the front desk answers each other's phones.
+      'pickup-groups': [
+        {
+          'id': 'pg-1',
+          'label': 'Front desk',
+          'memberExtensionIds': ['ext-1', 'ext-2'],
+        },
       ],
       'ring-groups': [
         {
@@ -1921,7 +1931,7 @@ class DemoPbx {
   /// number from the request: everything is worked out from who signed in.
   ResponseBody? _myPhone(RequestOptions options, String? userId) {
     final match = RegExp(
-      r'^/v1/tenants/[^/]+/me/(extension|directory|call-handling|voicemail|calls|sip-endpoint)(?:/(.*))?$',
+      r'^/v1/tenants/[^/]+/me/(extension|directory|call-handling|voicemail|calls|sip-endpoint|pickup)(?:/(.*))?$',
     ).firstMatch(options.path);
     if (match == null) return null;
     final method = options.method.toUpperCase();
@@ -1929,6 +1939,38 @@ class DemoPbx {
     if (extension == null) return _noExtension();
     final tail = match.group(2);
     switch (match.group(1)) {
+      // S9-18: calls ringing a colleague's phone (in the demo, any other
+      // phone), and taking one on mine.
+      case 'pickup':
+        final own = '${extension['number']}';
+        final ringing = [
+          for (final leg in demoLiveCalls(DateTime.now()))
+            if (leg['state'] == 'ringing' &&
+                leg['extension'] != null &&
+                leg['extension'] != own)
+              {
+                'callUuid': leg['callUuid'],
+                'extension': leg['extension'],
+                'from': leg['from'],
+                'startedAt': leg['startedAt'],
+              },
+        ];
+        if (method == 'GET') return _json({'calls': ringing});
+        final named = options.data is Map
+            ? (options.data as Map)['callUuid']
+            : null;
+        final chosen = named ?? ringing.firstOrNull?['callUuid'];
+        if (chosen == null) {
+          return _problem(
+            404,
+            'No call is ringing in your pickup groups.',
+            code: 'nothing_to_pick_up',
+          );
+        }
+        final (status, body) = demoCallAction('pickup', '$chosen', const {});
+        return status == 200
+            ? _json(body)
+            : _problem(status, '${body['detail']}', code: '${body['code']}');
       case 'sip-endpoint':
         return _phone(
           RequestOptions(path: '/v1/tenants/demo/sip-endpoint', method: 'GET'),

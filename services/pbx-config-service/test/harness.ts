@@ -195,6 +195,7 @@ export async function startBusHarness(): Promise<BusHarness> {
 export async function resetSchema(db: Database<PbxConfigServiceDb>): Promise<void> {
   await db.kysely.deleteFrom('dids').execute();
   await db.kysely.deleteFrom('ring_groups').execute();
+  await db.kysely.deleteFrom('pickup_groups').execute();
   await db.kysely.deleteFrom('queue_tiers').execute();
   await db.kysely.deleteFrom('queues').execute();
   await db.kysely.deleteFrom('agents').execute();

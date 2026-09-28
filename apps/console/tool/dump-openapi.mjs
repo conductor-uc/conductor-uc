@@ -39,6 +39,7 @@ const SOURCES = [
   ['pbx-config-service', 'emergency-location', 'registerEmergencyLocationRoutes', 1],
   ['pbx-config-service', 'media-asset', 'registerMediaAssetRoutes', 1],
   ['pbx-config-service', 'ring-group', 'registerRingGroupRoutes', 1],
+  ['pbx-config-service', 'pickup-group', 'registerPickupGroupRoutes', 1],
   ['pbx-config-service', 'queue', 'registerQueueRoutes', 2],
   ['pbx-config-service', 'agent', 'registerAgentRoutes', 1],
   ['pbx-config-service', 'parking-lot', 'registerParkingLotRoutes', 1],
@@ -156,6 +157,8 @@ const OVERRIDES = {
   'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/transfer/cancel': 'cancelMyTransfer',
   'post /v1/tenants/{tenantId}/me/live-calls/{callUuid}/park': 'parkMyCall',
   'post /v1/tenants/{tenantId}/me/dial': 'dialFromMyPhone',
+  'get /v1/tenants/{tenantId}/me/pickup': 'listMyPickupCalls',
+  'post /v1/tenants/{tenantId}/me/pickup': 'pickUpMyGroupCall',
   // S9-13: agents signing in, out and on a break.
   'get /v1/tenants/{tenantId}/me/agent-status': 'getMyAgentStatus',
   'put /v1/tenants/{tenantId}/me/agent-status': 'setMyAgentStatus',

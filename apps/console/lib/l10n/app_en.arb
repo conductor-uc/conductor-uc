@@ -2213,7 +2213,7 @@
   "@pdPlural": {
     "description": "Configuration screen text. People who can sign in."
   },
-  "resNew": "{resource, select, extensions{New extension} devices{New phone} dids{New phone number} ring_groups{New ring group} queues{New queue} agents{New agent} conference_rooms{New conference room} parking_lots{New parking lot} schedules{New schedule} emergency_locations{New emergency location} media_assets{New recording} trunks{New trunk} outbound_routes{New outbound route} flows{New call flow} users{New person} other{New item}}",
+  "resNew": "{resource, select, extensions{New extension} devices{New phone} dids{New phone number} ring_groups{New ring group} pickup_groups{New pickup group} queues{New queue} agents{New agent} conference_rooms{New conference room} parking_lots{New parking lot} schedules{New schedule} emergency_locations{New emergency location} media_assets{New recording} trunks{New trunk} outbound_routes{New outbound route} flows{New call flow} users{New person} other{New item}}",
   "@resNew": {
     "description": "Button that adds one more. Configuration screen text, per kind of thing (select on {resource}: extensions, devices, dids, ring_groups, queues, agents, conference_rooms, parking_lots, schedules, emergency_locations, media_assets, trunks, outbound_routes, flows, users). Word each for its noun's gender and case.",
     "placeholders": {
@@ -2222,7 +2222,7 @@
       }
     }
   },
-  "resEdit": "{resource, select, extensions{Edit extension} devices{Edit phone} dids{Edit phone number} ring_groups{Edit ring group} queues{Edit queue} agents{Edit agent} conference_rooms{Edit conference room} parking_lots{Edit parking lot} schedules{Edit schedule} emergency_locations{Edit emergency location} media_assets{Edit recording} trunks{Edit trunk} outbound_routes{Edit outbound route} flows{Edit call flow} users{Edit person} other{Edit item}}",
+  "resEdit": "{resource, select, extensions{Edit extension} devices{Edit phone} dids{Edit phone number} ring_groups{Edit ring group} pickup_groups{Edit pickup group} queues{Edit queue} agents{Edit agent} conference_rooms{Edit conference room} parking_lots{Edit parking lot} schedules{Edit schedule} emergency_locations{Edit emergency location} media_assets{Edit recording} trunks{Edit trunk} outbound_routes{Edit outbound route} flows{Edit call flow} users{Edit person} other{Edit item}}",
   "@resEdit": {
     "description": "Heading of the form for changing one. Configuration screen text, per kind of thing (select on {resource}: extensions, devices, dids, ring_groups, queues, agents, conference_rooms, parking_lots, schedules, emergency_locations, media_assets, trunks, outbound_routes, flows, users). Word each for its noun's gender and case.",
     "placeholders": {
@@ -2231,7 +2231,7 @@
       }
     }
   },
-  "resEmpty": "{resource, select, extensions{No extensions yet.} devices{No phones yet.} dids{No phone numbers yet.} ring_groups{No ring groups yet.} queues{No queues yet.} agents{No agents yet.} conference_rooms{No conference rooms yet.} parking_lots{No parking lots yet.} schedules{No schedules yet.} emergency_locations{No emergency locations yet.} media_assets{No recordings yet.} trunks{No trunks yet.} outbound_routes{No outbound routes yet.} flows{No call flows yet.} users{No people yet.} other{No items yet.}}",
+  "resEmpty": "{resource, select, extensions{No extensions yet.} devices{No phones yet.} dids{No phone numbers yet.} ring_groups{No ring groups yet.} pickup_groups{No pickup groups yet.} queues{No queues yet.} agents{No agents yet.} conference_rooms{No conference rooms yet.} parking_lots{No parking lots yet.} schedules{No schedules yet.} emergency_locations{No emergency locations yet.} media_assets{No recordings yet.} trunks{No trunks yet.} outbound_routes{No outbound routes yet.} flows{No call flows yet.} users{No people yet.} other{No items yet.}}",
   "@resEmpty": {
     "description": "Shown when the list is empty. Configuration screen text, per kind of thing (select on {resource}: extensions, devices, dids, ring_groups, queues, agents, conference_rooms, parking_lots, schedules, emergency_locations, media_assets, trunks, outbound_routes, flows, users). Word each for its noun's gender and case.",
     "placeholders": {
@@ -2240,7 +2240,7 @@
       }
     }
   },
-  "resDeleteTitle": "{resource, select, extensions{Delete this extension?} devices{Delete this phone?} dids{Delete this phone number?} ring_groups{Delete this ring group?} queues{Delete this queue?} agents{Delete this agent?} conference_rooms{Delete this conference room?} parking_lots{Delete this parking lot?} schedules{Delete this schedule?} emergency_locations{Delete this emergency location?} media_assets{Delete this recording?} trunks{Delete this trunk?} outbound_routes{Delete this outbound route?} flows{Delete this call flow?} users{Delete this person?} other{Delete this item?}}",
+  "resDeleteTitle": "{resource, select, extensions{Delete this extension?} devices{Delete this phone?} dids{Delete this phone number?} ring_groups{Delete this ring group?} pickup_groups{Delete this pickup group?} queues{Delete this queue?} agents{Delete this agent?} conference_rooms{Delete this conference room?} parking_lots{Delete this parking lot?} schedules{Delete this schedule?} emergency_locations{Delete this emergency location?} media_assets{Delete this recording?} trunks{Delete this trunk?} outbound_routes{Delete this outbound route?} flows{Delete this call flow?} users{Delete this person?} other{Delete this item?}}",
   "@resDeleteTitle": {
     "description": "Heading of the confirmation before deleting one. Configuration screen text, per kind of thing (select on {resource}: extensions, devices, dids, ring_groups, queues, agents, conference_rooms, parking_lots, schedules, emergency_locations, media_assets, trunks, outbound_routes, flows, users). Word each for its noun's gender and case.",
     "placeholders": {
@@ -7237,5 +7237,55 @@
         "example": "101 Alice Kim"
       }
     }
+  },
+  "navPickupGroups": "Pickup groups",
+  "@navPickupGroups": {
+    "description": "Navigation menu item. Groups of people who can answer each other's ringing phones."
+  },
+  "pgSingular": "Pickup group",
+  "@pgSingular": {
+    "description": "A group of people who can answer each other's ringing phones."
+  },
+  "pgPlural": "Pickup groups",
+  "@pgPlural": {
+    "description": "Plural of pgSingular."
+  },
+  "pgBlurb": "People in a pickup group can answer a call ringing another member's phone: from their home page, or by dialing *8.",
+  "@pgBlurb": {
+    "description": "Explains pickup groups on their screen."
+  },
+  "pgMembers": "Members",
+  "@pgMembers": {
+    "description": "Field: the people in a pickup group."
+  },
+  "pgMembersHelp": "At least two. Anyone here can answer a call ringing any other member.",
+  "@pgMembersHelp": {
+    "description": "Help under the members field."
+  },
+  "myPickupTitle": "Calls you can pick up",
+  "@myPickupTitle": {
+    "description": "A person's own home page. Card title: colleagues' phones ringing in the person's pickup groups."
+  },
+  "myPickupHelp": "A colleague's phone is ringing. Answer it on yours, or dial *8.",
+  "@myPickupHelp": {
+    "description": "A person's own home page. Card text."
+  },
+  "myPickupRinging": "{extension} is ringing: {caller}",
+  "@myPickupRinging": {
+    "description": "A person's own home page. One ringing call: whose phone, and who is calling.",
+    "placeholders": {
+      "extension": {
+        "type": "String",
+        "example": "102"
+      },
+      "caller": {
+        "type": "String",
+        "example": "(415) 555-0142"
+      }
+    }
+  },
+  "myPickupButton": "Pick up",
+  "@myPickupButton": {
+    "description": "A person's own home page. Button: answer this call on my phone."
   }
 }

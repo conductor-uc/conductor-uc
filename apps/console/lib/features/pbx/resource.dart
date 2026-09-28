@@ -394,6 +394,37 @@ ResourceDef get didsDef {
 /// A number as people read it: "(415) 555-0100" for a +1 number.
 String _didTitle(Map<String, dynamic> row) => formatPhone('${row['e164']}');
 
+/// S9-18 (G-125): who may answer whose ringing calls.
+ResourceDef get pickupGroupsDef {
+  final l = currentL10n;
+  return ResourceDef(
+    key: 'pickup-groups',
+    permission: 'group.manage',
+    singular: l.pgSingular,
+    plural: l.pgPlural,
+    icon: Icons.call_merge_outlined,
+    blurb: l.pgBlurb,
+    fields: [
+      Field(
+        'label',
+        l.fieldName,
+        FieldKind.text,
+        required: true,
+        showInList: true,
+      ),
+      Field(
+        'memberExtensionIds',
+        l.pgMembers,
+        FieldKind.refList,
+        required: true,
+        ref: 'extensions',
+        showInList: true,
+        help: l.pgMembersHelp,
+      ),
+    ],
+  );
+}
+
 ResourceDef get ringGroupsDef {
   final l = currentL10n;
   return ResourceDef(
@@ -1097,6 +1128,7 @@ List<ResourceDef> get allResources => [
   devicesDef,
   didsDef,
   ringGroupsDef,
+  pickupGroupsDef,
   queuesDef,
   agentsDef,
   conferenceRoomsDef,

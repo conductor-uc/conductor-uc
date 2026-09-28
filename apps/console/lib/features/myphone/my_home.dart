@@ -15,6 +15,7 @@ import '../media/media_page.dart'
     show filePickerProvider, uploadToStorageProvider;
 import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart' show tenantCountryProvider;
+import '../monitoring/presence.dart' show presenceProvider;
 import 'my_live_calls.dart';
 import 'my_phone_api.dart';
 import 'my_phone_pages.dart' show MyPhoneTabs;
@@ -24,6 +25,21 @@ import 'my_phone_pages.dart' show MyPhoneTabs;
 final greetingRecorderProvider = Provider<Recorder Function()?>(
   (ref) => AudioRecorder.supported ? AudioRecorder.new : null,
 );
+
+/// S9-18: the calls ringing within my pickup groups. Refreshed whenever an
+/// extension's presence changes (a colleague's phone starting or stopping
+/// ringing), so no polling.
+final myPickupProvider = FutureProvider.autoDispose<List<Json>>((ref) async {
+  final api = ref.watch(myPhoneApiProvider);
+  if (api == null || !ref.watch(canProvider('self.calls'))) return const [];
+  ref.listen(presenceProvider, (_, _) => ref.invalidateSelf());
+  try {
+    return await api.pickupable();
+  } catch (_) {
+    // Not offered, rather than an error on the home page.
+    return const [];
+  }
+});
 
 /// My last few calls, for the home page.
 final myRecentCallsProvider = FutureProvider.autoDispose<List<Json>>((
@@ -67,6 +83,7 @@ class MyHomePage extends ConsumerWidget {
               const MyPhoneTabs(current: '/my-phone/home'),
               const SizedBox(height: 16),
               const MyLiveCalls(),
+              const _PickupCard(),
               const Wrap(
                 spacing: 16,
                 runSpacing: 16,
@@ -121,6 +138,70 @@ class _Card extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// S9-18: the calls ringing a colleague in my pickup groups, each with a way
+/// to take it on my own phone. Not shown when there are none.
+class _PickupCard extends ConsumerWidget {
+  const _PickupCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final calls = ref.watch(myPickupProvider).value ?? const [];
+    if (calls.isEmpty) return const SizedBox.shrink();
+    final country = ref.watch(tenantCountryProvider);
+    String number(Object? n) =>
+        '$n'.startsWith('+') ? formatPhone('$n', country: country) : '$n';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        key: const ValueKey('my-pickup'),
+        color: Theme.of(context).colorScheme.tertiaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.myPickupTitle,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              Text(l10n.myPickupHelp),
+              for (final call in calls)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.ring_volume_outlined),
+                  title: Text(
+                    l10n.myPickupRinging(
+                      '${call['extension']}',
+                      number(call['from']),
+                    ),
+                  ),
+                  trailing: FilledButton(
+                    key: ValueKey('pick-up-${call['callUuid']}'),
+                    onPressed: () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      showToast(messenger, currentL10n.attRingingYourPhone);
+                      try {
+                        await ref
+                            .read(myPhoneApiProvider)
+                            ?.pickup('${call['callUuid']}');
+                        showToast(messenger, currentL10n.attPickedUp);
+                      } catch (e) {
+                        showToast(messenger, problemMessage(e));
+                      }
+                      ref.invalidate(myPickupProvider);
+                    },
+                    child: Text(l10n.myPickupButton),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// One switch: send every call to my mobile. The rest of the call handling

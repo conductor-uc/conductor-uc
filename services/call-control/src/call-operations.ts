@@ -7,6 +7,7 @@ import type { Logger } from '@cuc/logger';
 import {
   UpstreamError,
   type ParkingLotLookup,
+  type PickupPeersLookup,
   type TenantDomainLookup,
   type UserExtensionLookup,
 } from './clients.js';
@@ -31,6 +32,8 @@ export interface CallOperationsOptions {
   readonly userExtension: UserExtensionLookup;
   readonly tenantDomain: TenantDomainLookup;
   readonly parkingLot: ParkingLotLookup;
+  /** S9-18: whose ringing calls an extension may pick up (its pickup groups). */
+  readonly pickupPeers: PickupPeersLookup;
   readonly parkingLotNode: ParkingLotNode;
   /** Writes the audit event to the outbox; resolves once it is committed. */
   readonly audit: (input: AuditEventInput) => Promise<void>;
@@ -75,6 +78,26 @@ export interface CallOperations {
   ): Promise<{ readonly result: 'parked'; readonly parkingLotId: string; readonly slot: number }>;
   /** Rings the person's own phone and, when answered, takes a call ringing someone else's. */
   pickup(command: LegCommand): Promise<{ readonly result: 'picked_up'; readonly callUuid: string }>;
+  /**
+   * S9-18 (G-125): the calls ringing within the person's pickup groups, oldest first, which
+   * [pickupMine] can take.
+   */
+  pickupable(command: Base): Promise<PickupCandidate[]>;
+  /**
+   * S9-18: takes a call ringing within the person's pickup groups on their own phone: the one
+   * named, or the oldest.
+   */
+  pickupMine(
+    command: Base & { readonly callUuid?: string },
+  ): Promise<{ readonly result: 'picked_up'; readonly callUuid: string }>;
+  /**
+   * S9-18: for `*8` dialed from [extension]'s phone: the caller's leg to intercept (the oldest call
+   * ringing within its pickup groups) and the node it is on; undefined when there is none.
+   */
+  pickupTarget(
+    tenantId: string,
+    extension: string,
+  ): Promise<{ readonly callUuid: string; readonly nodeId: string } | undefined>;
   /** Click-to-call: rings the person's own phone and, when answered, dials `to` from it. */
   dial(
     command: Base & { readonly to: string },
@@ -87,6 +110,18 @@ export interface CallOperations {
   completeTransfer(command: LegCommand): Promise<{ readonly result: 'transferred' }>;
   /** Or: back to the waiting party; the one consulted is let go. */
   cancelTransfer(command: LegCommand): Promise<{ readonly result: 'resumed' }>;
+}
+
+/** A call ringing a phone that someone may pick up (S9-18). */
+export interface PickupCandidate {
+  /** The ringing leg. */
+  readonly callUuid: string;
+  /** The extension it is ringing. */
+  readonly extension: string;
+  /** Who is calling. */
+  readonly from: string;
+  /** When it started ringing (ISO). */
+  readonly startedAt: string;
 }
 
 /** A channel uuid, as FreeSWITCH makes them. Anything else never reaches an ESL command. */
@@ -458,6 +493,64 @@ export function createCallOperations(options: CallOperationsOptions): CallOperat
     return uuid;
   }
 
+  /** The calls ringing phones within [own]'s pickup groups, oldest first. */
+  async function candidates(tenantId: string, own: string): Promise<PickupCandidate[]> {
+    const peers = new Set(
+      await upstream('pbx-config-service', () => options.pickupPeers(tenantId, own)),
+    );
+    if (peers.size === 0) return [];
+    return (await registry.callsForTenant(tenantId))
+      .filter(
+        (call) =>
+          call.state === 'ringing' &&
+          call.extension !== null &&
+          call.extension !== own &&
+          peers.has(call.extension),
+      )
+      .sort((a, b) => a.startedAt - b.startedAt)
+      .map((call) => ({
+        callUuid: call.callUuid,
+        extension: call.extension!,
+        from: call.from,
+        startedAt: new Date(call.startedAt).toISOString(),
+      }));
+  }
+
+  /** The caller's leg a ringing leg was placed for: taking it over stops the ringing. */
+  async function callerOf(esl: OperationsEsl, ringing: Leg): Promise<string | undefined> {
+    for (const name of ['originating_leg_uuid', 'call_uuid']) {
+      let value: string | undefined;
+      try {
+        value = variableValue(await esl.sendApi(`uuid_getvar ${ringing.uuid} ${name}`));
+      } catch (error) {
+        logger.warn({ err: error }, 'call operations: the media node could not be asked');
+        throw unavailable(NOTHING_DONE, 'media_unavailable');
+      }
+      if (value !== undefined && CHANNEL_UUID.test(value) && value !== ringing.uuid) return value;
+    }
+    return undefined;
+  }
+
+  /** Rings the person's own phone into `intercept` of the ringing call's caller. */
+  async function take(
+    command: Base,
+    ringing: Leg,
+    own: string,
+  ): Promise<{ readonly result: 'picked_up'; readonly callUuid: string }> {
+    const esl = eslFor(ringing.node);
+    const caller = await callerOf(esl, ringing);
+    if (caller === undefined) throw notFound();
+    await audit(command, 'call.pickup', `call:${caller}`);
+    const callUuid = await ringOwnPhone(
+      esl,
+      command.tenantId,
+      own,
+      { name: PICKUP_CALLER_NAME, number: ringing.from },
+      `intercept(${caller})`,
+    );
+    return { result: 'picked_up', callUuid };
+  }
+
   function destination(to: string): string {
     // The routes' schemas already refuse anything else; this keeps a stray value out of ESL.
     if (!DIALABLE.test(to)) {
@@ -559,32 +652,44 @@ export function createCallOperations(options: CallOperationsOptions): CallOperat
       if (ringing.ext === own) {
         throw ProblemError.conflict('This call is ringing your own phone.', { code: 'own_call' });
       }
-      const esl = eslFor(ringing.node);
-      // The caller's leg, which the ringing leg was placed for: taking it over stops the ringing.
-      let caller: string | undefined;
-      for (const name of ['originating_leg_uuid', 'call_uuid']) {
-        let value: string | undefined;
-        try {
-          value = variableValue(await esl.sendApi(`uuid_getvar ${ringing.uuid} ${name}`));
-        } catch (error) {
-          logger.warn({ err: error }, 'call operations: the media node could not be asked');
-          throw unavailable(NOTHING_DONE, 'media_unavailable');
-        }
-        if (value !== undefined && CHANNEL_UUID.test(value) && value !== ringing.uuid) {
-          caller = value;
-          break;
-        }
+      return take(command, ringing, own);
+    },
+
+    async pickupable(command) {
+      const own = await ownNumber(command);
+      return candidates(command.tenantId, own);
+    },
+
+    async pickupMine(command) {
+      const own = await ownNumber(command);
+      const found = await candidates(command.tenantId, own);
+      const chosen =
+        command.callUuid === undefined
+          ? found[0]
+          : found.find((call) => call.callUuid === command.callUuid);
+      if (chosen === undefined) {
+        throw ProblemError.notFound(
+          command.callUuid === undefined
+            ? 'No call is ringing in your pickup groups.'
+            : 'That call is not ringing in your pickup groups.',
+          { code: command.callUuid === undefined ? 'nothing_to_pick_up' : 'call_not_found' },
+        );
       }
-      if (caller === undefined) throw notFound();
-      await audit(command, 'call.pickup', `call:${caller}`);
-      const callUuid = await ringOwnPhone(
-        esl,
-        command.tenantId,
-        own,
-        { name: PICKUP_CALLER_NAME, number: ringing.from },
-        `intercept(${caller})`,
-      );
-      return { result: 'picked_up', callUuid };
+      const ringing = await legIn(command.tenantId, chosen.callUuid);
+      if (ringing === undefined) throw notFound();
+      return take(command, ringing, own);
+    },
+
+    async pickupTarget(tenantId, extension) {
+      if (!EXTENSION_NUMBER.test(extension)) return undefined;
+      for (const candidate of await candidates(tenantId, extension)) {
+        const ringing = await legIn(tenantId, candidate.callUuid);
+        const esl = ringing === undefined ? undefined : options.esl(ringing.node);
+        if (ringing === undefined || esl === undefined) continue;
+        const caller = await callerOf(esl, ringing);
+        if (caller !== undefined) return { callUuid: caller, nodeId: ringing.node };
+      }
+      return undefined;
     },
 
     async dial(command) {

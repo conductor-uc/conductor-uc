@@ -16,6 +16,7 @@ import { createChannelHandler } from './channel-handler.js';
 import {
   createExtensionScopeLookup,
   createParkingLotLookup,
+  createPickupPeersLookup,
   createRecordingControlClient,
   createTenantByDomainLookup,
   createTenantDomainLookup,
@@ -26,7 +27,10 @@ import { createNodeDrain } from './node-drain.js';
 import { registerNodeMetrics } from './node-metrics.js';
 import { registerMonitorRoutes } from './routes/monitor.routes.js';
 import { createCallOperations } from './call-operations.js';
-import { registerCallOperationRoutes } from './routes/call-operations.routes.js';
+import {
+  registerCallOperationRoutes,
+  registerPickupInternalRoutes,
+} from './routes/call-operations.routes.js';
 import { createQueueStatus } from './queue-status.js';
 import {
   registerQueueStatusInternalRoutes,
@@ -252,33 +256,41 @@ registerMonitorRoutes(app, {
 });
 
 // S9-12: hang up, transfer, park and pick up live calls; a person's own, and click-to-call.
-registerCallOperationRoutes(app, {
-  operations: createCallOperations({
-    registry,
-    esl: (nodeId) => eslClientsById.get(nodeId),
-    // A call that starts at the person's phone can start on any node in service.
-    anyNode: async () => {
-      const live = (await registry.liveNodeIds()).filter((id) => eslClientsById.has(id));
-      return live[Math.floor(Math.random() * live.length)];
-    },
-    userExtension,
-    tenantDomain: createTenantDomainLookup({
-      baseUrl: config.ORG_SERVICE_URL,
-      internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
-    }),
-    parkingLot: createParkingLotLookup({
-      baseUrl: config.PBX_CONFIG_SERVICE_URL,
-      internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
-    }),
-    parkingLotNode: (tenantId, lotId) => affinity.getOwner(tenantId, 'park', lotId),
-    // Committed to the outbox before the call is touched; the relay publishes it.
-    audit: async (input) => {
-      await recordAuditEvent(db.kysely, input);
-    },
-    opensipsSipUri: config.OPENSIPS_SIP_URI,
-    ringTimeoutSeconds: config.MONITOR_RING_TIMEOUT_SECONDS,
-    logger,
+const callOperations = createCallOperations({
+  registry,
+  esl: (nodeId) => eslClientsById.get(nodeId),
+  // A call that starts at the person's phone can start on any node in service.
+  anyNode: async () => {
+    const live = (await registry.liveNodeIds()).filter((id) => eslClientsById.has(id));
+    return live[Math.floor(Math.random() * live.length)];
+  },
+  userExtension,
+  tenantDomain: createTenantDomainLookup({
+    baseUrl: config.ORG_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
   }),
+  parkingLot: createParkingLotLookup({
+    baseUrl: config.PBX_CONFIG_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
+  parkingLotNode: (tenantId, lotId) => affinity.getOwner(tenantId, 'park', lotId),
+  pickupPeers: createPickupPeersLookup({
+    baseUrl: config.PBX_CONFIG_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
+  // Committed to the outbox before the call is touched; the relay publishes it.
+  audit: async (input) => {
+    await recordAuditEvent(db.kysely, input);
+  },
+  opensipsSipUri: config.OPENSIPS_SIP_URI,
+  ringTimeoutSeconds: config.MONITOR_RING_TIMEOUT_SECONDS,
+  logger,
+});
+registerCallOperationRoutes(app, { operations: callOperations });
+// S9-18: `*8`, for telephony-config's dialplan.
+registerPickupInternalRoutes(app, {
+  operations: callOperations,
+  internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
 
 // S9-13: live queues for the realtime `queues` topic, and agents' status from the console.
