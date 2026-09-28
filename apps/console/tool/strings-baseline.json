@@ -6,7 +6,6 @@
   "lib/features/callflow/builder/node_types.dart": 19,
   "lib/features/callflow/builder/palette.dart": 1,
   "lib/features/callflow/builder/properties_panel.dart": 9,
-  "lib/features/callflow/flows_page.dart": 9,
   "lib/features/cdr/call_records_page.dart": 53,
   "lib/features/certificates/certificates_page.dart": 39,
   "lib/features/dashboard/dashboard_page.dart": 2,

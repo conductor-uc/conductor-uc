@@ -238,6 +238,18 @@ describe('self-service permissions (parity 1e)', () => {
   });
 });
 
+describe("resellers set up their customers' call flows (D-020)", () => {
+  it('reseller_admin edits and publishes them; reseller_support reads them', () => {
+    const org = { id: 'r1', type: 'reseller' as const, resellerId: 'r1' };
+    const resellerAdmin: Actor = { id: 'u3', type: 'user', org, roleIds: ['reseller_admin'] };
+    const resellerSupport: Actor = { id: 'u4', type: 'user', org, roleIds: ['reseller_support'] };
+    expect(roleHas(resellerAdmin, 'callflow.edit', catalog)).toBe(true);
+    expect(roleHas(resellerAdmin, 'callflow.publish', catalog)).toBe(true);
+    expect(roleHas(resellerSupport, 'callflow.read', catalog)).toBe(true);
+    expect(roleHas(resellerSupport, 'callflow.edit', catalog)).toBe(false);
+  });
+});
+
 describe('a management permission implies its read twin (G-10)', () => {
   it('roleHas: a built-in admin role reads what it manages without listing the read', () => {
     expect(catalog.get('tenant_admin')?.permissions.has('extension.read')).toBe(false);

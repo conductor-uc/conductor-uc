@@ -2103,6 +2103,29 @@ class DemoPbx {
         return _update(resource, rows, index, _body(options));
       }
       if (method == 'DELETE') {
+        // S9-10: as the service does, a flow another flow jumps to stays.
+        if (resource == 'flows') {
+          final usedBy = [
+            for (final f in rows)
+              if (f['id'] != id &&
+                  (((f['draftGraph'] as Map?)?['nodes'] as List?) ?? const [])
+                      .any(
+                        (n) =>
+                            n is Map &&
+                            n['type'] == 'goto_flow' &&
+                            (n['config'] as Map?)?['flowId'] == id,
+                      ))
+                '${f['name']}',
+          ];
+          if (usedBy.isNotEmpty) {
+            return _problem(
+              409,
+              'Flow is used by ${usedBy.join(', ')}.',
+              code: 'flow_in_use',
+              params: {'usedBy': usedBy},
+            );
+          }
+        }
         rows.removeAt(index);
         return ResponseBody.fromString('', 204);
       }
@@ -2157,6 +2180,11 @@ class DemoPbx {
     int index,
     Map<String, dynamic> body,
   ) {
+    if (resource == 'flows') {
+      // S9-10: a flow is renamed; its draft changes through PUT .../draft.
+      if (body['name'] is String) rows[index]['name'] = body['name'];
+      return _json(rows[index]);
+    }
     final clash = _clash(resource, rows, body, rows[index]['id'] as String);
     if (clash != null) return clash;
     _apply(resourceByKey(resource), rows[index], body);
@@ -2326,17 +2354,22 @@ class DemoPbx {
         },
       );
 
-  ResponseBody _problem(int status, String detail, {String? code}) =>
-      ResponseBody.fromString(
-        jsonEncode({
-          'title': 'Error',
-          'status': status,
-          'detail': detail,
-          'code': ?code,
-        }),
-        status,
-        headers: {
-          Headers.contentTypeHeader: ['application/problem+json'],
-        },
-      );
+  ResponseBody _problem(
+    int status,
+    String detail, {
+    String? code,
+    Map<String, Object?>? params,
+  }) => ResponseBody.fromString(
+    jsonEncode({
+      'title': 'Error',
+      'status': status,
+      'detail': detail,
+      'code': ?code,
+      'params': ?params,
+    }),
+    status,
+    headers: {
+      Headers.contentTypeHeader: ['application/problem+json'],
+    },
+  );
 }

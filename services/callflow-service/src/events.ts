@@ -31,4 +31,11 @@ export const flowEvents = defineEvents({
       versionNumber: Type.Number({ minimum: 1 }),
     }),
   },
+  'callflow.flow.deleted': {
+    schemaVersion: 1,
+    description:
+      'A flow and all its versions were deleted (S9-10). Anything that cached its IR ' +
+      'drops it; a number still pointing at it no longer reaches a flow.',
+    data: Type.Object({ flowId: Type.String({ minLength: 1 }) }),
+  },
 });

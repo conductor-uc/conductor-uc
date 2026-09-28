@@ -5,6 +5,7 @@ import { ProblemError, Type, type Server } from '@cuc/http';
 
 import { InvalidFlowNameError, normalizeFlowName } from '../domain/flow.js';
 import {
+  FlowInUseError,
   FlowNotFoundError,
   FlowVersionNotFoundError,
   InvalidDraftGraphError,
@@ -148,6 +149,12 @@ function toProblem(error: unknown): ProblemError {
     });
   }
   if (error instanceof FlowNotFoundError) return flowNotFound(error.message, error.flowId);
+  if (error instanceof FlowInUseError) {
+    return ProblemError.conflict(error.message, {
+      code: 'flow_in_use',
+      params: { flowId: error.flowId, usedBy: [...error.usedBy] },
+    });
+  }
   if (error instanceof FlowVersionNotFoundError) {
     return flowVersionNotFound(error.flowId, error.versionNumber);
   }
@@ -260,6 +267,41 @@ export function registerFlowRoutes(app: Server, flows: FlowRepo): void {
       }
       const created = await flows.create(ctxFor(request), name);
       return reply.status(201).send(toFlowResponse(created));
+    },
+  );
+
+  // S9-10: rename and delete, so the flow list can be kept tidy.
+  app.patch(
+    '/v1/tenants/:tenantId/flows/:id',
+    {
+      config: { permission: 'callflow.edit', dataClass: 'config' },
+      schema: { params: FlowParamsSchema, body: CreateBodySchema, response: { 200: FlowSchema } },
+    },
+    async (request) => {
+      try {
+        const name = normalizeFlowName(request.body.name);
+        return toFlowResponse(await flows.rename(ctxFor(request), request.params.id, name));
+      } catch (error) {
+        throw toProblem(error);
+      }
+    },
+  );
+
+  // Deleting a flow can change what live calls do, so it takes the permission
+  // that puts a flow live.
+  app.delete(
+    '/v1/tenants/:tenantId/flows/:id',
+    {
+      config: { permission: 'callflow.publish', dataClass: 'config' },
+      schema: { params: FlowParamsSchema },
+    },
+    async (request, reply) => {
+      try {
+        await flows.remove(ctxFor(request), request.params.id);
+      } catch (error) {
+        throw toProblem(error);
+      }
+      return reply.status(204).send();
     },
   );
 

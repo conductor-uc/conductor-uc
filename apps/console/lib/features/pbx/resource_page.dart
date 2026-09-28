@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/permissions.dart';
 import '../../forms/validators.dart';
@@ -395,6 +396,15 @@ class ResourcePage extends ConsumerWidget {
             builder: (_) => ConnectPhoneDialog(extension: row),
           ),
         ),
+      ],
+      // S9-10: a number that a call flow answers opens it.
+      'dids' => (context, ref, row) => [
+        if (row['destinationType'] == 'flow' && row['destinationId'] != null)
+          IconButton(
+            tooltip: context.l10n.flowsOpenFromNumber,
+            icon: const Icon(Icons.account_tree_outlined),
+            onPressed: () => context.go('/call-flows/${row['destinationId']}'),
+          ),
       ],
       'devices' => (context, ref, row) => [
         IconButton(

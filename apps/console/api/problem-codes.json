@@ -52,6 +52,7 @@
   "extension_not_found",
   "extension_number_taken",
   "extension_user_taken",
+  "flow_in_use",
   "flow_name_invalid",
   "flow_not_found",
   "flow_not_published",

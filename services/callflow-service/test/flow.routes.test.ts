@@ -141,4 +141,80 @@ describe.skipIf(skipReason !== undefined)('flow routes', () => {
     });
     expect(response.statusCode).toBe(404);
   });
+
+  async function newFlow(tenantId: string, name: string): Promise<string> {
+    const created = await app.inject({
+      method: 'POST',
+      url: `/v1/tenants/${tenantId}/flows`,
+      headers: headers(tenantId),
+      payload: { name },
+    });
+    return created.json<{ id: string }>().id;
+  }
+
+  it('renames a flow (S9-10)', async () => {
+    const tenantId = randomUUID();
+    const id = await newFlow(tenantId, 'Main line');
+    const renamed = await app.inject({
+      method: 'PATCH',
+      url: `/v1/tenants/${tenantId}/flows/${id}`,
+      headers: headers(tenantId),
+      payload: { name: 'Main number' },
+    });
+    expect(renamed.statusCode).toBe(200);
+    expect(renamed.json()).toMatchObject({ id, name: 'Main number' });
+  });
+
+  it('deletes a flow, and refuses one another flow jumps to (S9-10)', async () => {
+    const tenantId = randomUUID();
+    const h = headers(tenantId);
+    const target = await newFlow(tenantId, 'After hours');
+    const caller = await newFlow(tenantId, 'Main number');
+    await app.inject({
+      method: 'PUT',
+      url: `/v1/tenants/${tenantId}/flows/${caller}/draft`,
+      headers: h,
+      payload: {
+        entryPoints: { main: 'g1' },
+        nodes: [{ id: 'g1', type: 'goto_flow', config: { flowId: target, entryPoint: 'main' } }],
+        edges: [],
+      },
+    });
+
+    const refused = await app.inject({
+      method: 'DELETE',
+      url: `/v1/tenants/${tenantId}/flows/${target}`,
+      headers: h,
+    });
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json()).toMatchObject({
+      code: 'flow_in_use',
+      params: { usedBy: ['Main number'] },
+    });
+
+    const gone = await app.inject({
+      method: 'DELETE',
+      url: `/v1/tenants/${tenantId}/flows/${caller}`,
+      headers: h,
+    });
+    expect(gone.statusCode).toBe(204);
+    const now = await app.inject({
+      method: 'DELETE',
+      url: `/v1/tenants/${tenantId}/flows/${target}`,
+      headers: h,
+    });
+    expect(now.statusCode).toBe(204);
+    const list = await app.inject({
+      method: 'GET',
+      url: `/v1/tenants/${tenantId}/flows`,
+      headers: h,
+    });
+    expect(list.json<{ rows: unknown[] }>().rows).toEqual([]);
+    const events = await db.kysely
+      .selectFrom('outbox')
+      .select('type')
+      .where('type', '=', 'callflow.flow.deleted')
+      .execute();
+    expect(events.length).toBeGreaterThanOrEqual(2);
+  });
 });

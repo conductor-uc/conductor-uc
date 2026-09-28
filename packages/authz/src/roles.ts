@@ -51,6 +51,10 @@ const RESELLER_ADMIN_PERMISSIONS: readonly Permission[] = [
   'conference_room.manage',
   'schedule.manage',
   'media.manage',
+  // D-020 (owner, 2026-09-28): a reseller sets up its customers' call flows.
+  // They are configuration, not private data, so H1 is unaffected.
+  'callflow.edit',
+  'callflow.publish',
   'trunk.manage',
   'audit.read',
   'apikey.manage',
@@ -109,8 +113,9 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
  * `reseller_support` holds the reads of exactly what `reseller_admin` manages:
  * a support person never sees more than their own tier's admin could. That
  * leaves out `reseller.read` (H3 reserves it to the master), and the tenant-only
- * `callflow.read` and `recording.policy.read`, which no reseller role manages
- * either. H1 keeps it out of private data whatever it holds.
+ * `recording.policy.read`, which no reseller role manages either. It reads
+ * call flows, which resellers manage since D-020. H1 keeps it out of private
+ * data whatever it holds.
  */
 const MASTER_SUPPORT_PERMISSIONS: readonly Permission[] = [
   'org.view',
