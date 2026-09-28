@@ -22,6 +22,17 @@ export {
   type MigrationStatus,
 } from './migrate.js';
 export {
+  createPartitionJob,
+  PARTITION_INTERVAL_MS,
+  planMonthlyPartitions,
+  type ExistingPartition,
+  type MonthlyPartitionTarget,
+  type PartitionJob,
+  type PartitionJobOptions,
+  type PartitionPlan,
+  type PartitionResult,
+} from './partitions.js';
+export {
   createRewrapJob,
   REWRAP_INTERVAL_MS,
   type CiphertextRewrapper,

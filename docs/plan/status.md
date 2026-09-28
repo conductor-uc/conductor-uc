@@ -10,7 +10,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 |---|---|---|---|
 | S0 Foundations (10) | 10 | 0 | 0 |
 | S1 Orgs, identity, single-node (16) | 14 | 1 | 1 |
-| S2 Core telephony (21) | 17 | 3 | 1 |
+| S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (11) | 1 | 3 | 7 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
@@ -19,7 +19,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **70** | **13** | **44** |
+| **Total (127)** | **71** | **13** | **43** |
 
 Milestones: M1 (S1) reached except API-key auth and organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below (and S2-21, retention, added later). M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -85,7 +85,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S2-18 | Done | `services/cdr-service`: `/ingest/json-cdr`, CDR v1, `/cdrs`, `/cdr-exports`, `/billing-records` (D-013). Gaps: G-51 fields, G-52 partitions, G-53 master rollup |
 | S2-19 | Done | `freeswitch-2` in compose; dispatcher over two nodes; per-test cleanup covers both |
 | S2-20 | Done | 25 files in `tests/sip/test`; CI `sip` job runs the full suite nightly and by hand (G-110) |
-| S2-21 | Not started | no partition job; `CDR_RETENTION_MONTHS` and `AUDIT_RETENTION_MONTHS` appear nowhere in `services/` or `packages/` (G-12, G-52) |
+| S2-21 | Done | `@cuc/db` `createPartitionJob`: every 6 hours, under a MariaDB named lock, adds the next 3 months' partitions (split from `p_max`) and drops those past retention; cdr-service runs it on `cdrs` (`CDR_RETENTION_MONTHS`, 13), identity-service on `audit_events` (`AUDIT_RETENTION_MONTHS`, 12). Tested on MariaDB |
 
 ## Stage 3
 

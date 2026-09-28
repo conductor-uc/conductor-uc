@@ -191,6 +191,7 @@ Groups: base, database (`identity_service`), events, signed headers, crypto.
 | `ACCESS_TOKEN_TTL_SECONDS` | `600` | no | Access-token lifetime |
 | `REFRESH_TOKEN_TTL_DAYS` | `30` | no | Sliding session lifetime |
 | `MFA_TICKET_TTL_SECONDS` | `300` | no | Time to enter a two-step code |
+| `AUDIT_RETENTION_MONTHS` | `12` | no | S2-21 (G-12): whole months the audit log is kept after the month an entry falls in. Every 6 hours (and at startup) one copy drops the monthly partitions past it and adds the next three months'. 1 to 240. |
 | `SIGNING_KEY_OVERLAP_DAYS` | `7` | no | How long a retired signing key stays published, so tokens it signed keep verifying. Keep it longer than `ACCESS_TOKEN_TTL_SECONDS`. |
 | `SIGNING_KEY_ROTATION_DAYS` | `90` | no | Start rotating the signing key once it has signed for this many days: a new key is published, then promoted after `SIGNING_KEY_PUBLISH_AHEAD_MINUTES`. Every copy checks every 5 minutes and 30 s after startup; exactly one acts. `0` turns automatic rotation off (a key published by `rotate-signing-key` is still promoted on time). |
 | `SIGNING_KEY_PUBLISH_AHEAD_MINUTES` | `15` | no | How long a new signing key is published in the key set before it signs anything. **Must be longer than api-gateway's `JWKS_CACHE_MAX_AGE_MS`** (10 minutes by default), so every gateway has refetched the key set, and holds the new key, before the first token it signed arrives. Raise both together. |
@@ -275,6 +276,7 @@ Groups: base, database (`cdr_service`), events, signed headers, storage.
 | `INTERNAL_SERVICE_TOKEN` | **yes** (secret) | Sent to other services (it has no internal routes of its own) |
 | `ORG_SERVICE_URL`, `PBX_CONFIG_SERVICE_URL`, `IDENTITY_SERVICE_URL` | **yes** | |
 | `FS_CDR_INGEST_TOKEN` | **yes** (secret) | Password FreeSWITCH uses on `POST /ingest/json-cdr` (any username is accepted) |
+| `CDR_RETENTION_MONTHS` | no (default `13`) | S2-21 (G-52): whole months call records, and the billing records resellers read from them, are kept after the month a call falls in. Every 6 hours (and at startup) one copy drops the monthly partitions past it and adds the next three months'. Markets with a longer legal minimum raise it. 1 to 240. |
 
 ### 4.10 telephony-config
 

@@ -34,6 +34,13 @@ export const configSchema = Type.Object({
    * service's own FS-facing gate, not the same literal value.
    */
   FS_CDR_INGEST_TOKEN: Env.secret(),
+  /**
+   * S2-21 (G-52): whole months call records (and the billing records resellers
+   * read from them) are kept after the month they fall in; a monthly partition
+   * past it is dropped. 13 by default; markets with a longer legal minimum
+   * raise it.
+   */
+  CDR_RETENTION_MONTHS: Env.int({ minimum: 1, maximum: 240, default: 13 }),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

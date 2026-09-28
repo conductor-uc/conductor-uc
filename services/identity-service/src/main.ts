@@ -1,7 +1,13 @@
 import { toUnscopedAccessSink } from '@cuc/audit';
 import { redactConfig } from '@cuc/config';
 import { fileKekFromConfig } from '@cuc/crypto';
-import { createDatabase, migrateToLatest, REWRAP_INTERVAL_MS } from '@cuc/db';
+import {
+  createDatabase,
+  createPartitionJob,
+  migrateToLatest,
+  PARTITION_INTERVAL_MS,
+  REWRAP_INTERVAL_MS,
+} from '@cuc/db';
 import { connectBus, createRelay } from '@cuc/events';
 import { createServer, observeOutbox } from '@cuc/http';
 import { createLogger } from '@cuc/logger';
@@ -209,6 +215,15 @@ const kekRewrap = createKekRewrapJob(db, kek, logger);
 app.addReadinessCheck('kek_rewrap', kekRewrap.readinessCheck);
 kekRewrap.start(REWRAP_INTERVAL_MS);
 
+// S2-21 (G-12): months ahead added to `audit_events`, months past AUDIT_RETENTION_MONTHS dropped.
+// A platform table, so no `unscoped` is involved.
+const partitions = createPartitionJob({
+  db: db.kysely,
+  targets: [{ table: 'audit_events', retentionMonths: config.AUDIT_RETENTION_MONTHS }],
+  logger,
+});
+partitions.start(PARTITION_INTERVAL_MS);
+
 await app.listen({ host: config.HTTP_HOST, port: config.HTTP_PORT });
 logger.info({ port: config.HTTP_PORT }, 'listening');
 
@@ -229,6 +244,7 @@ async function shutdown(signal: string): Promise<void> {
   await auditConsumerLoop;
   await bus.close();
   await kekRewrap.stop();
+  await partitions.stop();
   await signingKeyRotator.stop();
   await db.destroy();
   logger.info('shutdown complete');

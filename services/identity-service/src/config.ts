@@ -19,6 +19,12 @@ export const configSchema = Type.Object({
   ...httpEnvSchema.properties,
 
   /**
+   * S2-21 (G-12): whole months the audit log is kept after the month an entry
+   * falls in; a monthly partition past it is dropped. 12 by default (07 §4).
+   */
+  AUDIT_RETENTION_MONTHS: Env.int({ minimum: 1, maximum: 240, default: 12 }),
+
+  /**
    * Shared secret for the internal, service-to-service admin-creation endpoint.
    *
    * Interim, matching the precedent in 07 §1 for FS nodes and OpenSIPs (a shared
