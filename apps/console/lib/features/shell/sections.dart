@@ -9,6 +9,7 @@ import '../../l10n/l10n.dart';
 enum NavLabel {
   dashboard,
   audit,
+  apiKeys,
   users,
   myHome,
   myCallHandling,
@@ -48,6 +49,7 @@ extension NavLabelText on NavLabel {
   String of(AppLocalizations l10n) => switch (this) {
     NavLabel.dashboard => l10n.navDashboard,
     NavLabel.audit => l10n.navAudit,
+    NavLabel.apiKeys => l10n.navApiKeys,
     NavLabel.users => l10n.navUsers,
     NavLabel.myHome => l10n.navMyHome,
     NavLabel.myCallHandling => l10n.navMyCallHandling,
@@ -161,6 +163,15 @@ const _audit = Section(
   requires: ['audit.read'],
   group: NavGroup.admin,
 );
+
+/// S1-08 (G-14): keys for other software, for whoever may manage them.
+const _apiKeys = Section(
+  '/api-keys',
+  NavLabel.apiKeys,
+  Icons.key_outlined,
+  requires: ['apikey.manage'],
+  group: NavGroup.admin,
+);
 const _users = Section(
   '/users',
   NavLabel.users,
@@ -259,6 +270,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
     ),
     _audit,
     _users,
+    _apiKeys,
   ],
   OrgType.reseller: [
     _dashboard,
@@ -292,6 +304,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
     ),
     _users,
     _audit,
+    _apiKeys,
   ],
   OrgType.tenant: [
     _dashboard,
@@ -426,6 +439,7 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       group: NavGroup.settings,
     ),
     _tenantUsers,
+    _apiKeys,
     Section(
       '/extensions',
       NavLabel.extensions,

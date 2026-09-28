@@ -40,7 +40,7 @@ Every service:
 
 **Responsibilities:** the single public HTTP/WebSocket entry point for the console and the public API.
 
-- Verifies JWTs locally (JWKS from identity-service) and API keys (by calling identity-service, cached).
+- Verifies JWTs locally (JWKS from identity-service) and API keys (S1-08: `Bearer key_…`, or `ApiKey key_…`, checked with identity-service's `POST /internal/v1/api-keys/verify` and cached 30 s by a hash of the key; forwarded as actor type `apikey` of the key's org). Every service's permission guard then checks the key's own permissions (`GET /internal/v1/orgs/{o}/api-keys/{id}/permissions`), refuses H4 routes (`api_key_not_allowed`) and scoped or self-service routes, which are about a person. A revoked key stops within about 35 s.
 - Builds the **request context** (`actor`, `orgId`, `orgType`, `resellerId`, `tenantId` of the target path) and forwards it to services as signed internal headers.
 - Resolves hostname → reseller for unauthenticated routes, which drives the branded login page.
 - Rate limits per IP, per user, and per API key (Redis).
@@ -137,7 +137,7 @@ A `LiveCall` is one channel (leg): `callUuid`, `direction` (`inbound`: the leg c
 - `POST /v1/auth/login`, `/v1/auth/mfa/verify`, `/v1/auth/refresh`, `/v1/auth/logout`
 - `POST /v1/auth/password-reset` (request and confirm)
 - `/v1/orgs/{orgId}/users` (CRUD)
-- `/v1/orgs/{orgId}/roles`, `/v1/orgs/{orgId}/grants`, `/v1/orgs/{orgId}/api-keys`
+- `/v1/orgs/{orgId}/roles`, `/v1/orgs/{orgId}/grants`, `/v1/orgs/{orgId}/api-keys` (S1-08: list, create, revoke; `apikey.manage`, class `secret`; the key is in the create answer only; audited `apikey.created`/`apikey.revoked`)
 - `GET /v1/orgs/{orgId}/audit-events`
 - `GET /.well-known/jwks.json`
 - `GET/PUT /v1/platform/security-settings` (`platform.observe`/`platform.operate`, master only): whether the master's own users must use two-step verification (D-012 as amended). Off on a fresh install; turning it off again takes a step-up code (G-100). Audited (`platform.security_settings.updated`)

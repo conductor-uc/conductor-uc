@@ -9,7 +9,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | Stage | Done | Partial | Not started |
 |---|---|---|---|
 | S0 Foundations (10) | 10 | 0 | 0 |
-| S1 Orgs, identity, single-node (16) | 14 | 1 | 1 |
+| S1 Orgs, identity, single-node (16) | 15 | 0 | 1 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (11) | 1 | 3 | 7 |
@@ -19,9 +19,9 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **71** | **13** | **43** |
+| **Total (127)** | **72** | **12** | **43** |
 
-Milestones: M1 (S1) reached except API-key auth and organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below (and S2-21, retention, added later). M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
+Milestones: M1 (S1) reached except organisation deletion (S1-16, added later). M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
 Services with an empty `src` (verified, no files): `analytics-service`, `chat-service`, `fax-service`, `provisioning-service`, `sms-service`. `example-service` is the S0-08 sample.
 
@@ -51,7 +51,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S1-05 | Done | `services/identity-service`: login, TOTP MFA, refresh cookie, JWKS, reset, invitations, MFA reset |
 | S1-06 | Done | `packages/authz` (`hard-rules.ts`, `roles.ts`); identity `roles.routes.ts`, `grants.routes.ts` |
 | S1-07 | Done | `packages/audit`, identity `audit.consumer.ts`, `GET /v1/orgs/:orgId/audit-events`; a reseller's read leaves out `private` rows (G-13). Gaps: G-12 (partition upkeep, S2-21), G-15 (not all writes audited) |
-| S1-08 | Partial | `services/api-gateway`: JWT auth, signed context, rate limit, CORS, path routing. API-key auth returns `api_key_auth_not_implemented` (G-14). The WebSocket hub came with S5-08 |
+| S1-08 | Done | `services/api-gateway`: JWT auth, signed context, rate limit, CORS, path routing; the WebSocket hub came with S5-08. API keys (G-14): identity-service `/v1/orgs/{o}/api-keys` (`key_<id>_<secret>`, SHA-256 stored, permissions capped at the creator's, H4, optional end date, revocable, audited); the gateway verifies `Bearer key_…` (cached 30 s); every service's permission guard checks the key's own permissions; console **API keys** page. Confirmed live |
 | S1-09 | Done | `pbx-config-service` extensions, SIP credentials, HA1/HA1B, reveal and reset-password routes |
 | S1-10 | Done | `telephony/freeswitch` (Dockerfile, conf), neutral identity, OpenSIPs-only ACL |
 | S1-11 | Done | `telephony/opensips` (`opensips.cfg.template`, db-schema), neutral headers |

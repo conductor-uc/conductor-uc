@@ -207,6 +207,26 @@ export interface IdentityServiceDb extends EventTables {
     extension_id: ColumnType<string | null, string | null | undefined, string | null>;
   };
 
+  /** S1-08 (G-14): one org's API keys. Only a hash of each secret is kept. */
+  api_keys: {
+    id: string;
+    org_id: string;
+    org_type: UserOrgType;
+    reseller_id: string | null;
+    name: string;
+    /** The key's public id, 12 hex characters: `key_<prefix>_<secret>`. */
+    prefix: string;
+    /** SHA-256 (hex) of the secret part. */
+    secret_hash: string;
+    /** JSON array of permission names. */
+    permissions: string;
+    created_by: string;
+    created_at: Date;
+    expires_at: Date | null;
+    last_used_at: Date | null;
+    revoked_at: Date | null;
+  };
+
   /**
    * The platform's sign-in policy (D-012 as amended): one row, `id = 1`, and
    * no row means the defaults. See `repo/security-settings.repo.ts`.

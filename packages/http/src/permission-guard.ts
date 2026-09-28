@@ -1,4 +1,4 @@
-import { h1RouteLevelWall, holdsPermission } from '@cuc/authz';
+import { apiKeyMayHold, h1RouteLevelWall, holdsPermission } from '@cuc/authz';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import type { RouteContract } from './contract.js';
@@ -11,11 +11,14 @@ export interface PermissionActor {
   readonly id: string;
   readonly orgId: string;
   readonly orgType: OrgType;
+  /** A person (the default) or an API key (S1-08): `id` is then the key's id. */
+  readonly type?: 'user' | 'apikey';
 }
 
 /**
  * Says whether `actor` holds `permission`. It is asked once per request for a
- * person (`actorType: 'user'`), never for a service, node or API key, and it
+ * person (`actorType: 'user'`) or an API key (S1-08), never for a service or a
+ * node, and it
  * must fail closed: throw (a 503 for the caller) rather than answer `true`
  * when it cannot tell.
  */
@@ -47,6 +50,11 @@ const ALWAYS_ALLOWED: ReadonlySet<string> = new Set(['org.view']);
  *    holds it (through a role, or an org-wide grant). Except on a route that
  *    declares `scopedPermission` (S5-09): a grant on one extension or queue is
  *    enough there, which only the handler can judge, so it checks instead.
+ * 3. **API keys (S1-08, G-14)** are checked the same way, against the key's own
+ *    permission list (identity-service's `/api-keys/{id}/permissions`), after
+ *    two refusals of their own: a route declaring a permission H4 keeps from
+ *    every key (`api_key_not_allowed`), and a `scopedPermission` route, which
+ *    is about a person's own phone and grants (`people_only`).
  *
  * Until this existed the route contract's `permission` was documented but not
  * evaluated by any service (only H1 and H3 were), so any signed-in person
@@ -62,7 +70,7 @@ export function registerPermissionGuard(app: Server, resolve: PermissionResolver
       const contract = (request.routeOptions.config ?? {}) as RouteContract;
       const { actorId, actorType, orgId, orgType } = request.context;
       if (contract.public === true || contract.permission === undefined) return;
-      if (actorType !== 'user' || actorId === undefined) return;
+      if ((actorType !== 'user' && actorType !== 'apikey') || actorId === undefined) return;
       if (orgId === undefined || orgType === undefined) return;
 
       // H1 first, with its own answer (the hard-rules hook runs later, after
@@ -81,9 +89,25 @@ export function registerPermissionGuard(app: Server, resolve: PermissionResolver
         });
       }
 
+      if (actorType === 'apikey') {
+        // H4: never user, role, grant or key management, whatever the key holds.
+        if (!apiKeyMayHold(contract.permission)) {
+          throw ProblemError.forbidden('An API key cannot do that.', {
+            code: 'api_key_not_allowed',
+          });
+        }
+        // A scoped check is about the person's own phone and grants; a key has neither.
+        if (contract.scopedPermission === true) {
+          throw ProblemError.forbidden('Only a signed-in person can do that.', {
+            code: 'people_only',
+          });
+        }
+      }
+
       if (ALWAYS_ALLOWED.has(contract.permission)) return;
       if (contract.scopedPermission === true) return;
-      if (!(await resolve({ id: actorId, orgId, orgType }, contract.permission))) {
+      const type = actorType === 'apikey' ? ('apikey' as const) : ('user' as const);
+      if (!(await resolve({ id: actorId, orgId, orgType, type }, contract.permission))) {
         request.log.warn({ permission: contract.permission }, 'permission denied');
         throw ProblemError.forbidden('You do not have permission to do that.', {
           code: 'permission_denied',
@@ -156,14 +180,15 @@ export function createRemotePermissionResolver(
   const cache = new Map<string, { expires: number; permissions: ReadonlySet<string> }>();
 
   async function permissionsOf(actor: PermissionActor): Promise<ReadonlySet<string>> {
-    const key = `${actor.orgId}:${actor.id}`;
+    const type = actor.type ?? 'user';
+    const key = `${type}:${actor.orgId}:${actor.id}`;
     const hit = cache.get(key);
     if (hit !== undefined && hit.expires > now()) return hit.permissions;
 
     let response: Response;
     try {
       response = await fetchImpl(
-        `${baseUrl}/internal/v1/orgs/${encodeURIComponent(actor.orgId)}/users/${encodeURIComponent(actor.id)}/permissions`,
+        `${baseUrl}/internal/v1/orgs/${encodeURIComponent(actor.orgId)}/${type === 'apikey' ? 'api-keys' : 'users'}/${encodeURIComponent(actor.id)}/permissions`,
         { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
       );
     } catch {

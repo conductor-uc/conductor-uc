@@ -69,6 +69,15 @@ export function h3ResellerLifecycle(actor: Actor, permission: Permission): boole
   return !(RESELLER_LIFECYCLE_PERMISSIONS.has(permission) && actor.org.type !== 'master');
 }
 
+/**
+ * H4 as a question about a permission alone (S1-08): whether an API key may
+ * hold it at all. identity-service refuses a key that asks for one, and the
+ * permission guard refuses a key on a route that declares one.
+ */
+export function apiKeyMayHold(permission: Permission): boolean {
+  return !API_KEY_RESTRICTED_PERMISSIONS.has(permission);
+}
+
 /** H4: API keys cannot manage users, roles, grants, or other API keys. */
 export function h4ApiKeyRestriction(actor: Actor, permission: Permission): boolean {
   return !(actor.type === 'apikey' && API_KEY_RESTRICTED_PERMISSIONS.has(permission));

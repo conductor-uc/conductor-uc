@@ -5,6 +5,7 @@ import type { Bus } from '@cuc/events';
 import type { Redis } from 'ioredis';
 
 import { createAccessTokenVerifier } from './auth/access-token-verifier.js';
+import { createApiKeyVerifier } from './auth/api-key-verifier.js';
 import { registerAuthentication } from './auth/authenticate.js';
 import { createChallengeLookup, registerAcmeChallengeRoute } from './acme-challenge.js';
 import { registerConsoleHosting } from './console-hosting.js';
@@ -128,6 +129,14 @@ export async function buildApp(options: BuildAppOptions): Promise<Server> {
 
   registerAuthentication(app, {
     verifier,
+    ...(config.INTERNAL_SERVICE_TOKEN === undefined
+      ? {}
+      : {
+          apiKeys: createApiKeyVerifier({
+            baseUrl: config.IDENTITY_SERVICE_URL,
+            internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+          }),
+        }),
     publicPrefixes: config.PUBLIC_ROUTE_PREFIXES,
     selfAuthenticatingPaths: config.REALTIME_ENABLED ? [REALTIME_PATH] : [],
   });

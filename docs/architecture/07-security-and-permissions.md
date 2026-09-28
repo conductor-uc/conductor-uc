@@ -5,7 +5,7 @@
 | Principal | Authenticates with | Belongs to |
 |---|---|---|
 | Console user | Email + password (argon2id) + MFA (TOTP; WebAuthn later) | Exactly one org (master, reseller, or tenant) |
-| API key | `Authorization: Bearer cuc_<prefix>_<secret>` (hash stored) | One org, with an explicit permission list |
+| API key | `Authorization: Bearer key_<id>_<secret>` (a SHA-256 of the secret stored; G-14, S1-08) | One org, with an explicit permission list capped at its creator's, never user, role, grant or key management (H4); an optional end date; revocable |
 | Service | mTLS or a service JWT (client-credentials from identity-service) | Platform |
 | FS node / OpenSIPs | Network ACL + shared per-environment token on the xml_curl, CDR ingest, and IR endpoints | Platform |
 | SIP endpoint | SIP digest against the tenant realm (OpenSIPs) | Tenant |
