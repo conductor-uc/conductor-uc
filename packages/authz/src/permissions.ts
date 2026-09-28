@@ -135,7 +135,7 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
  * state). 07 §3.2 classes live call monitoring as `private`, so none of the
  * config-class permissions fit (`monitor.presence` is held by every tenant
  * user), and the private ones each mean something else: `monitor.listen`/
- * `whisper`/`barge` act on a call and are not held by tenant admins,
+ * `whisper`/`barge` act on a call (and, until D-021, were not held by tenant admins),
  * `cdr.read` is call history and not held by supervisors, and
  * `analytics.view` is reports and wallboards. It is `private`, so H1 keeps
  * every reseller out, and like every private permission it has no read twin

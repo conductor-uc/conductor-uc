@@ -16,6 +16,7 @@ import 'package:console/features/monitoring/recording_controls.dart';
 import 'package:console/features/pbx/pbx_api.dart';
 import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
+import 'package:console/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -168,6 +169,9 @@ Finder recordingButtons() => find.byWidgetPredicate((w) {
   final key = w.key;
   return key is ValueKey<String> && key.value.startsWith('recording-');
 });
+
+/// The English strings the presence board is checked against.
+final en = lookupAppLocalizations(const Locale('en'));
 
 void main() {
   group('the realtime client', () {
@@ -471,11 +475,13 @@ void main() {
   group('the live calls panel', () {
     /// Each row's cells as text; a cell that is not text (the recording
     /// buttons) reads as ''.
-    List<List<String>> tableRows(WidgetTester tester) => [
+    /// The table's text, without the Queue column (S9-15) unless [queue].
+    List<List<String>> tableRows(WidgetTester tester, {bool queue = false}) => [
       for (final row in tester.widget<DataTable>(find.byType(DataTable)).rows)
         [
-          for (final cell in row.cells)
-            cell.child is Text ? (cell.child as Text).data! : '',
+          for (final (i, cell) in row.cells.indexed)
+            if (queue || i != 2)
+              cell.child is Text ? (cell.child as Text).data! : '',
         ],
     ];
 
@@ -719,7 +725,11 @@ void main() {
               realtimeConnectorProvider.overrideWithValue(hub.connect),
               clockProvider.overrideWith((ref) => Stream.value(fixedNow)),
             ],
-            child: const MaterialApp(home: Scaffold(body: LiveCallsPanel())),
+            child: const MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: LiveCallsPanel()),
+            ),
           ),
         );
         await tester.pumpAndSettle();
@@ -812,7 +822,11 @@ void main() {
             }),
             realtimeConnectorProvider.overrideWithValue(hub.connect),
           ],
-          child: const MaterialApp(home: Scaffold(body: LiveCallsPanel())),
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: LiveCallsPanel()),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -864,6 +878,58 @@ void main() {
       resetDemoRecordings();
     });
 
+    testWidgets(
+      'S9-15: names each call\'s queue, shows the queues, and gives an administrator listen, whisper and barge (D-021)',
+      (tester) async {
+        resetDemoRecordings();
+        addTearDown(resetDemoRecordings);
+        await pumpApp(
+          tester,
+          appWith(
+            api: demoApi(),
+            overrides: [
+              realtimeConnectorProvider.overrideWithValue(
+                demoRealtimeConnector,
+              ),
+              clockProvider.overrideWith((ref) => Stream.value(DateTime.now())),
+            ],
+          ),
+        );
+        tester.view.physicalSize = const Size(1600, 1400);
+        await submitSignIn(tester, 'tenant@example.test');
+        await tapNav(tester, 'Monitoring');
+        await tester.pumpAndSettle();
+
+        final queues = [
+          for (final row in tableRows(tester, queue: true)) row[2],
+        ];
+        // The caller waiting in Support; nobody else is in a queue.
+        expect(queues, ['—', '—', 'Support', '—', '—']);
+        expect(
+          find.descendant(
+            of: find.byType(MonitoringPage),
+            matching: find.text('Queues'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.textContaining('1 waiting'), findsOneWidget);
+        // An administrator holds call.control, so can change an agent's status here too.
+        expect(
+          find.byKey(const ValueKey('attendant-agent-103')),
+          findsOneWidget,
+        );
+
+        // D-021: the tenant administrator may listen, whisper and barge.
+        for (final mode in ['listen', 'barge']) {
+          expect(
+            find.byKey(ValueKey('monitor-$mode-demo-a1')),
+            findsOneWidget,
+            reason: mode,
+          );
+        }
+      },
+    );
+
     /// Pumps the live calls panel alone, as a tenant person holding [held]
     /// (or a reseller inside a tenant), with [calls] as the snapshot. A press
     /// is answered by [answer].
@@ -902,7 +968,11 @@ void main() {
             clockProvider.overrideWith((ref) => Stream.value(fixedNow)),
             monitorApiProvider.overrideWithValue(MonitorApi(dio, 'x')),
           ],
-          child: const MaterialApp(home: Scaffold(body: LiveCallsPanel())),
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: LiveCallsPanel()),
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -1276,7 +1346,7 @@ void main() {
       'each state has its own word, icon and color; an unknown one is neutral',
       () {
         const known = ['idle', 'ringing', 'on_call', 'dnd', 'offline'];
-        final looks = [for (final s in known) presenceLook(s)];
+        final looks = [for (final s in known) presenceLook(en, s)];
         expect(looks.map((l) => l.label), [
           'Available',
           'Ringing',
@@ -1288,9 +1358,9 @@ void main() {
         expect(looks.map((l) => l.color).toSet(), hasLength(5));
         expect(looks.map((l) => l.color), everyElement(isNotNull));
 
-        expect(presenceLook('on_break').label, 'On break');
-        expect(presenceLook('on_break').color, isNull);
-        expect(presenceLook('').label, 'Unknown');
+        expect(presenceLook(en, 'on_break').label, 'On break');
+        expect(presenceLook(en, 'on_break').color, isNull);
+        expect(presenceLook(en, '').label, 'Unknown');
       },
     );
   });
@@ -1427,7 +1497,11 @@ void main() {
             realtimeConnectorProvider.overrideWithValue(hub.connect),
             apiProvider.overrideWithValue(ConsoleApi(dio: dio)),
           ],
-          child: const MaterialApp(home: Scaffold(body: MonitoringPage())),
+          child: const MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: MonitoringPage()),
+          ),
         ),
       );
       await tester.pumpAndSettle();

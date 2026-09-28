@@ -36,8 +36,9 @@ const MONITOR_ACTIONS: ReadonlySet<string> = new Set([
 
 /**
  * G-121 (7), the owner's decision: a tenant's own administrator may give a person monitoring of
- * one extension or one queue (a queue lead) without holding monitoring themselves, which by
- * design they do not (07 §3.3). Only `monitor.listen`/`whisper`/`barge`; only scoped to an
+ * one extension or one queue (a queue lead) without holding monitoring themselves. Since D-021
+ * the built-in `tenant_admin` role holds it, so this matters for a custom administrator role
+ * that does not. Only `monitor.listen`/`whisper`/`barge`; only scoped to an
  * extension or a queue, never the whole org; only to a user, never a role (a role could reach the
  * granter); and only inside the granter's own tenant. It is less than the `tenant_supervisor` role
  * the administrator can already assign, and the granter still cannot grant it to themselves.

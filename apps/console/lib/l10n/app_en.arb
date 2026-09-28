@@ -2934,29 +2934,29 @@
   "@attNoExtensions": {
     "description": "Attendant console (receptionist's screen). Directory search found nothing."
   },
-  "attAvailable": "Available",
-  "@attAvailable": {
-    "description": "Attendant console (receptionist's screen). Extension status."
+  "presenceAvailable": "Available",
+  "@presenceAvailable": {
+    "description": "An extension's live status (presence board, attendant console)."
   },
-  "attRinging": "Ringing",
-  "@attRinging": {
-    "description": "Attendant console (receptionist's screen). Extension status."
+  "presenceRinging": "Ringing",
+  "@presenceRinging": {
+    "description": "An extension's live status (presence board, attendant console)."
   },
-  "attOnACall": "On a call",
-  "@attOnACall": {
-    "description": "Attendant console (receptionist's screen). Extension status."
+  "presenceOnACall": "On a call",
+  "@presenceOnACall": {
+    "description": "An extension's live status (presence board, attendant console)."
   },
-  "attDoNotDisturb": "Do not disturb",
-  "@attDoNotDisturb": {
-    "description": "Attendant console (receptionist's screen). Extension status."
+  "presenceDoNotDisturb": "Do not disturb",
+  "@presenceDoNotDisturb": {
+    "description": "An extension's live status (presence board, attendant console)."
   },
-  "attOffline": "Offline",
-  "@attOffline": {
-    "description": "Attendant console (receptionist's screen). Extension status: no phone connected."
+  "presenceOffline": "Offline",
+  "@presenceOffline": {
+    "description": "An extension's live status (presence board, attendant console)."
   },
-  "attUnknown": "Unknown",
-  "@attUnknown": {
-    "description": "Attendant console (receptionist's screen). Status not known."
+  "presenceUnknown": "Unknown",
+  "@presenceUnknown": {
+    "description": "An extension's live status (presence board, attendant console)."
   },
   "attSendHere": "Send the chosen call here",
   "@attSendHere": {
@@ -3058,5 +3058,113 @@
   "attTransferHelp": "Type a name to find someone.",
   "@attTransferHelp": {
     "description": "Attendant console (receptionist's screen). Transfer dialog field help."
+  },
+  "monTitle": "Monitoring",
+  "@monTitle": {
+    "description": "Monitoring page (live presence, queues and calls). Page title."
+  },
+  "monSubtitle": "What is happening on the phones right now.",
+  "@monSubtitle": {
+    "description": "Monitoring page (live presence, queues and calls). Page subtitle."
+  },
+  "monPresence": "Presence",
+  "@monPresence": {
+    "description": "Monitoring page (live presence, queues and calls). Section title: every extension's status."
+  },
+  "monQueues": "Queues",
+  "@monQueues": {
+    "description": "Monitoring page (live presence, queues and calls). Section title: live queues."
+  },
+  "monLiveCalls": "Live calls",
+  "@monLiveCalls": {
+    "description": "Monitoring page (live presence, queues and calls). Section title."
+  },
+  "monCallsYouCanMonitor": "Calls you can monitor",
+  "@monCallsYouCanMonitor": {
+    "description": "Monitoring page (live presence, queues and calls). Section title for someone who may monitor only some calls."
+  },
+  "monChooseTenantCalls": "Choose a tenant to see its live calls.",
+  "@monChooseTenantCalls": {
+    "description": "Monitoring page (live presence, queues and calls). No tenant selected."
+  },
+  "monChooseTenantPresence": "Choose a tenant to see its extensions.",
+  "@monChooseTenantPresence": {
+    "description": "Monitoring page (live presence, queues and calls). No tenant selected."
+  },
+  "monNoCallsRole": "Your role doesn't include live calls.",
+  "@monNoCallsRole": {
+    "description": "Monitoring page (live presence, queues and calls). Missing permission."
+  },
+  "monNoPresenceRole": "Your role doesn't include presence.",
+  "@monNoPresenceRole": {
+    "description": "Monitoring page (live presence, queues and calls). Missing permission."
+  },
+  "monConnecting": "Connecting…",
+  "@monConnecting": {
+    "description": "Monitoring page (live presence, queues and calls). Waiting for the live feed."
+  },
+  "monUpdatesUnavailable": "Live updates are unavailable. Reconnecting…",
+  "@monUpdatesUnavailable": {
+    "description": "Monitoring page (live presence, queues and calls). The live feed is down."
+  },
+  "monUpdatesStopped": "Live updates stopped.",
+  "@monUpdatesStopped": {
+    "description": "Monitoring page (live presence, queues and calls). The live feed ended."
+  },
+  "monNoCalls": "No calls right now.",
+  "@monNoCalls": {
+    "description": "Monitoring page (live presence, queues and calls). No live calls."
+  },
+  "monNoExtensions": "No extensions yet.",
+  "@monNoExtensions": {
+    "description": "Monitoring page (live presence, queues and calls). The tenant has no extensions."
+  },
+  "monFrom": "From",
+  "@monFrom": {
+    "description": "Monitoring page (live presence, queues and calls). Live calls table column."
+  },
+  "monTo": "To",
+  "@monTo": {
+    "description": "Monitoring page (live presence, queues and calls). Live calls table column."
+  },
+  "monQueue": "Queue",
+  "@monQueue": {
+    "description": "Monitoring page (live presence, queues and calls). Live calls table column."
+  },
+  "monState": "State",
+  "@monState": {
+    "description": "Monitoring page (live presence, queues and calls). Live calls table column."
+  },
+  "monDuration": "Duration",
+  "@monDuration": {
+    "description": "Monitoring page (live presence, queues and calls). Live calls table column."
+  },
+  "monRecording": "Recording",
+  "@monRecording": {
+    "description": "Monitoring page (live presence, queues and calls). Live calls table column."
+  },
+  "monActions": "Actions",
+  "@monActions": {
+    "description": "Monitoring page (live presence, queues and calls). Live calls table column."
+  },
+  "monRinging": "Ringing",
+  "@monRinging": {
+    "description": "Monitoring page (live presence, queues and calls). A call's state."
+  },
+  "monTalking": "Talking",
+  "@monTalking": {
+    "description": "Monitoring page (live presence, queues and calls). A call's state."
+  },
+  "monOnHold": "On hold",
+  "@monOnHold": {
+    "description": "Monitoring page (live presence, queues and calls). A call's state."
+  },
+  "monRecordingOn": "Recording",
+  "@monRecordingOn": {
+    "description": "Monitoring page (live presence, queues and calls). A call is being recorded."
+  },
+  "monRecordingPaused": "Paused",
+  "@monRecordingPaused": {
+    "description": "Monitoring page (live presence, queues and calls). A call's recording is paused."
   }
 }

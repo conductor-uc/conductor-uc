@@ -91,6 +91,11 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
   'voicemail.access',
   'monitor.presence',
   'monitor.calls',
+  // D-021 (the owner, 2026-09-28): an administrator listens, whispers and
+  // barges as a supervisor does; each use is audited (`call.monitor.*`).
+  'monitor.listen',
+  'monitor.whisper',
+  'monitor.barge',
   'analytics.view',
   'audit.read',
   'apikey.manage',

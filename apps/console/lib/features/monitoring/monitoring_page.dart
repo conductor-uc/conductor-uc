@@ -2,40 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../core/session.dart';
 import '../pbx/pbx_api.dart';
 import '../../widgets/page.dart';
 import 'live_calls.dart';
+import 'live_queues.dart';
 import 'monitor_controls.dart';
 import 'presence_board.dart';
 import 'recording_controls.dart';
 import '../../core/format.dart';
 
-/// Monitoring (08 §5): the presence board and the tenant's live calls, both
-/// streamed from the gateway's realtime hub, with the recording buttons
-/// (S5-15) and the listen, whisper and barge buttons (S5-10).
+/// Monitoring (08 §5): the presence board, the queues (S9-15) and the tenant's
+/// live calls, all streamed from the gateway's realtime hub, with the
+/// recording buttons (S5-15) and the listen, whisper and barge buttons (S5-10).
 class MonitoringPage extends ConsumerWidget {
   const MonitoringPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final title = Theme.of(context).textTheme.titleMedium;
     final showsCalls = ref.watch(showsLiveCallsProvider);
     final supervised = ref.watch(supervisesOnlyProvider);
+    final queues = ref.watch(canProvider('queue.read'))
+        ? ref.watch(liveQueuesProvider).value
+        : null;
     return PageFrame(
       children: [
-        const PageHeader(
-          title: 'Monitoring',
-          subtitle: 'What is happening on the phones right now.',
-        ),
+        PageHeader(title: l10n.monTitle, subtitle: l10n.monSubtitle),
         const SizedBox(height: 16),
-        Text('Presence', style: title),
+        Text(l10n.monPresence, style: title),
         const SizedBox(height: 8),
         // The board takes what it needs, up to a third of the height when the
         // calls table is below it, and scrolls beyond that.
         const Flexible(child: PresencePanel()),
+        // S9-15: the queues, as the attendant console shows them.
+        if (queues != null && queues.isNotEmpty) ...[
+          const SizedBox(height: 24),
+          Text(l10n.monQueues, style: title),
+          const SizedBox(height: 8),
+          const QueuesPanel(),
+        ],
         const SizedBox(height: 24),
-        Text(supervised ? 'Calls you can monitor' : 'Live calls', style: title),
+        Text(
+          supervised ? l10n.monCallsYouCanMonitor : l10n.monLiveCalls,
+          style: title,
+        ),
         const SizedBox(height: 8),
         if (showsCalls)
           const Expanded(flex: 2, child: LiveCallsPanel())
@@ -68,20 +81,21 @@ class LiveCallsPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final session = ref.watch(sessionProvider);
     if (ref.watch(tenantIdProvider) == null) {
-      return const Text('Choose a tenant to see its live calls.');
+      return Text(l10n.monChooseTenantCalls);
     }
     if (!ref.watch(showsLiveCallsProvider)) {
-      return const Text("Your role doesn't include live calls.");
+      return Text(l10n.monNoCallsRole);
     }
     final view = ref.watch(liveCallsProvider).value;
     final stopped = view?.stopped;
     if (view == null || (!view.loaded && stopped == null)) {
-      return const Text('Connecting…');
+      return Text(l10n.monConnecting);
     }
-    if (stopped != null) return Text(_stoppedText(stopped));
-    if (view.calls.isEmpty) return const Text('No calls right now.');
+    if (stopped != null) return Text(_stoppedText(l10n, stopped));
+    if (view.calls.isEmpty) return Text(l10n.monNoCalls);
     return _LiveCallsTable(
       rows: view.calls,
       tenantId: ref.watch(tenantIdProvider)!,
@@ -103,18 +117,20 @@ class LiveCallsPanel extends ConsumerWidget {
   }
 }
 
-String _stoppedText(String code) => switch (code) {
-  'offline' || 'unavailable' => 'Live updates are unavailable. Reconnecting…',
+String _stoppedText(AppLocalizations l, String code) => switch (code) {
+  'offline' || 'unavailable' => l.monUpdatesUnavailable,
   'forbidden' ||
   'permission_denied' ||
-  'reseller_private_data_denied' => "Your role doesn't include live calls.",
-  _ => 'Live updates stopped.',
+  'reseller_private_data_denied' => l.monNoCallsRole,
+  _ => l.monUpdatesStopped,
 };
 
-const _stateLabels = {
-  'ringing': 'Ringing',
-  'answered': 'Talking',
-  'held': 'On hold',
+/// A call's state in words; one the console does not know is shown as sent.
+String callStateLabel(AppLocalizations l, String state) => switch (state) {
+  'ringing' => l.monRinging,
+  'answered' => l.monTalking,
+  'held' => l.monOnHold,
+  _ => state,
 };
 
 /// Minutes and seconds (hours when there are any) from [since] to [now].
@@ -140,20 +156,29 @@ class _LiveCallsTable extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final now = ref.watch(clockProvider).value ?? DateTime.now();
     final actions = canControl || monitorModes.isNotEmpty;
+    // S9-15: which queue a call is in, by its name where the viewer may read
+    // the queues.
+    final queueNames = {
+      for (final q
+          in ref.watch(rowsProvider('queues')).asData?.value ?? const <Json>[])
+        '${q['id']}': '${q['label']}',
+    };
     return SingleChildScrollView(
       child: SingleChildScrollView(
         // The buttons make a row wider than a narrow window.
         scrollDirection: Axis.horizontal,
         child: DataTable(
           columns: [
-            const DataColumn(label: Text('From')),
-            const DataColumn(label: Text('To')),
-            const DataColumn(label: Text('State')),
-            const DataColumn(label: Text('Duration')),
-            const DataColumn(label: Text('Recording')),
-            if (actions) const DataColumn(label: Text('Actions')),
+            DataColumn(label: Text(l10n.monFrom)),
+            DataColumn(label: Text(l10n.monTo)),
+            DataColumn(label: Text(l10n.monQueue)),
+            DataColumn(label: Text(l10n.monState)),
+            DataColumn(label: Text(l10n.monDuration)),
+            DataColumn(label: Text(l10n.monRecording)),
+            if (actions) DataColumn(label: Text(l10n.monActions)),
           ],
           rows: [
             for (final row in rows)
@@ -162,12 +187,19 @@ class _LiveCallsTable extends ConsumerWidget {
                 cells: [
                   DataCell(Text(row.from.isEmpty ? '—' : row.from)),
                   DataCell(Text(row.to.isEmpty ? '—' : row.to)),
-                  DataCell(Text(_stateLabels[row.state] ?? row.state)),
+                  DataCell(
+                    Text(
+                      row.queueId == null
+                          ? '—'
+                          : queueNames[row.queueId] ?? row.queueId!,
+                    ),
+                  ),
+                  DataCell(Text(callStateLabel(l10n, row.state))),
                   // Talking time once answered; until then, how long it has rung.
                   DataCell(
                     Text(liveDuration(row.answeredAt ?? row.startedAt, now)),
                   ),
-                  DataCell(Text(recordingLabel(row.recordingState))),
+                  DataCell(Text(recordingLabel(l10n, row.recordingState))),
                   if (actions)
                     DataCell(
                       Row(
