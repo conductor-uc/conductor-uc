@@ -59,7 +59,7 @@ Every service:
 | `REQUIRE_HTTPS_FOR_PROVISIONING` | Default on: phone provisioning over plain HTTP gets a 403 (the file carries a SIP password). Development over `http://localhost` turns it off. |
 | `CONSOLE_DIR`, `CONSOLE_CONNECT_SOURCES` | Serve the built Flutter web console (`flutter build web --release --no-web-resources-cdn`) under a strict Content-Security-Policy; other origins the console may call (the object store) are listed in `CONSOLE_CONNECT_SOURCES`. Unknown extension-less paths get `index.html`. With the realtime hub on, the policy's `connect-src` also names `wss://` (or `ws://`) plus the host the page was requested on, since not every browser lets `'self'` cover WebSockets. |
 
-Responses carry `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy` and `Permissions-Policy`; API responses are `Cache-Control: no-store`. Route table entries added for certificates and provisioning: `/v1/platform/acme-settings`, `/v1/platform/certificates` (org), `/v1/public/provision`, `/v1/tenants/*/devices`, `/v1/tenants/*/sip-endpoint` (pbx). S5-15 adds the service key `call` (call-control, `CALL_CONTROL_URL`, now always required) with `/v1/tenants/*/calls` and `/v1/tenants/*/me/live-calls` (the recording buttons on live calls; `/me/calls` stays cdr-service's call history), and call-control to the platform health page.
+Responses carry `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy` and `Permissions-Policy`; API responses are `Cache-Control: no-store`. Route table entries added for certificates and provisioning: `/v1/platform/acme-settings`, `/v1/platform/certificates` (org), `/v1/platform/security-settings` (identity), `/v1/public/provision`, `/v1/tenants/*/devices`, `/v1/tenants/*/sip-endpoint` (pbx). S5-15 adds the service key `call` (call-control, `CALL_CONTROL_URL`, now always required) with `/v1/tenants/*/calls` and `/v1/tenants/*/me/live-calls` (the recording buttons on live calls; `/me/calls` stays cdr-service's call history), and call-control to the platform health page.
 
 ### Realtime hub (S5-08)
 
@@ -140,6 +140,7 @@ A `LiveCall` is one channel (leg): `callUuid`, `direction` (`inbound`: the leg c
 - `/v1/orgs/{orgId}/roles`, `/v1/orgs/{orgId}/grants`, `/v1/orgs/{orgId}/api-keys`
 - `GET /v1/orgs/{orgId}/audit-events`
 - `GET /.well-known/jwks.json`
+- `GET/PUT /v1/platform/security-settings` (`platform.observe`/`platform.operate`, master only): whether the master's own users must use two-step verification (D-012 as amended). Off on a fresh install; turning it off again takes a step-up code (G-100). Audited (`platform.security_settings.updated`)
 
 **Internal:** `POST /internal/v1/authz/check` (batch). Services normally evaluate authorization with the `@cuc/authz` library against the token's claims plus a cached grant set, and call this endpoint only for fine-grained grants that aren't in the token.
 

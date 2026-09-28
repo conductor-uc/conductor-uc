@@ -55,5 +55,5 @@ cat <<EOF
 
 Done. Sign in as $admin_email with DEV_ADMIN_PASSWORD from infra/compose/.env:
   POST http://localhost:${gateway_port:-8080}/v1/auth/login  {"orgId": "<master orgId above>", "email": ..., "password": ...}
-A master administrator must set up two-step verification (TOTP) at the first sign-in.
+Two-step verification is not required yet: turn it on under Security in the console once the platform is set up.
 EOF

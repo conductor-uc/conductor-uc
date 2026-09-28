@@ -125,9 +125,9 @@ describe.skipIf(skipReason !== undefined)('org resolved from the console hostnam
 
     it('the master console reaches only the master, not tenants or resellers', async () => {
       await make(MASTER, 'master', null);
-      expect((await login('console.platform.test', {})).json()).toMatchObject({
-        status: 'mfa_enrollment_required',
-      });
+      const master = await login('console.platform.test', {});
+      expect(orgOf(master.json<{ accessToken: string }>().accessToken)).toBe(MASTER);
+      await h.db.kysely.deleteFrom('sessions').execute();
       await h.db.kysely.deleteFrom('mfa_factors').execute();
       await h.db.kysely.deleteFrom('users').execute();
       await make(ACME_TENANT_A, 'tenant', ACME);

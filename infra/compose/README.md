@@ -154,10 +154,13 @@ curl -s localhost:8080/v1/auth/login -H 'content-type: application/json' \
   -d '{"orgId":"<orgId>","email":"admin@local.test","password":"dev-admin-password"}'
 ```
 
-A master administrator gets `"status":"mfa_enrollment_required"` with a TOTP
-secret: two-step verification is required for master and reseller
-administrators, and `POST /v1/auth/mfa/enroll/confirm` with the ticket and a
-code finishes the sign-in.
+On a fresh stack the master administrator gets tokens straight away: requiring
+two-step verification for the master's users is a platform setting that starts
+off (D-012 as amended), and is turned on under **Security** in the console once
+the platform is set up. From then on the answer is
+`"status":"mfa_enrollment_required"` with a TOTP secret, and
+`POST /v1/auth/mfa/enroll/confirm` with the ticket and a code finishes the
+sign-in. Reseller administrators always enrol.
 
 ## Troubleshooting
 

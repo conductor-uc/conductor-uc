@@ -79,7 +79,16 @@ describe.skipIf(skipReason !== undefined)('auth service', () => {
     await h.db.kysely.deleteFrom('mfa_factors').execute();
     await h.db.kysely.deleteFrom('users').execute();
     await h.db.kysely.deleteFrom('outbox').execute();
+    await h.db.kysely.deleteFrom('platform_security_settings').execute();
   });
+
+  /** The master's requirement is a platform setting, off on a fresh install (D-012 as amended). */
+  async function requireMasterMfa(on: boolean) {
+    await h.securitySettings.save(
+      { actorId: crypto.randomUUID(), orgId: crypto.randomUUID() },
+      { requireMasterMfa: on },
+    );
+  }
 
   describe('login without MFA (tenant users)', () => {
     it('issues tokens directly for a tenant user', async () => {
@@ -129,6 +138,10 @@ describe.skipIf(skipReason !== undefined)('auth service', () => {
   });
 
   describe('MFA is required for master and reseller users (07 §1)', () => {
+    beforeEach(async () => {
+      await requireMasterMfa(true);
+    });
+
     it('a master user without MFA cannot obtain an access token beyond enrollment — the acceptance criterion', async () => {
       const { org, email, password } = await createMasterUser(h);
 
@@ -237,6 +250,95 @@ describe.skipIf(skipReason !== undefined)('auth service', () => {
       await expect(
         h.auth.confirmMfaEnrollment(login.enrollmentTicket, '000000', TEST_META),
       ).rejects.toThrow(InvalidMfaCodeError);
+    });
+  });
+
+  describe("the master's requirement is a platform setting (D-012 as amended)", () => {
+    it('a fresh install signs a master user in with a password alone', async () => {
+      const { org, email, password } = await createMasterUser(h);
+
+      const result = await h.auth.login(org, email, password, TEST_META);
+
+      expect(result.status).toBe('ok');
+      if (result.status !== 'ok') throw new Error('unreachable');
+      const claims = await h.auth.verifyAccessTokenForTest(result.accessToken);
+      expect(claims).toMatchObject({ org, ot: 'master', amr: ['pwd'] });
+    });
+
+    it('still requires a reseller user to enrol while it is off', async () => {
+      const org = orgId();
+      const email = `${crypto.randomUUID()}@example.com`;
+      await h.users.create(
+        {},
+        {
+          orgId: org,
+          orgType: 'reseller',
+          resellerId: null,
+          email,
+          displayName: 'Reseller Admin',
+          password: 'correct horse battery staple',
+        },
+      );
+
+      const result = await h.auth.login(org, email, 'correct horse battery staple', TEST_META);
+
+      expect(result.status).toBe('mfa_enrollment_required');
+    });
+
+    it('still asks an enrolled master user for their code while it is off', async () => {
+      const { org, email, password } = await createMasterUser(h);
+      await requireMasterMfa(true);
+      const enroll = await h.auth.login(org, email, password, TEST_META);
+      if (enroll.status !== 'mfa_enrollment_required') throw new Error('unreachable');
+      await h.auth.confirmMfaEnrollment(
+        enroll.enrollmentTicket,
+        codeFor(enroll.totp.secret),
+        TEST_META,
+      );
+      await requireMasterMfa(false);
+
+      const login = await h.auth.login(org, email, password, TEST_META);
+
+      expect(login.status).toBe('mfa_verification_required');
+    });
+
+    it('turning it on stops an unenrolled session refreshing, and the next sign-in asks to enrol', async () => {
+      const { org, email, password } = await createMasterUser(h);
+      const login = await h.auth.login(org, email, password, TEST_META);
+      if (login.status !== 'ok') throw new Error('unreachable');
+
+      await requireMasterMfa(true);
+
+      await expect(h.auth.refresh(login.refreshToken, TEST_META)).rejects.toThrow(
+        InvalidRefreshTokenError,
+      );
+      const again = await h.auth.login(org, email, password, TEST_META);
+      expect(again.status).toBe('mfa_enrollment_required');
+    });
+
+    it('records who changed it in the audit trail', async () => {
+      const actorId = crypto.randomUUID();
+      const actorOrgId = crypto.randomUUID();
+
+      await h.securitySettings.save({ actorId, orgId: actorOrgId }, { requireMasterMfa: true });
+
+      const [row] = await h.db.kysely
+        .selectFrom('outbox')
+        .select('payload')
+        .where('type', '=', 'audit.event.recorded')
+        .execute();
+      const audit: unknown =
+        typeof row?.payload === 'string' ? JSON.parse(row.payload) : row?.payload;
+      expect(audit).toMatchObject({
+        actorId,
+        action: 'platform.security_settings.updated',
+        resource: 'require_master_mfa:on',
+        dataClass: 'config',
+      });
+      expect(await h.securitySettings.get()).toMatchObject({
+        requireMasterMfa: true,
+        updatedBy: actorId,
+      });
     });
   });
 

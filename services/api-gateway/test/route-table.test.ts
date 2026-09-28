@@ -135,6 +135,7 @@ describe('the default routing table', () => {
     ['/v1/tenants/t1/domain', SERVICES.org],
     ['/v1/session/brand', SERVICES.org],
     ['/v1/platform/acme-settings', SERVICES.org],
+    ['/v1/platform/security-settings', SERVICES.identity],
     ['/v1/platform/certificates', SERVICES.org],
     ['/v1/platform/network-settings', SERVICES.org],
     ['/v1/resellers/r1/certificates', SERVICES.org],

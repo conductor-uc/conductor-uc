@@ -16,6 +16,7 @@ import { createGrantRepo } from './repo/grant.repo.js';
 import { createMfaRepo } from './repo/mfa.repo.js';
 import { createRoleRepo } from './repo/role.repo.js';
 import { createSessionRepo } from './repo/session.repo.js';
+import { createSecuritySettingsRepo } from './repo/security-settings.repo.js';
 import { createTokenRepo } from './repo/token.repo.js';
 import { createSigningKeyRepo } from './repo/signing-key.repo.js';
 import { createSigningKeyRotator } from './signing-key-rotation.js';
@@ -33,6 +34,7 @@ import { registerLinkRoutes } from './routes/links.routes.js';
 import { registerPermissionsInternalRoutes } from './routes/permissions.routes.js';
 import { registerJwksRoute } from './routes/jwks.routes.js';
 import { registerRoleRoutes } from './routes/roles.routes.js';
+import { registerSecuritySettingsRoutes } from './routes/security-settings.routes.js';
 import { registerUserRoutes } from './routes/users.routes.js';
 import type { IdentityServiceDb } from './schema.js';
 
@@ -154,6 +156,7 @@ if (config.SIGNING_KEY_ROTATION_DAYS === 0) {
 }
 signingKeyRotator.start();
 
+const securitySettingsRepo = createSecuritySettingsRepo(db);
 const authService = createAuthService({
   users: userRepo,
   sessions: sessionRepo,
@@ -167,6 +170,7 @@ const authService = createAuthService({
   signingKeyOverlapDays: config.SIGNING_KEY_OVERLAP_DAYS,
   passwordResetTtlMinutes: config.PASSWORD_RESET_TTL_MINUTES,
   invitationTtlHours: config.INVITATION_TTL_HOURS,
+  securitySettings: securitySettingsRepo,
 });
 
 const orgClient = createOrgClient({
@@ -188,6 +192,7 @@ registerRoleRoutes(app, roleRepo, orgAccess, userRepo, permissionLookup);
 // G-100: sensitive actions are confirmed with the acting person's own code.
 const stepUp = createStepUp({ mfa: mfaRepo, kek });
 registerUserRoutes(app, userRepo, roleRepo, orgAccess, mfaRepo, stepUp);
+registerSecuritySettingsRoutes(app, securitySettingsRepo, stepUp);
 registerGrantRoutes(app, grantRepo, orgAccess, permissionLookup);
 registerPermissionsInternalRoutes(app, permissionLookup, config.INTERNAL_SERVICE_TOKEN);
 registerMeRoutes(app, roleRepo, grantRepo);

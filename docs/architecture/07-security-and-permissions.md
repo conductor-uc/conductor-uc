@@ -11,7 +11,7 @@
 | SIP endpoint | SIP digest against the tenant realm (OpenSIPs) | Tenant |
 | XMPP client | Via chat-service / identity-service | Tenant |
 
-MFA is **required** for master and reseller users. For tenant users it is configurable per tenant.
+MFA is **required** for reseller users. For master users it is a platform setting (D-012 as amended 2026-09-28): a fresh install does not require it, so the operator can configure the platform first, and a master administrator turns it on in the console (**Security**, `PUT /v1/platform/security-settings`). While it is off, a master user who has enrolled anyway is still asked for their code, and master users cannot take step-up actions (G-100) until they enrol. Turning it on sends unenrolled master users to enrolment at their next sign-in and stops their sessions refreshing; turning it off takes a step-up code. For tenant users it is configurable per tenant (O-17, not built).
 
 ## 2. Tokens
 

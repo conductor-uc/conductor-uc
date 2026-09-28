@@ -204,4 +204,15 @@ export interface IdentityServiceDb extends EventTables {
     accepted_at: Date | null;
     created_at: Date;
   };
+
+  /**
+   * The platform's sign-in policy (D-012 as amended): one row, `id = 1`, and
+   * no row means the defaults. See `repo/security-settings.repo.ts`.
+   */
+  platform_security_settings: {
+    id: number;
+    require_master_mfa: boolean;
+    updated_by: string | null;
+    updated_at: Date;
+  };
 }

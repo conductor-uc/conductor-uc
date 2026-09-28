@@ -615,6 +615,9 @@ class DemoPbx {
   /// Where the platform is reached from the internet, as the operator last saved it.
   String? _publicAddress;
 
+  /// Whether the platform's administrators must use two-step verification.
+  bool _requireMasterMfa = false;
+
   static String _recordType(String address) {
     if (RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(address)) return 'A';
     return address.contains(':') ? 'AAAA' : 'CNAME';
@@ -624,6 +627,39 @@ class DemoPbx {
   ResponseBody? _certificates(RequestOptions options) {
     final path = options.path;
     final method = options.method.toUpperCase();
+    if (path == '/v1/platform/security-settings') {
+      Map<String, dynamic> settings() => {
+        'requireMasterMfa': _requireMasterMfa,
+        'updatedAt': null,
+      };
+      if (method == 'GET') return _json(settings());
+      if (method == 'PUT') {
+        final body = _body(options);
+        final on = body['requireMasterMfa'] == true;
+        if (_requireMasterMfa && !on) {
+          // G-100 step-up, as for resetting someone's two-step verification:
+          // the demo accepts 123456.
+          final code = '${body['stepUpCode'] ?? ''}'.trim();
+          if (code.isEmpty) {
+            return _problem(
+              401,
+              'Enter the current code from your authenticator app to confirm.',
+              code: 'step_up_required',
+            );
+          }
+          if (code != '123456') {
+            return _problem(
+              401,
+              'That code is not right, or it was already used. Wait for the '
+              'next code and try again.',
+              code: 'step_up_invalid',
+            );
+          }
+        }
+        _requireMasterMfa = on;
+        return _json(settings());
+      }
+    }
     if (path == '/v1/platform/acme-settings') {
       if (method == 'GET') return _json(_acme);
       if (method == 'PUT') {

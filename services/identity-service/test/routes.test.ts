@@ -48,6 +48,7 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     await h.db.kysely.deleteFrom('role_assignments').execute();
     await h.db.kysely.deleteFrom('users').execute();
     await h.db.kysely.deleteFrom('outbox').execute();
+    await h.db.kysely.deleteFrom('platform_security_settings').execute();
     await h.db.kysely.deleteFrom('grants').execute();
     await h.db.kysely.deleteFrom('role_permissions').execute();
     await h.db.kysely.deleteFrom('roles').execute();
@@ -117,6 +118,10 @@ describe.skipIf(skipReason !== undefined)('identity-service HTTP routes', () => 
     it('a master user gets an enrollment ticket, not tokens, over HTTP too', async () => {
       const orgId = crypto.randomUUID();
       await createUserViaInternal(app, orgId, 'master');
+      await h.securitySettings.save(
+        { actorId: crypto.randomUUID(), orgId },
+        { requireMasterMfa: true },
+      );
 
       const response = await app.inject({
         method: 'POST',
