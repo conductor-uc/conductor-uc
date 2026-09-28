@@ -26,6 +26,8 @@ import type { VoicemailClient } from '../voicemail-client.js';
 import {
   AGENT_LOGIN_FEATURE_CODE,
   PICKUP_FEATURE_CODE,
+  NEUTRAL_HOLD_TONE,
+  withHoldMusicAction,
   buildPickupDialplanDocument,
   AGENT_LOGOUT_FEATURE_CODE,
   buildAgentStatusDialplanDocument,
@@ -1655,8 +1657,36 @@ export function registerFsRoutes(
     reply.type('text/xml');
     const target: RecordingTarget = { eligible: false, extensionIds: [] };
     const document = await resolveDialplan(body, nodeId, target);
-    return withRecording(document, target, body, nodeId);
+    return withRecording(await withHoldMusic(document), target, body, nodeId);
   });
+
+  /** S9-19: each tenant's hold music source, kept a short while (calls come in bursts). */
+  const holdMusicCache = new Map<string, { source: string; until: number }>();
+  const HOLD_MUSIC_TTL_MS = 30_000;
+
+  /** The tenant's hold music as FreeSWITCH plays it, or the neutral tone when it has none. */
+  async function holdMusicSource(tenantId: string): Promise<string> {
+    const cached = holdMusicCache.get(tenantId);
+    if (cached !== undefined && cached.until > Date.now()) return cached.source;
+    let source = NEUTRAL_HOLD_TONE;
+    try {
+      const assetId = await pbxConfigClient.holdMusic(tenantId);
+      if (assetId !== null) source = mohUrlFor(tenantId, assetId);
+    } catch (error) {
+      // The call goes on; its waiting callers hear the neutral tone.
+      logger.warn({ err: error, tenantId }, 'dialplan: hold music could not be looked up');
+    }
+    if (holdMusicCache.size > 10_000) holdMusicCache.clear();
+    holdMusicCache.set(tenantId, { source, until: Date.now() + HOLD_MUSIC_TTL_MS });
+    return source;
+  }
+
+  /** Adds `hold_music` to a document for a tenant's call ([withHoldMusicAction]). */
+  async function withHoldMusic(document: string): Promise<string> {
+    const tenantId = /data="cuc_tenant_id=([^"]*)"/.exec(document)?.[1];
+    if (tenantId === undefined || tenantId === '') return document;
+    return withHoldMusicAction(document, await holdMusicSource(tenantId));
+  }
 
   /** The dialplan document for one `/fs/dialplan` hunt. Fills in `rec` for calls that may be recorded. */
   async function resolveDialplan(

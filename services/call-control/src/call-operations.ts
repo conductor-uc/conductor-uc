@@ -142,8 +142,21 @@ const SHOWN_NUMBER = /^\+?[0-9]{1,32}$/;
  * {@link intoDialplan} sets.
  */
 const CONTEXT = 'public';
-/** How long a waiting party stays parked before FreeSWITCH lets them go, if nobody comes back. */
+/**
+ * S9-19 (G-125): how long a caller waits during an attended transfer before their call rings the
+ * person who put them on hold again.
+ */
 const HELD_TIMEOUT_SECONDS = 300;
+/**
+ * S9-19: what a waiting caller hears when their call has no `hold_music` (telephony-config
+ * exports the tenant's on every call it routes; this is its neutral tone).
+ */
+const NEUTRAL_HOLD_TONE = 'tone_stream://%(250,4750,440);loops=-1';
+
+/** The FreeSWITCH scheduler task that rings the transferrer back for [waiting]. */
+function ringBackTask(waiting: string): string {
+  return `cuc-ringback-${waiting}`;
+}
 /** How long a slot stays reserved while its call is moved into it. */
 const SLOT_RESERVATION_MS = 15_000;
 /** The registry field on the person's leg naming the party waiting during a consultation. */
@@ -516,6 +529,15 @@ export function createCallOperations(options: CallOperationsOptions): CallOperat
       }));
   }
 
+  /** Forgets the ring-back of a waiting caller once they are joined to someone (S9-19). */
+  async function cancelRingBack(esl: OperationsEsl, waiting: string): Promise<void> {
+    try {
+      await esl.sendApi(`sched_del ${ringBackTask(waiting)}`);
+    } catch (error) {
+      logger.warn({ err: error }, 'call operations: the ring-back could not be cancelled');
+    }
+  }
+
   /** The caller's leg a ringing leg was placed for: taking it over stops the ringing. */
   async function callerOf(esl: OperationsEsl, ringing: Leg): Promise<string | undefined> {
     for (const name of ['originating_leg_uuid', 'call_uuid']) {
@@ -729,13 +751,31 @@ export function createCallOperations(options: CallOperationsOptions): CallOperat
       const esl = eslFor(leg.node);
       if (waiting.node !== leg.node) throw unavailable(NOTHING_DONE, 'media_unavailable');
       await audit(command, 'call.transfer.consult', `call:${waiting.uuid}`, `to ${to}`);
-      // The person's leg stays up when the bridge ends, and the waiting party is parked (silent)
-      // until joined to someone, or let go after a while if nobody comes back.
+      // The person's leg stays up when the bridge ends. The waiting party hears the tenant's hold
+      // music (S9-19) until joined to someone; after HELD_TIMEOUT_SECONDS their call rings the
+      // person again, through the dialplan as the tenant's own call, instead of being dropped.
+      // The node's own scheduler does it, so it happens whatever becomes of this service.
       await run(esl, `uuid_setvar ${leg.uuid} park_after_bridge true`);
       await registry.updateCall(leg.uuid, { [HELD_FIELD]: waiting.uuid });
+      let music: EslApiResult | undefined;
+      try {
+        music = await esl.sendApi(`uuid_getvar ${waiting.uuid} hold_music`);
+      } catch {
+        music = undefined;
+      }
+      if (music === undefined || variableValue(music) === undefined) {
+        await run(esl, `uuid_setvar ${waiting.uuid} hold_music ${NEUTRAL_HOLD_TONE}`);
+      }
       await run(
         esl,
-        `uuid_transfer ${waiting.uuid} set:park_timeout=${String(HELD_TIMEOUT_SECONDS)},park inline`,
+        `uuid_setvar_multi ${waiting.uuid} sip_h_X-Call-Direction=internal;sip_h_X-Tenant-Id=${command.tenantId}`,
+      );
+      // `${hold_music}` is expanded when it plays, not here: a tone's commas would split the inline
+      // dialplan.
+      await run(esl, `uuid_transfer ${waiting.uuid} endless_playback:\${hold_music} inline`);
+      await run(
+        esl,
+        `sched_api +${String(HELD_TIMEOUT_SECONDS)} ${ringBackTask(waiting.uuid)} uuid_transfer ${waiting.uuid} ${own} XML ${CONTEXT}`,
       );
       await intoDialplan(esl, command.tenantId, leg.uuid, to, own);
       return { result: 'consulting', heldCallUuid: waiting.uuid };
@@ -766,6 +806,7 @@ export function createCallOperations(options: CallOperationsOptions): CallOperat
         `to ${consulted.uuid}`,
       );
       await run(esl, `uuid_bridge ${waiting.uuid} ${consulted.uuid}`);
+      await cancelRingBack(esl, waiting.uuid);
       await run(esl, `uuid_kill ${leg.uuid} NORMAL_CLEARING`).catch(() => undefined);
       return { result: 'transferred' };
     },
@@ -782,6 +823,7 @@ export function createCallOperations(options: CallOperationsOptions): CallOperat
       await audit(command, 'call.transfer.cancel', `call:${waiting.uuid}`);
       // Joining the person back to the waiting party ends the consultation leg.
       await run(esl, `uuid_bridge ${leg.uuid} ${waiting.uuid}`);
+      await cancelRingBack(esl, waiting.uuid);
       await run(esl, `uuid_setvar ${leg.uuid} park_after_bridge false`);
       await registry.updateCall(leg.uuid, { [HELD_FIELD]: '' });
       return { result: 'resumed' };

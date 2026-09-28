@@ -494,7 +494,13 @@ describe.skipIf(skipReason !== undefined)(
         expect(commands()).toEqual([
           '<audit>',
           `uuid_setvar ${phone} park_after_bridge true`,
-          `uuid_transfer ${caller} set:park_timeout=300,park inline`,
+          // S9-19: the caller hears hold music (a tone when the call has none), and after five
+          // minutes rings 201 again instead of being dropped.
+          `uuid_getvar ${caller} hold_music`,
+          `uuid_setvar ${caller} hold_music tone_stream://%(250,4750,440);loops=-1`,
+          `uuid_setvar_multi ${caller} sip_h_X-Call-Direction=internal;sip_h_X-Tenant-Id=${tenantId}`,
+          `uuid_transfer ${caller} endless_playback:\${hold_music} inline`,
+          `sched_api +300 cuc-ringback-${caller} uuid_transfer ${caller} 201 XML public`,
           `uuid_setvar_multi ${phone} sip_h_X-Call-Direction=internal;sip_h_X-Tenant-Id=${tenantId};sip_from_user=201;effective_caller_id_number=201;effective_caller_id_name=201`,
           `uuid_transfer ${phone} 102 XML public`,
         ]);
@@ -543,6 +549,7 @@ describe.skipIf(skipReason !== undefined)(
         expect(commands()).toEqual([
           '<audit>',
           `uuid_bridge ${caller} ${colleague}`,
+          `sched_del cuc-ringback-${caller}`,
           `uuid_kill ${phone} NORMAL_CLEARING`,
         ]);
       });
@@ -570,6 +577,7 @@ describe.skipIf(skipReason !== undefined)(
         expect(commands()).toEqual([
           '<audit>',
           `uuid_bridge ${phone} ${caller}`,
+          `sched_del cuc-ringback-${caller}`,
           `uuid_setvar ${phone} park_after_bridge false`,
         ]);
         expect((await registry.getCall(phone))?.['consultHeld']).toBe('');

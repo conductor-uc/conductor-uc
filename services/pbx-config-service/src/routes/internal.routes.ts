@@ -260,6 +260,32 @@ export function registerInternalRoutes(
   );
 
   /**
+   * `GET /internal/v1/tenants/:tenantId/hold-music` (S9-19, G-125): which of the tenant's media is
+   * its hold music (its most recently changed ready `moh` asset), for telephony-config to play to
+   * callers who wait; null when it has none.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/hold-music',
+    {
+      config: { public: true },
+      schema: {
+        params: Type.Object({ tenantId: Type.String({ minLength: 1 }) }),
+        response: { 200: Type.Object({ mediaAssetId: Type.Union([Type.String(), Type.Null()]) }) },
+      },
+    },
+    async (request) => {
+      const presented = bearerToken(request.headers.authorization);
+      if (presented === undefined || !secretEquals(internalServiceToken, presented)) {
+        throw ProblemError.unauthorized('A valid internal service token is required.', {
+          code: 'internal_token_invalid',
+        });
+      }
+      const asset = await mediaAssets.holdMusic({ tenantId: request.params.tenantId });
+      return { mediaAssetId: asset?.id ?? null };
+    },
+  );
+
+  /**
    * `GET /internal/v1/tenants/:tenantId/media-assets/:id` (S2-07) — what the
    * transcode worker calls after `pbx.media_asset.finalize_requested` fires,
    * to learn the raw upload's own `objectKey`/`contentType` (the event

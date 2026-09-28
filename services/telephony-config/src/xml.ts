@@ -1371,6 +1371,27 @@ export function buildAgentStatusDialplanDocument(
  * not one. Fixed here; G-48 still covers the longer `lotname/ext/timeout/
  * return-ext` return-on-timeout form, not attempted.
  */
+/**
+ * S9-19 (G-125): what a caller hears while they wait (parked, or held during an attended
+ * transfer) when the tenant has no hold music of its own: a short, soft beep every five seconds,
+ * so they know they are still connected. Never silence, which sounds like a dropped call.
+ */
+export const NEUTRAL_HOLD_TONE = 'tone_stream://%(250,4750,440);loops=-1';
+
+/**
+ * S9-19: exports `hold_music` (the tenant's, or [NEUTRAL_HOLD_TONE]) on the call, right after the
+ * tenant id every document for a tenant's call exports ({@link tenantIdAction}). FreeSWITCH plays
+ * it to whoever a phone puts on hold, a parked call ([buildParkDialplanDocument]) and a caller
+ * waiting during an attended transfer (call-control). A document with no tenant is unchanged.
+ */
+export function withHoldMusicAction(document: string, source: string): string {
+  const tenantExport = /(<action application="export" data="cuc_tenant_id=[^"]*"\/>)/;
+  return document.replace(
+    tenantExport,
+    `$1\n          <action application="export" data="${escapeXml(`hold_music=${source}`)}"/>`,
+  );
+}
+
 export function buildParkDialplanDocument(
   callerContext: string,
   destinationNumber: string,
@@ -1395,7 +1416,9 @@ export function buildParkDialplanDocument(
     // own documented sentinel for a synthetic, always-resolvable stream
     // (no real audio file dependency, matching this platform's existing
     // caution about unconfirmed sound-file paths elsewhere, e.g. G-50).
-    '          <action application="set" data="valet_hold_music=silence"/>\n' +
+    // S9-19: the tenant's hold music (or the neutral tone), exported on the
+    // call as `hold_music` just above ([withHoldMusicAction]).
+    '          <action application="set" data="valet_hold_music=${hold_music}"/>\n' +
     `          <action application="valet_park" data="${escapeXml(`${lotName} ${String(slotNumber)}`)}"/>\n` +
     '        </condition>\n' +
     '      </extension>\n' +

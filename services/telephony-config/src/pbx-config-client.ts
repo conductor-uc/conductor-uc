@@ -179,6 +179,8 @@ export interface PbxConfigClient {
     tenantId: string,
     locationId: string,
   ): Promise<EmergencyLocationConfig | undefined>;
+  /** S9-19: the id of the tenant's hold music (a ready `moh` asset), or null when it has none. */
+  holdMusic(tenantId: string): Promise<string | null>;
   /** Undefined when the asset does not exist in that tenant (a 404). */
   findMediaAsset(tenantId: string, id: string): Promise<MediaAssetConfig | undefined>;
   /** Undefined when the ring group does not exist in that tenant (a 404). */
@@ -248,6 +250,28 @@ export function createPbxConfigClient(options: PbxConfigClientOptions): PbxConfi
       }
 
       return (await response.json()) as DigestCredential;
+    },
+
+    async holdMusic(tenantId: string): Promise<string | null> {
+      let response: Response;
+      try {
+        response = await fetchImpl(
+          `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/hold-music`,
+          { headers: { authorization: `Bearer ${options.internalServiceToken}` } },
+        );
+      } catch (error) {
+        throw new PbxConfigClientError(
+          `Could not reach pbx-config-service: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      if (!response.ok) {
+        throw new PbxConfigClientError(
+          `pbx-config-service rejected the hold music lookup (${String(response.status)}): ` +
+            (await responseDetail(response)),
+        );
+      }
+      const body = (await response.json()) as { mediaAssetId?: unknown };
+      return typeof body.mediaAssetId === 'string' ? body.mediaAssetId : null;
     },
 
     async findDid(tenantId: string, didId: string): Promise<DidConfig | undefined> {

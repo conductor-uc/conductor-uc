@@ -369,6 +369,11 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
         (leg, all) => leg.callUuid === ownLeg.callUuid && talksTo(leg, all, '803'),
       );
 
+      // S9-19: 801 hears the tenant's hold music (this tenant has none: the neutral tone), and a
+      // ring-back to 802 is scheduled on the node for five minutes from now.
+      expect(await fsCliAll(`uuid_getvar ${callerLeg} hold_music`)).toContain('tone_stream://');
+      expect(await fsCliAll('show tasks')).toContain(`cuc-ringback-${callerLeg}`);
+
       const done = await act(`me/live-calls/${ownLeg.callUuid}/transfer/complete`);
       expect(done.status, JSON.stringify(done.json)).toBe(200);
       const joined = await waitForLeg(
@@ -376,6 +381,11 @@ describe.skipIf(skipReason !== undefined)('S9-12 moving live calls (live SIPp)',
         (leg, all) => leg.callUuid === callerLeg && talksTo(leg, all, '803'),
       );
       expect(joined.state).toBe('answered');
+      expect((await person.result()).successfulCalls).toBe(1);
+      // Joined: the ring-back is gone (the scheduler drops a deleted task on its next tick).
+      await expect
+        .poll(() => fsCliAll('show tasks'), { timeout: 5_000 })
+        .not.toContain(`cuc-ringback-${callerLeg}`);
       expect((await person.result()).successfulCalls).toBe(1);
 
       await fsCli(`uuid_kill ${callerLeg}`);
