@@ -109,11 +109,7 @@ void main() {
   group('tenants', () {
     testWidgets('a reseller creates a tenant', (tester) async {
       await signInAs(tester, 'reseller@example.test');
-      await tester.tap(find.text('New tenant'));
-      await tester.pumpAndSettle();
-      await fillNewOrg(tester, slug: 'summit', name: 'Summit Dental');
-      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-      await tester.pumpAndSettle();
+      await createTenantWithWizard(tester, name: 'Summit Dental');
       expect(find.text('Summit Dental'), findsOneWidget);
     });
 

@@ -20,6 +20,7 @@ import '../features/myphone/my_phone_api.dart';
 import '../features/myphone/my_phone_pages.dart';
 import '../features/myphone/my_home.dart';
 import '../features/orgs/domains_panel.dart';
+import '../features/orgs/new_tenant_page.dart';
 import '../features/orgs/reseller_page.dart';
 import '../features/trunks/outbound_routes_page.dart';
 import '../features/trunks/trunks_page.dart';
@@ -175,6 +176,18 @@ final routerProvider = Provider<GoRouter>((ref) {
                 MainNumberPage(numberId: state.uri.queryParameters['number']),
           ),
           // S9-07: adding or changing a person is a page of its own.
+          // S9-16: setting up a new customer.
+          GoRoute(
+            path: '/tenants/new',
+            builder: (context, state) => NewTenantPage(
+              resellerId: ref.read(sessionProvider)?.orgId ?? '',
+            ),
+          ),
+          GoRoute(
+            path: '/resellers/:id/new-tenant',
+            builder: (context, state) =>
+                NewTenantPage(resellerId: state.pathParameters['id']!),
+          ),
           GoRoute(
             path: '/people/new',
             builder: (context, state) => const PersonEditorPage(),

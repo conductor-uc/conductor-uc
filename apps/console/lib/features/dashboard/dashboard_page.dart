@@ -5,12 +5,13 @@ import 'package:go_router/go_router.dart';
 import '../../core/acting.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
-import '../../widgets/page.dart';
+import '../../l10n/l10n.dart';
 import '../orgs/orgs_api.dart';
 import '../pbx/pbx_api.dart';
 import '../platform/operations_api.dart';
 import '../shell/sections.dart';
 import '../users/users_api.dart';
+import 'org_home.dart';
 import 'tenant_home.dart';
 
 /// One figure on the dashboard, and where it leads.
@@ -171,24 +172,16 @@ class DashboardPage extends ConsumerWidget {
       );
     }
 
-    return PageFrame(
-      children: [
-        PageHeader(
-          title: 'Dashboard',
-          subtitle: acting == null
-              ? null
-              : "What is set up for ${acting.name}.",
-        ),
-        const SizedBox(height: 16),
-        if (tiles.isEmpty)
-          const Text('Nothing to show here for your role yet.')
-        else
-          Wrap(
-            spacing: 16,
-            runSpacing: 16,
-            children: [for (final t in tiles) _TileCard(tile: t)],
-          ),
-      ],
+    // S9-16: a reseller's or the master's home says what needs them too.
+    return OrgHome(
+      visible: visible,
+      glance: tiles.isEmpty
+          ? Text(context.l10n.dashNothingYet)
+          : Wrap(
+              spacing: 16,
+              runSpacing: 16,
+              children: [for (final t in tiles) _TileCard(tile: t)],
+            ),
     );
   }
 }
