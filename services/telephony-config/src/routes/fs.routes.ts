@@ -37,6 +37,7 @@ import {
   buildDialplanDocument,
   buildDirectoryDocument,
   buildEmergencyDialplanDocument,
+  buildAffinityHairpinDocument,
   buildFlowDialplanDocument,
   buildOutboundDialplanDocument,
   buildParkDialplanDocument,
@@ -50,9 +51,11 @@ import {
   FEATURE_CODE_REFUSED_TONE,
   featureCodeListenLegs,
   FORWARD_HOPS_HEADER,
+  HAIRPIN_ARRIVAL_ACTION,
   injectDialplanActions,
   MAX_FORWARD_HOPS,
   NOT_FOUND_DOCUMENT,
+  parseAffinityTarget,
   RECORDING_REFUSAL_CAUSE,
   RECORDING_REFUSAL_TONE,
   RECORDING_UNAVAILABLE_ACTION,
@@ -60,6 +63,7 @@ import {
   recordingControlsFor,
   recordingFeatureCodeActions,
   recordingSpoolPath,
+  type AffinityTarget,
   type CallcenterAgentEntry,
   type CallcenterQueueEntry,
   type CallHandlingPlan,
@@ -363,6 +367,12 @@ export function registerFsRoutes(
    * turns recording off entirely, which is what tests that never exercise it get.
    */
   recording: RecordingWiring | null = null,
+  /**
+   * S4-05: a media node's SIP address by its id (the OpenSIPs dispatcher projection), for a call
+   * hairpinned to the node holding a lease. Without it (tests that never need one) a resource
+   * leased elsewhere is a miss.
+   */
+  nodeSipUri: ((nodeId: string) => Promise<string | undefined>) | null = null,
 ): void {
   // mod_xml_curl posts `application/x-www-form-urlencoded` (verified live
   // against a real FS node) — Fastify parses JSON and text/plain out of the
@@ -1043,7 +1053,7 @@ export function registerFsRoutes(
   /**
    * `*8` (S9-18, G-125): call-control names the caller's leg of the oldest call ringing within the
    * dialing extension's pickup groups; the dialplan intercepts it. A call on another node cannot
-   * be intercepted from this one (as with a queue or a parking lot until S4-05), and nothing
+   * be intercepted from this one (S4-05 hairpins queues, lots and rooms, not ringing calls), and nothing
    * ringing, or call-control out of reach, is a miss: the phone hears the usual failure.
    */
   async function handlePickup(
@@ -1064,7 +1074,7 @@ export function registerFsRoutes(
     if (nodeId !== undefined && nodeId !== '' && target.nodeId !== nodeId) {
       logger.warn(
         { tenantId, nodeId, ringingOn: target.nodeId },
-        'dialplan: the call to pick up is on another node; cross-node pickup is S4-05’s concern',
+        'dialplan: the call to pick up is on another node; it cannot be intercepted from here',
       );
       return NOT_FOUND_DOCUMENT;
     }
@@ -1099,20 +1109,147 @@ export function registerFsRoutes(
   }
 
   /**
+   * S4-05 (04 §3.3): the call wants a resource leased to another node, so it goes back through
+   * OpenSIPs to that node ({@link buildAffinityHairpinDocument}). Only a call that has not already
+   * been hairpinned once is sent (`arrived`): a node that is sent a call for a resource it no
+   * longer holds does not pass it on again, so a call is never bounced between nodes; it misses,
+   * as any call does when its resource cannot be served. This node records nothing for the call:
+   * the owning node decides the recording.
+   */
+  async function hairpin(
+    rec: RecordingTarget,
+    tenantId: string,
+    callerContext: string,
+    destinationNumber: string,
+    nodeId: string,
+    ownerNodeId: string,
+    target: AffinityTarget,
+    arrived: boolean,
+  ): Promise<string> {
+    const log = { tenantId, kind: target.kind, resourceId: target.id, nodeId, ownerNodeId };
+    if (arrived) {
+      logger.warn(log, 'dialplan: hairpinned here, but the resource is leased to another node');
+      return NOT_FOUND_DOCUMENT;
+    }
+    let ownerUri: string | undefined;
+    try {
+      ownerUri = nodeSipUri === null ? undefined : await nodeSipUri(ownerNodeId);
+    } catch (error) {
+      logger.error({ ...log, err: error }, 'dialplan: could not look up the owning node');
+      return NOT_FOUND_DOCUMENT;
+    }
+    if (ownerUri === undefined) {
+      logger.warn(log, 'dialplan: the node holding the lease has no dispatcher address');
+      return NOT_FOUND_DOCUMENT;
+    }
+    const domain = await readModel.findDomain(db.kysely, tenantId);
+    if (domain === undefined) {
+      logger.warn({ tenantId }, 'dialplan: tenant has no projected domain');
+      return NOT_FOUND_DOCUMENT;
+    }
+    rec.eligible = false;
+    logger.info({ ...log, ownerUri }, 'dialplan: hairpinning to the node holding the lease');
+    return buildAffinityHairpinDocument(
+      callerContext,
+      destinationNumber,
+      domain.fqdn,
+      opensipsSipUri,
+      tenantId,
+      ownerUri,
+      target,
+    );
+  }
+
+  /**
+   * S4-05: serves a call another node hairpinned here ({@link hairpin}). The headers are trusted
+   * because only OpenSIPs reaches a media node, and OpenSIPs strips `X-Affinity-*` from every
+   * source but a media node. The resource is acquired again, as on any call: if this node still
+   * holds it (the usual case), the call is served here; if not, it misses rather than moving on.
+   * A queue call is decided for recording here, as the flow runner's hand-off already expects.
+   */
+  async function handleAffinityArrival(
+    tenantId: string | undefined,
+    /** The flow runner is already recording the call on the node it came from. */
+    recorded: boolean,
+    value: string,
+    callerContext: string,
+    destinationNumber: string,
+    nodeId: string | undefined,
+    rec: RecordingTarget,
+  ): Promise<string> {
+    const target = parseAffinityTarget(value);
+    if (target === undefined || tenantId === undefined || tenantId === '') {
+      logger.warn({ value, tenantId }, 'dialplan: malformed hairpinned call');
+      return NOT_FOUND_DOCUMENT;
+    }
+    switch (target.kind) {
+      case 'queue': {
+        const queue = await readModel.findQueueById(target.id);
+        const domain = await readModel.findDomain(db.kysely, tenantId);
+        if (queue === undefined || queue.tenantId !== tenantId || domain === undefined) {
+          return NOT_FOUND_DOCUMENT;
+        }
+        Object.assign(rec, {
+          eligible: !recorded,
+          tenantId,
+          direction: 'inbound',
+          queueId: target.id,
+          ...(target.didId === undefined ? {} : { didId: target.didId }),
+        });
+        return handleQueueDial(
+          rec,
+          tenantId,
+          target.id,
+          callerContext,
+          destinationNumber,
+          domain.fqdn,
+          nodeId,
+          target.didId,
+          true,
+        );
+      }
+      case 'park': {
+        const lot = await readModel.findParkingLotBySlot(tenantId, target.slot);
+        if (lot?.id !== target.id) return NOT_FOUND_DOCUMENT;
+        return handleParkDial(
+          rec,
+          tenantId,
+          lot,
+          target.slot,
+          callerContext,
+          destinationNumber,
+          nodeId,
+          true,
+        );
+      }
+      case 'conf': {
+        const room = await readModel.findConferenceRoomById(target.id);
+        if (room === undefined || room.tenantId !== tenantId) return NOT_FOUND_DOCUMENT;
+        return handleConferenceDial(
+          rec,
+          tenantId,
+          room,
+          callerContext,
+          destinationNumber,
+          nodeId,
+          true,
+        );
+      }
+    }
+  }
+
+  /**
    * `/fs/dialplan`'s from-trunk `queue` branch (S2-13; G-25). Unlike
    * `extension`/`ring_group` above, a queue must be *leased* to the node
    * handling this call before `mod_callcenter` has anything loaded for it —
    * `nodeId` (the requesting FS node's own `cuc_node_id`, carried as a query
    * param on the `/fs/dialplan` xml_curl binding, `xml_curl.conf.xml`) is
    * what lets this acquire that lease synchronously, onto the same node,
-   * before handing the call to `callcenter`. If the queue turns out to be
-   * leased to a *different* node, this is an honest miss today rather than a
-   * guess: real cross-node redirection for a DID-mapped pinned resource is
-   * OpenSIPs' own `cachedb_redis` read (04 §3.3), not built until S4-05, and
-   * with one FS node in the dev stack (S2-19 adds the second) this branch
-   * should never actually observe it.
+   * before handing the call to `callcenter`. A queue leased to a different
+   * node is hairpinned there (S4-05, {@link hairpin}).
    */
   async function handleQueueDial(
+    rec: RecordingTarget,
     tenantId: string,
     queueId: string,
     callerContext: string,
@@ -1121,6 +1258,8 @@ export function registerFsRoutes(
     nodeId: string | undefined,
     /** S5-14: the DID the call came in on, for an agent-scoped recording decision at answer. */
     didId?: string,
+    /** S4-05: the call was hairpinned here for this queue. */
+    arrived = false,
   ): Promise<string> {
     if (nodeId === undefined || nodeId === '') {
       logger.warn({ tenantId, queueId }, 'dialplan: queue DID hit with no requesting nodeId');
@@ -1147,11 +1286,16 @@ export function registerFsRoutes(
     }
 
     if (acquired.nodeId !== nodeId) {
-      logger.warn(
-        { tenantId, queueId, nodeId, leasedTo: acquired.nodeId },
-        'dialplan: queue is leased to a different node; cross-node routing is S4-05’s concern, not this one’s',
+      return hairpin(
+        rec,
+        tenantId,
+        callerContext,
+        destinationNumber,
+        nodeId,
+        acquired.nodeId,
+        { kind: 'queue', id: queueId, ...(didId === undefined ? {} : { didId }) },
+        arrived,
       );
-      return NOT_FOUND_DOCUMENT;
     }
 
     return buildQueueDialplanDocument(
@@ -1173,12 +1317,14 @@ export function registerFsRoutes(
    * (`AffinityManager`'s own default) is what runs.
    */
   async function handleParkDial(
+    rec: RecordingTarget,
     tenantId: string,
     lot: NonNullable<Awaited<ReturnType<typeof readModel.findParkingLotBySlot>>>,
     slotNumber: number,
     callerContext: string,
     destinationNumber: string,
     nodeId: string | undefined,
+    arrived = false,
   ): Promise<string> {
     if (nodeId === undefined || nodeId === '') {
       logger.warn({ tenantId, lotId: lot.id }, 'dialplan: park dial with no requesting nodeId');
@@ -1205,11 +1351,16 @@ export function registerFsRoutes(
     }
 
     if (acquired.nodeId !== nodeId) {
-      logger.warn(
-        { tenantId, lotId: lot.id, nodeId, leasedTo: acquired.nodeId },
-        'dialplan: parking lot is leased to a different node; cross-node routing is S4-05’s concern, not this one’s',
+      return hairpin(
+        rec,
+        tenantId,
+        callerContext,
+        destinationNumber,
+        nodeId,
+        acquired.nodeId,
+        { kind: 'park', id: lot.id, slot: slotNumber },
+        arrived,
       );
-      return NOT_FOUND_DOCUMENT;
     }
 
     return buildParkDialplanDocument(
@@ -1230,11 +1381,13 @@ export function registerFsRoutes(
    * default (`xml_flush_cache`) is what runs, the same as parking.
    */
   async function handleConferenceDial(
+    rec: RecordingTarget,
     tenantId: string,
     room: NonNullable<Awaited<ReturnType<typeof readModel.findConferenceRoomByNumber>>>,
     callerContext: string,
     destinationNumber: string,
     nodeId: string | undefined,
+    arrived = false,
   ): Promise<string> {
     if (nodeId === undefined || nodeId === '') {
       logger.warn(
@@ -1264,11 +1417,16 @@ export function registerFsRoutes(
     }
 
     if (acquired.nodeId !== nodeId) {
-      logger.warn(
-        { tenantId, roomId: room.id, nodeId, leasedTo: acquired.nodeId },
-        'dialplan: conference room is leased to a different node; cross-node routing is S4-05’s concern, not this one’s',
+      return hairpin(
+        rec,
+        tenantId,
+        callerContext,
+        destinationNumber,
+        nodeId,
+        acquired.nodeId,
+        { kind: 'conf', id: room.id },
+        arrived,
       );
-      return NOT_FOUND_DOCUMENT;
     }
 
     return buildConferenceDialplanDocument(
@@ -1713,6 +1871,23 @@ export function registerFsRoutes(
       return NOT_FOUND_DOCUMENT;
     }
 
+    // S4-05: a call another node hairpinned here for a resource this node holds.
+    const affinityTarget = body['variable_sip_h_X-Affinity-Target'];
+    if (affinityTarget !== undefined && affinityTarget !== '') {
+      const served = await handleAffinityArrival(
+        body['variable_sip_h_X-Affinity-Tenant'],
+        body['variable_sip_h_X-Affinity-Recorded'] === '1',
+        affinityTarget,
+        callerContext,
+        destinationNumber,
+        nodeId,
+        rec,
+      );
+      return served === NOT_FOUND_DOCUMENT
+        ? served
+        : injectDialplanActions(served, [HAIRPIN_ARRIVAL_ACTION]);
+    }
+
     if (callDirection === 'internal') {
       const tenantId = body['variable_sip_h_X-Tenant-Id'];
       if (tenantId === undefined || tenantId === '') return NOT_FOUND_DOCUMENT;
@@ -1775,7 +1950,14 @@ export function registerFsRoutes(
         // collision, not a rejection at provisioning time.
         const room = await readModel.findConferenceRoomByNumber(tenantId, destinationNumber);
         if (room !== undefined) {
-          return handleConferenceDial(tenantId, room, callerContext, destinationNumber, nodeId);
+          return handleConferenceDial(
+            rec,
+            tenantId,
+            room,
+            callerContext,
+            destinationNumber,
+            nodeId,
+          );
         }
 
         // S2-14: a known extension always wins a coincidental collision
@@ -1788,6 +1970,7 @@ export function registerFsRoutes(
           const lot = await readModel.findParkingLotBySlot(tenantId, slotNumber);
           if (lot !== undefined) {
             return handleParkDial(
+              rec,
               tenantId,
               lot,
               slotNumber,
@@ -2059,6 +2242,7 @@ export function registerFsRoutes(
           queueId: did.destinationId,
         });
         return handleQueueDial(
+          rec,
           trunk.tenantId,
           did.destinationId,
           callerContext,
@@ -2078,7 +2262,14 @@ export function registerFsRoutes(
           );
           return NOT_FOUND_DOCUMENT;
         }
-        return handleConferenceDial(trunk.tenantId, room, callerContext, destinationNumber, nodeId);
+        return handleConferenceDial(
+          rec,
+          trunk.tenantId,
+          room,
+          callerContext,
+          destinationNumber,
+          nodeId,
+        );
       }
 
       // did.destinationType === 'ring_group' (S2-08).
@@ -2353,7 +2544,7 @@ export function registerFsRoutes(
    * calling node (the same `handleQueueDial` reasoning — a call already
    * running on this node should claim an unleased queue locally rather than
    * being load-balanced elsewhere). The runner uses `isLocal` to decide
-   * whether to run `callcenter` itself or hairpin to `nodeId`.
+   * whether to run `callcenter` itself or hairpin to `nodeId`, at `nodeUri` (S4-05).
    */
   app.get(
     '/fs/flow/:tenantId/queue/:queueId',
@@ -2405,10 +2596,23 @@ export function registerFsRoutes(
       const recordingInstruction = isLocal
         ? await flowRecordingFor(tenantId, request.query, { extensionIds: [], queueId })
         : undefined;
+      // S4-05: where the runner hairpins a call for a queue leased elsewhere.
+      let nodeUri: string | undefined;
+      if (!isLocal && nodeSipUri !== null) {
+        try {
+          nodeUri = await nodeSipUri(acquired.nodeId);
+        } catch (error) {
+          logger.error(
+            { err: error, tenantId, queueId, ownerNodeId: acquired.nodeId },
+            'flow: could not look up the node holding the queue',
+          );
+        }
+      }
       return {
         queueName: callcenterName(queueId, domain.fqdn),
         nodeId: acquired.nodeId,
         isLocal,
+        ...(nodeUri === undefined ? {} : { nodeUri }),
         ...(recordingInstruction === undefined ? {} : { recording: recordingInstruction }),
       };
     },

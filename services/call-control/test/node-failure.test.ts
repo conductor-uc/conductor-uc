@@ -147,4 +147,17 @@ describe.skipIf(skipReason !== undefined)('when a media node dies (S4-04)', () =
       .execute();
     expect(lost).toHaveLength(1);
   });
+  it('handles a node that comes back and dies again at once, not when the first claim lapses', async () => {
+    const node = `fs-twice-${crypto.randomUUID().slice(0, 6)}`;
+    await h.registry.heartbeat(node, 1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await watcher().runOnce()).toContain(node);
+
+    // It restarts, heartbeats, and dies again well within the 60 s claim.
+    await h.registry.heartbeat(node, 1);
+    await call(node, crypto.randomUUID(), null);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await watcher('replica-b').runOnce()).toContain(node);
+    expect(handedOver.filter((id) => id === node)).toHaveLength(2);
+  });
 });

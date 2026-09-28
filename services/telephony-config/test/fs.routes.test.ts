@@ -10,6 +10,8 @@ import { resetSchema, startHarness, type Harness } from './harness.js';
 const skipReason = (await databaseOrSkipReason()) ?? (await redisOrSkipReason());
 const TOKEN = 'test-fs-xml-curl-token';
 const BASIC_AUTH = `Basic ${Buffer.from(`fs-node:${TOKEN}`).toString('base64')}`;
+/** S4-05: the dispatcher address of `fs-2`, the node the tests lease resources to. */
+const FS2_URI = 'sip:freeswitch-2:5060';
 
 /** mod_xml_curl's real wire format (verified live against FreeSWITCH 1.10.12). */
 function form(fields: Record<string, string>): string {
@@ -39,6 +41,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       h.affinity,
       h.callControl,
       'http://telephony-config-test:8080',
+      null,
+      (nodeId) => Promise.resolve(nodeId === 'fs-2' ? FS2_URI : undefined),
     );
     await app.ready();
   });
@@ -2347,14 +2351,15 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         });
       });
 
-      it('404s when the queue is leased to a different node', async () => {
+      it('hairpins the call to the node holding the queue (S4-05)', async () => {
         const tenantId = crypto.randomUUID();
         const trunkId = crypto.randomUUID();
         await seedTenant(tenantId);
         await seedTrunk(tenantId, trunkId);
         const queueId = await seedQueue(tenantId);
+        const didId = crypto.randomUUID();
         await h.readModel.upsertDid(h.db.kysely, {
-          id: crypto.randomUUID(),
+          id: didId,
           tenantId,
           e164: '+15551234567',
           trunkId,
@@ -2380,7 +2385,104 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         });
 
         expect(response.statusCode).toBe(200);
-        expect(response.body).toContain('<result status="not found"/>');
+        expect(response.body).not.toContain('callcenter');
+        expect(response.body).toContain(
+          `{sip_route_uri=sip:opensips:5060,sip_h_X-Affinity-Node=${FS2_URI},` +
+            `sip_h_X-Affinity-Target=queue:${queueId}:${didId},sip_h_X-Affinity-Tenant=${tenantId}}` +
+            'sofia/internal/+15551234567@acme.platform.test',
+        );
+        expect(response.body).toContain(`cuc_tenant_id=${tenantId}`);
+      });
+
+      describe('arriving hairpinned from another node (S4-05)', () => {
+        function arrivalPayload(fields: Record<string, string>) {
+          return form({
+            section: 'dialplan',
+            'Caller-Context': 'public',
+            'Caller-Destination-Number': '+15551234567',
+            ...fields,
+          });
+        }
+
+        async function dialplan(payload: string, nodeId = 'fs-2') {
+          return app.inject({
+            method: 'POST',
+            url: `/fs/dialplan?nodeId=${nodeId}`,
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+              authorization: BASIC_AUTH,
+            },
+            payload,
+          });
+        }
+
+        it('serves the queue on the node holding it, keeping no call record of its own', async () => {
+          const tenantId = crypto.randomUUID();
+          await seedTenant(tenantId);
+          const queueId = await seedQueue(tenantId);
+          h.callControl.acquireResults[`${tenantId}:queue:${queueId}`] = {
+            nodeId: 'fs-2',
+            acquired: false,
+          };
+
+          const response = await dialplan(
+            arrivalPayload({
+              'variable_sip_h_X-Affinity-Target': `queue:${queueId}`,
+              'variable_sip_h_X-Affinity-Tenant': tenantId,
+            }),
+          );
+
+          expect(response.body).toContain(
+            `<action application="callcenter" data="${queueId}@acme.platform.test"/>`,
+          );
+          expect(response.body).toContain('<action application="set" data="process_cdr=false"/>');
+          expect(response.body).not.toContain('X-Affinity-Node');
+        });
+
+        it('never sends a hairpinned call on again, even if the lease has moved', async () => {
+          const tenantId = crypto.randomUUID();
+          await seedTenant(tenantId);
+          const queueId = await seedQueue(tenantId);
+          h.callControl.acquireResults[`${tenantId}:queue:${queueId}`] = {
+            nodeId: 'fs-2',
+            acquired: false,
+          };
+
+          const response = await dialplan(
+            arrivalPayload({
+              'variable_sip_h_X-Affinity-Target': `queue:${queueId}`,
+              'variable_sip_h_X-Affinity-Tenant': tenantId,
+            }),
+            'fs-1',
+          );
+
+          expect(response.body).toContain('<result status="not found"/>');
+        });
+
+        it('misses for a queue in another tenant, or a malformed target', async () => {
+          const tenantId = crypto.randomUUID();
+          const otherTenantId = crypto.randomUUID();
+          await seedTenant(tenantId);
+          await seedTenant(otherTenantId);
+          const queueId = await seedQueue(tenantId);
+
+          for (const fields of [
+            {
+              'variable_sip_h_X-Affinity-Target': `queue:${queueId}`,
+              'variable_sip_h_X-Affinity-Tenant': otherTenantId,
+            },
+            {
+              'variable_sip_h_X-Affinity-Target': `queue:${queueId}`,
+            },
+            {
+              'variable_sip_h_X-Affinity-Target': `ring_group:${queueId}`,
+              'variable_sip_h_X-Affinity-Tenant': tenantId,
+            },
+          ]) {
+            const response = await dialplan(arrivalPayload(fields));
+            expect(response.body).toContain('<result status="not found"/>');
+          }
+        });
       });
 
       it('404s when the queue no longer exists in the local mirror', async () => {
@@ -2693,8 +2795,8 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
           headers: { authorization: BASIC_AUTH },
         });
 
-        const body: { isLocal: boolean; nodeId: string } = response.json();
-        expect(body).toMatchObject({ isLocal: false, nodeId: 'fs-2' });
+        const body: { isLocal: boolean; nodeId: string; nodeUri?: string } = response.json();
+        expect(body).toMatchObject({ isLocal: false, nodeId: 'fs-2', nodeUri: FS2_URI });
       });
 
       it('404s for a queue in a different tenant', async () => {
@@ -2847,7 +2949,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(response.body).toContain('sofia/internal/150@acme.platform.test');
     });
 
-    it('404s when the slot is leased to a different node', async () => {
+    it('hairpins a slot leased to another node there (S4-05)', async () => {
       const tenantId = crypto.randomUUID();
       await seedTenant(tenantId);
       const lotId = await seedLot(tenantId);
@@ -2866,7 +2968,35 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         payload: internalPayload(tenantId, { 'Caller-Destination-Number': '705' }),
       });
 
-      expect(response.body).toContain('<result status="not found"/>');
+      expect(response.body).not.toContain('valet_park');
+      expect(response.body).toContain(
+        `sip_h_X-Affinity-Node=${FS2_URI},sip_h_X-Affinity-Target=park:${lotId}:705,`,
+      );
+    });
+
+    it('serves a slot hairpinned here from another node (S4-05)', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const lotId = await seedLot(tenantId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-2',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'Caller-Destination-Number': '705',
+          'variable_sip_h_X-Affinity-Target': `park:${lotId}:705`,
+          'variable_sip_h_X-Affinity-Tenant': tenantId,
+        }),
+      });
+
+      expect(response.body).toContain('valet_park');
+      expect(response.body).toContain('process_cdr=false');
     });
 
     it('falls through to outbound dialing for a number outside every lot', async () => {
@@ -3029,7 +3159,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
       expect(response.body).not.toContain('valet_park');
     });
 
-    it('404s when the room is leased to a different node', async () => {
+    it('hairpins a room leased to another node there (S4-05)', async () => {
       const tenantId = crypto.randomUUID();
       await seedTenant(tenantId);
       const roomId = await seedRoom(tenantId);
@@ -3048,7 +3178,35 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         payload: internalPayload(tenantId, { 'Caller-Destination-Number': '600' }),
       });
 
-      expect(response.body).toContain('<result status="not found"/>');
+      expect(response.body).not.toContain('conference.lua');
+      expect(response.body).toContain(
+        `sip_h_X-Affinity-Node=${FS2_URI},sip_h_X-Affinity-Target=conf:${roomId},`,
+      );
+    });
+
+    it('serves a room hairpinned here from another node (S4-05)', async () => {
+      const tenantId = crypto.randomUUID();
+      await seedTenant(tenantId);
+      const roomId = await seedRoom(tenantId);
+
+      const response = await app.inject({
+        method: 'POST',
+        url: '/fs/dialplan?nodeId=fs-2',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          authorization: BASIC_AUTH,
+        },
+        payload: form({
+          section: 'dialplan',
+          'Caller-Context': 'public',
+          'Caller-Destination-Number': '600',
+          'variable_sip_h_X-Affinity-Target': `conf:${roomId}`,
+          'variable_sip_h_X-Affinity-Tenant': tenantId,
+        }),
+      });
+
+      expect(response.body).toContain(`conference.lua ${tenantId} ${roomId}`);
+      expect(response.body).toContain('process_cdr=false');
     });
 
     describe('/fs/dialplan (from-trunk DID -> conference)', () => {
@@ -3119,7 +3277,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
         });
       });
 
-      it('404s when the room is leased to a different node', async () => {
+      it('misses when the node holding the room has no dispatcher address (S4-05)', async () => {
         const tenantId = crypto.randomUUID();
         const trunkId = crypto.randomUUID();
         await seedTenant(tenantId);
@@ -3134,7 +3292,7 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
           destinationId: roomId,
         });
         h.callControl.acquireResults[`${tenantId}:conf:${roomId}`] = {
-          nodeId: 'fs-2',
+          nodeId: 'fs-3',
           acquired: false,
         };
 

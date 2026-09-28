@@ -59,8 +59,11 @@ function numberOr(value: string | undefined, fallback: number | null): number | 
  *    so the next call for each is placed on a live node.
  *
  * A node that comes back simply heartbeats again and takes new calls; its
- * claim lapses on its own. Handling is idempotent: a second pass over the same
- * node finds no calls and no leases.
+ * first heartbeat clears the claim, so a node that dies again soon after is
+ * handled again at once (found live in S4-05: with the claim left to lapse, a
+ * second death within its 60 s went unhandled, and the node's leases with it).
+ * Handling is idempotent: a second pass over the same node finds no calls and
+ * no leases.
  */
 export function createNodeFailureWatcher(options: NodeFailureWatcherOptions) {
   const { registry, affinity, db, logger, replicaId } = options;

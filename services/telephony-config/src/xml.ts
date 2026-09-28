@@ -1272,6 +1272,94 @@ export function buildQueueDialplanDocument(
 }
 
 /**
+ * S4-05 (04 §3.3): what a hairpinned call carries to the node holding the lease. `queue` may
+ * name the DID the call came in on (S5-14's agent-scoped recording); `park` names the slot.
+ */
+export type AffinityTarget =
+  | { readonly kind: 'queue'; readonly id: string; readonly didId?: string }
+  | { readonly kind: 'park'; readonly id: string; readonly slot: number }
+  | { readonly kind: 'conf'; readonly id: string };
+
+/** `X-Affinity-Target`'s value: `<kind>:<resource id>[:<did id or slot>]`. */
+export function formatAffinityTarget(target: AffinityTarget): string {
+  switch (target.kind) {
+    case 'queue':
+      return target.didId === undefined
+        ? `queue:${target.id}`
+        : `queue:${target.id}:${target.didId}`;
+    case 'park':
+      return `park:${target.id}:${String(target.slot)}`;
+    case 'conf':
+      return `conf:${target.id}`;
+  }
+}
+
+/** Reads `X-Affinity-Target` back; undefined for anything malformed. */
+export function parseAffinityTarget(value: string): AffinityTarget | undefined {
+  const [kind, id, extra, ...rest] = value.split(':');
+  if (id === undefined || id === '' || rest.length > 0) return undefined;
+  if (kind === 'queue') {
+    if (extra === '') return undefined;
+    return extra === undefined ? { kind, id } : { kind, id, didId: extra };
+  }
+  if (kind === 'park') {
+    const slot = Number(extra);
+    return Number.isInteger(slot) && extra !== '' ? { kind, id, slot } : undefined;
+  }
+  if (kind === 'conf') return extra === undefined ? { kind, id } : undefined;
+  return undefined;
+}
+
+/**
+ * S4-05 (04 §3.3), the hairpin: the queue, parking lot or conference room this call wants is
+ * leased to another media node, so this node sends the call back through OpenSIPs to that node,
+ * the one holding the resource's live state. OpenSIPs trusts the `X-Affinity-*` headers only
+ * from a media node (it strips them from anything else), relays on `X-Affinity-Node`, and the
+ * owning node's `/fs/dialplan` serves `X-Affinity-Target` directly for `X-Affinity-Tenant`
+ * (OpenSIPs strips `X-Tenant-Id` from every source, a media node included, so the tenant travels
+ * under its own name).
+ *
+ * This node stays in the media path for the whole call, and keeps the call's one record: the
+ * owning node's leg is not recorded (`process_cdr=false` there).
+ */
+export function buildAffinityHairpinDocument(
+  callerContext: string,
+  destinationNumber: string,
+  tenantDomain: string,
+  opensipsSipUri: string,
+  tenantId: string,
+  /** The owning node's dispatcher address, e.g. `sip:freeswitch-2:5060`. */
+  ownerSipUri: string,
+  target: AffinityTarget,
+): string {
+  const variables = [
+    `sip_route_uri=sip:${opensipsSipUri}`,
+    `sip_h_X-Affinity-Node=${ownerSipUri}`,
+    `sip_h_X-Affinity-Target=${formatAffinityTarget(target)}`,
+    `sip_h_X-Affinity-Tenant=${tenantId}`,
+  ].join(',');
+  const dial = `{${variables}}sofia/internal/${destinationNumber}@${tenantDomain}`;
+  return (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' +
+    '<document type="freeswitch/xml">\n' +
+    '  <section name="dialplan">\n' +
+    `    <context name="${escapeXml(callerContext)}">\n` +
+    `      <extension name="affinity-${escapeXml(destinationNumber)}">\n` +
+    `        <condition field="destination_number" expression="${escapeXml(`^${escapeRegex(destinationNumber)}$`)}">\n` +
+    `          ${tenantIdAction(tenantId)}\n` +
+    `          <action application="bridge" data="${escapeXml(dial)}"/>\n` +
+    '        </condition>\n' +
+    '      </extension>\n' +
+    '    </context>\n' +
+    '  </section>\n' +
+    '</document>\n'
+  );
+}
+
+/** S4-05: the owning node's leg of a hairpinned call keeps no call record; the receiving node's does. */
+export const HAIRPIN_ARRIVAL_ACTION = '<action application="set" data="process_cdr=false"/>';
+
+/**
  * The agent login/logout feature codes (S2-13; plan: "agent login and
  * logout feature codes"). `*45`/`*46` are this task's own arbitrary,
  * undocumented choice, the same "picked for familiarity, nothing more"

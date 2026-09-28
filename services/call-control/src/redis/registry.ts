@@ -44,7 +44,8 @@ export interface CallRegistry {
   /**
    * S4-04: claims the handling of a node's death for this replica
    * (`nodelost:{id}`, `SET NX PX`), so exactly one replica sweeps it. False
-   * when another replica already has it. The claim lapses after [ttlMs].
+   * when another replica already has it. The claim lapses after [ttlMs], or is cleared by the
+   * node's next heartbeat (it came back).
    */
   claimNodeLoss(nodeId: string, replicaId: string, ttlMs: number): Promise<boolean>;
   /** S4-04: forgets a node's (now empty) call set once its calls are handled. */
@@ -163,10 +164,11 @@ const UPDATE_IF_EXISTS = `if redis.call('EXISTS', KEYS[1]) == 1 then return redi
 const ATTACH_TENANT = `if redis.call('HGET', KEYS[1], 'tenant') == '' then redis.call('HSET', KEYS[1], 'tenant', ARGV[1]) redis.call('SADD', KEYS[2], ARGV[2]) return redis.call('HGETALL', KEYS[1]) end return {}`;
 
 /**
- * KEYS: fsnode:{id}, fsnodes:draining, fsnodes. ARGV: node id, TTL (ms), then field/value pairs
- * (S4-12: a FreeSWITCH HEARTBEAT's figures) to set as well.
+ * KEYS: fsnode:{id}, fsnodes:draining, fsnodes, nodelost:{id}. ARGV: node id, TTL (ms), then
+ * field/value pairs (S4-12: a FreeSWITCH HEARTBEAT's figures) to set as well. A heartbeat ends
+ * any earlier death's claim, so the node dying again is handled at once, not when it lapses.
  */
-const HEARTBEAT = `local status = 'up' if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then status = 'draining' end redis.call('HSET', KEYS[1], 'status', status) for i = 3, #ARGV, 2 do redis.call('HSET', KEYS[1], ARGV[i], ARGV[i + 1]) end redis.call('PEXPIRE', KEYS[1], ARGV[2]) redis.call('SADD', KEYS[3], ARGV[1]) return status`;
+const HEARTBEAT = `local status = 'up' if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then status = 'draining' end redis.call('HSET', KEYS[1], 'status', status) for i = 3, #ARGV, 2 do redis.call('HSET', KEYS[1], ARGV[i], ARGV[i + 1]) end redis.call('PEXPIRE', KEYS[1], ARGV[2]) redis.call('SADD', KEYS[3], ARGV[1]) redis.call('DEL', KEYS[4]) return status`;
 
 /** KEYS: fsnode:{id}, fsnodes:draining. ARGV: node id, '1' to drain or '0' to undrain. */
 const SET_DRAINING = `local status = 'up' if ARGV[2] == '1' then redis.call('SADD', KEYS[2], ARGV[1]) status = 'draining' else redis.call('SREM', KEYS[2], ARGV[1]) end if redis.call('EXISTS', KEYS[1]) == 1 then redis.call('HSET', KEYS[1], 'status', status) end return status`;
@@ -256,10 +258,11 @@ export function createCallRegistry(redis: Redis, keyPrefix: string): CallRegistr
             ];
       await redis.eval(
         HEARTBEAT,
-        3,
+        4,
         k(`fsnode:${nodeId}`),
         k('fsnodes:draining'),
         k('fsnodes'),
+        k(`nodelost:${nodeId}`),
         nodeId,
         ttlMs,
         ...fields,

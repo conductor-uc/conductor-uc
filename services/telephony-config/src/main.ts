@@ -249,6 +249,7 @@ registerFsRoutes(
   callControlClient,
   config.SELF_URL,
   { client: recordingClient, spoolDir: config.RECORDING_SPOOL_DIR },
+  (nodeId) => opensipsProjection.findNodeSipUri(nodeId),
 );
 registerInternalRoutes(
   app,

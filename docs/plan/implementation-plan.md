@@ -336,7 +336,7 @@ Stage 3's non-telephony screens can start as soon as Stage 1 lands, in parallel 
 | S4-02 | Multi-node FS: dispatcher probing, weights, draining | S2-19 |
 | S4-03 | call-control HA: node-assignment leases across replicas | S2-11 |
 | S4-04 | Failover handling: dialog teardown, `call.lost`, synthetic CDRs, lease release, Redis rebuild | S4-02, S4-03, S2-18 |
-| S4-05 | Affinity routing at OpenSIPs (`cachedb_redis`) + multi-node lease tests | S2-12, S4-02 |
+| S4-05 | Affinity routing through OpenSIPs (the hairpin, G-128) + multi-node lease tests | S2-12, S4-02 |
 | S4-06 | OpenSIPs cluster: clusterer, usrloc full-sharing, dialog replication, registrant sharing, VIP | S1-11 |
 | S4-07 | Redis Sentinel, MariaDB HA, NATS cluster | S4-01 |
 | S4-08 | Chaos test suite | S4-04, S4-05, S4-06 |
