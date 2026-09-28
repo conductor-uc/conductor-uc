@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/l10n.dart';
 import 'operations_api.dart';
 import 'operations_charts.dart';
 import 'operations_widgets.dart';
@@ -14,6 +15,7 @@ class OverviewTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final history = ref.watch(operationsHistoryProvider);
+    final l = context.l10n;
     final o = overview;
     final events = o.events;
     final servicesAllReady = o.servicesReady == o.services.length;
@@ -39,17 +41,23 @@ class OverviewTab extends ConsumerWidget {
             maxColumns: 5,
             children: [
               StatTile(
-                label: 'Services ready',
-                value: '${o.servicesReady} of ${o.services.length}',
+                label: l.opsServicesReady,
+                value: l.opsPartOfWhole(
+                  '${o.servicesReady}',
+                  '${o.services.length}',
+                ),
                 icon: Icons.dns_outlined,
                 health: servicesAllReady ? Health.good : Health.attention,
                 detail: servicesAllReady
-                    ? 'All reporting ready'
-                    : '${o.services.length - o.servicesReady} need attention',
+                    ? l.opsAllReportingReady
+                    : l.opsNeedAttention(o.services.length - o.servicesReady),
               ),
               StatTile(
-                label: 'Media nodes in service',
-                value: '${o.nodesInService} of ${o.nodes.length}',
+                label: l.opsMediaNodesInService,
+                value: l.opsPartOfWhole(
+                  '${o.nodesInService}',
+                  '${o.nodes.length}',
+                ),
                 icon: Icons.graphic_eq,
                 health: o.nodes.isEmpty
                     ? Health.neutral
@@ -59,25 +67,27 @@ class OverviewTab extends ConsumerWidget {
                     ? Health.good
                     : Health.attention,
                 detail: nodesAllIn
-                    ? 'Taking new calls'
-                    : '${o.nodes.length - o.nodesInService} not taking new calls',
+                    ? l.opsTakingNewCalls
+                    : l.opsNotTakingNewCalls(o.nodes.length - o.nodesInService),
               ),
               StatTile(
-                label: 'Live calls',
+                label: l.monLiveCalls,
                 value: formatCount(o.liveCalls),
                 icon: Icons.call_outlined,
-                detail: 'On every media node',
+                detail: l.opsOnEveryMediaNode,
               ),
               StatTile(
-                label: 'Registered phones',
+                label: l.opsRegisteredPhones,
                 value: formatCount(o.signalling?.registrations),
                 icon: Icons.phone_android_outlined,
                 detail: o.signalling == null
-                    ? 'Edge not answering'
-                    : '${formatCount(o.signalling!.activeDialogs)} calls at the edge',
+                    ? l.opsEdgeNotAnswering
+                    : l.opsCallsAtTheEdge(
+                        formatCount(o.signalling!.activeDialogs),
+                      ),
               ),
               StatTile(
-                label: 'Event backlog',
+                label: l.opsEventBacklog,
                 value: formatCount(events?.backlog),
                 icon: Icons.move_to_inbox_outlined,
                 health: events == null
@@ -86,10 +96,10 @@ class OverviewTab extends ConsumerWidget {
                     ? Health.good
                     : Health.attention,
                 detail: events == null
-                    ? 'Event bus not answering'
+                    ? l.opsEventBusNotAnswering
                     : behind.isEmpty
-                    ? 'Every consumer caught up'
-                    : '${behind.length} consumers behind',
+                    ? l.opsEveryConsumerCaughtUp
+                    : l.opsConsumersBehind(behind.length),
               ),
             ],
           ),
@@ -99,26 +109,23 @@ class OverviewTab extends ConsumerWidget {
             maxColumns: 2,
             children: [
               Panel(
-                title: 'Calls per media node',
-                subtitle: 'Live calls on each node now.',
+                title: l.opsCallsPerMediaNode,
+                subtitle: l.opsCallsPerMediaNodeHelp,
                 child: ValueBarChart(
                   items: [
                     for (final n in o.nodes) (n.nodeId, n.calls.toDouble()),
                   ],
                   format: (v) => formatCount(v),
-                  emptyText: 'No media nodes are configured.',
+                  emptyText: l.opsNoMediaNodes,
                 ),
               ),
               Panel(
-                title: 'Media node CPU',
-                subtitle:
-                    'How busy each node reported itself at its last heartbeat.',
+                title: l.opsMediaNodeCpu,
+                subtitle: l.opsMediaNodeCpuHelp,
                 child: SizedBox(
                   height: 220,
                   child: o.nodes.isEmpty
-                      ? const Center(
-                          child: Text('No media nodes are configured.'),
-                        )
+                      ? Center(child: Text(l.opsNoMediaNodes))
                       : Center(
                           child: SingleChildScrollView(
                             child: Wrap(
@@ -138,16 +145,16 @@ class OverviewTab extends ConsumerWidget {
                 ),
               ),
               Panel(
-                title: 'Live calls, last 10 minutes',
-                subtitle: 'From this page\'s own readings while it is open.',
+                title: l.opsLiveCallsTrend,
+                subtitle: l.opsLiveCallsTrendHelp,
                 child: TrendChart(
                   points: [for (final s in history) (s.at, s.calls.toDouble())],
                   format: (v) => formatCount(v),
                 ),
               ),
               Panel(
-                title: 'Event backlog, last 10 minutes',
-                subtitle: 'Events waiting for a consumer, summed.',
+                title: l.opsEventBacklogTrend,
+                subtitle: l.opsEventBacklogTrendHelp,
                 child: TrendChart(
                   points: [
                     for (final s in history)
@@ -157,25 +164,24 @@ class OverviewTab extends ConsumerWidget {
                 ),
               ),
               Panel(
-                title: 'Service response times',
+                title: l.opsResponseTimes,
                 subtitle: unreachable == 0
-                    ? 'How long each service took to answer this reading.'
-                    : 'How long each service took to answer. '
-                          '$unreachable not answering (see Services).',
+                    ? l.opsResponseTimesHelp
+                    : l.opsResponseTimesSomeDown(unreachable),
                 child: ValueBarChart(
                   items: [for (final s in reachable) (s.name, s.latencyMs!)],
                   format: (v) => formatMs(v),
                   floor: 20,
-                  emptyText: 'No service answered.',
+                  emptyText: l.opsNoServiceAnswered,
                 ),
               ),
               Panel(
-                title: 'Event backlog by consumer',
+                title: l.opsBacklogByConsumer,
                 subtitle: events == null
-                    ? 'The event bus is not answering.'
+                    ? l.opsEventBusDown
                     : behind.isEmpty
-                    ? 'Every consumer is caught up.'
-                    : 'The consumers furthest behind.',
+                    ? l.opsEveryConsumerIsCaughtUp
+                    : l.opsConsumersFurthestBehind,
                 child: ValueBarChart(
                   items: [
                     for (final c in (behind.isEmpty ? consumers : behind).take(
@@ -185,8 +191,8 @@ class OverviewTab extends ConsumerWidget {
                   ],
                   format: (v) => formatCount(v),
                   emptyText: events == null
-                      ? 'Event bus not answering.'
-                      : 'No consumers yet.',
+                      ? l.opsEventBusNotAnsweringShort
+                      : l.opsNoConsumersYet,
                 ),
               ),
             ],

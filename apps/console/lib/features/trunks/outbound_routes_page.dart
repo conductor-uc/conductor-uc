@@ -18,24 +18,22 @@ class OutboundRoutesPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (ref.watch(tenantIdProvider) == null) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Text('Choose a tenant to configure its outbound routes.'),
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(context.l10n.routeChooseTenant),
       );
     }
     final routes = ref.watch(canProvider('trunk.read'));
     final emergency = ref.watch(canProvider('emergency_route.read'));
+    final l = context.l10n;
     final tabs = [
-      if (routes) ('Outbound routes', ResourceView(def: outboundRoutesDef)),
-      if (emergency) ('Emergency route', const EmergencyRoutePanel()),
+      if (routes) (l.orPlural, ResourceView(def: outboundRoutesDef)),
+      if (emergency) (l.routeEmergency, const EmergencyRoutePanel()),
     ];
     if (tabs.isEmpty) {
-      return const PageFrame(
+      return PageFrame(
         children: [
-          PageHeader(
-            title: 'Not available to you',
-            subtitle: "Your role doesn't include outbound routing.",
-          ),
+          PageHeader(title: l.shellForbiddenTitle, subtitle: l.routeNotInRole),
         ],
       );
     }
@@ -70,13 +68,12 @@ class EmergencyRoutePanel extends ConsumerWidget {
     final route = ref.watch(emergencyRouteProvider);
     final trunks = ref.watch(rowsProvider('trunks')).asData?.value;
     final canChange = ref.watch(canProvider('emergency_route.manage'));
+    final l = context.l10n;
     return PageFrame(
       children: [
         PageHeader(
-          title: 'Emergency route',
-          subtitle:
-              'The trunk that carries emergency calls, and the numbers that '
-              'count as emergencies. These are dialed exactly as typed.',
+          title: l.routeEmergency,
+          subtitle: l.routeEmergencyHelp,
           actions: [
             if (canChange)
               FilledButton.icon(
@@ -85,7 +82,7 @@ class EmergencyRoutePanel extends ConsumerWidget {
                   route.value == null ? Icons.add : Icons.edit_outlined,
                 ),
                 label: Text(
-                  route.value == null ? 'Set emergency route' : 'Edit',
+                  route.value == null ? l.routeSetEmergency : l.commonEdit,
                 ),
               ),
           ],
@@ -98,12 +95,9 @@ class EmergencyRoutePanel extends ConsumerWidget {
             isEmpty: (_) => false,
             builder: (data) {
               if (data == null) {
-                return const Align(
+                return Align(
                   alignment: Alignment.topLeft,
-                  child: Text(
-                    'No emergency route is set. Emergency calls have no '
-                    'trunk to leave through.',
-                  ),
+                  child: Text(l.routeNoEmergency),
                 );
               }
               final trunk = trunks?.where((t) => t['id'] == data['trunkId']);
@@ -117,7 +111,7 @@ class EmergencyRoutePanel extends ConsumerWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         ListTile(
-                          title: const Text('Trunk'),
+                          title: Text(l.trSingular),
                           subtitle: Text(
                             trunk == null || trunk.isEmpty
                                 ? '${data['trunkId']}'
@@ -125,7 +119,7 @@ class EmergencyRoutePanel extends ConsumerWidget {
                           ),
                         ),
                         ListTile(
-                          title: const Text('Emergency numbers'),
+                          title: Text(l.routeEmergencyNumbers),
                           subtitle: Text(
                             [...(data['numbers'] as List)].join(', '),
                           ),
@@ -135,7 +129,7 @@ class EmergencyRoutePanel extends ConsumerWidget {
                             alignment: Alignment.centerRight,
                             child: TextButton(
                               onPressed: () => _remove(context, ref),
-                              child: const Text('Remove emergency route'),
+                              child: Text(l.routeRemoveEmergency),
                             ),
                           ),
                       ],
@@ -164,19 +158,16 @@ class EmergencyRoutePanel extends ConsumerWidget {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove the emergency route?'),
-        content: const Text(
-          'Emergency calls will have no trunk to leave through until a new '
-          'route is set.',
-        ),
+        title: Text(context.l10n.routeRemoveTitle),
+        content: Text(context.l10n.routeRemoveBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Remove'),
+            child: Text(context.l10n.routeRemove),
           ),
         ],
       ),
@@ -243,8 +234,9 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
   @override
   Widget build(BuildContext context) {
     final trunks = ref.watch(rowsProvider('trunks'));
+    final l = context.l10n;
     return AlertDialog(
-      title: const Text('Emergency route'),
+      title: Text(l.routeEmergency),
       content: SizedBox(
         width: 440,
         child: Form(
@@ -262,7 +254,7 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
                       ? _trunkId
                       : null,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Trunk *'),
+                  decoration: InputDecoration(labelText: l.routeTrunkRequired),
                   items: [
                     for (final r in rows)
                       DropdownMenuItem<String?>(
@@ -277,10 +269,9 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
               ),
               TextFormField(
                 controller: _numbers,
-                decoration: const InputDecoration(
-                  labelText: 'Emergency numbers *',
-                  helperText:
-                      'Comma-separated, digits only, such as 911 or 112.',
+                decoration: InputDecoration(
+                  labelText: l.routeNumbersRequired,
+                  helperText: l.routeNumbersHelp,
                 ),
                 validator: (v) =>
                     (v ?? '').split(',').any((w) => w.trim().isNotEmpty)
@@ -299,11 +290,11 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l.commonCancel),
         ),
         FilledButton(
           onPressed: _busy ? null : _save,
-          child: const Text('Save'),
+          child: Text(l.commonSave),
         ),
       ],
     );

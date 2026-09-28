@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
 import '../../core/problem.dart';
+import '../../l10n/l10n.dart';
 import 'operations_api.dart';
 import 'operations_widgets.dart';
 import '../../core/format.dart';
@@ -18,7 +19,7 @@ class NodesTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (overview.nodes.isEmpty) {
-      return const Center(child: Text('No media nodes are configured.'));
+      return Center(child: Text(context.l10n.opsNoMediaNodes));
     }
     final canOperate = ref.watch(canProvider('platform.operate'));
     return SingleChildScrollView(
@@ -65,39 +66,35 @@ class _NodeCardState extends ConsumerState<NodeCard> {
   }
 
   Future<void> _drain() async {
+    final l = context.l10n;
     final ok = await _confirm(
-      title: 'Drain ${node.nodeId}?',
-      body:
-          'It stops taking new calls within a few seconds. Its queues, parking '
-          'lots and conference rooms move to other nodes the next time they are '
-          'used. Calls already on it carry on until they end.\n\n'
-          'It stays drained, even if it restarts, until you return it to '
-          'service.',
-      action: 'Drain',
+      title: l.opsDrainTitle(node.nodeId),
+      body: l.opsDrainBody,
+      action: l.opsDrain,
     );
     if (!ok) return;
     await _run(
       () => ref.read(operationsApiProvider).drain(node.nodeId),
-      '${node.nodeId} is draining.',
+      l.opsDraining(node.nodeId),
     );
   }
 
   Future<void> _undrain() async {
+    final l = context.l10n;
     final ok = await _confirm(
-      title: 'Return ${node.nodeId} to service?',
-      body:
-          'It takes new calls again, in its share by weight. Queues, parking '
-          'lots and conference rooms come to it as they are next used.',
-      action: 'Return to service',
+      title: l.opsReturnTitle(node.nodeId),
+      body: l.opsReturnBody,
+      action: l.opsReturnToService,
     );
     if (!ok) return;
     await _run(
       () => ref.read(operationsApiProvider).undrain(node.nodeId),
-      '${node.nodeId} is back in service.',
+      l.opsBackInService(node.nodeId),
     );
   }
 
   Future<void> _setWeight() async {
+    final l = context.l10n;
     final weight = await showDialog<int>(
       context: context,
       builder: (context) =>
@@ -106,7 +103,7 @@ class _NodeCardState extends ConsumerState<NodeCard> {
     if (weight == null || weight == node.weight) return;
     await _run(
       () => ref.read(operationsApiProvider).setWeight(node.nodeId, weight),
-      '${node.nodeId} now has weight $weight.',
+      l.opsWeightSet(node.nodeId, weight),
     );
   }
 
@@ -126,7 +123,7 @@ class _NodeCardState extends ConsumerState<NodeCard> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+              child: Text(context.l10n.commonCancel),
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
@@ -150,6 +147,7 @@ class _NodeCardState extends ConsumerState<NodeCard> {
         : null;
     final cpu = node.cpuBusyPercent;
     final heartbeat = DateTime.tryParse(node.heartbeatAt ?? '');
+    final l = context.l10n;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -172,7 +170,7 @@ class _NodeCardState extends ConsumerState<NodeCard> {
                         style: theme.textTheme.titleMedium,
                       ),
                       Text(
-                        node.uri ?? 'No address at the edge',
+                        node.uri ?? l.opsNoEdgeAddress,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
@@ -197,29 +195,29 @@ class _NodeCardState extends ConsumerState<NodeCard> {
               spacing: 24,
               runSpacing: 12,
               children: [
-                Fact('Calls', formatCount(node.calls)),
-                Fact('Leases', formatCount(node.leases)),
+                Fact(l.opsCalls, formatCount(node.calls)),
+                Fact(l.opsLeases, formatCount(node.leases)),
                 Fact(
-                  'Weight',
+                  l.opsWeight,
                   node.weight == null ? noValue : '${node.weight}',
                 ),
-                Fact('Uptime', formatSpan(node.uptimeSeconds)),
-                Fact('New sessions', formatRate(node.sessionsPerSecond)),
+                Fact(l.opsUptime, formatSpan(node.uptimeSeconds)),
+                Fact(l.opsNewSessions, formatRate(node.sessionsPerSecond)),
               ],
             ),
             const SizedBox(height: 16),
             _Meter(
-              label: 'Sessions',
+              label: l.opsSessions,
               value: sessionShare,
               text: sessions == null
                   ? noValue
                   : max == null
                   ? formatCount(sessions)
-                  : '${formatCount(sessions)} of ${formatCount(max)}',
+                  : l.opsPartOfWhole(formatCount(sessions), formatCount(max)),
             ),
             const SizedBox(height: 12),
             _Meter(
-              label: 'CPU busy',
+              label: l.opsCpuBusy,
               value: cpu == null ? null : cpu / 100,
               text: formatPercent(cpu),
               warn: cpu != null && cpu >= 70,
@@ -228,8 +226,8 @@ class _NodeCardState extends ConsumerState<NodeCard> {
             const SizedBox(height: 12),
             Text(
               heartbeat == null
-                  ? 'No heartbeat reported yet.'
-                  : 'Last heartbeat ${formatUtcClock(heartbeat)} UTC.',
+                  ? l.opsNoHeartbeat
+                  : l.opsLastHeartbeat(formatUtcClock(heartbeat)),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
@@ -245,24 +243,24 @@ class _NodeCardState extends ConsumerState<NodeCard> {
                     FilledButton.tonalIcon(
                       onPressed: _busy ? null : _undrain,
                       icon: const Icon(Icons.play_circle_outline),
-                      label: const Text('Return to service'),
+                      label: Text(l.opsReturnToService),
                     )
                   else
                     OutlinedButton.icon(
                       onPressed: _busy ? null : _drain,
                       icon: const Icon(Icons.pause_circle_outline),
-                      label: const Text('Drain'),
+                      label: Text(l.opsDrain),
                     ),
                   Tooltip(
                     message: node.weight == null
-                        ? 'This node is not in the edge list, so it has no weight.'
-                        : 'Its share of new calls against the other nodes.',
+                        ? l.opsNoWeightHelp
+                        : l.opsWeightHelp,
                     child: TextButton.icon(
                       onPressed: _busy || node.weight == null
                           ? null
                           : _setWeight,
                       icon: const Icon(Icons.balance_outlined),
-                      label: const Text('Set weight'),
+                      label: Text(l.opsSetWeight),
                     ),
                   ),
                   if (_busy)
@@ -369,18 +367,14 @@ class _WeightDialogState extends State<WeightDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text('Set the weight of ${widget.nodeId}'),
+    title: Text(context.l10n.opsSetWeightTitle(widget.nodeId)),
     content: ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 440),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'New calls are shared out by weight: a node with weight 2 takes two '
-            'calls for every one a node with weight 1 takes. The weight is kept '
-            'when the edge restarts. To send a node no calls, drain it instead.',
-          ),
+          Text(context.l10n.opsWeightExplain),
           const SizedBox(height: 16),
           TextField(
             controller: _controller,
@@ -388,8 +382,8 @@ class _WeightDialogState extends State<WeightDialog> {
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             decoration: InputDecoration(
-              labelText: 'Weight',
-              helperText: 'From $minWeight to $maxWeight.',
+              labelText: context.l10n.opsWeight,
+              helperText: context.l10n.opsWeightRange(minWeight, maxWeight),
               errorText: _error,
               border: const OutlineInputBorder(),
             ),
@@ -404,9 +398,9 @@ class _WeightDialogState extends State<WeightDialog> {
     actions: [
       TextButton(
         onPressed: () => Navigator.of(context).pop(),
-        child: const Text('Cancel'),
+        child: Text(context.l10n.commonCancel),
       ),
-      FilledButton(onPressed: _submit, child: const Text('Save')),
+      FilledButton(onPressed: _submit, child: Text(context.l10n.commonSave)),
     ],
   );
 }

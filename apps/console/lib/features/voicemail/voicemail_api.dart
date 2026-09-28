@@ -2,14 +2,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config.dart';
+import '../../l10n/l10n.dart';
 import '../pbx/pbx_api.dart';
 
-/// What happens to a message once it has been emailed.
-const emailAfterChoices = {
-  'keep': 'Keep it as a new message',
-  'mark_read': 'Mark it as read',
-  'delete': 'Delete it (the email holds the only copy)',
+/// What happens to a message once it has been emailed, by wire value.
+Map<String, String> emailAfterChoicesOf(AppLocalizations l) => {
+  'keep': l.vmAfterKeep,
+  'mark_read': l.vmAfterMarkRead,
+  'delete': l.vmAfterDelete,
 };
+
+/// [emailAfterChoicesOf] for code with no [BuildContext].
+Map<String, String> get emailAfterChoices => emailAfterChoicesOf(currentL10n);
 
 /// A mailbox's voicemail-to-email settings (`PUT .../email-settings`).
 class EmailSettings {

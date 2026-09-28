@@ -1,5 +1,6 @@
 import 'package:console/features/users/users_page.dart';
 import 'package:dio/dio.dart';
+import 'package:console/l10n/l10n.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,6 +24,8 @@ Future<List<String>> pumpDialog(
   final sent = <String>[];
   await tester.pumpWidget(
     MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
       home: ResetMfaDialog(
         user: const {'id': 'u2', 'displayName': 'Sam Support'},
         reset: (code) {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../auth/auth_errors.dart';
 import '../auth/auth_scaffold.dart' show FormMessage;
@@ -18,9 +19,9 @@ class SecurityPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return PageFrame(
       children: [
-        const PageHeader(
-          title: 'Sign-in security',
-          subtitle: 'How administrators of this platform sign in.',
+        PageHeader(
+          title: context.l10n.secTitle,
+          subtitle: context.l10n.secSubtitle,
         ),
         const SizedBox(height: 16),
         Expanded(
@@ -98,13 +99,8 @@ class _TwoStepCardState extends ConsumerState<TwoStepCard> {
               contentPadding: EdgeInsets.zero,
               value: on,
               onChanged: canChange && !_saving ? _set : null,
-              title: const Text(
-                'Require two-step verification for platform administrators',
-              ),
-              subtitle: const Text(
-                'Administrators sign in with a password and a code from an '
-                'authenticator app. Reseller administrators always need both.',
-              ),
+              title: Text(context.l10n.secRequireTwoStep),
+              subtitle: Text(context.l10n.secRequireTwoStepHelp),
             ),
             const SizedBox(height: 8),
             Container(
@@ -117,12 +113,7 @@ class _TwoStepCardState extends ConsumerState<TwoStepCard> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                on
-                    ? 'On. Administrators who have not set up an authenticator '
-                          'app are asked to at their next sign-in.'
-                    : 'Off. Turn this on once the platform is set up. Anyone '
-                          'who has already set up an authenticator app is '
-                          'still asked for a code.',
+                on ? context.l10n.secStatusOn : context.l10n.secStatusOff,
               ),
             ),
             if (_error != null) FormMessage(_error!, isError: true),
@@ -164,9 +155,7 @@ class _TurnOffTwoStepDialogState extends State<TurnOffTwoStepDialog> {
   Future<void> _submit() async {
     final code = _code.text.replaceAll(RegExp(r'\s'), '');
     if (!RegExp(r'^\d{6}$').hasMatch(code)) {
-      setState(
-        () => _error = 'Enter the 6-digit code from your authenticator app.',
-      );
+      setState(() => _error = context.l10n.authMfaEnterCode);
       return;
     }
     setState(() {
@@ -182,16 +171,10 @@ class _TurnOffTwoStepDialogState extends State<TurnOffTwoStepDialog> {
         _busy = false;
         _cannot = problemCode(e) == 'step_up_not_enrolled';
         _error = switch (problemCode(e)) {
-          'step_up_required' =>
-            'Enter the 6-digit code from your authenticator app.',
-          'step_up_invalid' =>
-            'That code did not work, or it was already used. Wait for the '
-                'next code in your authenticator app and try again.',
-          'step_up_locked' =>
-            'Too many wrong codes. Wait 15 minutes, then try again.',
-          'step_up_not_enrolled' =>
-            'You have not set up an authenticator app yet, so you cannot '
-                'confirm this. Sign out and back in to set one up.',
+          'step_up_required' => context.l10n.authMfaEnterCode,
+          'step_up_invalid' => context.l10n.problemStepUpInvalid,
+          'step_up_locked' => context.l10n.problemStepUpLocked,
+          'step_up_not_enrolled' => context.l10n.secStepUpNotEnrolled,
           _ => problemMessage(e),
         };
       });
@@ -202,23 +185,16 @@ class _TurnOffTwoStepDialogState extends State<TurnOffTwoStepDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Stop requiring two-step verification?'),
+      title: Text(context.l10n.secTurnOffTitle),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 440),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Administrators who have not set up an authenticator app will '
-              'sign in with a password alone. Anyone who has set one up is '
-              'still asked for a code.',
-            ),
+            Text(context.l10n.secTurnOffBody),
             const SizedBox(height: 16),
-            const Text(
-              'To confirm, enter the current code from your own authenticator '
-              'app.',
-            ),
+            Text(context.l10n.usrResetMfaConfirm),
             const SizedBox(height: 8),
             TextField(
               key: const ValueKey('step-up-code'),
@@ -227,7 +203,7 @@ class _TurnOffTwoStepDialogState extends State<TurnOffTwoStepDialog> {
               enabled: !_busy && !_cannot,
               keyboardType: TextInputType.number,
               autofillHints: const [AutofillHints.oneTimeCode],
-              decoration: const InputDecoration(labelText: 'Your code'),
+              decoration: InputDecoration(labelText: context.l10n.usrYourCode),
               onSubmitted: (_) => _busy ? null : _submit(),
             ),
             if (_error != null) FormMessage(_error!, isError: true),
@@ -237,11 +213,11 @@ class _TurnOffTwoStepDialogState extends State<TurnOffTwoStepDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
         FilledButton(
           onPressed: _busy || _cannot ? null : _submit,
-          child: const Text('Turn off'),
+          child: Text(context.l10n.secTurnOff),
         ),
       ],
     );

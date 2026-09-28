@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource.dart';
@@ -16,13 +17,6 @@ const _scopeResource = {
   'did': 'dids',
 };
 
-const _scopeNoun = {
-  'extension': 'extension',
-  'agent': 'agent',
-  'queue': 'queue',
-  'did': 'phone number',
-};
-
 String _titleFor(String scopeType, Json row) => switch (scopeType) {
   'extension' || 'agent' => extensionsDef.titleOf(row),
   'queue' => queuesDef.titleOf(row),
@@ -34,17 +28,17 @@ String _titleFor(String scopeType, Json row) => switch (scopeType) {
 class PoliciesPanel extends ConsumerWidget {
   const PoliciesPanel({super.key});
 
-  String _appliesTo(Json p, WidgetRef ref) {
+  String _appliesTo(AppLocalizations l10n, Json p, WidgetRef ref) {
     final type = '${p['scopeType']}';
-    if (type == 'tenant') return 'Whole organization';
+    if (type == 'tenant') return l10n.polScopeTenant;
     final rows =
         ref.watch(rowsProvider(_scopeResource[type]!)).asData?.value ??
         const <Json>[];
     final match = rows.where((r) => r['id'] == p['scopeId']);
-    final noun = policyScopes[type] ?? type;
+    final noun = policyScopesOf(l10n)[type] ?? type;
     return match.isEmpty
-        ? '$noun ${p['scopeId']}'
-        : '$noun ${_titleFor(type, match.first)}';
+        ? l10n.polAppliesToTarget(noun, '${p['scopeId']}')
+        : l10n.polAppliesToTarget(noun, _titleFor(type, match.first));
   }
 
   Future<void> _edit(
@@ -62,22 +56,20 @@ class PoliciesPanel extends ConsumerWidget {
   Future<void> _delete(BuildContext context, WidgetRef ref, Json p) async {
     final api = ref.read(recordingsApiProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete rule?'),
-        content: Text(
-          'Calls it covered follow the next broader rule, or are not recorded '
-          'if there is none. ${_appliesTo(p, ref)}.',
-        ),
+        title: Text(l10n.polDeleteTitle),
+        content: Text(l10n.polDeleteBody(_appliesTo(l10n, p, ref))),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Delete'),
+            child: Text(l10n.commonDelete),
           ),
         ],
       ),
@@ -88,13 +80,14 @@ class PoliciesPanel extends ConsumerWidget {
       ref.invalidate(recordingPoliciesProvider);
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Could not delete it: ${problemMessage(e)}')),
+        SnackBar(content: Text(l10n.polCouldNotDelete(problemMessage(e)))),
       );
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final policies = ref.watch(recordingPoliciesProvider);
     final canChange = ref.watch(canProvider('recording.policy.manage'));
     return Column(
@@ -108,10 +101,7 @@ class PoliciesPanel extends ConsumerWidget {
           children: [
             Expanded(
               child: Text(
-                'The narrowest rule that applies to a call decides: an '
-                'extension beats a queue agent, an agent beats a queue, a queue '
-                'beats a phone number, a phone number beats the whole '
-                'organization. With no rule, a call is not recorded.',
+                l10n.polPrecedence,
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
@@ -120,7 +110,7 @@ class PoliciesPanel extends ConsumerWidget {
               FilledButton.icon(
                 onPressed: () => _edit(context, ref),
                 icon: const Icon(Icons.add),
-                label: const Text('Add rule'),
+                label: Text(l10n.polAdd),
               ),
             ],
           ],
@@ -129,53 +119,53 @@ class PoliciesPanel extends ConsumerWidget {
         Expanded(
           child: AsyncBody<List<Json>>(
             value: policies,
-            emptyText: 'No rules yet, so no calls are recorded.',
+            emptyText: l10n.polEmpty,
             builder: (rows) => SingleChildScrollView(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Applies to')),
-                    DataColumn(label: Text('Calls')),
-                    DataColumn(label: Text('Action')),
-                    DataColumn(label: Text('Announcement')),
-                    DataColumn(label: Text('Feature codes')),
-                    DataColumn(label: Text('')),
+                  columns: [
+                    DataColumn(label: Text(l10n.polAppliesTo)),
+                    DataColumn(label: Text(l10n.polCalls)),
+                    DataColumn(label: Text(l10n.polAction)),
+                    DataColumn(label: Text(l10n.polAnnouncement)),
+                    DataColumn(label: Text(l10n.polFeatureCodes)),
+                    const DataColumn(label: Text('')),
                   ],
                   rows: [
                     for (final p in rows)
                       DataRow(
                         key: ValueKey('policy-${p['id']}'),
                         cells: [
-                          DataCell(Text(_appliesTo(p, ref))),
+                          DataCell(Text(_appliesTo(l10n, p, ref))),
                           DataCell(
                             Text(
-                              policyDirections['${p['direction']}'] ??
+                              policyDirectionsOf(l10n)['${p['direction']}'] ??
                                   '${p['direction']}',
                             ),
                           ),
                           DataCell(
                             Text(
-                              policyActions['${p['action']}'] ??
+                              policyActionsOf(l10n)['${p['action']}'] ??
                                   '${p['action']}',
                             ),
                           ),
                           DataCell(
                             Text(
                               p['announce'] != true
-                                  ? 'None'
+                                  ? l10n.polAnnounceNone
                                   : p['consentAssetId'] == null
-                                  ? 'Short tone'
-                                  : 'Recording',
+                                  ? l10n.polShortTone
+                                  : l10n.polAnnounceRecording,
                             ),
                           ),
                           DataCell(
                             Text(
                               p['allowOnDemand'] != true
-                                  ? 'Off'
+                                  ? l10n.polCodesOff
                                   : p['action'] == 'record'
-                                  ? '*2 pause'
-                                  : '*1 record',
+                                  ? l10n.polCodesPause
+                                  : l10n.polCodesRecord,
                             ),
                           ),
                           DataCell(
@@ -184,12 +174,12 @@ class PoliciesPanel extends ConsumerWidget {
                               children: [
                                 if (canChange) ...[
                                   IconButton(
-                                    tooltip: 'Edit rule',
+                                    tooltip: l10n.polEdit,
                                     icon: const Icon(Icons.edit_outlined),
                                     onPressed: () => _edit(context, ref, p),
                                   ),
                                   IconButton(
-                                    tooltip: 'Delete rule',
+                                    tooltip: l10n.polDelete,
                                     icon: const Icon(Icons.delete_outline),
                                     onPressed: () => _delete(context, ref, p),
                                   ),
@@ -235,13 +225,14 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
     final days = int.tryParse(_days.text.trim());
     if (days == null || days < 0 || days > 3650) {
       setState(() {
-        _error = 'Enter a whole number of days from 0 to 3650.';
+        _error = context.l10n.polRetentionInvalid;
         _notice = null;
       });
       return;
     }
     final api = ref.read(recordingsApiProvider);
     if (api == null) return;
+    final l10n = context.l10n;
     setState(() {
       _busy = true;
       _error = null;
@@ -255,8 +246,8 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
         setState(() {
           _busy = false;
           _notice = saved == 0
-              ? 'Recordings are now kept until they are deleted.'
-              : 'Recordings are now kept for $saved days.';
+              ? l10n.polKeptUntilDeleted
+              : l10n.polKeptForDays(saved);
         });
       }
     } catch (e) {
@@ -271,6 +262,7 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final current = ref.watch(recordingRetentionProvider);
     final canChange = ref.watch(canProvider('recording.policy.manage'));
     if (!_loaded && current.hasValue) {
@@ -284,7 +276,7 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Keeping recordings',
+              l10n.polKeepingTitle,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
@@ -300,9 +292,9 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
                     enabled: !_busy,
                     readOnly: !canChange,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Keep recordings for (days)',
-                      helperText: '0 keeps them until someone deletes them.',
+                    decoration: InputDecoration(
+                      labelText: l10n.polKeepFor,
+                      helperText: l10n.polKeepForHelp,
                     ),
                     onSubmitted: (_) => _save(),
                   ),
@@ -310,7 +302,7 @@ class _RetentionCardState extends ConsumerState<RetentionCard> {
                 if (canChange)
                   FilledButton(
                     onPressed: _busy ? null : _save,
-                    child: const Text('Save'),
+                    child: Text(l10n.commonSave),
                   ),
               ],
             ),
@@ -345,6 +337,7 @@ class _RecordingRequiredCardState extends ConsumerState<RecordingRequiredCard> {
   Future<void> _save(bool required) async {
     final api = ref.read(recordingsApiProvider);
     if (api == null) return;
+    final l10n = context.l10n;
     setState(() {
       _busy = true;
       _error = null;
@@ -356,9 +349,7 @@ class _RecordingRequiredCardState extends ConsumerState<RecordingRequiredCard> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _notice = saved
-              ? 'Calls that cannot be recorded are now refused.'
-              : 'Calls that cannot be recorded now go ahead unrecorded.';
+          _notice = saved ? l10n.polRequiredOn : l10n.polRequiredOff;
         });
       }
     } catch (e) {
@@ -373,6 +364,7 @@ class _RecordingRequiredCardState extends ConsumerState<RecordingRequiredCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final settings = ref.watch(recordingSettingsProvider);
     final canChange = ref.watch(canProvider('recording.policy.manage'));
     final required = settings.asData?.value.recordingRequired ?? false;
@@ -385,14 +377,8 @@ class _RecordingRequiredCardState extends ConsumerState<RecordingRequiredCard> {
             SwitchListTile(
               key: const ValueKey('recording-required'),
               contentPadding: EdgeInsets.zero,
-              title: const Text('Recording required'),
-              subtitle: const Text(
-                'When a call that your rules may record cannot have its '
-                'recording set up, for example because the recording system '
-                'cannot be reached, refuse the call instead of connecting it '
-                'unrecorded. The caller hears a short tone and the call ends. '
-                'Calls your rules do not record are never refused.',
-              ),
+              title: Text(l10n.polRequiredTitle),
+              subtitle: Text(l10n.polRequiredHelp),
               value: required,
               onChanged: _busy || !canChange || !settings.hasValue
                   ? null
@@ -456,9 +442,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
 
   Future<void> _save() async {
     if (_form.scopeType != 'tenant' && _form.scopeId == null) {
-      setState(
-        () => _error = 'Choose which ${_scopeNoun[_form.scopeType]} it covers.',
-      );
+      setState(() => _error = context.l10n.polChooseTarget(_form.scopeType));
       return;
     }
     final api = ref.read(recordingsApiProvider);
@@ -500,10 +484,11 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
               const <Json>[])
         if (a['status'] == 'ready' && a['kind'] == 'prompt') a,
     ];
+    final l10n = context.l10n;
     final recording = _form.action == 'record';
     final agentRule = _form.scopeType == 'agent';
     return AlertDialog(
-      title: Text(widget.policy == null ? 'Add rule' : 'Edit rule'),
+      title: Text(widget.policy == null ? l10n.polAdd : l10n.polEdit),
       content: SizedBox(
         width: 480,
         child: SingleChildScrollView(
@@ -515,9 +500,9 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                 key: const ValueKey('policy-scope'),
                 initialValue: _form.scopeType,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Applies to'),
+                decoration: InputDecoration(labelText: l10n.polAppliesTo),
                 items: [
-                  for (final e in policyScopes.entries)
+                  for (final e in policyScopesOf(l10n).entries)
                     DropdownMenuItem(value: e.key, child: Text(e.value)),
                 ],
                 onChanged: _busy
@@ -539,9 +524,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'Records the queue calls this person answers as an agent, '
-                    'from the moment they answer. A call the queue or phone '
-                    'number rule already records is not recorded twice.',
+                    l10n.polAgentHelp,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
@@ -551,7 +534,7 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                   initialValue: _form.scopeId,
                   isExpanded: true,
                   decoration: InputDecoration(
-                    labelText: policyScopes[_form.scopeType],
+                    labelText: policyScopesOf(l10n)[_form.scopeType],
                   ),
                   items: [
                     for (final t in targets)
@@ -566,9 +549,9 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                 key: const ValueKey('policy-direction'),
                 initialValue: _form.direction,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Calls'),
+                decoration: InputDecoration(labelText: l10n.polCalls),
                 items: [
-                  for (final e in policyDirections.entries)
+                  for (final e in policyDirectionsOf(l10n).entries)
                     DropdownMenuItem(value: e.key, child: Text(e.value)),
                 ],
                 onChanged: _busy ? null : (v) => _set(direction: v),
@@ -577,9 +560,9 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                 key: const ValueKey('policy-action'),
                 initialValue: _form.action,
                 isExpanded: true,
-                decoration: const InputDecoration(labelText: 'Action'),
+                decoration: InputDecoration(labelText: l10n.polAction),
                 items: [
-                  for (final e in policyActions.entries)
+                  for (final e in policyActionsOf(l10n).entries)
                     if (!agentRule || e.key == 'record')
                       DropdownMenuItem(value: e.key, child: Text(e.value)),
                 ],
@@ -593,10 +576,8 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Play an announcement first'),
-                subtitle: const Text(
-                  'Played to the caller before recording starts.',
-                ),
+                title: Text(l10n.polAnnounceFirst),
+                subtitle: Text(l10n.polAnnounceFirstHelp),
                 value: _form.announce && recording,
                 onChanged: _busy || !recording || agentRule
                     ? null
@@ -607,16 +588,14 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                   key: const ValueKey('policy-consent'),
                   initialValue: _form.consentAssetId,
                   isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Announcement recording',
-                    helperText:
-                        'Upload a prompt on the Media page. Without one, a '
-                        'short tone plays instead of words.',
+                  decoration: InputDecoration(
+                    labelText: l10n.polAnnouncementRecording,
+                    helperText: l10n.polAnnouncementHelp,
                   ),
                   items: [
-                    const DropdownMenuItem(
+                    DropdownMenuItem(
                       value: null,
-                      child: Text('Short tone'),
+                      child: Text(l10n.polShortTone),
                     ),
                     for (final a in assets)
                       DropdownMenuItem(
@@ -631,28 +610,19 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
                   key: const ValueKey('policy-on-demand'),
                   contentPadding: EdgeInsets.zero,
                   title: Text(
-                    recording
-                        ? 'Allow pausing with *2'
-                        : 'Allow recording on demand with *1',
+                    recording ? l10n.polAllowPause : l10n.polAllowOnDemand,
                   ),
                   subtitle: Text(
                     recording
-                        ? 'During a call this rule records, a person on it can '
-                              'press *2 to pause the recording (for card or '
-                              'medical details) and *2 again to resume. The '
-                              'paused part is silent. Every pause is logged.'
-                        : 'During a call this rule does not record, a person on '
-                              'it can press *1 to start recording and *1 again to '
-                              'stop. Every start and stop is logged.',
+                        ? l10n.polAllowPauseHelp
+                        : l10n.polAllowOnDemandHelp,
                   ),
                   value: _form.allowOnDemand,
                   onChanged: _busy ? null : (v) => _set(allowOnDemand: v),
                 ),
               const SizedBox(height: 8),
               Text(
-                'Whether you must tell people a call is recorded, and how, '
-                'depends on where they are. Choosing announcements that meet '
-                'those rules is up to you.',
+                l10n.polDisclosure,
                 style: Theme.of(context).textTheme.bodySmall,
               ),
               if (_error != null) ...[
@@ -666,11 +636,11 @@ class _PolicyDialogState extends ConsumerState<PolicyDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(l10n.commonCancel),
         ),
         FilledButton(
           onPressed: _busy ? null : _save,
-          child: const Text('Save'),
+          child: Text(l10n.commonSave),
         ),
       ],
     );

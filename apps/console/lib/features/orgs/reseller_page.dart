@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../trunks/trunks_page.dart';
@@ -26,11 +27,11 @@ class ResellerPage extends ConsumerWidget {
     final resellers = ref.watch(resellersProvider);
     return AsyncBody<List<Json>>(
       value: resellers,
-      emptyText: 'No such reseller.',
+      emptyText: context.l10n.orgNoSuchReseller,
       builder: (rows) {
         final match = rows.where((r) => r['id'] == resellerId);
         if (match.isEmpty) {
-          return const Center(child: Text('No such reseller.'));
+          return Center(child: Text(context.l10n.orgNoSuchReseller));
         }
         return _Detail(reseller: match.first);
       },
@@ -60,7 +61,7 @@ class _Detail extends ConsumerWidget {
                   '${reseller['slug']} · ${suspended ? reseller['status'] : 'active'}'
                   '${reseller['timezone'] == null ? '' : ' · ${reseller['timezone']}'}',
               leading: IconButton(
-                tooltip: 'Back to resellers',
+                tooltip: context.l10n.orgBackToResellers,
                 icon: const Icon(Icons.arrow_back),
                 onPressed: () => context.go('/resellers'),
               ),
@@ -69,27 +70,31 @@ class _Detail extends ConsumerWidget {
                   OutlinedButton(
                     onPressed: () =>
                         orgAction(context, ref, reseller, true, 'edit'),
-                    child: const Text('Edit'),
+                    child: Text(context.l10n.commonEdit),
                   ),
                   OutlinedButton(
                     onPressed: () =>
                         orgAction(context, ref, reseller, true, 'suspend'),
-                    child: Text(suspended ? 'Resume' : 'Suspend'),
+                    child: Text(
+                      suspended
+                          ? context.l10n.orgResume
+                          : context.l10n.orgSuspend,
+                    ),
                   ),
                 ],
               ],
             ),
             const SizedBox(height: 8),
-            const TabBar(
+            TabBar(
               isScrollable: true,
               tabAlignment: TabAlignment.start,
               tabs: [
-                Tab(text: 'Tenants'),
-                Tab(text: 'People'),
-                Tab(text: 'Trunks'),
-                Tab(text: 'Domains'),
-                Tab(text: 'Certificates'),
-                Tab(text: 'Brand'),
+                Tab(text: context.l10n.navTenants),
+                Tab(text: context.l10n.navPeople),
+                Tab(text: context.l10n.navTrunks),
+                Tab(text: context.l10n.navDomains),
+                Tab(text: context.l10n.navCertificates),
+                Tab(text: context.l10n.navBrand),
               ],
             ),
             Expanded(

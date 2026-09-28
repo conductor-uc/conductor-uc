@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/permissions.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/commit_field.dart';
 import '../../widgets/page.dart';
 import '../callflow/builder/lookups.dart';
@@ -86,7 +87,7 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
   Future<void> _change(Json tier, String key, String text) {
     final n = int.tryParse(text.trim());
     if (n == null || n < 1 || n > 100) {
-      setState(() => _error = 'Enter a whole number from 1 to 100.');
+      setState(() => _error = context.l10n.tierNumberRange);
       return Future.value();
     }
     return _run(
@@ -106,6 +107,7 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final agents = ref.watch(optionsProvider('agents')).asData?.value ?? {};
     final tiers = _tiers;
     // Someone who can read queues but not change them sees who answers only.
@@ -116,24 +118,25 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
         if (!used.contains(e.key)) e.key: e.value,
     };
     return AlertDialog(
-      title: Text('Agents in ${widget.queue['label'] ?? 'this queue'}'),
+      title: Text(
+        widget.queue['label'] == null
+            ? l.tierTitleUnnamed
+            : l.tierTitle('${widget.queue['label']}'),
+      ),
       content: SizedBox(
         width: 560,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Callers try agents at level 1 first, and move to the next level '
-              'only when nobody at the level before is available.',
-            ),
+            Text(l.tierIntro),
             const SizedBox(height: 12),
             if (tiers == null && _error == null)
               const LinearProgressIndicator(),
             if (tiers != null && tiers.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('No agents yet. Add one below.'),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(l.tierNone),
               ),
             if (tiers != null)
               Flexible(
@@ -154,14 +157,16 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
                               ),
                               if (!canChange)
                                 Text(
-                                  'Level ${t['level']} · '
-                                  'position ${t['position']}',
+                                  l.tierLevelPosition(
+                                    '${t['level']}',
+                                    '${t['position']}',
+                                  ),
                                 )
                               else ...[
                                 SizedBox(
                                   width: 90,
                                   child: CommitField(
-                                    label: 'Level',
+                                    label: l.tierLevel,
                                     value: '${t['level']}',
                                     number: true,
                                     onCommit: (v) => _change(t, 'level', v),
@@ -171,14 +176,14 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
                                 SizedBox(
                                   width: 90,
                                   child: CommitField(
-                                    label: 'Position',
+                                    label: l.tierPosition,
                                     value: '${t['position']}',
                                     number: true,
                                     onCommit: (v) => _change(t, 'position', v),
                                   ),
                                 ),
                                 IconButton(
-                                  tooltip: 'Remove from queue',
+                                  tooltip: l.tierRemove,
                                   icon: const Icon(Icons.close),
                                   onPressed: () => _remove(t),
                                 ),
@@ -201,10 +206,8 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
                       initialValue: _newAgent,
                       isExpanded: true,
                       decoration: InputDecoration(
-                        labelText: 'Add an agent',
-                        helperText: free.isEmpty
-                            ? 'Every agent is already in this queue.'
-                            : null,
+                        labelText: l.tierAddAgent,
+                        helperText: free.isEmpty ? l.tierAllAdded : null,
                       ),
                       items: [
                         for (final e in free.entries)
@@ -217,7 +220,7 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
                   SizedBox(
                     width: 80,
                     child: CommitField(
-                      label: 'Level',
+                      label: l.tierLevel,
                       value: '$_newLevel',
                       number: true,
                       onCommit: (v) => _newLevel = int.tryParse(v.trim()) ?? 1,
@@ -227,7 +230,7 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
                   SizedBox(
                     width: 80,
                     child: CommitField(
-                      label: 'Position',
+                      label: l.tierPosition,
                       value: '$_newPosition',
                       number: true,
                       onCommit: (v) =>
@@ -239,7 +242,7 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
                     padding: const EdgeInsets.only(top: 8),
                     child: FilledButton(
                       onPressed: _newAgent == null ? null : _add,
-                      child: const Text('Add'),
+                      child: Text(l.tierAdd),
                     ),
                   ),
                 ],
@@ -254,7 +257,7 @@ class _QueueTiersDialogState extends ConsumerState<QueueTiersDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
+          child: Text(l.tierDone),
         ),
       ],
     );

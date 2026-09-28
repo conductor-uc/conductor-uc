@@ -195,27 +195,33 @@ class ResourceView extends ConsumerWidget {
         return value == true ? f.label : '';
       case FieldKind.choice:
         // S9-08: a choice reads as its label ("A call flow"), not its value.
-        return value == null ? '—' : f.choiceLabels['$value'] ?? '$value';
+        return value == null
+            ? currentL10n.commonNoValue
+            : f.choiceLabels['$value'] ?? '$value';
       case FieldKind.ref:
         return _lookup(ref, f.ref!, value);
       case FieldKind.dynamicRef:
         final type = row[f.refByField] as String?;
         final target = type == null ? null : f.refMap[type];
-        return target == null ? '—' : _lookup(ref, target, value);
+        return target == null
+            ? currentL10n.commonNoValue
+            : _lookup(ref, target, value);
       case FieldKind.refList:
         final ids = [...?(value as List?)];
         return ids.isEmpty
-            ? '—'
+            ? currentL10n.commonNoValue
             : ids.map((id) => _lookup(ref, f.ref!, id)).join(', ');
       case FieldKind.textList:
         final words = [...?(value as List?)];
-        return words.isEmpty ? '—' : words.join(', ');
+        return words.isEmpty ? currentL10n.commonNoValue : words.join(', ');
       case FieldKind.weeklyHours:
         return summarizeRules(value);
       case FieldKind.dateList:
         return summarizeHolidays(value);
       default:
-        if (value == null || value == '') return f.emptyLabel ?? '—';
+        if (value == null || value == '') {
+          return f.emptyLabel ?? currentL10n.commonNoValue;
+        }
         // S9-07, S9-08: a MAC reads as printed on the phone, and a phone
         // number the way people write it here.
         if (f.format == FieldFormat.mac) return formatMac('$value');
@@ -232,7 +238,7 @@ class ResourceView extends ConsumerWidget {
   /// The display title of the row `id` in `resource`, or the raw id while that
   /// resource is still loading or the row is gone.
   String _lookup(WidgetRef ref, String resource, Object? id) {
-    if (id == null) return '—';
+    if (id == null) return currentL10n.commonNoValue;
     final rows = ref.watch(rowsProvider(resource)).asData?.value;
     final match = rows?.where((r) => r['id'] == id);
     if (match == null || match.isEmpty) return '$id';
@@ -340,11 +346,9 @@ class ResourcePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (ref.watch(tenantIdProvider) == null) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
-        child: Text(
-          'Choose a tenant to configure. Acting as a tenant arrives with the app shell.',
-        ),
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(context.l10n.rpChooseTenant),
       );
     }
     if (defs.length == 1) return _view(defs.single);
@@ -382,7 +386,7 @@ class ResourcePage extends ConsumerWidget {
     rowActions: switch (def.key) {
       'queues' => (context, ref, row) => [
         IconButton(
-          tooltip: 'Agents and tiers',
+          tooltip: context.l10n.rpAgentsAndTiers,
           icon: const Icon(Icons.people_outline),
           onPressed: () => showDialog<void>(
             context: context,
@@ -393,7 +397,7 @@ class ResourcePage extends ConsumerWidget {
       'extensions' => (context, ref, row) => [
         if (ref.watch(canProvider(def.permission)))
           IconButton(
-            tooltip: 'Call handling',
+            tooltip: context.l10n.rpCallHandling,
             icon: const Icon(Icons.call_split_outlined),
             onPressed: () => showDialog<bool>(
               context: context,
@@ -401,7 +405,7 @@ class ResourcePage extends ConsumerWidget {
             ),
           ),
         IconButton(
-          tooltip: 'Connect a phone',
+          tooltip: context.l10n.rpConnectPhone,
           icon: const Icon(Icons.phone_in_talk_outlined),
           onPressed: () => showDialog<void>(
             context: context,
@@ -420,7 +424,7 @@ class ResourcePage extends ConsumerWidget {
       ],
       'devices' => (context, ref, row) => [
         IconButton(
-          tooltip: 'Set up this phone',
+          tooltip: context.l10n.provTitle,
           icon: const Icon(Icons.settings_remote_outlined),
           onPressed: () => showDialog<void>(
             context: context,

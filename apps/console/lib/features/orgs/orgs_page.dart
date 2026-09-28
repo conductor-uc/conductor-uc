@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/acting.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../pbx/resource_form.dart';
@@ -35,13 +36,14 @@ class OrgsPage extends ConsumerWidget {
     final rows = showingResellers
         ? ref.watch(resellersProvider)
         : ref.watch(tenantsProvider(resellerId ?? session.orgId));
+    final l10n = context.l10n;
     return PageFrame(
       children: [
         PageHeader(
-          title: showingResellers ? 'Resellers' : 'Tenants',
+          title: showingResellers ? l10n.navResellers : l10n.navTenants,
           leading: isMaster && !showingResellers && !embedded
               ? IconButton(
-                  tooltip: 'Back to resellers',
+                  tooltip: l10n.orgBackToResellers,
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () => context.go('/resellers'),
                 )
@@ -62,7 +64,9 @@ class OrgsPage extends ConsumerWidget {
                             : '/tenants/new',
                       ),
                 icon: const Icon(Icons.add),
-                label: Text(showingResellers ? 'New reseller' : 'New tenant'),
+                label: Text(
+                  showingResellers ? l10n.orgNewReseller : l10n.orgNewTenant,
+                ),
               ),
           ],
         ),
@@ -71,8 +75,8 @@ class OrgsPage extends ConsumerWidget {
           child: AsyncBody(
             value: rows,
             emptyText: showingResellers
-                ? 'No resellers yet.'
-                : 'No tenants yet.',
+                ? l10n.orgNoResellers
+                : l10n.orgNoTenants,
             builder: (data) => Material(
               type: MaterialType.transparency,
               child: ListView(
@@ -111,8 +115,12 @@ class OrgsPage extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Created ${created['name']}.'
-            '${admin == null ? '' : ' Its administrator signs in as $admin.'}',
+            admin == null
+                ? context.l10n.orgCreated('${created['name']}')
+                : context.l10n.orgCreatedWithAdmin(
+                    '${created['name']}',
+                    '$admin',
+                  ),
           ),
         ),
       );
@@ -176,22 +184,32 @@ class _OrgTile extends ConsumerWidget {
                       // S9-05: a visit starts at the tenant's home.
                       context.go('/dashboard');
                     },
-              child: const Text('Act as'),
+              child: Text(context.l10n.orgActAs),
             ),
           if (canEdit || canSuspend || !isReseller)
             PopupMenuButton<String>(
-              tooltip: 'More',
+              tooltip: context.l10n.orgMore,
               onSelected: (choice) =>
                   orgAction(context, ref, org, isReseller, choice),
               itemBuilder: (_) => [
                 if (canEdit)
-                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                  PopupMenuItem(
+                    value: 'edit',
+                    child: Text(context.l10n.commonEdit),
+                  ),
                 if (!isReseller)
-                  const PopupMenuItem(value: 'people', child: Text('People')),
+                  PopupMenuItem(
+                    value: 'people',
+                    child: Text(context.l10n.navPeople),
+                  ),
                 if (canSuspend)
                   PopupMenuItem(
                     value: 'suspend',
-                    child: Text(suspended ? 'Resume' : 'Suspend'),
+                    child: Text(
+                      suspended
+                          ? context.l10n.orgResume
+                          : context.l10n.orgSuspend,
+                    ),
                   ),
               ],
             ),
@@ -247,20 +265,24 @@ Future<void> orgAction(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: Text('${suspend ? 'Suspend' : 'Resume'} ${org['name']}?'),
-      content: Text(
+      title: Text(
         suspend
-            ? 'Their users are signed out and calls stop routing until it is resumed.'
-            : 'Service is restored.',
+            ? context.l10n.orgSuspendTitle('${org['name']}')
+            : context.l10n.orgResumeTitle('${org['name']}'),
+      ),
+      content: Text(
+        suspend ? context.l10n.orgSuspendBody : context.l10n.orgResumeBody,
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: Text(suspend ? 'Suspend' : 'Resume'),
+          child: Text(
+            suspend ? context.l10n.orgSuspend : context.l10n.orgResume,
+          ),
         ),
       ],
     ),

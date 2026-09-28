@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'pbx_api.dart' show Json;
 import '../../core/format.dart';
+import '../../l10n/l10n.dart';
 
 /// Weekday order as a schedule shows it. The service numbers days 0 (Sunday)
 /// to 6 (Saturday); people read a week from Monday.
@@ -47,7 +48,7 @@ String describeDays(Iterable<int> days) {
 /// One line for the table: `Mon–Fri 09:00–17:00 · Sat 10:00–14:00`.
 String summarizeRules(Object? rules) {
   final list = [...?(rules as List?)];
-  if (list.isEmpty) return 'Never open';
+  if (list.isEmpty) return currentL10n.schedNeverOpen;
   return list
       .map((r) {
         final m = r as Map;
@@ -59,23 +60,23 @@ String summarizeRules(Object? rules) {
 
 String summarizeHolidays(Object? holidays) {
   final n = ((holidays as List?) ?? const []).length;
-  return n == 0 ? 'None' : (n == 1 ? '1 holiday' : '$n holidays');
+  return currentL10n.schedHolidayCount(n);
 }
 
 /// What is wrong with the weekly windows, or null. Mirrors the service.
 String? rulesError(List<Json> rules) {
+  final l = currentL10n;
   for (final (i, r) in rules.indexed) {
-    final where = 'Hours ${i + 1}';
     if (((r['days'] as List?) ?? const []).isEmpty) {
-      return '$where: choose at least one day.';
+      return l.schedNeedsDay(i + 1);
     }
     final start = '${r['start'] ?? ''}';
     final end = '${r['end'] ?? ''}';
     if (!isValidTime(start) || !isValidTime(end)) {
-      return '$where: times look like 09:00 (24-hour).';
+      return l.schedTimeFormat(i + 1);
     }
     if (end.compareTo(start) <= 0) {
-      return '$where: closing must be after opening.';
+      return l.schedCloseAfterOpen(i + 1);
     }
   }
   return null;
@@ -86,8 +87,8 @@ String? holidaysError(List<Json> holidays) {
   final seen = <String>{};
   for (final h in holidays) {
     final date = '${h['date'] ?? ''}';
-    if (!isValidDate(date)) return '"$date" is not a date (YYYY-MM-DD).';
-    if (!seen.add(date)) return '$date is listed twice.';
+    if (!isValidDate(date)) return currentL10n.schedNotADate(date);
+    if (!seen.add(date)) return currentL10n.schedDateTwice(date);
   }
   return null;
 }
@@ -173,10 +174,11 @@ class _WeeklyHoursEditorState extends State<WeeklyHoursEditor> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = context.l10n;
     return InputDecorator(
       decoration: InputDecoration(
-        labelText: 'Open hours',
-        helperText: 'Outside these hours the schedule is closed.',
+        labelText: l.schRules,
+        helperText: l.schedHoursHelp,
         helperMaxLines: 2,
         errorText: widget.errorText,
         border: const OutlineInputBorder(),
@@ -185,9 +187,9 @@ class _WeeklyHoursEditorState extends State<WeeklyHoursEditor> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (_rows.isEmpty)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 8),
-              child: Text('Never open. Add hours below.'),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(l.schedNeverOpenAdd),
             ),
           for (final (i, row) in _rows.indexed)
             Padding(
@@ -222,8 +224,8 @@ class _WeeklyHoursEditorState extends State<WeeklyHoursEditor> {
                         child: TextField(
                           key: ValueKey('hours-$i-start'),
                           controller: row.start,
-                          decoration: const InputDecoration(
-                            labelText: 'Opens',
+                          decoration: InputDecoration(
+                            labelText: l.mainNumberOpens,
                             hintText: '09:00',
                             isDense: true,
                           ),
@@ -236,8 +238,8 @@ class _WeeklyHoursEditorState extends State<WeeklyHoursEditor> {
                         child: TextField(
                           key: ValueKey('hours-$i-end'),
                           controller: row.end,
-                          decoration: const InputDecoration(
-                            labelText: 'Closes',
+                          decoration: InputDecoration(
+                            labelText: l.mainNumberCloses,
                             hintText: '17:00',
                             isDense: true,
                           ),
@@ -245,7 +247,7 @@ class _WeeklyHoursEditorState extends State<WeeklyHoursEditor> {
                         ),
                       ),
                       IconButton(
-                        tooltip: 'Remove these hours',
+                        tooltip: l.schedRemoveHours,
                         icon: const Icon(Icons.close),
                         onPressed: () {
                           setState(() => _rows.removeAt(i).dispose());
@@ -260,7 +262,7 @@ class _WeeklyHoursEditorState extends State<WeeklyHoursEditor> {
           TextButton.icon(
             onPressed: _add,
             icon: const Icon(Icons.add),
-            label: const Text('Add hours'),
+            label: Text(l.schedAddHours),
             style: TextButton.styleFrom(
               foregroundColor: theme.colorScheme.primary,
             ),
@@ -332,10 +334,11 @@ class _DateListEditorState extends State<DateListEditor> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     return InputDecorator(
       decoration: InputDecoration(
-        labelText: 'Holidays',
-        helperText: 'Closed all day on these dates, whatever the hours say.',
+        labelText: l.schedHolidays,
+        helperText: l.schedHolidaysHelp,
         helperMaxLines: 2,
         errorText: widget.errorText,
         border: const OutlineInputBorder(),
@@ -354,8 +357,8 @@ class _DateListEditorState extends State<DateListEditor> {
                     child: TextField(
                       key: ValueKey('holiday-$i-date'),
                       controller: row.date,
-                      decoration: const InputDecoration(
-                        labelText: 'Date',
+                      decoration: InputDecoration(
+                        labelText: l.schedDate,
                         hintText: '2026-12-25',
                         isDense: true,
                       ),
@@ -367,15 +370,15 @@ class _DateListEditorState extends State<DateListEditor> {
                     child: TextField(
                       key: ValueKey('holiday-$i-label'),
                       controller: row.label,
-                      decoration: const InputDecoration(
-                        labelText: 'Name (optional)',
+                      decoration: InputDecoration(
+                        labelText: l.schedNameOptional,
                         isDense: true,
                       ),
                       onChanged: (_) => _changed(),
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Remove this holiday',
+                    tooltip: l.schedRemoveHoliday,
                     icon: const Icon(Icons.close),
                     onPressed: () {
                       setState(() => _rows.removeAt(i).dispose());
@@ -391,7 +394,7 @@ class _DateListEditorState extends State<DateListEditor> {
               _changed();
             },
             icon: const Icon(Icons.add),
-            label: const Text('Add a holiday'),
+            label: Text(l.schedAddHoliday),
           ),
         ],
       ),

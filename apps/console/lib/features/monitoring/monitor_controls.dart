@@ -5,47 +5,34 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_client.dart';
 import '../../core/problem.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 
 /// The ways a supervisor can join a live call (S5-09), each from their own
 /// phone (O-14), each with its own permission.
 enum MonitorMode {
-  listen(
-    'listen',
-    'Listen',
-    'monitor.listen',
-    Icons.headphones_outlined,
-    'Listening on your phone',
-  ),
-  whisper(
-    'whisper',
-    'Whisper',
-    'monitor.whisper',
-    Icons.record_voice_over_outlined,
-    'Whispering on your phone',
-  ),
-  barge(
-    'barge',
-    'Barge',
-    'monitor.barge',
-    Icons.call_merge,
-    'Barged in on your phone',
-  );
+  listen('listen', 'monitor.listen', Icons.headphones_outlined),
+  whisper('whisper', 'monitor.whisper', Icons.record_voice_over_outlined),
+  barge('barge', 'monitor.barge', Icons.call_merge);
 
-  const MonitorMode(
-    this.wire,
-    this.label,
-    this.permission,
-    this.icon,
-    this.doneLabel,
-  );
+  const MonitorMode(this.wire, this.permission, this.icon);
 
   final String wire;
-  final String label;
   final String permission;
   final IconData icon;
 
+  /// The button's label.
+  String label(AppLocalizations l) => switch (this) {
+    MonitorMode.listen => l.mcListen,
+    MonitorMode.whisper => l.mcWhisper,
+    MonitorMode.barge => l.mcBarge,
+  };
+
   /// What the snackbar says once the phone has answered and joined.
-  final String doneLabel;
+  String doneLabel(AppLocalizations l) => switch (this) {
+    MonitorMode.listen => l.mcListening,
+    MonitorMode.whisper => l.mcWhispering,
+    MonitorMode.barge => l.mcBarged,
+  };
 }
 
 /// Whether a call can be joined: the service refuses one that is still
@@ -138,14 +125,14 @@ class MonitorControls extends ConsumerWidget {
       return Row(
         key: ValueKey('monitor-pending-$callId'),
         mainAxisSize: MainAxisSize.min,
-        children: const [
-          SizedBox(
+        children: [
+          const SizedBox(
             width: 14,
             height: 14,
             child: CircularProgressIndicator(strokeWidth: 2),
           ),
-          SizedBox(width: 8),
-          Text('Ringing your phone…'),
+          const SizedBox(width: 8),
+          Text(context.l10n.mcRingingYourPhone),
         ],
       );
     }
@@ -159,7 +146,7 @@ class MonitorControls extends ConsumerWidget {
             key: ValueKey('monitor-${mode.wire}-$callId'),
             onPressed: () => _press(context, ref, mode),
             icon: Icon(mode.icon, size: 18),
-            label: Text(mode.label),
+            label: Text(mode.label(context.l10n)),
           ),
       ],
     );
@@ -174,10 +161,11 @@ class MonitorControls extends ConsumerWidget {
     if (api == null) return;
     final pending = ref.read(pendingMonitorsProvider.notifier);
     final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
     pending.start(callId, mode);
     try {
       await api.monitor(tenantId: tenantId, callUuid: actOn, mode: mode);
-      messenger.showSnackBar(SnackBar(content: Text(mode.doneLabel)));
+      messenger.showSnackBar(SnackBar(content: Text(mode.doneLabel(l))));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(problemMessage(e))));
     } finally {

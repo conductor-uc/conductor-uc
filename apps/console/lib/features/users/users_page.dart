@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/acting.dart';
 import '../../core/permissions.dart';
 import '../../core/session.dart';
+import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import '../auth/auth_errors.dart';
 import '../auth/auth_scaffold.dart' show FormMessage;
@@ -41,16 +42,16 @@ class UsersPage extends ConsumerWidget {
     return PageFrame(
       children: [
         PageHeader(
-          title: embedded ? 'People' : 'Users',
+          title: embedded ? context.l10n.navPeople : context.l10n.navUsers,
           subtitle: name == null
-              ? 'People who can sign in. Invite someone by email, then give them a role.'
-              : "People who can sign in to $name. Invite someone by email, then give them a role.",
+              ? context.l10n.usrSubtitle
+              : context.l10n.usrSubtitleNamed(name),
           actions: [
             if (canChange)
               FilledButton.icon(
                 onPressed: () => _invite(context, ref, target),
                 icon: const Icon(Icons.person_add_alt_outlined),
-                label: const Text('Invite user'),
+                label: Text(context.l10n.usrInvite),
               ),
           ],
         ),
@@ -58,7 +59,7 @@ class UsersPage extends ConsumerWidget {
         Expanded(
           child: AsyncBody(
             value: rows,
-            emptyText: 'No users yet.',
+            emptyText: context.l10n.usrEmpty,
             builder: (data) => SingleChildScrollView(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -67,14 +68,14 @@ class UsersPage extends ConsumerWidget {
                     minWidth: MediaQuery.sizeOf(context).width - 320,
                   ),
                   child: DataTable(
-                    columns: const [
-                      DataColumn(label: Text('Name')),
-                      DataColumn(label: Text('Email')),
-                      DataColumn(label: Text('Role')),
-                      DataColumn(label: Text('Access')),
-                      DataColumn(label: Text('Two-step')),
-                      DataColumn(label: Text('Last sign-in')),
-                      DataColumn(label: Text('')),
+                    columns: [
+                      DataColumn(label: Text(context.l10n.fieldName)),
+                      DataColumn(label: Text(context.l10n.authEmail)),
+                      DataColumn(label: Text(context.l10n.usrRole)),
+                      DataColumn(label: Text(context.l10n.usrAccess)),
+                      DataColumn(label: Text(context.l10n.usrTwoStep)),
+                      DataColumn(label: Text(context.l10n.usrLastSignIn)),
+                      const DataColumn(label: Text('')),
                     ],
                     rows: [
                       for (final u in data)
@@ -104,33 +105,51 @@ class UsersPage extends ConsumerWidget {
     return DataRow(
       key: ValueKey('user-${u['id']}'),
       cells: [
-        DataCell(Text('${u['displayName']}${mine ? ' (you)' : ''}')),
+        DataCell(
+          Text(
+            mine
+                ? context.l10n.usrNameYou('${u['displayName']}')
+                : '${u['displayName']}',
+          ),
+        ),
         DataCell(Text('${u['email']}')),
-        DataCell(Text(role == null ? 'No role' : roleLabels[role] ?? role)),
-        DataCell(Text(disabled ? 'Disabled' : 'Can sign in')),
+        DataCell(
+          Text(
+            role == null ? context.l10n.usrNoRole : roleLabels[role] ?? role,
+          ),
+        ),
+        DataCell(
+          Text(
+            disabled
+                ? context.l10n.usrStatusDisabled
+                : context.l10n.usrStatusActive,
+          ),
+        ),
         DataCell(
           Icon(u['mfaEnrolled'] == true ? Icons.check : Icons.remove, size: 18),
         ),
-        DataCell(Text(_when(u['lastLoginAt']))),
+        DataCell(Text(_when(context, u['lastLoginAt']))),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               if (canChange)
                 IconButton(
-                  tooltip: 'Edit',
+                  tooltip: context.l10n.commonEdit,
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: () => _edit(context, ref, target, u),
                 ),
               if (canChange && !mine && u['mfaEnrolled'] == true)
                 IconButton(
-                  tooltip: 'Reset two-step verification',
+                  tooltip: context.l10n.usrResetMfa,
                   icon: const Icon(Icons.phonelink_erase_outlined),
                   onPressed: () => _confirmResetMfa(context, ref, target, u),
                 ),
               if (canChange && !mine)
                 IconButton(
-                  tooltip: disabled ? 'Allow sign-in' : 'Disable',
+                  tooltip: disabled
+                      ? context.l10n.usrAllowSignIn
+                      : context.l10n.usrDisable,
                   icon: Icon(
                     disabled ? Icons.lock_open_outlined : Icons.block_outlined,
                   ),
@@ -145,8 +164,10 @@ class UsersPage extends ConsumerWidget {
     );
   }
 
-  String _when(Object? iso) {
-    if (iso == null || DateTime.tryParse('$iso') == null) return 'Never';
+  String _when(BuildContext context, Object? iso) {
+    if (iso == null || DateTime.tryParse('$iso') == null) {
+      return context.l10n.commonNever;
+    }
     return formatDateTime(iso);
   }
 
@@ -185,7 +206,9 @@ class UsersPage extends ConsumerWidget {
     );
     if (sent == null || !context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Invitation sent to ${sent['email']}.')),
+      SnackBar(
+        content: Text(context.l10n.usrInvitationSent('${sent['email']}')),
+      ),
     );
   }
 
@@ -198,18 +221,16 @@ class UsersPage extends ConsumerWidget {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Disable ${user['displayName']}?'),
-        content: const Text(
-          'They are signed out now and cannot sign in until you allow it again.',
-        ),
+        title: Text(context.l10n.usrDisableTitle('${user['displayName']}')),
+        content: Text(context.l10n.usrDisableBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Disable'),
+            child: Text(context.l10n.usrDisable),
           ),
         ],
       ),
@@ -228,6 +249,7 @@ class UsersPage extends ConsumerWidget {
     final api = ref.read(usersApiForProvider(target));
     if (api == null) return;
     final messenger = ScaffoldMessenger.of(context);
+    final l10n = context.l10n;
     final done = await showDialog<bool>(
       context: context,
       builder: (_) => ResetMfaDialog(
@@ -238,11 +260,7 @@ class UsersPage extends ConsumerWidget {
     if (done != true) return;
     ref.invalidate(usersForProvider(target));
     messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          'Two-step verification reset for ${user['displayName']}.',
-        ),
-      ),
+      SnackBar(content: Text(l10n.usrMfaResetDone('${user['displayName']}'))),
     );
   }
 
@@ -300,9 +318,7 @@ class _ResetMfaDialogState extends State<ResetMfaDialog> {
   Future<void> _submit() async {
     final code = _code.text.replaceAll(RegExp(r'\s'), '');
     if (!RegExp(r'^\d{6}$').hasMatch(code)) {
-      setState(
-        () => _error = 'Enter the 6-digit code from your authenticator app.',
-      );
+      setState(() => _error = context.l10n.authMfaEnterCode);
       return;
     }
     setState(() {
@@ -318,16 +334,10 @@ class _ResetMfaDialogState extends State<ResetMfaDialog> {
         _busy = false;
         _cannot = problemCode(e) == 'step_up_not_enrolled';
         _error = switch (problemCode(e)) {
-          'step_up_required' =>
-            'Enter the 6-digit code from your authenticator app.',
-          'step_up_invalid' =>
-            'That code did not work, or it was already used. Wait for the '
-                'next code in your authenticator app and try again.',
-          'step_up_locked' =>
-            'Too many wrong codes. Wait 15 minutes, then try again.',
-          'step_up_not_enrolled' =>
-            'Your own account has no two-step verification, so you cannot '
-                'confirm this. Ask another administrator to do it.',
+          'step_up_required' => context.l10n.authMfaEnterCode,
+          'step_up_invalid' => context.l10n.problemStepUpInvalid,
+          'step_up_locked' => context.l10n.problemStepUpLocked,
+          'step_up_not_enrolled' => context.l10n.usrStepUpNotEnrolled,
           _ => problemMessage(e),
         };
       });
@@ -339,7 +349,7 @@ class _ResetMfaDialogState extends State<ResetMfaDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: Text(
-        'Reset two-step verification for ${widget.user['displayName']}?',
+        context.l10n.usrResetMfaTitle('${widget.user['displayName']}'),
       ),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 440),
@@ -347,17 +357,9 @@ class _ResetMfaDialogState extends State<ResetMfaDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Use this when they have lost their phone. They are signed out '
-              'everywhere and asked to set up a new authenticator app the next '
-              'time they sign in. We email them to say it happened, and let '
-              "the organization's other administrators know.",
-            ),
+            Text(context.l10n.usrResetMfaBody),
             const SizedBox(height: 16),
-            const Text(
-              'To confirm, enter the current code from your own authenticator '
-              'app.',
-            ),
+            Text(context.l10n.usrResetMfaConfirm),
             const SizedBox(height: 8),
             TextField(
               key: const ValueKey('step-up-code'),
@@ -366,7 +368,7 @@ class _ResetMfaDialogState extends State<ResetMfaDialog> {
               enabled: !_busy && !_cannot,
               keyboardType: TextInputType.number,
               autofillHints: const [AutofillHints.oneTimeCode],
-              decoration: const InputDecoration(labelText: 'Your code'),
+              decoration: InputDecoration(labelText: context.l10n.usrYourCode),
               onSubmitted: (_) => _busy ? null : _submit(),
             ),
             if (_error != null) FormMessage(_error!, isError: true),
@@ -376,11 +378,11 @@ class _ResetMfaDialogState extends State<ResetMfaDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Cancel'),
+          child: Text(context.l10n.commonCancel),
         ),
         FilledButton(
           onPressed: _busy || _cannot ? null : _submit,
-          child: const Text('Reset'),
+          child: Text(context.l10n.usrResetButton),
         ),
       ],
     );

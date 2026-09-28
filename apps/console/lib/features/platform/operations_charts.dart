@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/format.dart';
+import '../../l10n/l10n.dart';
 
 /// Rounds [max] up to a tidy axis top (1, 2, 5, 10, 20, 50, ...), never below
 /// [floor], so a quiet platform still draws a sensible axis.
@@ -32,14 +33,16 @@ class ValueBarChart extends StatelessWidget {
     required this.format,
     this.height = 220,
     this.floor = 4,
-    this.emptyText = 'Nothing to show yet.',
+    this.emptyText,
   });
 
   final List<(String, double)> items;
   final String Function(double value) format;
   final double height;
   final double floor;
-  final String emptyText;
+
+  /// Said when there are no items; "Nothing to show yet." when not given.
+  final String? emptyText;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +51,12 @@ class ValueBarChart extends StatelessWidget {
     if (items.isEmpty) {
       return SizedBox(
         height: height,
-        child: Center(child: Text(emptyText, style: _axisStyle(theme))),
+        child: Center(
+          child: Text(
+            emptyText ?? context.l10n.opsNothingToShowYet,
+            style: _axisStyle(theme),
+          ),
+        ),
       );
     }
     final top = niceCeiling(
@@ -233,7 +241,7 @@ class CpuGauge extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    'CPU',
+                    context.l10n.opsCpu,
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: scheme.onSurfaceVariant,
                     ),
@@ -279,7 +287,7 @@ class TrendChart extends StatelessWidget {
         height: height,
         child: Center(
           child: Text(
-            'The line starts after a few readings.',
+            context.l10n.opsLineStartsLater,
             style: _axisStyle(theme),
           ),
         ),

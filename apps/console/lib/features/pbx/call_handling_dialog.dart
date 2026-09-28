@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../l10n/l10n.dart';
 import '../myphone/my_phone_api.dart';
 import 'pbx_api.dart';
 
@@ -52,13 +53,12 @@ class _Dest {
   };
 
   /// What is wrong with this destination, or null.
-  String? problem(String slot) {
+  String? problem(AppLocalizations l, String slot) {
     if (type == 'extension' && extensionId == null) {
-      return '$slot: choose an extension.';
+      return l.chChooseExtension(slot);
     }
     if (type == 'external' && !_e164.hasMatch(number.text.trim())) {
-      return '$slot: enter the number with a leading + and country code, '
-          'for example +14155552671.';
+      return l.chEnterE164(slot);
     }
     return null;
   }
@@ -123,7 +123,7 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
     final api = ref.read(pbxApiProvider);
     final mine = ref.read(myPhoneApiProvider);
     if (widget.mine ? mine == null : api == null) {
-      setState(() => _error = 'Sign in again to continue.');
+      setState(() => _error = currentL10n.chSignInAgain);
       return;
     }
     try {
@@ -160,22 +160,23 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
   }
 
   Future<void> _save() async {
+    final l = context.l10n;
     final slots = {
-      'Forward all calls': _always,
-      'Forward when busy': _busy,
-      'Forward when there is no answer': _noAnswer,
-      'Forward when unreachable': _unreachable,
+      l.chForwardAlways: _always,
+      l.chForwardBusy: _busy,
+      l.chForwardNoAnswer: _noAnswer,
+      l.chForwardUnreachable: _unreachable,
     };
     String? bad;
     for (final e in slots.entries) {
-      bad ??= e.value.problem(e.key);
+      bad ??= e.value.problem(l, e.key);
     }
     for (var i = 0; i < _ring.length; i++) {
-      bad ??= _ring[i].problem('Also ring ${i + 1}');
+      bad ??= _ring[i].problem(l, l.chAlsoRingN(i + 1));
     }
     final seconds = int.tryParse(_seconds.text.trim());
     if (seconds == null || seconds < 5 || seconds > 120) {
-      bad ??= 'Ring for: enter a whole number of seconds from 5 to 120.';
+      bad ??= l.chRingForInvalid;
     }
     if (bad != null) {
       setState(() => _error = bad);
@@ -220,6 +221,7 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final number = '${widget.extension['number']}';
     final extensions =
         (widget.mine
@@ -233,7 +235,7 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
         if ('${e['id']}' != _extensionId) e,
     ];
     return AlertDialog(
-      title: Text('Call handling for $number'),
+      title: Text(l.chTitle(number)),
       content: SizedBox(
         width: 560,
         child: !_loaded
@@ -253,10 +255,8 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
                     SwitchListTile(
                       key: const Key('call-handling-dnd'),
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Do not disturb'),
-                      subtitle: const Text(
-                        'Calls do not ring this extension, and nothing below applies.',
-                      ),
+                      title: Text(l.chDoNotDisturb),
+                      subtitle: Text(l.chDoNotDisturbHelp),
                       value: _dnd,
                       onChanged: (v) => setState(() => _dnd = v),
                     ),
@@ -264,17 +264,17 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
                       DropdownButtonFormField<String>(
                         key: const Key('call-handling-dnd-action'),
                         initialValue: _dndAction,
-                        decoration: const InputDecoration(
-                          labelText: 'Send callers to',
+                        decoration: InputDecoration(
+                          labelText: l.chSendCallersTo,
                         ),
-                        items: const [
+                        items: [
                           DropdownMenuItem(
                             value: 'voicemail',
-                            child: Text('Voicemail'),
+                            child: Text(l.destVoicemail),
                           ),
                           DropdownMenuItem(
                             value: 'busy',
-                            child: Text('A busy signal'),
+                            child: Text(l.chBusySignal),
                           ),
                         ],
                         onChanged: (v) =>
@@ -283,15 +283,15 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
                     const Divider(height: 32),
                     _slot(
                       'always',
-                      'Forward all calls',
+                      l.chForwardAlways,
                       _always,
                       others,
-                      help: 'Replaces ringing this extension.',
+                      help: l.chForwardAlwaysHelp,
                     ),
-                    _slot('busy', 'Forward when busy', _busy, others),
+                    _slot('busy', l.chForwardBusy, _busy, others),
                     _slot(
                       'no-answer',
-                      'Forward when there is no answer',
+                      l.chForwardNoAnswer,
                       _noAnswer,
                       others,
                       extra: SizedBox(
@@ -300,28 +300,25 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
                           key: const Key('call-handling-seconds'),
                           controller: _seconds,
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            labelText: 'Ring for (seconds)',
-                          ),
+                          decoration: InputDecoration(labelText: l.rgRingFor),
                         ),
                       ),
                     ),
                     _slot(
                       'unreachable',
-                      'Forward when unreachable',
+                      l.chForwardUnreachable,
                       _unreachable,
                       others,
-                      help: 'The phone is not registered.',
+                      help: l.chForwardUnreachableHelp,
                     ),
                     const Divider(height: 32),
                     Text(
-                      'Also ring at the same time',
+                      l.chAlsoRing,
                       style: Theme.of(context).textTheme.titleSmall,
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Up to $_maxRing extensions or outside numbers ring '
-                      'together with this one.',
+                      l.chAlsoRingHelp(_maxRing),
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                     for (var i = 0; i < _ring.length; i++)
@@ -345,7 +342,7 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
                             ),
                             IconButton(
                               key: Key('call-handling-ring-$i-remove'),
-                              tooltip: 'Remove',
+                              tooltip: l.chRemove,
                               icon: const Icon(Icons.close),
                               onPressed: () => setState(() {
                                 _ring.removeAt(i).dispose();
@@ -364,7 +361,7 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
                                 () => _ring.add(_Dest(type: 'extension')),
                               ),
                         icon: const Icon(Icons.add),
-                        label: const Text('Add destination'),
+                        label: Text(l.chAddDestination),
                       ),
                     ),
                     if (_error != null)
@@ -384,11 +381,11 @@ class _CallHandlingDialogState extends ConsumerState<CallHandlingDialog> {
       actions: [
         TextButton(
           onPressed: _saving ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l.commonCancel),
         ),
         FilledButton(
           onPressed: !_loaded || _saving ? null : _save,
-          child: const Text('Save'),
+          child: Text(l.commonSave),
         ),
       ],
     );
@@ -453,6 +450,7 @@ class _DestinationEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     final ids = {for (final e in others) '${e['id']}'};
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -463,22 +461,22 @@ class _DestinationEditor extends StatelessWidget {
             key: Key('call-handling-$slotKey-type'),
             isExpanded: true,
             initialValue: dest.type,
-            decoration: const InputDecoration(labelText: 'Send to'),
+            decoration: InputDecoration(labelText: l.chSendTo),
             items: [
               if (allowNone)
-                const DropdownMenuItem(value: 'none', child: Text('Not set')),
-              const DropdownMenuItem(
+                DropdownMenuItem(value: 'none', child: Text(l.chNotSet)),
+              DropdownMenuItem(
                 value: 'extension',
-                child: Text('An extension'),
+                child: Text(l.chAnExtension),
               ),
               if (allowVoicemail)
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: 'voicemail',
-                  child: Text('A voicemail'),
+                  child: Text(l.chAVoicemail),
                 ),
-              const DropdownMenuItem(
+              DropdownMenuItem(
                 value: 'external',
-                child: Text('An outside number'),
+                child: Text(l.chAnOutsideNumber),
               ),
             ],
             onChanged: (v) {
@@ -497,7 +495,7 @@ class _DestinationEditor extends StatelessWidget {
                   ? dest.extensionId
                   : null,
               isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Extension'),
+              decoration: InputDecoration(labelText: l.extSingular),
               items: [
                 for (final e in others)
                   DropdownMenuItem(value: '${e['id']}', child: Text(_title(e))),
@@ -513,11 +511,11 @@ class _DestinationEditor extends StatelessWidget {
                   ? dest.extensionId
                   : null,
               isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Voicemail of'),
+              decoration: InputDecoration(labelText: l.chVoicemailOf),
               items: [
-                const DropdownMenuItem<String?>(
+                DropdownMenuItem<String?>(
                   value: null,
-                  child: Text('This extension'),
+                  child: Text(l.chThisExtension),
                 ),
                 for (final e in others)
                   DropdownMenuItem<String?>(
@@ -534,8 +532,8 @@ class _DestinationEditor extends StatelessWidget {
               key: Key('call-handling-$slotKey-number'),
               controller: dest.number,
               keyboardType: TextInputType.phone,
-              decoration: const InputDecoration(
-                labelText: 'Number',
+              decoration: InputDecoration(
+                labelText: l.chNumber,
                 hintText: '+14155552671',
               ),
             ),

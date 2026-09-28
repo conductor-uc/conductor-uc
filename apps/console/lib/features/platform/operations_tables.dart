@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../l10n/l10n.dart';
 import 'operations_api.dart';
 import 'operations_charts.dart';
 import 'operations_widgets.dart';
@@ -36,8 +37,9 @@ class ServicesTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     if (overview.services.isEmpty) {
-      return const Center(child: Text('No services are configured.'));
+      return Center(child: Text(l.opsNoServices));
     }
     final services = [...overview.services]
       ..sort((a, b) {
@@ -55,16 +57,16 @@ class ServicesTab extends StatelessWidget {
       child: Card(
         margin: EdgeInsets.zero,
         child: _WideTable(
-          columns: const [
-            'Service',
-            'Status',
-            'Response',
-            'Version',
-            'Uptime',
-            'Memory',
-            'Outbox',
-            'Not ready',
-            'Details',
+          columns: [
+            l.opsColService,
+            l.opsColStatus,
+            l.opsColResponse,
+            l.opsColVersion,
+            l.opsUptime,
+            l.opsColMemory,
+            l.opsColOutbox,
+            l.opsColNotReady,
+            l.opsColDetails,
           ],
           rows: [
             for (final s in services)
@@ -81,7 +83,7 @@ class ServicesTab extends StatelessWidget {
                   DataCell(Text(s.version ?? noValue)),
                   DataCell(Text(formatSpan(s.uptimeSeconds))),
                   DataCell(Text(formatBytes(s.rssBytes))),
-                  DataCell(_outbox(s)),
+                  DataCell(_outbox(l, s)),
                   DataCell(
                     Text(
                       s.failingChecks.isEmpty
@@ -107,18 +109,20 @@ class ServicesTab extends StatelessWidget {
     );
   }
 
-  Widget _outbox(ServiceStatus s) {
+  Widget _outbox(AppLocalizations l, ServiceStatus s) {
     if (s.outboxPending == null) return Text(noValue);
     final failed = s.outboxFailed ?? 0;
     final pending = s.outboxPending!;
     final text = pending == 0
-        ? 'Empty'
-        : '${formatCount(pending)} waiting, oldest '
-              '${formatSpan(s.outboxOldestSeconds)}';
+        ? l.opsOutboxEmpty
+        : l.opsOutboxWaiting(
+            formatCount(pending),
+            formatSpan(s.outboxOldestSeconds),
+          );
     if (failed == 0) return Text(text);
     return HealthLabel(
       Health.bad,
-      '$text; ${formatCount(failed)} given up',
+      l.opsOutboxGivenUp(text, formatCount(failed)),
       dense: true,
     );
   }
@@ -134,6 +138,7 @@ class SignallingTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = overview.signalling;
     final theme = Theme.of(context);
+    final l = context.l10n;
     final shmShare =
         s?.shmUsedBytes != null &&
             s?.shmTotalBytes != null &&
@@ -146,47 +151,44 @@ class SignallingTab extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           if (s == null)
-            const Card(
-              margin: EdgeInsets.zero,
-              child: Unavailable('The SIP edge is not answering.'),
-            )
+            Card(margin: EdgeInsets.zero, child: Unavailable(l.opsSipEdgeDown))
           else
             ResponsiveGrid(
               minWidth: 200,
               maxColumns: 6,
               children: [
                 StatTile(
-                  label: 'Edge',
+                  label: l.opsEdge,
                   value: serviceHealth(s.status).$2,
                   icon: Icons.router_outlined,
                   health: serviceHealth(s.status).$1,
-                  detail: 'Up ${formatSpan(s.uptimeSeconds)}',
+                  detail: l.opsUpFor(formatSpan(s.uptimeSeconds)),
                 ),
                 StatTile(
-                  label: 'Registered phones',
+                  label: l.opsRegisteredPhones,
                   value: formatCount(s.registrations),
                   icon: Icons.phone_android_outlined,
                 ),
                 StatTile(
-                  label: 'Calls in progress',
+                  label: l.opsCallsInProgress,
                   value: formatCount(s.activeDialogs),
                   icon: Icons.call_outlined,
-                  detail: 'Answered dialogs',
+                  detail: l.opsAnsweredDialogs,
                 ),
                 StatTile(
-                  label: 'Calls ringing',
+                  label: l.opsCallsRinging,
                   value: formatCount(s.earlyDialogs),
                   icon: Icons.ring_volume_outlined,
-                  detail: 'Early dialogs',
+                  detail: l.opsEarlyDialogs,
                 ),
                 StatTile(
-                  label: 'Transactions',
+                  label: l.opsTransactions,
                   value: formatCount(s.transactions),
                   icon: Icons.swap_horiz,
-                  detail: 'In progress',
+                  detail: l.opsInProgress,
                 ),
                 StatTile(
-                  label: 'Shared memory',
+                  label: l.opsSharedMemory,
                   value: formatPercent(
                     shmShare == null ? null : shmShare * 100,
                   ),
@@ -198,29 +200,26 @@ class SignallingTab extends StatelessWidget {
                       : shmShare >= 0.7
                       ? Health.attention
                       : Health.good,
-                  detail:
-                      '${formatBytes(s.shmUsedBytes)} of ${formatBytes(s.shmTotalBytes)}',
+                  detail: l.opsPartOfWhole(
+                    formatBytes(s.shmUsedBytes),
+                    formatBytes(s.shmTotalBytes),
+                  ),
                 ),
               ],
             ),
           const SizedBox(height: 16),
           Panel(
-            title: 'Media nodes at the edge',
-            subtitle:
-                'Where the edge sends new calls. Weights split them; a node out '
-                'of rotation gets none.',
+            title: l.opsMediaNodesAtEdge,
+            subtitle: l.opsMediaNodesAtEdgeHelp,
             child: overview.nodes.isEmpty
-                ? Text(
-                    'No media nodes are configured.',
-                    style: theme.textTheme.bodyMedium,
-                  )
+                ? Text(l.opsNoMediaNodes, style: theme.textTheme.bodyMedium)
                 : _WideTable(
-                    columns: const [
-                      'Node',
-                      'Address',
-                      'State',
-                      'Weight',
-                      'Share',
+                    columns: [
+                      l.opsColNode,
+                      l.opsColAddress,
+                      l.opsColState,
+                      l.opsWeight,
+                      l.opsColShare,
                     ],
                     rows: [
                       for (final n in overview.nodes)
@@ -267,10 +266,11 @@ class EventsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final events = overview.events;
+    final l = context.l10n;
     if (events == null) {
-      return const Card(
+      return Card(
         margin: EdgeInsets.zero,
-        child: Unavailable('The event bus is not answering.'),
+        child: Unavailable(l.opsEventBusDown),
       );
     }
     final consumers = [...events.consumers]
@@ -288,21 +288,26 @@ class EventsTab extends StatelessWidget {
             maxColumns: 2,
             children: [
               Panel(
-                title: 'Messages kept per stream',
-                subtitle: 'Events each stream holds for replay.',
+                title: l.opsMessagesPerStream,
+                subtitle: l.opsMessagesPerStreamHelp,
                 child: ValueBarChart(
                   items: [
                     for (final s in events.streams)
                       (s.name, s.messages.toDouble()),
                   ],
                   format: (v) => formatCount(v),
-                  emptyText: 'No streams yet.',
+                  emptyText: l.opsNoStreams,
                 ),
               ),
               Panel(
-                title: 'Streams',
+                title: l.opsStreams,
                 child: _WideTable(
-                  columns: const ['Stream', 'Messages', 'Size', 'Consumers'],
+                  columns: [
+                    l.opsColStream,
+                    l.opsColMessages,
+                    l.opsColSize,
+                    l.opsConsumers,
+                  ],
                   rows: [
                     for (final s in events.streams)
                       DataRow(
@@ -320,17 +325,15 @@ class EventsTab extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Panel(
-            title: 'Consumers',
-            subtitle:
-                'Waiting: not yet delivered. Unacknowledged: delivered, not yet '
-                'done. Redelivered: tried again after a failure.',
+            title: l.opsConsumers,
+            subtitle: l.opsConsumersHelp,
             child: _WideTable(
-              columns: const [
-                'Consumer',
-                'Stream',
-                'Waiting',
-                'Unacknowledged',
-                'Redelivered',
+              columns: [
+                l.opsColConsumer,
+                l.opsColStream,
+                l.opsColWaiting,
+                l.opsColUnacknowledged,
+                l.opsColRedelivered,
               ],
               rows: [
                 for (final c in consumers)
@@ -364,8 +367,9 @@ class DataStoresTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = context.l10n;
     if (overview.dataStores.isEmpty) {
-      return const Center(child: Text('No data stores reported.'));
+      return Center(child: Text(l.opsNoDataStores));
     }
     final theme = Theme.of(context);
     return SingleChildScrollView(
@@ -404,9 +408,10 @@ class DataStoresTab extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       [
-                        if (store.version != null) 'Version ${store.version}',
+                        if (store.version != null)
+                          l.opsVersionIs('${store.version}'),
                         if (store.uptimeSeconds != null)
-                          'up ${formatSpan(store.uptimeSeconds)}',
+                          l.opsUpForLower(formatSpan(store.uptimeSeconds)),
                       ].join(', '),
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
@@ -415,7 +420,7 @@ class DataStoresTab extends StatelessWidget {
                     const SizedBox(height: 16),
                     if (store.facts.isEmpty)
                       Text(
-                        'Nothing reported.',
+                        l.opsNothingReported,
                         style: theme.textTheme.bodyMedium,
                       )
                     else

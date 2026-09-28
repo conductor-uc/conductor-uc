@@ -3480,5 +3480,3732 @@
   "dashNothingYet": "Nothing to show here for your role yet.",
   "@dashNothingYet": {
     "description": "Dashboard: no figures for this person's role."
+  },
+  "cdrDirInbound": "Inbound",
+  "@cdrDirInbound": {
+    "description": "Call records: a call that came in from outside."
+  },
+  "cdrDirOutbound": "Outbound",
+  "@cdrDirOutbound": {
+    "description": "Call records: a call made to an outside number."
+  },
+  "cdrDirInternal": "Internal",
+  "@cdrDirInternal": {
+    "description": "Call records: a call between two extensions of the organization."
+  },
+  "cdrDispAnswered": "Answered",
+  "@cdrDispAnswered": {
+    "description": "Call records, Result column: the call was answered."
+  },
+  "cdrDispNoAnswer": "No answer",
+  "@cdrDispNoAnswer": {
+    "description": "Call records, Result column: nobody picked up."
+  },
+  "cdrDispBusy": "Busy",
+  "@cdrDispBusy": {
+    "description": "Call records, Result column: the called line was busy."
+  },
+  "cdrDispFailed": "Failed",
+  "@cdrDispFailed": {
+    "description": "Call records, Result column: the call could not be connected."
+  },
+  "cdrDispCancelled": "Cancelled",
+  "@cdrDispCancelled": {
+    "description": "Call records, Result column: the caller hung up before it was answered."
+  },
+  "cdrDispNodeFailure": "Failed (platform)",
+  "@cdrDispNodeFailure": {
+    "description": "Call records, Result column: the call was cut off by a fault in the phone system itself."
+  },
+  "cdrChooseTenant": "Choose a tenant to see its call records.",
+  "@cdrChooseTenant": {
+    "description": "Call records page, shown to a platform or reseller administrator who has not picked a customer yet."
+  },
+  "cdrForbiddenBody": "Your role doesn't include call records.",
+  "@cdrForbiddenBody": {
+    "description": "Call records page, under the not-available heading."
+  },
+  "cdrTitle": "Call records",
+  "@cdrTitle": {
+    "description": "Heading of the call records page."
+  },
+  "cdrSubtitle": "Every call to, from and inside this tenant, newest first.",
+  "@cdrSubtitle": {
+    "description": "Explanation under the call records heading."
+  },
+  "cdrExportCsv": "Export CSV",
+  "@cdrExportCsv": {
+    "description": "Call records page button that opens the export dialog (CSV is a spreadsheet file format)."
+  },
+  "cdrNoMatches": "No calls match.",
+  "@cdrNoMatches": {
+    "description": "Call records page when the filters match no calls."
+  },
+  "cdrFromNotDate": "From must be a date such as 2026-09-24.",
+  "@cdrFromNotDate": {
+    "description": "Call records and recordings filters: the From date is not a valid year-month-day date. Keep the example date as it is."
+  },
+  "cdrToNotDate": "To must be a date such as 2026-09-24.",
+  "@cdrToNotDate": {
+    "description": "Call records and recordings filters: the To date is not a valid year-month-day date. Keep the example date as it is."
+  },
+  "cdrToBeforeFrom": "To must not be before From.",
+  "@cdrToBeforeFrom": {
+    "description": "Call records and recordings filters: the end date is earlier than the start date."
+  },
+  "cdrFromDate": "From date",
+  "@cdrFromDate": {
+    "description": "Call records and recordings filters, and the export dialog: first day to include."
+  },
+  "cdrToDate": "To date",
+  "@cdrToDate": {
+    "description": "Call records and recordings filters: last day to include."
+  },
+  "cdrDirection": "Direction",
+  "@cdrDirection": {
+    "description": "Call records: filter label, column heading and detail label for which way a call went."
+  },
+  "cdrAll": "All",
+  "@cdrAll": {
+    "description": "Call records and recordings filters: the choice that does not narrow by direction."
+  },
+  "cdrNumber": "Number",
+  "@cdrNumber": {
+    "description": "Call records filter: a phone number to look for."
+  },
+  "cdrNumberHelp": "Caller, callee or dialed",
+  "@cdrNumberHelp": {
+    "description": "Help under the Number filter on call records: which numbers it matches."
+  },
+  "cdrExtension": "Extension",
+  "@cdrExtension": {
+    "description": "Call records and recordings filters: narrow to one extension (internal number)."
+  },
+  "cdrExtensionHelp": "Fills in its number",
+  "@cdrExtensionHelp": {
+    "description": "Help under the Extension filter on call records: choosing one fills in the Number filter."
+  },
+  "cdrAny": "Any",
+  "@cdrAny": {
+    "description": "Call records and recordings filters: the choice that does not narrow by extension or queue."
+  },
+  "cdrDidFilter": "Phone number called",
+  "@cdrDidFilter": {
+    "description": "Call records filter: the organization's own phone number the caller dialed."
+  },
+  "cdrSearch": "Search",
+  "@cdrSearch": {
+    "description": "Call records and recordings: button that applies the filters."
+  },
+  "cdrClear": "Clear",
+  "@cdrClear": {
+    "description": "Call records and recordings: button that clears the filters."
+  },
+  "cdrStarted": "Started",
+  "@cdrStarted": {
+    "description": "Call records and recordings: column heading and detail label for when the call started."
+  },
+  "cdrFrom": "From",
+  "@cdrFrom": {
+    "description": "Call records: column heading and detail label for who made the call."
+  },
+  "cdrTo": "To",
+  "@cdrTo": {
+    "description": "Call records: column heading and detail label for who was called."
+  },
+  "cdrDuration": "Duration",
+  "@cdrDuration": {
+    "description": "Call records: column heading and detail label for how long the call lasted."
+  },
+  "cdrResult": "Result",
+  "@cdrResult": {
+    "description": "Call records: column heading and detail label for how the call ended (answered, busy...)."
+  },
+  "cdrLoadMore": "Load more",
+  "@cdrLoadMore": {
+    "description": "Call records and recordings: button under the table that loads the next page of rows."
+  },
+  "cdrDetailsTitle": "Call details",
+  "@cdrDetailsTitle": {
+    "description": "Title of the dialog showing everything recorded about one call."
+  },
+  "cdrAnsweredAt": "Answered",
+  "@cdrAnsweredAt": {
+    "description": "Call details dialog: label of the time the call was answered."
+  },
+  "cdrEnded": "Ended",
+  "@cdrEnded": {
+    "description": "Call details dialog: label of the time the call ended."
+  },
+  "cdrBillable": "Billable time",
+  "@cdrBillable": {
+    "description": "Call details dialog: label of the chargeable duration."
+  },
+  "cdrDialed": "Dialed",
+  "@cdrDialed": {
+    "description": "Call details dialog: label of the digits the caller dialed."
+  },
+  "cdrPhoneNumber": "Phone number",
+  "@cdrPhoneNumber": {
+    "description": "Call details dialog: label of the organization's phone number the call came in on."
+  },
+  "cdrTrunk": "Trunk",
+  "@cdrTrunk": {
+    "description": "Call details dialog: label of the carrier connection the call used."
+  },
+  "cdrExtensions": "Extensions",
+  "@cdrExtensions": {
+    "description": "Call details dialog: label of the extensions the call reached."
+  },
+  "cdrQueue": "Queue",
+  "@cdrQueue": {
+    "description": "Call details dialog: label of the queue the call waited in."
+  },
+  "cdrCallFlow": "Call flow",
+  "@cdrCallFlow": {
+    "description": "Call details dialog: label of the call flow (menu, hours...) that handled the call."
+  },
+  "cdrEndedBecause": "Ended because",
+  "@cdrEndedBecause": {
+    "description": "Call details dialog: label of the technical reason the call ended."
+  },
+  "cdrHungUpBy": "Hung up by",
+  "@cdrHungUpBy": {
+    "description": "Call details dialog: label of which side hung up."
+  },
+  "cdrRecordings": "Recordings",
+  "@cdrRecordings": {
+    "description": "Call details dialog: label of how many recordings the call has."
+  },
+  "cdrNone": "None",
+  "@cdrNone": {
+    "description": "Call details dialog: the call has no recordings."
+  },
+  "cdrExportTitle": "Export call records",
+  "@cdrExportTitle": {
+    "description": "Title of the dialog that starts a call records export."
+  },
+  "cdrExportBody": "A CSV of every call in the period, up to a year. It is prepared in the background; the download appears on this page when ready.",
+  "@cdrExportBody": {
+    "description": "Explanation in the export dialog."
+  },
+  "cdrToDateIncluded": "To date (included)",
+  "@cdrToDateIncluded": {
+    "description": "Export dialog: last day to include in the export."
+  },
+  "cdrExportBothDates": "Enter both dates as YYYY-MM-DD.",
+  "@cdrExportBothDates": {
+    "description": "Export dialog error: a date is missing or not in year-month-day form. Keep YYYY-MM-DD as it is: it is the format the field takes."
+  },
+  "cdrStartExport": "Start export",
+  "@cdrStartExport": {
+    "description": "Export dialog button that starts preparing the file."
+  },
+  "cdrExportRow": "Export, {from} to {to}",
+  "@cdrExportRow": {
+    "description": "One export in the list on the call records page. {from} and {to} are the first and last days it covers, already formatted.",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "cdrExportPending": "Waiting to start…",
+  "@cdrExportPending": {
+    "description": "Status of an export that has not started yet."
+  },
+  "cdrExportProcessing": "Preparing the file…",
+  "@cdrExportProcessing": {
+    "description": "Status of an export being prepared."
+  },
+  "cdrExportReady": "Ready",
+  "@cdrExportReady": {
+    "description": "Status of an export that can be downloaded."
+  },
+  "cdrExportFailed": "Failed: {reason}",
+  "@cdrExportFailed": {
+    "description": "Status of an export that failed. {reason} is the service's explanation, or the generic one.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "cdrExportFailedUnknown": "the export could not be completed.",
+  "@cdrExportFailedUnknown": {
+    "description": "Reason shown after Failed: when the service gave none. Lower case: it follows a colon."
+  },
+  "cdrDownload": "Download",
+  "@cdrDownload": {
+    "description": "Button that downloads a finished export."
+  },
+  "vmAfterKeep": "Keep it as a new message",
+  "@vmAfterKeep": {
+    "description": "Voicemail email settings: after emailing, leave the message unheard."
+  },
+  "vmAfterMarkRead": "Mark it as read",
+  "@vmAfterMarkRead": {
+    "description": "Voicemail email settings: after emailing, mark the message as heard."
+  },
+  "vmAfterDelete": "Delete it (the email holds the only copy)",
+  "@vmAfterDelete": {
+    "description": "Voicemail email settings: after emailing, delete the message."
+  },
+  "vmTitle": "Voicemail",
+  "@vmTitle": {
+    "description": "Heading of the organization's voicemail page."
+  },
+  "vmSubtitle": "Each extension with voicemail has a mailbox. Open one to hear its messages, or set where new messages are emailed.",
+  "@vmSubtitle": {
+    "description": "Explanation under the voicemail heading."
+  },
+  "vmNoMailboxes": "No mailboxes yet.",
+  "@vmNoMailboxes": {
+    "description": "Voicemail page when there are no mailboxes."
+  },
+  "vmMailbox": "Mailbox",
+  "@vmMailbox": {
+    "description": "Voicemail mailboxes column heading: whose mailbox it is."
+  },
+  "vmNewMessages": "New messages",
+  "@vmNewMessages": {
+    "description": "Voicemail mailboxes column heading: how many messages are unheard."
+  },
+  "vmGreeting": "Greeting",
+  "@vmGreeting": {
+    "description": "Voicemail mailboxes column heading: which greeting callers hear."
+  },
+  "vmEmailTo": "Email to",
+  "@vmEmailTo": {
+    "description": "Voicemail mailboxes column heading: the address new messages are emailed to."
+  },
+  "vmGreetingCustom": "Custom",
+  "@vmGreetingCustom": {
+    "description": "Voicemail mailboxes: the owner recorded their own greeting."
+  },
+  "vmGreetingDefault": "Default",
+  "@vmGreetingDefault": {
+    "description": "Voicemail mailboxes: callers hear the standard greeting."
+  },
+  "vmEmailOff": "Off",
+  "@vmEmailOff": {
+    "description": "Voicemail mailboxes: new messages are not emailed."
+  },
+  "vmMessages": "Messages",
+  "@vmMessages": {
+    "description": "Tooltip on the button that opens a mailbox's messages."
+  },
+  "vmEmailSettings": "Email settings",
+  "@vmEmailSettings": {
+    "description": "Voicemail: tooltip, button and dialog title for where new messages are emailed."
+  },
+  "vmResetPin": "Reset PIN",
+  "@vmResetPin": {
+    "description": "Voicemail: tooltip and dialog title for setting a new mailbox PIN."
+  },
+  "vmMyTitle": "My voicemail",
+  "@vmMyTitle": {
+    "description": "Heading of a person's own voicemail page."
+  },
+  "vmMailboxTitle": "Voicemail: {mailbox}",
+  "@vmMailboxTitle": {
+    "description": "Heading of one mailbox's messages. {mailbox} is the extension it belongs to.",
+    "placeholders": {
+      "mailbox": {
+        "type": "String"
+      }
+    }
+  },
+  "vmMySubtitle": "{unread} new. Your greeting: {greeting}. Emailed to: {email}.",
+  "@vmMySubtitle": {
+    "description": "Summary under My voicemail. {unread} is the number of unheard messages; {greeting} is custom or default (vmMyGreetingCustom/Default); {email} is the address, or nobody.",
+    "placeholders": {
+      "unread": {
+        "type": "int"
+      },
+      "greeting": {
+        "type": "String"
+      },
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "vmMyGreetingCustom": "custom",
+  "@vmMyGreetingCustom": {
+    "description": "Inserted into the My voicemail summary: the person recorded their own greeting. Lower case: it is mid-sentence."
+  },
+  "vmMyGreetingDefault": "default",
+  "@vmMyGreetingDefault": {
+    "description": "Inserted into the My voicemail summary: callers hear the standard greeting. Lower case: it is mid-sentence."
+  },
+  "vmMyEmailNobody": "nobody",
+  "@vmMyEmailNobody": {
+    "description": "Inserted into the My voicemail summary when new messages are not emailed. Lower case: it is mid-sentence."
+  },
+  "vmBack": "Back to mailboxes",
+  "@vmBack": {
+    "description": "Tooltip on the back button above one mailbox's messages."
+  },
+  "vmChangePin": "Change PIN",
+  "@vmChangePin": {
+    "description": "My voicemail button that sets a new PIN."
+  },
+  "vmNoMessages": "No messages.",
+  "@vmNoMessages": {
+    "description": "A mailbox with no messages."
+  },
+  "vmFrom": "From",
+  "@vmFrom": {
+    "description": "Voicemail messages column heading: who left the message."
+  },
+  "vmReceived": "Received",
+  "@vmReceived": {
+    "description": "Voicemail messages column heading: when the message was left."
+  },
+  "vmLength": "Length",
+  "@vmLength": {
+    "description": "Voicemail messages column heading: how long the message is."
+  },
+  "vmUnknownCaller": "Unknown caller",
+  "@vmUnknownCaller": {
+    "description": "Voicemail message whose caller sent no name or number."
+  },
+  "vmRead": "Read",
+  "@vmRead": {
+    "description": "Voicemail message tag: already heard."
+  },
+  "vmNew": "New",
+  "@vmNew": {
+    "description": "Voicemail message tag: not heard yet."
+  },
+  "vmPlay": "Play",
+  "@vmPlay": {
+    "description": "Tooltip on the button that plays a voicemail message."
+  },
+  "vmCouldNotPlay": "Could not play it: {reason}",
+  "@vmCouldNotPlay": {
+    "description": "A voicemail message failed to play. {reason} says why.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "vmCouldNotDelete": "Could not delete it: {reason}",
+  "@vmCouldNotDelete": {
+    "description": "A voicemail message could not be deleted. {reason} says why.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "vmDeleteTitle": "Delete message?",
+  "@vmDeleteTitle": {
+    "description": "Title of the dialog confirming a voicemail message is deleted."
+  },
+  "vmDeleteBody": "The recording is removed and cannot be recovered.",
+  "@vmDeleteBody": {
+    "description": "Body of the dialog confirming a voicemail message is deleted."
+  },
+  "vmEnterOneEmail": "Enter one email address.",
+  "@vmEnterOneEmail": {
+    "description": "Voicemail email settings error: the address is missing or not a single valid address."
+  },
+  "vmEmailNew": "Email new messages",
+  "@vmEmailNew": {
+    "description": "Voicemail email settings switch: send each new message by email."
+  },
+  "vmEmailAddress": "Email address",
+  "@vmEmailAddress": {
+    "description": "Voicemail email settings field: where to send new messages."
+  },
+  "vmAttach": "Attach the recording",
+  "@vmAttach": {
+    "description": "Voicemail email settings switch: include the audio in the email."
+  },
+  "vmAttachHelp": "A very long message is sent without it, and says so.",
+  "@vmAttachHelp": {
+    "description": "Help under the attach-the-recording switch."
+  },
+  "vmAfterEmail": "After it is emailed",
+  "@vmAfterEmail": {
+    "description": "Voicemail email settings: what happens to the message once emailed."
+  },
+  "vmDeleteNeedsAttach": "Deleting needs the recording attached.",
+  "@vmDeleteNeedsAttach": {
+    "description": "Voicemail email settings: why delete-after-email cannot be chosen."
+  },
+  "vmPinInvalid": "The PIN must be 4 to 8 digits.",
+  "@vmPinInvalid": {
+    "description": "Reset PIN dialog error."
+  },
+  "vmPinChanged": "PIN changed.",
+  "@vmPinChanged": {
+    "description": "Confirmation after a mailbox PIN is changed."
+  },
+  "vmPinMine": "The PIN you enter on your phone to hear your messages.",
+  "@vmPinMine": {
+    "description": "Reset PIN dialog explanation, for the person's own mailbox."
+  },
+  "vmPinOwner": "The PIN the mailbox owner enters on a phone.",
+  "@vmPinOwner": {
+    "description": "Reset PIN dialog explanation, for an administrator."
+  },
+  "vmNewPin": "New PIN",
+  "@vmNewPin": {
+    "description": "Reset PIN dialog field."
+  },
+  "recDirInbound": "Incoming",
+  "@recDirInbound": {
+    "description": "Recordings: a recorded call that came in."
+  },
+  "recDirOutbound": "Outgoing",
+  "@recDirOutbound": {
+    "description": "Recordings: a recorded call that went out."
+  },
+  "recDirInternal": "Between extensions",
+  "@recDirInternal": {
+    "description": "Recordings: a recorded call between two extensions."
+  },
+  "recStatusPending": "Uploading",
+  "@recStatusPending": {
+    "description": "Recordings status: the audio is still being stored."
+  },
+  "recStatusReady": "Ready",
+  "@recStatusReady": {
+    "description": "Recordings status: the audio can be played."
+  },
+  "recStatusFailed": "Failed",
+  "@recStatusFailed": {
+    "description": "Recordings status: the audio could not be stored."
+  },
+  "recStatusExpired": "Expired",
+  "@recStatusExpired": {
+    "description": "Recordings status: the audio was deleted after the keeping period."
+  },
+  "recChooseTenant": "Choose a tenant to see its recordings.",
+  "@recChooseTenant": {
+    "description": "Recordings page, shown to a platform or reseller administrator who has not picked a customer yet."
+  },
+  "recForbiddenBody": "Your role doesn't include recordings.",
+  "@recForbiddenBody": {
+    "description": "Recordings page, under the not-available heading."
+  },
+  "recTabRecordings": "Recordings",
+  "@recTabRecordings": {
+    "description": "Recordings page tab: the list of recorded calls."
+  },
+  "recTabRules": "Rules",
+  "@recTabRules": {
+    "description": "Recordings page tab: the rules that decide which calls are recorded."
+  },
+  "recTitle": "Recordings",
+  "@recTitle": {
+    "description": "Heading of the recordings page."
+  },
+  "recSubtitle": "Recorded calls, newest first, and the rules that decide which calls are recorded.",
+  "@recSubtitle": {
+    "description": "Explanation under the recordings heading."
+  },
+  "recNoMatches": "No recordings match.",
+  "@recNoMatches": {
+    "description": "Recordings page when the filters match nothing."
+  },
+  "recCalls": "Calls",
+  "@recCalls": {
+    "description": "Recordings: filter label and column heading for which way the call went."
+  },
+  "recQueue": "Queue",
+  "@recQueue": {
+    "description": "Recordings filter: narrow to one queue."
+  },
+  "recOn": "On",
+  "@recOn": {
+    "description": "Recordings column heading: the extension or queue the recording was made on."
+  },
+  "recLength": "Length",
+  "@recLength": {
+    "description": "Recordings column heading: how long the recording is."
+  },
+  "recSize": "Size",
+  "@recSize": {
+    "description": "Recordings column heading: file size."
+  },
+  "recStatus": "Status",
+  "@recStatus": {
+    "description": "Recordings column heading."
+  },
+  "recKeptUntil": "Kept until",
+  "@recKeptUntil": {
+    "description": "Recordings column heading: the date the recording is deleted."
+  },
+  "recOnDemand": "on demand",
+  "@recOnDemand": {
+    "description": "Recordings status tag: someone started it with a feature code. Lower case: it follows the status."
+  },
+  "recPaused": "paused",
+  "@recPaused": {
+    "description": "Recordings status tag: it was paused for part of the call. Lower case: it follows the status."
+  },
+  "recUntilDeleted": "Until deleted",
+  "@recUntilDeleted": {
+    "description": "Recordings, Kept until column: kept until someone deletes it."
+  },
+  "recPlay": "Play",
+  "@recPlay": {
+    "description": "Tooltip on the button that plays a recording."
+  },
+  "recDownload": "Download",
+  "@recDownload": {
+    "description": "Tooltip on the button that downloads a recording."
+  },
+  "recCouldNotPlay": "Could not play it: {reason}",
+  "@recCouldNotPlay": {
+    "description": "A recording failed to play. {reason} says why.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "recCouldNotDownload": "Could not download it: {reason}",
+  "@recCouldNotDownload": {
+    "description": "A recording failed to download. {reason} says why.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "recCouldNotDelete": "Could not delete it: {reason}",
+  "@recCouldNotDelete": {
+    "description": "A recording could not be deleted. {reason} says why.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "recDeleteTitle": "Delete recording?",
+  "@recDeleteTitle": {
+    "description": "Title of the dialog confirming a recording is deleted."
+  },
+  "recDeleteBody": "The audio is removed and cannot be recovered. That it was deleted, and by whom, is kept in the audit trail.",
+  "@recDeleteBody": {
+    "description": "Body of the dialog confirming a recording is deleted."
+  },
+  "polScopeTenant": "Whole organization",
+  "@polScopeTenant": {
+    "description": "Recording rule scope: applies to every call of the organization."
+  },
+  "polScopeExtension": "Extension",
+  "@polScopeExtension": {
+    "description": "Recording rule scope: applies to one extension."
+  },
+  "polScopeAgent": "Queue agent",
+  "@polScopeAgent": {
+    "description": "Recording rule scope: applies to queue calls one agent answers."
+  },
+  "polScopeQueue": "Queue",
+  "@polScopeQueue": {
+    "description": "Recording rule scope: applies to one queue."
+  },
+  "polScopeDid": "Phone number",
+  "@polScopeDid": {
+    "description": "Recording rule scope: applies to one of the organization's phone numbers."
+  },
+  "polDirAny": "Every call",
+  "@polDirAny": {
+    "description": "Recording rule: covers calls in every direction."
+  },
+  "polDirInbound": "Incoming calls",
+  "@polDirInbound": {
+    "description": "Recording rule: covers calls coming in."
+  },
+  "polDirOutbound": "Outgoing calls",
+  "@polDirOutbound": {
+    "description": "Recording rule: covers calls going out."
+  },
+  "polDirInternal": "Calls between extensions",
+  "@polDirInternal": {
+    "description": "Recording rule: covers internal calls."
+  },
+  "polActionRecord": "Record",
+  "@polActionRecord": {
+    "description": "Recording rule action: record the calls."
+  },
+  "polActionNoRecord": "Do not record",
+  "@polActionNoRecord": {
+    "description": "Recording rule action: do not record the calls."
+  },
+  "polAppliesToTarget": "{scope} {target}",
+  "@polAppliesToTarget": {
+    "description": "Recording rules, Applies to column: {scope} is the kind (Extension, Queue...), {target} the one it names.",
+    "placeholders": {
+      "scope": {
+        "type": "String"
+      },
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "polDeleteTitle": "Delete rule?",
+  "@polDeleteTitle": {
+    "description": "Title of the dialog confirming a recording rule is deleted."
+  },
+  "polDeleteBody": "Calls it covered follow the next broader rule, or are not recorded if there is none. {appliesTo}.",
+  "@polDeleteBody": {
+    "description": "Body of the dialog confirming a recording rule is deleted. {appliesTo} is what the rule applies to, such as Extension 201 (Front desk).",
+    "placeholders": {
+      "appliesTo": {
+        "type": "String"
+      }
+    }
+  },
+  "polCouldNotDelete": "Could not delete it: {reason}",
+  "@polCouldNotDelete": {
+    "description": "A recording rule could not be deleted. {reason} says why.",
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "polPrecedence": "The narrowest rule that applies to a call decides: an extension beats a queue agent, an agent beats a queue, a queue beats a phone number, a phone number beats the whole organization. With no rule, a call is not recorded.",
+  "@polPrecedence": {
+    "description": "Explanation above the recording rules table."
+  },
+  "polAdd": "Add rule",
+  "@polAdd": {
+    "description": "Button and dialog title for adding a recording rule."
+  },
+  "polEdit": "Edit rule",
+  "@polEdit": {
+    "description": "Tooltip and dialog title for changing a recording rule."
+  },
+  "polDelete": "Delete rule",
+  "@polDelete": {
+    "description": "Tooltip on the button that deletes a recording rule."
+  },
+  "polEmpty": "No rules yet, so no calls are recorded.",
+  "@polEmpty": {
+    "description": "Recording rules table when there are none."
+  },
+  "polAppliesTo": "Applies to",
+  "@polAppliesTo": {
+    "description": "Recording rules column heading and dialog field: what the rule is attached to."
+  },
+  "polCalls": "Calls",
+  "@polCalls": {
+    "description": "Recording rules column heading and dialog field: which calls it covers."
+  },
+  "polAction": "Action",
+  "@polAction": {
+    "description": "Recording rules column heading and dialog field: record or not."
+  },
+  "polAnnouncement": "Announcement",
+  "@polAnnouncement": {
+    "description": "Recording rules column heading: what callers hear before recording."
+  },
+  "polFeatureCodes": "Feature codes",
+  "@polFeatureCodes": {
+    "description": "Recording rules column heading: whether *1/*2 keypad codes are allowed."
+  },
+  "polAnnounceNone": "None",
+  "@polAnnounceNone": {
+    "description": "Recording rules, Announcement column: nothing is played."
+  },
+  "polShortTone": "Short tone",
+  "@polShortTone": {
+    "description": "Recording rules: a short beep is played instead of words."
+  },
+  "polAnnounceRecording": "Recording",
+  "@polAnnounceRecording": {
+    "description": "Recording rules, Announcement column: an uploaded spoken announcement is played."
+  },
+  "polCodesOff": "Off",
+  "@polCodesOff": {
+    "description": "Recording rules, Feature codes column: not allowed."
+  },
+  "polCodesPause": "*2 pause",
+  "@polCodesPause": {
+    "description": "Recording rules, Feature codes column: *2 pauses the recording. Keep *2."
+  },
+  "polCodesRecord": "*1 record",
+  "@polCodesRecord": {
+    "description": "Recording rules, Feature codes column: *1 starts a recording. Keep *1."
+  },
+  "polRetentionInvalid": "Enter a whole number of days from 0 to 3650.",
+  "@polRetentionInvalid": {
+    "description": "Keeping recordings card error."
+  },
+  "polKeptUntilDeleted": "Recordings are now kept until they are deleted.",
+  "@polKeptUntilDeleted": {
+    "description": "Confirmation after the keeping period is set to 0."
+  },
+  "polKeptForDays": "Recordings are now kept for {days} days.",
+  "@polKeptForDays": {
+    "description": "Confirmation after the keeping period is saved. {days} is the number of days.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "polKeepingTitle": "Keeping recordings",
+  "@polKeepingTitle": {
+    "description": "Heading of the card that sets how long recordings are kept."
+  },
+  "polKeepFor": "Keep recordings for (days)",
+  "@polKeepFor": {
+    "description": "Field: how many days recordings are kept."
+  },
+  "polKeepForHelp": "0 keeps them until someone deletes them.",
+  "@polKeepForHelp": {
+    "description": "Help under the keep-for-days field."
+  },
+  "polRequiredOn": "Calls that cannot be recorded are now refused.",
+  "@polRequiredOn": {
+    "description": "Confirmation after recording required is turned on."
+  },
+  "polRequiredOff": "Calls that cannot be recorded now go ahead unrecorded.",
+  "@polRequiredOff": {
+    "description": "Confirmation after recording required is turned off."
+  },
+  "polRequiredTitle": "Recording required",
+  "@polRequiredTitle": {
+    "description": "Switch: refuse calls whose recording cannot be set up."
+  },
+  "polRequiredHelp": "When a call that your rules may record cannot have its recording set up, for example because the recording system cannot be reached, refuse the call instead of connecting it unrecorded. The caller hears a short tone and the call ends. Calls your rules do not record are never refused.",
+  "@polRequiredHelp": {
+    "description": "Explanation under the recording required switch."
+  },
+  "polChooseTarget": "{scope, select, extension{Choose which extension it covers.} agent{Choose which agent it covers.} queue{Choose which queue it covers.} did{Choose which phone number it covers.} other{Choose which one it covers.}}",
+  "@polChooseTarget": {
+    "description": "Recording rule dialog error: the rule's target was not chosen. {scope} is the kind of target.",
+    "placeholders": {
+      "scope": {
+        "type": "String"
+      }
+    }
+  },
+  "polAgentHelp": "Records the queue calls this person answers as an agent, from the moment they answer. A call the queue or phone number rule already records is not recorded twice.",
+  "@polAgentHelp": {
+    "description": "Recording rule dialog: what an agent rule does."
+  },
+  "polAnnounceFirst": "Play an announcement first",
+  "@polAnnounceFirst": {
+    "description": "Recording rule dialog switch."
+  },
+  "polAnnounceFirstHelp": "Played to the caller before recording starts.",
+  "@polAnnounceFirstHelp": {
+    "description": "Help under the play-an-announcement switch."
+  },
+  "polAnnouncementRecording": "Announcement recording",
+  "@polAnnouncementRecording": {
+    "description": "Recording rule dialog field: which uploaded prompt to play."
+  },
+  "polAnnouncementHelp": "Upload a prompt on the Media page. Without one, a short tone plays instead of words.",
+  "@polAnnouncementHelp": {
+    "description": "Help under the announcement recording field."
+  },
+  "polAllowPause": "Allow pausing with *2",
+  "@polAllowPause": {
+    "description": "Recording rule dialog switch, for a rule that records. Keep *2."
+  },
+  "polAllowOnDemand": "Allow recording on demand with *1",
+  "@polAllowOnDemand": {
+    "description": "Recording rule dialog switch, for a rule that does not record. Keep *1."
+  },
+  "polAllowPauseHelp": "During a call this rule records, a person on it can press *2 to pause the recording (for card or medical details) and *2 again to resume. The paused part is silent. Every pause is logged.",
+  "@polAllowPauseHelp": {
+    "description": "Help under the allow-pausing switch."
+  },
+  "polAllowOnDemandHelp": "During a call this rule does not record, a person on it can press *1 to start recording and *1 again to stop. Every start and stop is logged.",
+  "@polAllowOnDemandHelp": {
+    "description": "Help under the allow-recording-on-demand switch."
+  },
+  "polDisclosure": "Whether you must tell people a call is recorded, and how, depends on where they are. Choosing announcements that meet those rules is up to you.",
+  "@polDisclosure": {
+    "description": "Note at the bottom of the recording rule dialog."
+  },
+  "audTitle": "Audit",
+  "@audTitle": {
+    "description": "Heading of the audit trail page."
+  },
+  "audSubtitle": "What your people did, and what anyone did to your data. Newest first, times in UTC.",
+  "@audSubtitle": {
+    "description": "Explanation under the audit heading."
+  },
+  "audRefresh": "Refresh",
+  "@audRefresh": {
+    "description": "Tooltip on the audit page button that reloads the events."
+  },
+  "audFilter": "Filter by action or resource",
+  "@audFilter": {
+    "description": "Audit page search field."
+  },
+  "audEmpty": "Nothing has been recorded yet.",
+  "@audEmpty": {
+    "description": "Audit page with no events."
+  },
+  "audNoMatches": "No events match that.",
+  "@audNoMatches": {
+    "description": "Audit page when the filter matches nothing."
+  },
+  "audWhen": "When",
+  "@audWhen": {
+    "description": "Audit column heading."
+  },
+  "audWho": "Who",
+  "@audWho": {
+    "description": "Audit column heading."
+  },
+  "audAction": "Action",
+  "@audAction": {
+    "description": "Audit column heading: what was done."
+  },
+  "audResource": "Resource",
+  "@audResource": {
+    "description": "Audit column heading: what it was done to."
+  },
+  "audData": "Data",
+  "@audData": {
+    "description": "Audit column heading: the class of data touched (such as private)."
+  },
+  "audReason": "Reason",
+  "@audReason": {
+    "description": "Audit column heading: the reason given."
+  },
+  "audActor": "{type} {id}",
+  "@audActor": {
+    "description": "Audit, Who column. {type} is the kind of actor as recorded (such as user); {id} is the start of their ID.",
+    "placeholders": {
+      "type": {
+        "type": "String"
+      },
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "audActorOtherOrg": "{type} {id} (other org)",
+  "@audActorOtherOrg": {
+    "description": "Audit, Who column, for someone from another organization. {type} is the kind of actor; {id} is the start of their ID.",
+    "placeholders": {
+      "type": {
+        "type": "String"
+      },
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "orgFieldSlug": "Short name",
+  "@orgFieldSlug": {
+    "description": "Reseller or tenant form. Field: the organization's short name, used in addresses."
+  },
+  "orgFieldSlugHelp": "Lowercase letters, digits and hyphens, at least two characters. It cannot be changed later.",
+  "@orgFieldSlugHelp": {
+    "description": "Reseller or tenant form. Help under the short name field."
+  },
+  "orgFieldAdminEmail": "Admin email",
+  "@orgFieldAdminEmail": {
+    "description": "Reseller or tenant form. Field: the email address of the organization's first administrator."
+  },
+  "orgFieldAdminEmailHelp": "The first administrator, who signs in with this address.",
+  "@orgFieldAdminEmailHelp": {
+    "description": "Reseller or tenant form. Help under the admin email field."
+  },
+  "orgFieldAdminName": "Admin name",
+  "@orgFieldAdminName": {
+    "description": "Reseller or tenant form. Field: the name of the organization's first administrator."
+  },
+  "orgFieldAdminPassword": "Admin password",
+  "@orgFieldAdminPassword": {
+    "description": "Reseller or tenant form. Field: the first administrator's password."
+  },
+  "orgFieldAdminPasswordHelp": "At least 12 characters.",
+  "@orgFieldAdminPasswordHelp": {
+    "description": "Reseller or tenant form. Help under the admin password field."
+  },
+  "orgFieldTimezone": "Time zone",
+  "@orgFieldTimezone": {
+    "description": "Reseller or tenant form. Field: the organization's time zone."
+  },
+  "orgFieldTimezoneHelp": "For example America/Chicago.",
+  "@orgFieldTimezoneHelp": {
+    "description": "Reseller or tenant form. Help under the time zone field. Keep the example as an IANA time zone name."
+  },
+  "orgFieldCountry": "Country",
+  "@orgFieldCountry": {
+    "description": "Reseller or tenant form. Field: the organization's country."
+  },
+  "orgFieldCountryHelp": "Two-letter code, for example US.",
+  "@orgFieldCountryHelp": {
+    "description": "Reseller or tenant form. Help under the country field."
+  },
+  "orgResellerSingular": "Reseller",
+  "@orgResellerSingular": {
+    "description": "One reseller (a company that resells the service to its own customers), as in \"New reseller\"."
+  },
+  "orgResellerPlural": "Resellers",
+  "@orgResellerPlural": {
+    "description": "More than one reseller."
+  },
+  "orgTenantSingular": "Tenant",
+  "@orgTenantSingular": {
+    "description": "One tenant (a customer organization)."
+  },
+  "orgTenantPlural": "Tenants",
+  "@orgTenantPlural": {
+    "description": "More than one tenant."
+  },
+  "orgBackToResellers": "Back to resellers",
+  "@orgBackToResellers": {
+    "description": "Tooltip on the back arrow that returns to the list of resellers."
+  },
+  "orgNewReseller": "New reseller",
+  "@orgNewReseller": {
+    "description": "Button that creates a reseller."
+  },
+  "orgNewTenant": "New tenant",
+  "@orgNewTenant": {
+    "description": "Button that starts setting up a tenant (a customer organization)."
+  },
+  "orgNoResellers": "No resellers yet.",
+  "@orgNoResellers": {
+    "description": "Shown when the list of resellers is empty."
+  },
+  "orgNoTenants": "No tenants yet.",
+  "@orgNoTenants": {
+    "description": "Shown when the list of tenants is empty."
+  },
+  "orgCreated": "Created {name}.",
+  "@orgCreated": {
+    "description": "Confirmation after creating a reseller or tenant. {name} is its name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "orgCreatedWithAdmin": "Created {name}. Its administrator signs in as {email}.",
+  "@orgCreatedWithAdmin": {
+    "description": "Confirmation after creating a reseller or tenant with a first administrator. {name} is its name; {email} is the administrator's email address.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "orgActAs": "Act as",
+  "@orgActAs": {
+    "description": "Button on a tenant row that lets an administrator work inside that tenant's account."
+  },
+  "orgMore": "More",
+  "@orgMore": {
+    "description": "Tooltip on the menu of further actions for a reseller or tenant."
+  },
+  "orgSuspend": "Suspend",
+  "@orgSuspend": {
+    "description": "Action that suspends a reseller or tenant (its service stops until resumed)."
+  },
+  "orgResume": "Resume",
+  "@orgResume": {
+    "description": "Action that resumes a suspended reseller or tenant."
+  },
+  "orgSuspendTitle": "Suspend {name}?",
+  "@orgSuspendTitle": {
+    "description": "Heading of the dialog confirming a suspension. {name} is the reseller or tenant's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "orgResumeTitle": "Resume {name}?",
+  "@orgResumeTitle": {
+    "description": "Heading of the dialog confirming a resumption. {name} is the reseller or tenant's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "orgSuspendBody": "Their users are signed out and calls stop routing until it is resumed.",
+  "@orgSuspendBody": {
+    "description": "Explanation in the dialog confirming a suspension."
+  },
+  "orgResumeBody": "Service is restored.",
+  "@orgResumeBody": {
+    "description": "Explanation in the dialog confirming a resumption."
+  },
+  "orgNoSuchReseller": "No such reseller.",
+  "@orgNoSuchReseller": {
+    "description": "Shown when the reseller in the address does not exist or is not visible."
+  },
+  "domOnlyReseller": "Only a reseller has base domains.",
+  "@domOnlyReseller": {
+    "description": "Shown on the domains page to someone signed in to an account that is not a reseller."
+  },
+  "domVerified": "{domain} is verified.",
+  "@domVerified": {
+    "description": "Confirmation after a base domain's DNS record was found. {domain} is the domain name.",
+    "placeholders": {
+      "domain": {
+        "type": "String"
+      }
+    }
+  },
+  "domSubtitle": "Base domains your tenants get their own names under. Prove you control one by publishing a DNS record, then verify it.",
+  "@domSubtitle": {
+    "description": "Explanation under the Domains heading."
+  },
+  "domAdd": "Add domain",
+  "@domAdd": {
+    "description": "Button and dialog heading for adding a base domain."
+  },
+  "domEmpty": "No base domains yet.",
+  "@domEmpty": {
+    "description": "Shown when a reseller has no base domains."
+  },
+  "domStatusVerified": "Verified",
+  "@domStatusVerified": {
+    "description": "Status chip: the base domain's ownership has been proved."
+  },
+  "domStatusWaiting": "Waiting for DNS",
+  "@domStatusWaiting": {
+    "description": "Status chip: the base domain's DNS record has not been found yet."
+  },
+  "domPublishRecord": "Publish this TXT record:",
+  "@domPublishRecord": {
+    "description": "Instruction above the DNS TXT record that proves control of a domain."
+  },
+  "domVerifyNow": "Verify now",
+  "@domVerifyNow": {
+    "description": "Button that asks the service to check for the domain's DNS record."
+  },
+  "domField": "Domain",
+  "@domField": {
+    "description": "Field in the add-domain dialog: the domain name."
+  },
+  "domFieldHelp": "For example voice.example.com",
+  "@domFieldHelp": {
+    "description": "Help under the domain field. Keep an example domain under example.com."
+  },
+  "domAddButton": "Add",
+  "@domAddButton": {
+    "description": "Button that confirms adding the domain."
+  },
+  "brandDisplayName": "Display name",
+  "@brandDisplayName": {
+    "description": "Brand editor field: the name the reseller's customers see."
+  },
+  "brandDisplayNameHelp": "Shown in the console header and page title.",
+  "@brandDisplayNameHelp": {
+    "description": "Help under the brand display name field."
+  },
+  "brandPrimaryColor": "Primary color",
+  "@brandPrimaryColor": {
+    "description": "Brand editor field: the brand's main color."
+  },
+  "brandPrimaryColorHelp": "Six-digit hex, like #4a148c.",
+  "@brandPrimaryColorHelp": {
+    "description": "Help under the primary color field. Keep the example color code."
+  },
+  "brandAccentColor": "Accent color",
+  "@brandAccentColor": {
+    "description": "Brand editor field: the brand's secondary color."
+  },
+  "brandAccentColorHelp": "Six-digit hex, like #ffe082.",
+  "@brandAccentColorHelp": {
+    "description": "Help under the accent color field. Keep the example color code."
+  },
+  "brandSupportEmail": "Support email",
+  "@brandSupportEmail": {
+    "description": "Brand editor field: the email address customers write to for help."
+  },
+  "brandSupportUrl": "Support URL",
+  "@brandSupportUrl": {
+    "description": "Brand editor field: the web address customers visit for help."
+  },
+  "brandSupportPhone": "Support phone",
+  "@brandSupportPhone": {
+    "description": "Brand editor field: the phone number customers call for help."
+  },
+  "brandEmailFromName": "Email sender name",
+  "@brandEmailFromName": {
+    "description": "Brand editor field: the sender name on emails sent to customers."
+  },
+  "brandEmailFromAddress": "Email sender address",
+  "@brandEmailFromAddress": {
+    "description": "Brand editor field: the sender address on emails sent to customers."
+  },
+  "brandEmailFromAddressHelp": "Its domain must pass SPF and DKIM before use.",
+  "@brandEmailFromAddressHelp": {
+    "description": "Help under the email sender address field. SPF and DKIM are email authentication standards; keep them as is."
+  },
+  "brandSipUserAgent": "SIP user agent",
+  "@brandSipUserAgent": {
+    "description": "Brand editor field: the name phones and carriers see in SIP signaling."
+  },
+  "brandSipUserAgentHelp": "Optional override for the SIP User-Agent header.",
+  "@brandSipUserAgentHelp": {
+    "description": "Help under the SIP user agent field. Keep \"User-Agent\" as is: it is the header's name."
+  },
+  "brandLegalFooter": "Legal footer",
+  "@brandLegalFooter": {
+    "description": "Brand editor field: legal text shown at the bottom of pages and emails."
+  },
+  "brandLegalFooterHelp": "Shown at the bottom of sign-in and emails.",
+  "@brandLegalFooterHelp": {
+    "description": "Help under the legal footer field."
+  },
+  "brandLogoLight": "Logo (for light backgrounds)",
+  "@brandLogoLight": {
+    "description": "Brand editor image: the logo used on light backgrounds."
+  },
+  "brandLogoDark": "Logo (for dark backgrounds)",
+  "@brandLogoDark": {
+    "description": "Brand editor image: the logo used on dark backgrounds."
+  },
+  "brandFavicon": "Favicon",
+  "@brandFavicon": {
+    "description": "Brand editor image: the small icon shown in the browser tab."
+  },
+  "brandColorInvalid": "Colors are six-digit hex values, like #4a148c.",
+  "@brandColorInvalid": {
+    "description": "Error when a brand color is not a valid hex color code."
+  },
+  "brandSaved": "Brand saved.",
+  "@brandSaved": {
+    "description": "Confirmation after saving the brand."
+  },
+  "brandUploaded": "Uploaded {file}. Save the brand to use it.",
+  "@brandUploaded": {
+    "description": "Confirmation after uploading a brand image. {file} is the uploaded file's name.",
+    "placeholders": {
+      "file": {
+        "type": "String"
+      }
+    }
+  },
+  "brandOnlyReseller": "Only a reseller has a brand to edit.",
+  "@brandOnlyReseller": {
+    "description": "Shown on the brand page to someone whose account has no brand."
+  },
+  "brandIntro": "What your customers see: the console header, sign-in page, and emails. Leave everything blank for the neutral look.",
+  "@brandIntro": {
+    "description": "Explanation under the Brand heading."
+  },
+  "brandImageNone": "None",
+  "@brandImageNone": {
+    "description": "Shown in place of a brand image's file name when none is uploaded."
+  },
+  "brandUpload": "Upload",
+  "@brandUpload": {
+    "description": "Button that uploads a brand image."
+  },
+  "brandRemoveImage": "Remove {image}",
+  "@brandRemoveImage": {
+    "description": "Tooltip on the button that removes a brand image. {image} is the image's label, such as \"Favicon\".",
+    "placeholders": {
+      "image": {
+        "type": "String"
+      }
+    }
+  },
+  "brandSave": "Save brand",
+  "@brandSave": {
+    "description": "Button that saves the brand."
+  },
+  "brandHostnames": "Console hostnames",
+  "@brandHostnames": {
+    "description": "Heading for the web addresses the reseller's customers use to reach the console."
+  },
+  "brandAddHostname": "Add hostname",
+  "@brandAddHostname": {
+    "description": "Button and dialog heading for adding a console hostname."
+  },
+  "brandHostnamesHelp": "Point each name at the console with a DNS record; sign-in there shows this brand.",
+  "@brandHostnamesHelp": {
+    "description": "Explanation under the console hostnames heading."
+  },
+  "brandHostnamesEmpty": "None yet.",
+  "@brandHostnamesEmpty": {
+    "description": "Shown when there are no console hostnames."
+  },
+  "brandHostnameTls": "TLS: {status}",
+  "@brandHostnameTls": {
+    "description": "Under a console hostname: the state of its TLS certificate. {status} is the status as reported by the service.",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "brandPreview": "Preview",
+  "@brandPreview": {
+    "description": "Label on the card that previews the brand."
+  },
+  "brandPreviewAccent": "Accent",
+  "@brandPreviewAccent": {
+    "description": "Sample chip in the brand preview, drawn in the accent color."
+  },
+  "brandHostnameField": "Hostname",
+  "@brandHostnameField": {
+    "description": "Field in the add-hostname dialog: the host name."
+  },
+  "brandHostnameFieldHelp": "For example portal.example.com",
+  "@brandHostnameFieldHelp": {
+    "description": "Help under the hostname field. Keep an example domain under example.com."
+  },
+  "brandAddHostnameButton": "Add",
+  "@brandAddHostnameButton": {
+    "description": "Button that confirms adding the hostname."
+  },
+  "usrRoleAdministrator": "Administrator",
+  "@usrRoleAdministrator": {
+    "description": "Built-in role: can manage everything in their organization."
+  },
+  "usrRoleSupport": "Support",
+  "@usrRoleSupport": {
+    "description": "Built-in role for a platform or reseller support person."
+  },
+  "usrRoleSupervisor": "Supervisor",
+  "@usrRoleSupervisor": {
+    "description": "Built-in tenant role: oversees queues and agents."
+  },
+  "usrRoleUser": "User",
+  "@usrRoleUser": {
+    "description": "Built-in tenant role: an ordinary person with a phone."
+  },
+  "usrSingular": "User",
+  "@usrSingular": {
+    "description": "One person who can sign in (a user account)."
+  },
+  "usrPlural": "Users",
+  "@usrPlural": {
+    "description": "More than one user account."
+  },
+  "usrRole": "Role",
+  "@usrRole": {
+    "description": "Field and column: the person's built-in role."
+  },
+  "usrRoleHelp": "What they can do. Without a role they can sign in but not much else.",
+  "@usrRoleHelp": {
+    "description": "Help under the role field."
+  },
+  "usrAccess": "Access",
+  "@usrAccess": {
+    "description": "Field and column: whether the person can sign in."
+  },
+  "usrStatusActive": "Can sign in",
+  "@usrStatusActive": {
+    "description": "Access value: the account is enabled."
+  },
+  "usrStatusDisabled": "Disabled",
+  "@usrStatusDisabled": {
+    "description": "Access value: the account cannot sign in."
+  },
+  "usrInvitationSingular": "Invitation",
+  "@usrInvitationSingular": {
+    "description": "One invitation to join the organization."
+  },
+  "usrInvitationPlural": "Invitations",
+  "@usrInvitationPlural": {
+    "description": "More than one invitation."
+  },
+  "usrSubtitle": "People who can sign in. Invite someone by email, then give them a role.",
+  "@usrSubtitle": {
+    "description": "Explanation under the users heading."
+  },
+  "usrSubtitleNamed": "People who can sign in to {org}. Invite someone by email, then give them a role.",
+  "@usrSubtitleNamed": {
+    "description": "Explanation under the users heading when looking at another organization's people. {org} is that organization's name.",
+    "placeholders": {
+      "org": {
+        "type": "String"
+      }
+    }
+  },
+  "usrInvite": "Invite user",
+  "@usrInvite": {
+    "description": "Button that invites a person by email."
+  },
+  "usrEmpty": "No users yet.",
+  "@usrEmpty": {
+    "description": "Shown when the organization has no users."
+  },
+  "usrTwoStep": "Two-step",
+  "@usrTwoStep": {
+    "description": "Column: whether the person has set up two-step verification. Keep short."
+  },
+  "usrLastSignIn": "Last sign-in",
+  "@usrLastSignIn": {
+    "description": "Column: when the person last signed in."
+  },
+  "usrNameYou": "{name} (you)",
+  "@usrNameYou": {
+    "description": "A person's name in the users table when it is the signed-in person. {name} is their name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "usrNoRole": "No role",
+  "@usrNoRole": {
+    "description": "Shown in the role column when the person has no built-in role."
+  },
+  "usrResetMfa": "Reset two-step verification",
+  "@usrResetMfa": {
+    "description": "Tooltip on the button that removes a person's authenticator (for a lost phone)."
+  },
+  "usrAllowSignIn": "Allow sign-in",
+  "@usrAllowSignIn": {
+    "description": "Tooltip on the button that re-enables a disabled account."
+  },
+  "usrDisable": "Disable",
+  "@usrDisable": {
+    "description": "Button that stops a person from signing in."
+  },
+  "usrInvitationSent": "Invitation sent to {email}.",
+  "@usrInvitationSent": {
+    "description": "Confirmation after inviting someone. {email} is their email address.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "usrDisableTitle": "Disable {name}?",
+  "@usrDisableTitle": {
+    "description": "Heading of the dialog confirming that a person is disabled. {name} is their name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "usrDisableBody": "They are signed out now and cannot sign in until you allow it again.",
+  "@usrDisableBody": {
+    "description": "Explanation in the dialog confirming that a person is disabled."
+  },
+  "usrMfaResetDone": "Two-step verification reset for {name}.",
+  "@usrMfaResetDone": {
+    "description": "Confirmation after resetting someone's two-step verification. {name} is their name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "usrStepUpNotEnrolled": "Your own account has no two-step verification, so you cannot confirm this. Ask another administrator to do it.",
+  "@usrStepUpNotEnrolled": {
+    "description": "Error in the reset dialog when the administrator has no authenticator of their own to confirm with."
+  },
+  "usrResetMfaTitle": "Reset two-step verification for {name}?",
+  "@usrResetMfaTitle": {
+    "description": "Heading of the dialog that resets someone's two-step verification. {name} is their name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "usrResetMfaBody": "Use this when they have lost their phone. They are signed out everywhere and asked to set up a new authenticator app the next time they sign in. We email them to say it happened, and let the organization's other administrators know.",
+  "@usrResetMfaBody": {
+    "description": "Explanation in the dialog that resets someone's two-step verification."
+  },
+  "usrResetMfaConfirm": "To confirm, enter the current code from your own authenticator app.",
+  "@usrResetMfaConfirm": {
+    "description": "Instruction above the code field when an administrator confirms a sensitive action with their own authenticator code."
+  },
+  "usrYourCode": "Your code",
+  "@usrYourCode": {
+    "description": "Field: the current code from the administrator's own authenticator app."
+  },
+  "usrResetButton": "Reset",
+  "@usrResetButton": {
+    "description": "Button that confirms resetting someone's two-step verification."
+  },
+  "secTitle": "Sign-in security",
+  "@secTitle": {
+    "description": "Heading of the platform operator's sign-in policy page."
+  },
+  "secSubtitle": "How administrators of this platform sign in.",
+  "@secSubtitle": {
+    "description": "Explanation under the sign-in security heading."
+  },
+  "secRequireTwoStep": "Require two-step verification for platform administrators",
+  "@secRequireTwoStep": {
+    "description": "Switch that makes platform administrators use two-step verification."
+  },
+  "secRequireTwoStepHelp": "Administrators sign in with a password and a code from an authenticator app. Reseller administrators always need both.",
+  "@secRequireTwoStepHelp": {
+    "description": "Explanation under the require-two-step switch."
+  },
+  "secStatusOn": "On. Administrators who have not set up an authenticator app are asked to at their next sign-in.",
+  "@secStatusOn": {
+    "description": "Status note when two-step verification is required."
+  },
+  "secStatusOff": "Off. Turn this on once the platform is set up. Anyone who has already set up an authenticator app is still asked for a code.",
+  "@secStatusOff": {
+    "description": "Status note when two-step verification is not required."
+  },
+  "secStepUpNotEnrolled": "You have not set up an authenticator app yet, so you cannot confirm this. Sign out and back in to set one up.",
+  "@secStepUpNotEnrolled": {
+    "description": "Error when turning the requirement off and the administrator has no authenticator of their own to confirm with."
+  },
+  "secTurnOffTitle": "Stop requiring two-step verification?",
+  "@secTurnOffTitle": {
+    "description": "Heading of the dialog that turns the two-step requirement off."
+  },
+  "secTurnOffBody": "Administrators who have not set up an authenticator app will sign in with a password alone. Anyone who has set one up is still asked for a code.",
+  "@secTurnOffBody": {
+    "description": "Explanation in the dialog that turns the two-step requirement off."
+  },
+  "secTurnOff": "Turn off",
+  "@secTurnOff": {
+    "description": "Button that confirms turning the two-step requirement off."
+  },
+  "mediaKindPrompt": "Prompt (menus and announcements)",
+  "@mediaKindPrompt": {
+    "description": "Kind of recording: a prompt played in menus and announcements."
+  },
+  "mediaKindMoh": "Hold music",
+  "@mediaKindMoh": {
+    "description": "Kind of recording: music callers hear while on hold."
+  },
+  "mediaKindGreeting": "Voicemail greeting",
+  "@mediaKindGreeting": {
+    "description": "Kind of recording: a voicemail greeting."
+  },
+  "mediaCouldNotPlay": "Could not play it: {problem}",
+  "@mediaCouldNotPlay": {
+    "description": "Error when a recording cannot be played. {problem} is the reason.",
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
+  "mediaPlay": "Play",
+  "@mediaPlay": {
+    "description": "Tooltip on the button that plays a recording."
+  },
+  "mediaUploadRecording": "Upload recording",
+  "@mediaUploadRecording": {
+    "description": "Button and dialog heading for uploading a recording."
+  },
+  "mediaNotAudio": "That does not look like an audio file. Use WAV, MP3, OGG, M4A, or FLAC.",
+  "@mediaNotAudio": {
+    "description": "Error when the chosen file is not a supported audio file. Keep the format names as is."
+  },
+  "mediaChooseFirst": "Choose an audio file first.",
+  "@mediaChooseFirst": {
+    "description": "Error when uploading without choosing a file."
+  },
+  "mediaNameRequired": "Give the recording a name.",
+  "@mediaNameRequired": {
+    "description": "Error when uploading a recording without a name."
+  },
+  "mediaStepPreparing": "Preparing…",
+  "@mediaStepPreparing": {
+    "description": "Upload progress: getting ready to send the file."
+  },
+  "mediaStepUploading": "Uploading…",
+  "@mediaStepUploading": {
+    "description": "Upload progress: sending the file."
+  },
+  "mediaStepFinishing": "Finishing…",
+  "@mediaStepFinishing": {
+    "description": "Upload progress: telling the service the upload is done."
+  },
+  "mediaCouldNotUpload": "Could not upload: {problem}",
+  "@mediaCouldNotUpload": {
+    "description": "Error when an upload fails. {problem} is the reason.",
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
+  "mediaChooseFile": "Choose a file",
+  "@mediaChooseFile": {
+    "description": "Button that opens the file chooser for a recording."
+  },
+  "mediaFileSize": "{kb} KB",
+  "@mediaFileSize": {
+    "description": "Size of the chosen file in kilobytes. {kb} is a whole number.",
+    "placeholders": {
+      "kb": {
+        "type": "int"
+      }
+    }
+  },
+  "mediaUsedFor": "Used for",
+  "@mediaUsedFor": {
+    "description": "Field: what kind of recording this is."
+  },
+  "mediaUpload": "Upload",
+  "@mediaUpload": {
+    "description": "Button that starts the upload."
+  },
+  "certSubtitle": "The certificates that secure phone connections and consoles are requested and renewed automatically.",
+  "@certSubtitle": {
+    "description": "Explanation under the Certificates heading on the platform operator's page."
+  },
+  "certPlatformHeading": "Platform certificates",
+  "@certPlatformHeading": {
+    "description": "Heading above the table of the platform's own certificates."
+  },
+  "certEmptyPlatform": "No certificates are wanted yet.",
+  "@certEmptyPlatform": {
+    "description": "Shown when the platform needs no certificates yet."
+  },
+  "certLetsEncrypt": "Let's Encrypt",
+  "@certLetsEncrypt": {
+    "description": "Heading of the card for the Let's Encrypt account. Let's Encrypt is the name of the certificate authority; keep it as is."
+  },
+  "certLetsEncryptIntro": "One account for the whole platform. Let’s Encrypt writes to this address before a certificate expires.",
+  "@certLetsEncryptIntro": {
+    "description": "Explanation on the Let's Encrypt card."
+  },
+  "certAcmeReady": "Ready. Certificates are requested and renewed automatically.",
+  "@certAcmeReady": {
+    "description": "Status note when the Let's Encrypt account is set up."
+  },
+  "certAcmeNotSetUp": "Not set up. No certificates are requested until an email address is saved and the agreement is accepted.",
+  "@certAcmeNotSetUp": {
+    "description": "Status note when the Let's Encrypt account is not set up yet."
+  },
+  "certContactEmail": "Contact email",
+  "@certContactEmail": {
+    "description": "Field: the email address the certificate authority writes to."
+  },
+  "certContactEmailHelp": "A mailbox someone reads.",
+  "@certContactEmailHelp": {
+    "description": "Help under the contact email field."
+  },
+  "certEnvironment": "Environment",
+  "@certEnvironment": {
+    "description": "Label above the choice between the certificate authority's production and staging services."
+  },
+  "certProduction": "Production",
+  "@certProduction": {
+    "description": "Choice: the certificate authority's real service, whose certificates are trusted."
+  },
+  "certStaging": "Staging (testing)",
+  "@certStaging": {
+    "description": "Choice: the certificate authority's test service."
+  },
+  "certStagingNote": "Staging certificates are not trusted by any phone or browser. Use it to try the setup, then switch to Production.",
+  "@certStagingNote": {
+    "description": "Note shown when the staging service is chosen. \"Production\" names the other choice."
+  },
+  "certAgree": "I agree to the Let’s Encrypt Subscriber Agreement",
+  "@certAgree": {
+    "description": "Checkbox accepting the certificate authority's terms."
+  },
+  "certAgreed": "Agreed {date}",
+  "@certAgreed": {
+    "description": "Under the agreement checkbox: when it was accepted. {date} is a formatted date.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "certReadAgreement": "Read the agreement",
+  "@certReadAgreement": {
+    "description": "Link that opens the certificate authority's agreement."
+  },
+  "certPublicAddress": "Public address",
+  "@certPublicAddress": {
+    "description": "Heading and field: where the platform is reached from the internet."
+  },
+  "certPublicAddressIntro": "Where phones and browsers reach the platform. Resellers are shown DNS records that point their names here, and the certificate authority checks the names on port 80.",
+  "@certPublicAddressIntro": {
+    "description": "Explanation on the public address card."
+  },
+  "certPublicAddressHelp": "An IP address, or a hostname to point names at with a CNAME.",
+  "@certPublicAddressHelp": {
+    "description": "Help under the public address field. CNAME is a DNS record type; keep it as is."
+  },
+  "certSaveAddress": "Save address",
+  "@certSaveAddress": {
+    "description": "Button that saves the public address."
+  },
+  "certStatusActive": "Active",
+  "@certStatusActive": {
+    "description": "Certificate status: issued and in use."
+  },
+  "certStatusPending": "Waiting",
+  "@certStatusPending": {
+    "description": "Certificate status: not issued yet."
+  },
+  "certStatusFailed": "Failing",
+  "@certStatusFailed": {
+    "description": "Certificate status: requesting it keeps failing."
+  },
+  "certUsedFor": "Used for",
+  "@certUsedFor": {
+    "description": "Column: what a certificate or DNS record is for (phones or the console)."
+  },
+  "certColumnStatus": "Status",
+  "@certColumnStatus": {
+    "description": "Column: the certificate's status."
+  },
+  "certColumnExpires": "Expires",
+  "@certColumnExpires": {
+    "description": "Column: when the certificate expires."
+  },
+  "certColumnNotes": "Notes",
+  "@certColumnNotes": {
+    "description": "Column: why a certificate is not working, if it is not."
+  },
+  "certPurposeSip": "Phones (SIP)",
+  "@certPurposeSip": {
+    "description": "What a certificate or DNS record is for: phone connections."
+  },
+  "certPurposeConsole": "Console",
+  "@certPurposeConsole": {
+    "description": "What a certificate or DNS record is for: the web console."
+  },
+  "certBeingRequested": "Being requested.",
+  "@certBeingRequested": {
+    "description": "Note on a certificate that is being requested."
+  },
+  "certLastError": "{error} Trying again {date}.",
+  "@certLastError": {
+    "description": "Note on a failing certificate. {error} is the reason it failed, as reported; {date} is a formatted date of the next attempt.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "certResellerIntro": "Phones connect to sip.<your base domain> and sign in with their own domain. Each verified base domain gets a certificate for that name automatically, once its name points at the platform.",
+  "@certResellerIntro": {
+    "description": "Explanation on a reseller's certificates tab. Keep \"sip.\" as is: it is the start of a host name."
+  },
+  "certResellerEmpty": "No certificates yet. They appear once a base domain is verified.",
+  "@certResellerEmpty": {
+    "description": "Shown when a reseller has no certificates."
+  },
+  "certDnsNoAddress": "The platform operator has not said where the platform is reached yet, so there is nothing to point your names at. Ask them.",
+  "@certDnsNoAddress": {
+    "description": "Shown to a reseller when the platform has no public address yet."
+  },
+  "certDnsHeading": "DNS records to publish",
+  "@certDnsHeading": {
+    "description": "Heading above the DNS records a reseller publishes."
+  },
+  "certDnsIntro": "Add one record for each name, at wherever your domain’s DNS is kept.",
+  "@certDnsIntro": {
+    "description": "Explanation above the DNS records table."
+  },
+  "certColumnType": "Type",
+  "@certColumnType": {
+    "description": "Column: the DNS record type."
+  },
+  "certColumnValue": "Value",
+  "@certColumnValue": {
+    "description": "Column: the DNS record's value."
+  },
+  "nodePlay": "Play",
+  "@nodePlay": {
+    "description": "Call flow step type: plays a recording."
+  },
+  "nodePlayDescription": "Play a recording, then continue.",
+  "@nodePlayDescription": {
+    "description": "Palette description of the Play step."
+  },
+  "nodeMenu": "Menu",
+  "@nodeMenu": {
+    "description": "Call flow step type: a phone menu (press 1 for…)."
+  },
+  "nodeMenuDescription": "Play a prompt and route by the digit pressed.",
+  "@nodeMenuDescription": {
+    "description": "Palette description of the Menu step."
+  },
+  "nodeTimeCondition": "Time condition",
+  "@nodeTimeCondition": {
+    "description": "Call flow step type: branches on whether a schedule is open."
+  },
+  "nodeTimeConditionDescription": "Route by whether a schedule is open right now.",
+  "@nodeTimeConditionDescription": {
+    "description": "Palette description of the Time condition step."
+  },
+  "nodeExtension": "Extension",
+  "@nodeExtension": {
+    "description": "Call flow step type: rings one extension."
+  },
+  "nodeExtensionDescription": "Ring one extension.",
+  "@nodeExtensionDescription": {
+    "description": "Palette description of the Extension step."
+  },
+  "nodeRingGroup": "Ring group",
+  "@nodeRingGroup": {
+    "description": "Call flow step type: rings a ring group."
+  },
+  "nodeRingGroupDescription": "Ring a group of extensions.",
+  "@nodeRingGroupDescription": {
+    "description": "Palette description of the Ring group step."
+  },
+  "nodeQueue": "Queue",
+  "@nodeQueue": {
+    "description": "Call flow step type: sends the caller to a call queue."
+  },
+  "nodeQueueDescription": "Hold the caller until an agent is free.",
+  "@nodeQueueDescription": {
+    "description": "Palette description of the Queue step."
+  },
+  "nodeVoicemail": "Voicemail",
+  "@nodeVoicemail": {
+    "description": "Call flow step type: takes a voicemail message."
+  },
+  "nodeVoicemailDescription": "Take a message.",
+  "@nodeVoicemailDescription": {
+    "description": "Palette description of the Voicemail step."
+  },
+  "nodeGotoFlow": "Go to flow",
+  "@nodeGotoFlow": {
+    "description": "Call flow step type: continues in another call flow."
+  },
+  "nodeGotoFlowDescription": "Continue in another call flow.",
+  "@nodeGotoFlowDescription": {
+    "description": "Palette description of the Go to flow step."
+  },
+  "nodeHangup": "Hang up",
+  "@nodeHangup": {
+    "description": "Call flow step type: ends the call."
+  },
+  "nodeHangupDescription": "End the call.",
+  "@nodeHangupDescription": {
+    "description": "Palette description of the Hang up step."
+  },
+  "nodeFieldRecording": "Recording",
+  "@nodeFieldRecording": {
+    "description": "Setting of a Play step: the recording it plays."
+  },
+  "nodeFieldPrompt": "Prompt",
+  "@nodeFieldPrompt": {
+    "description": "Setting of a Menu step: the recording played as the menu prompt."
+  },
+  "nodeFieldTimeoutSeconds": "Wait for a digit (seconds)",
+  "@nodeFieldTimeoutSeconds": {
+    "description": "Setting of a Menu step: how long to wait for the caller to press a key."
+  },
+  "nodeFieldMaxInvalidAttempts": "Invalid tries allowed",
+  "@nodeFieldMaxInvalidAttempts": {
+    "description": "Setting of a Menu step: how many wrong keys the caller may press."
+  },
+  "nodeFieldSchedule": "Schedule",
+  "@nodeFieldSchedule": {
+    "description": "Setting of a Time condition step: the schedule it checks."
+  },
+  "nodeFieldScheduleHelp": "Checked when each call arrives, so changing the schedule needs no republish.",
+  "@nodeFieldScheduleHelp": {
+    "description": "Help under the schedule setting of a Time condition step."
+  },
+  "nodeFieldExtension": "Extension",
+  "@nodeFieldExtension": {
+    "description": "Setting of an Extension step: the extension it rings."
+  },
+  "nodeFieldRingSeconds": "Ring for (seconds)",
+  "@nodeFieldRingSeconds": {
+    "description": "Setting of an Extension step: how long it rings."
+  },
+  "nodeFieldRingGroup": "Ring group",
+  "@nodeFieldRingGroup": {
+    "description": "Setting of a Ring group step: the group it rings."
+  },
+  "nodeFieldQueue": "Queue",
+  "@nodeFieldQueue": {
+    "description": "Setting of a Queue step: the queue the caller joins."
+  },
+  "nodeFieldMailbox": "Mailbox",
+  "@nodeFieldMailbox": {
+    "description": "Setting of a Voicemail step: the mailbox that takes the message."
+  },
+  "nodeFieldCallFlow": "Call flow",
+  "@nodeFieldCallFlow": {
+    "description": "Setting of a Go to flow step: the call flow to continue in."
+  },
+  "nodeFieldStartAt": "Start at",
+  "@nodeFieldStartAt": {
+    "description": "Setting of a Go to flow step: which start of the other flow to enter at."
+  },
+  "nodePortNext": "Next",
+  "@nodePortNext": {
+    "description": "Exit of a call flow step taken when it finishes."
+  },
+  "nodePortNoInput": "No input",
+  "@nodePortNoInput": {
+    "description": "Exit of a Menu step taken when the caller presses nothing."
+  },
+  "nodePortInvalid": "Invalid",
+  "@nodePortInvalid": {
+    "description": "Exit of a Menu step taken after too many wrong keys."
+  },
+  "nodePortOpen": "Open",
+  "@nodePortOpen": {
+    "description": "Exit of a Time condition step taken when the schedule is open."
+  },
+  "nodePortClosed": "Closed",
+  "@nodePortClosed": {
+    "description": "Exit of a Time condition step taken when the schedule is closed."
+  },
+  "nodePortNoAnswer": "No answer",
+  "@nodePortNoAnswer": {
+    "description": "Exit of a ringing step taken when nobody answers."
+  },
+  "nodePortMatch": "Match",
+  "@nodePortMatch": {
+    "description": "Exit of a condition step taken when it matches."
+  },
+  "nodePortNoMatch": "No match",
+  "@nodePortNoMatch": {
+    "description": "Exit of a condition step taken when it does not match."
+  },
+  "nodePortPress": "Press {digit}",
+  "@nodePortPress": {
+    "description": "Exit of a Menu step taken when the caller presses a key. {digit} is the key: 0-9, * or #.",
+    "placeholders": {
+      "digit": {
+        "type": "String"
+      }
+    }
+  },
+  "flowAddStep": "Add a step",
+  "@flowAddStep": {
+    "description": "Heading of the call flow builder's palette of step types."
+  },
+  "flowCallsStartHere": "Calls start here: {names}",
+  "@flowCallsStartHere": {
+    "description": "Tooltip on a step's flag: the named starts of the flow that enter at this step. {names} is a comma-separated list.",
+    "placeholders": {
+      "names": {
+        "type": "String"
+      }
+    }
+  },
+  "flowNotSet": "Not set",
+  "@flowNotSet": {
+    "description": "Shown under a step's name when its main setting has not been chosen."
+  },
+  "flowMissing": "Missing",
+  "@flowMissing": {
+    "description": "Shown under a step's name when the item it points at no longer exists."
+  },
+  "flowUnknownStepType": "Unknown step type \"{type}\".",
+  "@flowUnknownStepType": {
+    "description": "Shown in the properties panel for a step this console does not know. {type} is the step's internal type name.",
+    "placeholders": {
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "flowDeleteStep": "Delete this step",
+  "@flowDeleteStep": {
+    "description": "Tooltip of the button that deletes the selected call flow step."
+  },
+  "flowStartName": "Start: {name}",
+  "@flowStartName": {
+    "description": "Chip naming a start of the call flow that enters at this step.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "flowStartCallHere": "Start a call here",
+  "@flowStartCallHere": {
+    "description": "Button that makes the selected step a start of the call flow."
+  },
+  "flowProblems": "Problems",
+  "@flowProblems": {
+    "description": "Heading over the list of problems with the selected step."
+  },
+  "flowChooseFlowFirst": "Choose a call flow first.",
+  "@flowChooseFlowFirst": {
+    "description": "Helper under a Go to flow step's start picker before a call flow is chosen."
+  },
+  "flowNoStartYet": "That flow has no start yet.",
+  "@flowNoStartYet": {
+    "description": "Helper under a Go to flow step's start picker when the chosen flow has no starts."
+  },
+  "flowAtLeast": "At least {min}",
+  "@flowAtLeast": {
+    "description": "Error under a number setting of a step that is below its minimum.",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      }
+    }
+  },
+  "flowMenuKeys": "Keys the caller may press",
+  "@flowMenuKeys": {
+    "description": "Heading over the digit keys a Menu step offers."
+  },
+  "flowMenuKeysHelp": "Each key you pick gets its own exit on the step. Unpicking one removes its connection.",
+  "@flowMenuKeysHelp": {
+    "description": "Help under a Menu step's digit keys."
+  },
+  "flowRefLoadFailed": "Could not load the list ({problem}). Enter the id.",
+  "@flowRefLoadFailed": {
+    "description": "Helper under a step's picker when its list could not be loaded, so the id is typed instead. {problem} is the reason.",
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
+  "flowRefNone": "None yet. Create one first.",
+  "@flowRefNone": {
+    "description": "Helper under a step's picker when there is nothing to choose."
+  },
+  "flowRefMissing": "Missing ({id})",
+  "@flowRefMissing": {
+    "description": "Picker entry for an item the step points at that no longer exists. {id} is its id.",
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "flowWhereCallsStart": "Where calls start",
+  "@flowWhereCallsStart": {
+    "description": "Heading of the call flow panel listing the flow's named starts."
+  },
+  "flowWhereCallsStartHelp": "A number or another flow enters this one at a named start.",
+  "@flowWhereCallsStartHelp": {
+    "description": "Explains what a start of a call flow is."
+  },
+  "flowStartsAt": "Starts at",
+  "@flowStartsAt": {
+    "description": "Label of the picker choosing the step a named start enters at."
+  },
+  "flowRemoveStart": "Remove this start",
+  "@flowRemoveStart": {
+    "description": "Tooltip of the button that removes a named start of the flow."
+  },
+  "flowNoStart": "No start yet. A call has nowhere to go.",
+  "@flowNoStart": {
+    "description": "Shown when a call flow has no named start."
+  },
+  "flowAddStart": "Add a start",
+  "@flowAddStart": {
+    "description": "Button that adds a named start to the call flow."
+  },
+  "flowProblemsByService": "Problems (checked by the service)",
+  "@flowProblemsByService": {
+    "description": "Heading over the flow's problems when the server checked it, not the console."
+  },
+  "flowNoProblems": "None found.",
+  "@flowNoProblems": {
+    "description": "Shown under Problems when the flow has none."
+  },
+  "flowPublishedVersions": "Published versions",
+  "@flowPublishedVersions": {
+    "description": "Heading of the call flow's version history panel."
+  },
+  "flowNoVersions": "None yet.",
+  "@flowNoVersions": {
+    "description": "Shown when the call flow has never been published."
+  },
+  "flowVersion": "Version {number}",
+  "@flowVersion": {
+    "description": "Title of one published version of a call flow.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "flowRollBackToThis": "Roll back to this",
+  "@flowRollBackToThis": {
+    "description": "Button that makes an earlier published version live again."
+  },
+  "flowOpenAsDraft": "Open as draft",
+  "@flowOpenAsDraft": {
+    "description": "Button that copies a published version into the draft to edit."
+  },
+  "flowFixBeforePublishing": "Fix these before publishing",
+  "@flowFixBeforePublishing": {
+    "description": "Title of the publish dialog when the flow has problems."
+  },
+  "flowPublishQuestion": "Publish this flow?",
+  "@flowPublishQuestion": {
+    "description": "Title of the dialog confirming a call flow publish."
+  },
+  "flowFirstVersion": "This is the first published version. Calls will use it straight away.",
+  "@flowFirstVersion": {
+    "description": "Publish dialog text when the flow has never been published."
+  },
+  "flowNothingChanged": "Nothing has changed since version {version}.",
+  "@flowNothingChanged": {
+    "description": "Publish dialog text when the draft equals the live version.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "flowChangesSince": "Changes since version {version}, which is live now:",
+  "@flowChangesSince": {
+    "description": "Publish dialog text introducing the list of changes from the live version.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "flowDiffAdded": "Added",
+  "@flowDiffAdded": {
+    "description": "Publish dialog heading over the steps added since the live version."
+  },
+  "flowDiffRemoved": "Removed",
+  "@flowDiffRemoved": {
+    "description": "Publish dialog heading over the steps removed since the live version."
+  },
+  "flowDiffChanged": "Changed",
+  "@flowDiffChanged": {
+    "description": "Publish dialog heading over the steps changed since the live version; also the line saying the starts changed."
+  },
+  "flowDiffConnections": "Connections",
+  "@flowDiffConnections": {
+    "description": "Publish dialog heading over the connection changes."
+  },
+  "flowDiffConnectionsAdded": "{count} added",
+  "@flowDiffConnectionsAdded": {
+    "description": "Publish dialog: how many connections between steps were added.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "flowDiffConnectionsRemoved": "{count} removed",
+  "@flowDiffConnectionsRemoved": {
+    "description": "Publish dialog: how many connections between steps were removed.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "flowDiffStarts": "Starts",
+  "@flowDiffStarts": {
+    "description": "Publish dialog heading over changes to the flow's named starts."
+  },
+  "flowPublish": "Publish",
+  "@flowPublish": {
+    "description": "Button that publishes the call flow so calls use it."
+  },
+  "flowEnterName": "Enter a name",
+  "@flowEnterName": {
+    "description": "Error when a new start of the flow is given no name."
+  },
+  "flowNameTaken": "That name is already a start",
+  "@flowNameTaken": {
+    "description": "Error when a new start of the flow reuses a name."
+  },
+  "flowNameThisStart": "Name this start",
+  "@flowNameThisStart": {
+    "description": "Title of the dialog naming a new start of the flow."
+  },
+  "flowAdd": "Add",
+  "@flowAdd": {
+    "description": "Button that adds the named start."
+  },
+  "flowCouldNotSave": "Could not save: {problem}",
+  "@flowCouldNotSave": {
+    "description": "Error when the call flow draft could not be saved. {problem} is the reason.",
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
+  "flowServiceValid": "The service says this flow is valid.",
+  "@flowServiceValid": {
+    "description": "Message after the server checked the call flow and found nothing wrong."
+  },
+  "flowServiceProblems": "The service found {count} problem(s).",
+  "@flowServiceProblems": {
+    "description": "Message after the server checked the call flow and found problems.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "flowPublishedVersion": "Published version {version}.",
+  "@flowPublishedVersion": {
+    "description": "Message after a call flow was published.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "flowRollbackTitle": "Roll back to version {version}?",
+  "@flowRollbackTitle": {
+    "description": "Title of the dialog confirming a roll back to an earlier version.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "flowRollbackBody": "Calls will use version {version} again. Your draft is not changed.",
+  "@flowRollbackBody": {
+    "description": "Body of the dialog confirming a roll back to an earlier version.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "flowRollback": "Roll back",
+  "@flowRollback": {
+    "description": "Button confirming a roll back to an earlier version."
+  },
+  "flowRolledBack": "Rolled back to version {version}.",
+  "@flowRolledBack": {
+    "description": "Message after a roll back.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "flowOpenAsDraftTitle": "Open version {version} as the draft?",
+  "@flowOpenAsDraftTitle": {
+    "description": "Title of the dialog confirming a published version replaces the draft.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "flowOpenAsDraftBody": "The draft is replaced by version {version}. Changes you have not published are lost.",
+  "@flowOpenAsDraftBody": {
+    "description": "Body of the dialog confirming a published version replaces the draft.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "flowReplaceDraft": "Replace draft",
+  "@flowReplaceDraft": {
+    "description": "Button confirming a published version replaces the draft."
+  },
+  "flowDraftReplaced": "Draft replaced with version {version}.",
+  "@flowDraftReplaced": {
+    "description": "Message after a published version replaced the draft.",
+    "placeholders": {
+      "version": {
+        "type": "int"
+      }
+    }
+  },
+  "flowCouldNotLoad": "Could not load this flow.",
+  "@flowCouldNotLoad": {
+    "description": "Shown when the call flow could not be loaded."
+  },
+  "flowReadOnly": "Read only: changes are not saved",
+  "@flowReadOnly": {
+    "description": "Save status for someone who can only look at the call flow."
+  },
+  "flowSaved": "Saved",
+  "@flowSaved": {
+    "description": "Save status: the draft is saved."
+  },
+  "flowUnsaved": "Unsaved changes",
+  "@flowUnsaved": {
+    "description": "Save status: there are edits not saved yet."
+  },
+  "flowSaving": "Saving…",
+  "@flowSaving": {
+    "description": "Save status: the draft is being saved."
+  },
+  "flowNotSaved": "Not saved",
+  "@flowNotSaved": {
+    "description": "Save status: saving the draft failed."
+  },
+  "flowBackToFlows": "Back to call flows",
+  "@flowBackToFlows": {
+    "description": "Tooltip of the button leaving the builder for the list of call flows."
+  },
+  "flowRedo": "Redo",
+  "@flowRedo": {
+    "description": "Tooltip of the button redoing the last undone edit."
+  },
+  "flowValidate": "Validate",
+  "@flowValidate": {
+    "description": "Button asking the server to check the call flow."
+  },
+  "flowTabStep": "Step",
+  "@flowTabStep": {
+    "description": "Side panel tab showing the selected step's settings."
+  },
+  "flowTabFlow": "Flow",
+  "@flowTabFlow": {
+    "description": "Side panel tab showing the flow's starts and problems."
+  },
+  "flowTabHistory": "History",
+  "@flowTabHistory": {
+    "description": "Side panel tab showing the flow's published versions."
+  },
+  "flowSelectStep": "Select a step to edit it, or add one from the left.",
+  "@flowSelectStep": {
+    "description": "Shown in the side panel when no step is selected."
+  },
+  "flowStepsSelected": "{count} steps selected.",
+  "@flowStepsSelected": {
+    "description": "Shown in the side panel when several steps are selected.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "chChooseExtension": "{slot}: choose an extension.",
+  "@chChooseExtension": {
+    "description": "Error in call handling when a forwarding rule sends to an extension but none is chosen. {slot} names the rule, such as \"Forward when busy\".",
+    "placeholders": {
+      "slot": {
+        "type": "String"
+      }
+    }
+  },
+  "chEnterE164": "{slot}: enter the number with a leading + and country code, for example +14155552671.",
+  "@chEnterE164": {
+    "description": "Error in call handling when an outside number is not in international format. {slot} names the rule.",
+    "placeholders": {
+      "slot": {
+        "type": "String"
+      }
+    }
+  },
+  "chSignInAgain": "Sign in again to continue.",
+  "@chSignInAgain": {
+    "description": "Shown in the call handling dialog when the session has ended."
+  },
+  "chForwardAlways": "Forward all calls",
+  "@chForwardAlways": {
+    "description": "Call handling rule: forward every call."
+  },
+  "chForwardAlwaysHelp": "Replaces ringing this extension.",
+  "@chForwardAlwaysHelp": {
+    "description": "Help under the Forward all calls rule."
+  },
+  "chForwardBusy": "Forward when busy",
+  "@chForwardBusy": {
+    "description": "Call handling rule: forward when the extension is on a call."
+  },
+  "chForwardNoAnswer": "Forward when there is no answer",
+  "@chForwardNoAnswer": {
+    "description": "Call handling rule: forward when nobody answers."
+  },
+  "chForwardUnreachable": "Forward when unreachable",
+  "@chForwardUnreachable": {
+    "description": "Call handling rule: forward when the phone is offline."
+  },
+  "chForwardUnreachableHelp": "The phone is not registered.",
+  "@chForwardUnreachableHelp": {
+    "description": "Help under the Forward when unreachable rule."
+  },
+  "chAlsoRingN": "Also ring {index}",
+  "@chAlsoRingN": {
+    "description": "Names one simultaneous-ring destination in an error message. {index} counts from 1.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "chRingForInvalid": "Ring for: enter a whole number of seconds from 5 to 120.",
+  "@chRingForInvalid": {
+    "description": "Error when the no-answer ring time is out of range."
+  },
+  "chTitle": "Call handling for {number}",
+  "@chTitle": {
+    "description": "Title of the call handling dialog. {number} is the extension number.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "chDoNotDisturb": "Do not disturb",
+  "@chDoNotDisturb": {
+    "description": "Switch that turns on do not disturb for the extension."
+  },
+  "chDoNotDisturbHelp": "Calls do not ring this extension, and nothing below applies.",
+  "@chDoNotDisturbHelp": {
+    "description": "Help under the do not disturb switch."
+  },
+  "chSendCallersTo": "Send callers to",
+  "@chSendCallersTo": {
+    "description": "Label of the picker choosing what callers get while do not disturb is on."
+  },
+  "chBusySignal": "A busy signal",
+  "@chBusySignal": {
+    "description": "Do not disturb option: callers hear busy."
+  },
+  "chAlsoRing": "Also ring at the same time",
+  "@chAlsoRing": {
+    "description": "Heading of the simultaneous ring section."
+  },
+  "chAlsoRingHelp": "Up to {max} extensions or outside numbers ring together with this one.",
+  "@chAlsoRingHelp": {
+    "description": "Help under the simultaneous ring heading.",
+    "placeholders": {
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "chRemove": "Remove",
+  "@chRemove": {
+    "description": "Tooltip of the button removing a simultaneous-ring destination."
+  },
+  "chAddDestination": "Add destination",
+  "@chAddDestination": {
+    "description": "Button adding a simultaneous-ring destination."
+  },
+  "chSendTo": "Send to",
+  "@chSendTo": {
+    "description": "Label of the picker choosing the kind of destination."
+  },
+  "chNotSet": "Not set",
+  "@chNotSet": {
+    "description": "Destination kind: nothing, the rule is off."
+  },
+  "chAnExtension": "An extension",
+  "@chAnExtension": {
+    "description": "Destination kind: another extension."
+  },
+  "chAVoicemail": "A voicemail",
+  "@chAVoicemail": {
+    "description": "Destination kind: a voicemail box."
+  },
+  "chAnOutsideNumber": "An outside number",
+  "@chAnOutsideNumber": {
+    "description": "Destination kind: an external phone number."
+  },
+  "chVoicemailOf": "Voicemail of",
+  "@chVoicemailOf": {
+    "description": "Label of the picker choosing whose voicemail takes the call."
+  },
+  "chThisExtension": "This extension",
+  "@chThisExtension": {
+    "description": "Option: this extension's own voicemail."
+  },
+  "chNumber": "Number",
+  "@chNumber": {
+    "description": "Label of the outside phone number field."
+  },
+  "phonePasswordReset": "Password reset. Enter the new one in the phone.",
+  "@phonePasswordReset": {
+    "description": "Message after an extension's SIP password was reset."
+  },
+  "phoneTitle": "Connect a phone to {number}",
+  "@phoneTitle": {
+    "description": "Title of the dialog showing the SIP settings for an extension. {number} is the extension number.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneIntro": "Enter these in the phone or softphone. On a desk phone, open its web page and look for the account or SIP settings.",
+  "@phoneIntro": {
+    "description": "Intro of the connect a phone dialog."
+  },
+  "phoneOutboundProxy": "Outbound proxy",
+  "@phoneOutboundProxy": {
+    "description": "SIP setting label: the proxy the phone sends its traffic to."
+  },
+  "phoneServerRegistrar": "Server / registrar",
+  "@phoneServerRegistrar": {
+    "description": "SIP setting label: the domain the phone registers to, when an outbound proxy is used."
+  },
+  "phoneTlsPort": "TLS port",
+  "@phoneTlsPort": {
+    "description": "SIP setting label: the encrypted port."
+  },
+  "phoneTransport": "Transport",
+  "@phoneTransport": {
+    "description": "SIP setting label: UDP, TCP or TLS."
+  },
+  "phoneOrSeparator": " or ",
+  "@phoneOrSeparator": {
+    "description": "Joins the transports a phone may use, as in \"UDP or TCP\". Keep the spaces."
+  },
+  "phoneDomainRealm": "Domain / realm",
+  "@phoneDomainRealm": {
+    "description": "SIP setting label: the authentication domain."
+  },
+  "phonePassword": "Password",
+  "@phonePassword": {
+    "description": "SIP setting label: the extension's SIP password."
+  },
+  "phoneResetPassword": "Reset password",
+  "@phoneResetPassword": {
+    "description": "Button that gives the extension a new SIP password."
+  },
+  "phonePasswordHidden": "The password is shown only to people allowed to reveal it.",
+  "@phonePasswordHidden": {
+    "description": "Shown in place of the SIP password for someone who may not reveal it."
+  },
+  "phoneRevealPassword": "Reveal password",
+  "@phoneRevealPassword": {
+    "description": "Button that starts revealing the SIP password (asks for a reason)."
+  },
+  "phoneWhyReveal": "Why do you need it?",
+  "@phoneWhyReveal": {
+    "description": "Label of the reason field before revealing a SIP password."
+  },
+  "phoneAuditNote": "Recorded in the audit log along with your name.",
+  "@phoneAuditNote": {
+    "description": "Helper under a reason field: the reason is audited."
+  },
+  "phoneReveal": "Reveal",
+  "@phoneReveal": {
+    "description": "Button that reveals the SIP password."
+  },
+  "phoneCopy": "Copy {label}",
+  "@phoneCopy": {
+    "description": "Tooltip of the copy button next to a SIP setting. {label} is the setting's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "phonePasswordCopied": "Password copied.",
+  "@phonePasswordCopied": {
+    "description": "Message after copying the SIP password."
+  },
+  "phoneCopied": "{label} copied.",
+  "@phoneCopied": {
+    "description": "Message after copying a SIP setting. {label} is the setting's name.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "phoneResetTitle": "Reset this password?",
+  "@phoneResetTitle": {
+    "description": "Title of the dialog confirming a SIP password reset."
+  },
+  "phoneResetBody": "The extension gets a new password. The phone using it stops working until you enter the new one.",
+  "@phoneResetBody": {
+    "description": "Body of the dialog confirming a SIP password reset."
+  },
+  "phoneWhyReset": "Why are you resetting it?",
+  "@phoneWhyReset": {
+    "description": "Label of the reason field before resetting a SIP password."
+  },
+  "phoneReset": "Reset",
+  "@phoneReset": {
+    "description": "Button confirming a SIP password reset."
+  },
+  "schedNeverOpen": "Never open",
+  "@schedNeverOpen": {
+    "description": "Summary of a schedule with no open hours, in the schedules table."
+  },
+  "schedHolidayCount": "{count, plural, =0{None} =1{1 holiday} other{{count} holidays}}",
+  "@schedHolidayCount": {
+    "description": "How many holidays a schedule has, in the schedules table.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "schedNeedsDay": "Hours {index}: choose at least one day.",
+  "@schedNeedsDay": {
+    "description": "Error on a schedule's open hours: a window has no days. {index} counts the windows from 1.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "schedTimeFormat": "Hours {index}: times look like 09:00 (24-hour).",
+  "@schedTimeFormat": {
+    "description": "Error on a schedule's open hours: a time is not HH:MM. {index} counts the windows from 1.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "schedCloseAfterOpen": "Hours {index}: closing must be after opening.",
+  "@schedCloseAfterOpen": {
+    "description": "Error on a schedule's open hours: the window closes before it opens. {index} counts the windows from 1.",
+    "placeholders": {
+      "index": {
+        "type": "int"
+      }
+    }
+  },
+  "schedNotADate": "\"{date}\" is not a date (YYYY-MM-DD).",
+  "@schedNotADate": {
+    "description": "Error on a schedule's holidays: not a date. {date} is what was typed.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "schedDateTwice": "{date} is listed twice.",
+  "@schedDateTwice": {
+    "description": "Error on a schedule's holidays: the same date appears twice.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "schedHoursHelp": "Outside these hours the schedule is closed.",
+  "@schedHoursHelp": {
+    "description": "Helper under a schedule's open hours."
+  },
+  "schedNeverOpenAdd": "Never open. Add hours below.",
+  "@schedNeverOpenAdd": {
+    "description": "Shown when a schedule has no open hours yet."
+  },
+  "schedRemoveHours": "Remove these hours",
+  "@schedRemoveHours": {
+    "description": "Tooltip of the button removing one window of open hours."
+  },
+  "schedAddHours": "Add hours",
+  "@schedAddHours": {
+    "description": "Button adding a window of open hours to a schedule."
+  },
+  "schedHolidays": "Holidays",
+  "@schedHolidays": {
+    "description": "Label of a schedule's list of closed dates."
+  },
+  "schedHolidaysHelp": "Closed all day on these dates, whatever the hours say.",
+  "@schedHolidaysHelp": {
+    "description": "Helper under a schedule's holidays."
+  },
+  "schedDate": "Date",
+  "@schedDate": {
+    "description": "Label of a holiday's date field."
+  },
+  "schedNameOptional": "Name (optional)",
+  "@schedNameOptional": {
+    "description": "Label of a holiday's name field."
+  },
+  "schedRemoveHoliday": "Remove this holiday",
+  "@schedRemoveHoliday": {
+    "description": "Tooltip of the button removing a holiday."
+  },
+  "schedAddHoliday": "Add a holiday",
+  "@schedAddHoliday": {
+    "description": "Button adding a holiday to a schedule."
+  },
+  "provNotFetched": "Set up, but the phone has not fetched its settings yet.",
+  "@provNotFetched": {
+    "description": "Desk phone setup status: details were created but never used."
+  },
+  "provNotIssued": "No setup details have been created yet.",
+  "@provNotIssued": {
+    "description": "Desk phone setup status: nothing created yet."
+  },
+  "provLastFetched": "Last fetched its settings {when}{fromIp}{userAgent}.",
+  "@provLastFetched": {
+    "description": "Desk phone setup status. {when} is a date and time; {fromIp} is empty or the text of provFromIp; {userAgent} is empty or the text of provUserAgent.",
+    "placeholders": {
+      "when": {
+        "type": "String"
+      },
+      "fromIp": {
+        "type": "String"
+      },
+      "userAgent": {
+        "type": "String"
+      }
+    }
+  },
+  "provFromIp": " from {ip}",
+  "@provFromIp": {
+    "description": "Part of provLastFetched: the address the phone fetched from. Starts with a space.",
+    "placeholders": {
+      "ip": {
+        "type": "String"
+      }
+    }
+  },
+  "provUserAgent": " ({agent})",
+  "@provUserAgent": {
+    "description": "Part of provLastFetched: the phone's model and firmware as it reported them. Starts with a space.",
+    "placeholders": {
+      "agent": {
+        "type": "String"
+      }
+    }
+  },
+  "provTitle": "Set up this phone",
+  "@provTitle": {
+    "description": "Title of the desk phone auto-provisioning dialog."
+  },
+  "provNotAllowed": "Setup details are created only by people allowed to reveal passwords.",
+  "@provNotAllowed": {
+    "description": "Shown in the provisioning dialog to someone who may not create setup details."
+  },
+  "provIntro": "Create the address, user name and password to give this phone. The password is shown once. Creating new details replaces any earlier ones, and a phone still using them stops fetching its settings.",
+  "@provIntro": {
+    "description": "Explains creating provisioning details."
+  },
+  "provWhy": "Why do you need them?",
+  "@provWhy": {
+    "description": "Label of the reason field before creating provisioning details."
+  },
+  "provCreate": "Create setup details",
+  "@provCreate": {
+    "description": "Button that creates provisioning details for a desk phone."
+  },
+  "provHowTo": "On the phone, open its web page and find Auto Provision (the menu name varies by model). Enter these, then start auto provision. Or give the phone the address by DHCP option 66.",
+  "@provHowTo": {
+    "description": "How to enter the provisioning details into a desk phone."
+  },
+  "provNoPublicAddress": "This platform's public address is not set, so the address is not shown. Use your API address followed by /v1/public/provision/yealink/",
+  "@provNoPublicAddress": {
+    "description": "Shown when the provisioning address cannot be built."
+  },
+  "provServerUrl": "Server URL",
+  "@provServerUrl": {
+    "description": "Provisioning detail label: the address the phone fetches from."
+  },
+  "provUserName": "User name",
+  "@provUserName": {
+    "description": "Provisioning detail label: the phone's user name."
+  },
+  "provDhcpOption66": "DHCP option 66",
+  "@provDhcpOption66": {
+    "description": "Provisioning detail label: the address with credentials, for DHCP option 66."
+  },
+  "provShownOnce": "This password is not shown again.",
+  "@provShownOnce": {
+    "description": "Warning under freshly created provisioning details."
+  },
+  "rpChooseTenant": "Choose a tenant to configure. Acting as a tenant arrives with the app shell.",
+  "@rpChooseTenant": {
+    "description": "Shown on a PBX settings page when no tenant is chosen."
+  },
+  "rpAgentsAndTiers": "Agents and tiers",
+  "@rpAgentsAndTiers": {
+    "description": "Tooltip of the queue row button that opens the queue's agents."
+  },
+  "rpCallHandling": "Call handling",
+  "@rpCallHandling": {
+    "description": "Tooltip of the extension row button that opens forwarding and do not disturb."
+  },
+  "rpConnectPhone": "Connect a phone",
+  "@rpConnectPhone": {
+    "description": "Tooltip of the extension row button that shows the SIP settings for a phone."
+  },
+  "tierNumberRange": "Enter a whole number from 1 to 100.",
+  "@tierNumberRange": {
+    "description": "Error when a queue agent's level or position is out of range."
+  },
+  "tierTitle": "Agents in {queue}",
+  "@tierTitle": {
+    "description": "Title of the dialog listing a queue's agents. {queue} is the queue's name.",
+    "placeholders": {
+      "queue": {
+        "type": "String"
+      }
+    }
+  },
+  "tierTitleUnnamed": "Agents in this queue",
+  "@tierTitleUnnamed": {
+    "description": "Title of the dialog listing a queue's agents, when the queue has no name."
+  },
+  "tierIntro": "Callers try agents at level 1 first, and move to the next level only when nobody at the level before is available.",
+  "@tierIntro": {
+    "description": "Explains queue agent levels."
+  },
+  "tierNone": "No agents yet. Add one below.",
+  "@tierNone": {
+    "description": "Shown when a queue has no agents."
+  },
+  "tierLevelPosition": "Level {level} · position {position}",
+  "@tierLevelPosition": {
+    "description": "A queue agent's level and position, for someone who can only read them.",
+    "placeholders": {
+      "level": {
+        "type": "String"
+      },
+      "position": {
+        "type": "String"
+      }
+    }
+  },
+  "tierLevel": "Level",
+  "@tierLevel": {
+    "description": "Label of a queue agent's level field (lower levels are tried first)."
+  },
+  "tierPosition": "Position",
+  "@tierPosition": {
+    "description": "Label of a queue agent's position field (order within a level)."
+  },
+  "tierRemove": "Remove from queue",
+  "@tierRemove": {
+    "description": "Tooltip of the button removing an agent from the queue."
+  },
+  "tierAddAgent": "Add an agent",
+  "@tierAddAgent": {
+    "description": "Label of the picker adding an agent to the queue."
+  },
+  "tierAllAdded": "Every agent is already in this queue.",
+  "@tierAllAdded": {
+    "description": "Helper when there is no agent left to add."
+  },
+  "tierAdd": "Add",
+  "@tierAdd": {
+    "description": "Button adding the chosen agent to the queue."
+  },
+  "tierDone": "Done",
+  "@tierDone": {
+    "description": "Button closing the queue agents dialog."
+  },
+  "opsTabOverview": "Overview",
+  "@opsTabOverview": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Tab: headline figures and charts."
+  },
+  "opsTabServices": "Services",
+  "@opsTabServices": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Tab: every service."
+  },
+  "opsTabMediaNodes": "Media nodes",
+  "@opsTabMediaNodes": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Tab: the media (call-handling) servers."
+  },
+  "opsTabSignalling": "Signalling",
+  "@opsTabSignalling": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Tab: the SIP edge."
+  },
+  "opsTabEvents": "Events",
+  "@opsTabEvents": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Tab: the event bus."
+  },
+  "opsTabDataStores": "Data stores",
+  "@opsTabDataStores": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Tab: databases and caches."
+  },
+  "opsSubtitle": "The services, media nodes, SIP edge, event bus and data stores.",
+  "@opsSubtitle": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Page subtitle before the first reading."
+  },
+  "opsReadAt": "Read at {time} UTC. Refreshes every {seconds} seconds.",
+  "@opsReadAt": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Page subtitle. {time} is a clock time; {seconds} how often the page refreshes.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "opsReadNow": "Read now",
+  "@opsReadNow": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Tooltip of the refresh button."
+  },
+  "opsLastReadingFailed": "The last reading failed ({problem}). Showing the one before.",
+  "@opsLastReadingFailed": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). {problem} is the error message.",
+    "placeholders": {
+      "problem": {
+        "type": "String"
+      }
+    }
+  },
+  "opsNothingToShow": "Nothing to show.",
+  "@opsNothingToShow": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Shown when there is nothing to display."
+  },
+  "opsServicesReady": "Services ready",
+  "@opsServicesReady": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure label."
+  },
+  "opsPartOfWhole": "{part} of {whole}",
+  "@opsPartOfWhole": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). A figure out of a total, such as '3 of 4'. Both are already formatted.",
+    "placeholders": {
+      "part": {
+        "type": "String"
+      },
+      "whole": {
+        "type": "String"
+      }
+    }
+  },
+  "opsAllReportingReady": "All reporting ready",
+  "@opsAllReportingReady": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Every service reports it is ready."
+  },
+  "opsNeedAttention": "{count} need attention",
+  "@opsNeedAttention": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). {count} services are not ready.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "opsMediaNodesInService": "Media nodes in service",
+  "@opsMediaNodesInService": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure label."
+  },
+  "opsTakingNewCalls": "Taking new calls",
+  "@opsTakingNewCalls": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Every media node is taking new calls."
+  },
+  "opsNotTakingNewCalls": "{count} not taking new calls",
+  "@opsNotTakingNewCalls": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). {count} media nodes are not taking new calls.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "opsOnEveryMediaNode": "On every media node",
+  "@opsOnEveryMediaNode": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Detail under the live calls figure."
+  },
+  "opsRegisteredPhones": "Registered phones",
+  "@opsRegisteredPhones": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure label: phones signed in at the SIP edge."
+  },
+  "opsEdgeNotAnswering": "Edge not answering",
+  "@opsEdgeNotAnswering": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). The SIP edge did not answer."
+  },
+  "opsCallsAtTheEdge": "{count} calls at the edge",
+  "@opsCallsAtTheEdge": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). {count} is an already formatted number.",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "opsEventBacklog": "Event backlog",
+  "@opsEventBacklog": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure label: events waiting to be processed."
+  },
+  "opsEventBusNotAnswering": "Event bus not answering",
+  "@opsEventBusNotAnswering": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure detail: the event bus did not answer."
+  },
+  "opsEveryConsumerCaughtUp": "Every consumer caught up",
+  "@opsEveryConsumerCaughtUp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure detail: no events are waiting."
+  },
+  "opsConsumersBehind": "{count} consumers behind",
+  "@opsConsumersBehind": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). {count} event consumers have events waiting.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "opsCallsPerMediaNode": "Calls per media node",
+  "@opsCallsPerMediaNode": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart title."
+  },
+  "opsCallsPerMediaNodeHelp": "Live calls on each node now.",
+  "@opsCallsPerMediaNodeHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart subtitle."
+  },
+  "opsNoMediaNodes": "No media nodes are configured.",
+  "@opsNoMediaNodes": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Shown when there are no media nodes."
+  },
+  "opsMediaNodeCpu": "Media node CPU",
+  "@opsMediaNodeCpu": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart title."
+  },
+  "opsMediaNodeCpuHelp": "How busy each node reported itself at its last heartbeat.",
+  "@opsMediaNodeCpuHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart subtitle."
+  },
+  "opsLiveCallsTrend": "Live calls, last 10 minutes",
+  "@opsLiveCallsTrend": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart title."
+  },
+  "opsLiveCallsTrendHelp": "From this page's own readings while it is open.",
+  "@opsLiveCallsTrendHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart subtitle."
+  },
+  "opsEventBacklogTrend": "Event backlog, last 10 minutes",
+  "@opsEventBacklogTrend": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart title."
+  },
+  "opsEventBacklogTrendHelp": "Events waiting for a consumer, summed.",
+  "@opsEventBacklogTrendHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart subtitle."
+  },
+  "opsResponseTimes": "Service response times",
+  "@opsResponseTimes": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart title."
+  },
+  "opsResponseTimesHelp": "How long each service took to answer this reading.",
+  "@opsResponseTimesHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart subtitle when every service answered."
+  },
+  "opsResponseTimesSomeDown": "How long each service took to answer. {count} not answering (see Services).",
+  "@opsResponseTimesSomeDown": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart subtitle. {count} services did not answer.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "opsNoServiceAnswered": "No service answered.",
+  "@opsNoServiceAnswered": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Empty chart text."
+  },
+  "opsBacklogByConsumer": "Event backlog by consumer",
+  "@opsBacklogByConsumer": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart title."
+  },
+  "opsEventBusDown": "The event bus is not answering.",
+  "@opsEventBusDown": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Shown when the event bus did not answer."
+  },
+  "opsEveryConsumerIsCaughtUp": "Every consumer is caught up.",
+  "@opsEveryConsumerIsCaughtUp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart subtitle: no events are waiting."
+  },
+  "opsConsumersFurthestBehind": "The consumers furthest behind.",
+  "@opsConsumersFurthestBehind": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart subtitle."
+  },
+  "opsEventBusNotAnsweringShort": "Event bus not answering.",
+  "@opsEventBusNotAnsweringShort": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Empty chart text: the event bus did not answer."
+  },
+  "opsNoConsumersYet": "No consumers yet.",
+  "@opsNoConsumersYet": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Empty chart text."
+  },
+  "opsNoServices": "No services are configured.",
+  "@opsNoServices": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Shown when there are no services."
+  },
+  "opsColService": "Service",
+  "@opsColService": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Services table column."
+  },
+  "opsColStatus": "Status",
+  "@opsColStatus": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Services table column."
+  },
+  "opsColResponse": "Response",
+  "@opsColResponse": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Services table column: response time."
+  },
+  "opsColVersion": "Version",
+  "@opsColVersion": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Services table column."
+  },
+  "opsUptime": "Uptime",
+  "@opsUptime": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Table column and figure label: how long it has been running."
+  },
+  "opsColMemory": "Memory",
+  "@opsColMemory": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Services table column."
+  },
+  "opsColOutbox": "Outbox",
+  "@opsColOutbox": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Services table column: events waiting to be published."
+  },
+  "opsColNotReady": "Not ready",
+  "@opsColNotReady": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Services table column: the checks that are failing."
+  },
+  "opsColDetails": "Details",
+  "@opsColDetails": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Services table column."
+  },
+  "opsColNode": "Node",
+  "@opsColNode": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Edge table column: a media node."
+  },
+  "opsColAddress": "Address",
+  "@opsColAddress": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Edge table column: a media node's SIP address."
+  },
+  "opsColState": "State",
+  "@opsColState": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Edge table column: whether the edge sends the node calls."
+  },
+  "opsWeight": "Weight",
+  "@opsWeight": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Table column, figure label and field label: a media node's share of new calls."
+  },
+  "opsColShare": "Share",
+  "@opsColShare": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Edge table column: a media node's percentage of new calls."
+  },
+  "opsColStream": "Stream",
+  "@opsColStream": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Events table column."
+  },
+  "opsColMessages": "Messages",
+  "@opsColMessages": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Events table column: messages kept in a stream."
+  },
+  "opsColSize": "Size",
+  "@opsColSize": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Events table column."
+  },
+  "opsConsumers": "Consumers",
+  "@opsConsumers": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Events table column and panel title: services that process events."
+  },
+  "opsColConsumer": "Consumer",
+  "@opsColConsumer": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Events table column."
+  },
+  "opsColWaiting": "Waiting",
+  "@opsColWaiting": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Events table column: events not yet delivered."
+  },
+  "opsColUnacknowledged": "Unacknowledged",
+  "@opsColUnacknowledged": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Events table column: events delivered but not yet done."
+  },
+  "opsColRedelivered": "Redelivered",
+  "@opsColRedelivered": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Events table column: events tried again after a failure."
+  },
+  "opsOutboxEmpty": "Empty",
+  "@opsOutboxEmpty": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). A service's outbox has nothing waiting."
+  },
+  "opsOutboxWaiting": "{count} waiting, oldest {age}",
+  "@opsOutboxWaiting": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). A service's outbox. {count} is a formatted number, {age} a formatted time span.",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      },
+      "age": {
+        "type": "String"
+      }
+    }
+  },
+  "opsOutboxGivenUp": "{summary}; {count} given up",
+  "@opsOutboxGivenUp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). {summary} is the outbox text; {count} a formatted number of events that failed for good.",
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      },
+      "count": {
+        "type": "String"
+      }
+    }
+  },
+  "opsSipEdgeDown": "The SIP edge is not answering.",
+  "@opsSipEdgeDown": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Shown when the SIP edge did not answer."
+  },
+  "opsEdge": "Edge",
+  "@opsEdge": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure label: the SIP edge."
+  },
+  "opsUpFor": "Up {span}",
+  "@opsUpFor": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). How long the SIP edge has been running. {span} is a formatted time span.",
+    "placeholders": {
+      "span": {
+        "type": "String"
+      }
+    }
+  },
+  "opsCallsInProgress": "Calls in progress",
+  "@opsCallsInProgress": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure label."
+  },
+  "opsAnsweredDialogs": "Answered dialogs",
+  "@opsAnsweredDialogs": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure detail (SIP term)."
+  },
+  "opsCallsRinging": "Calls ringing",
+  "@opsCallsRinging": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure label."
+  },
+  "opsEarlyDialogs": "Early dialogs",
+  "@opsEarlyDialogs": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure detail (SIP term)."
+  },
+  "opsTransactions": "Transactions",
+  "@opsTransactions": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure label (SIP transactions)."
+  },
+  "opsInProgress": "In progress",
+  "@opsInProgress": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure detail."
+  },
+  "opsSharedMemory": "Shared memory",
+  "@opsSharedMemory": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Figure label."
+  },
+  "opsMediaNodesAtEdge": "Media nodes at the edge",
+  "@opsMediaNodesAtEdge": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Panel title."
+  },
+  "opsMediaNodesAtEdgeHelp": "Where the edge sends new calls. Weights split them; a node out of rotation gets none.",
+  "@opsMediaNodesAtEdgeHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Panel subtitle."
+  },
+  "opsMessagesPerStream": "Messages kept per stream",
+  "@opsMessagesPerStream": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart title."
+  },
+  "opsMessagesPerStreamHelp": "Events each stream holds for replay.",
+  "@opsMessagesPerStreamHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Chart subtitle."
+  },
+  "opsNoStreams": "No streams yet.",
+  "@opsNoStreams": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Empty chart text."
+  },
+  "opsStreams": "Streams",
+  "@opsStreams": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Panel title: event streams."
+  },
+  "opsConsumersHelp": "Waiting: not yet delivered. Unacknowledged: delivered, not yet done. Redelivered: tried again after a failure.",
+  "@opsConsumersHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Panel subtitle explaining the consumer columns."
+  },
+  "opsNoDataStores": "No data stores reported.",
+  "@opsNoDataStores": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Shown when no data stores reported."
+  },
+  "opsVersionIs": "Version {version}",
+  "@opsVersionIs": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). A data store's version.",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "opsUpForLower": "up {span}",
+  "@opsUpForLower": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Follows the version after a comma: how long a data store has been running. {span} is a formatted time span.",
+    "placeholders": {
+      "span": {
+        "type": "String"
+      }
+    }
+  },
+  "opsNothingReported": "Nothing reported.",
+  "@opsNothingReported": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). A data store reported no figures."
+  },
+  "opsDrainTitle": "Drain {node}?",
+  "@opsDrainTitle": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Confirm dialog title. {node} is a media node's name.",
+    "placeholders": {
+      "node": {
+        "type": "String"
+      }
+    }
+  },
+  "opsDrainBody": "It stops taking new calls within a few seconds. Its queues, parking lots and conference rooms move to other nodes the next time they are used. Calls already on it carry on until they end.\n\nIt stays drained, even if it restarts, until you return it to service.",
+  "@opsDrainBody": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Confirm dialog body for draining a media node."
+  },
+  "opsDrain": "Drain",
+  "@opsDrain": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Button: stop a media node taking new calls."
+  },
+  "opsDraining": "{node} is draining.",
+  "@opsDraining": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Snackbar. {node} is a media node's name.",
+    "placeholders": {
+      "node": {
+        "type": "String"
+      }
+    }
+  },
+  "opsReturnTitle": "Return {node} to service?",
+  "@opsReturnTitle": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Confirm dialog title. {node} is a media node's name.",
+    "placeholders": {
+      "node": {
+        "type": "String"
+      }
+    }
+  },
+  "opsReturnBody": "It takes new calls again, in its share by weight. Queues, parking lots and conference rooms come to it as they are next used.",
+  "@opsReturnBody": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Confirm dialog body for returning a media node to service."
+  },
+  "opsReturnToService": "Return to service",
+  "@opsReturnToService": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Button: a drained media node takes new calls again."
+  },
+  "opsBackInService": "{node} is back in service.",
+  "@opsBackInService": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Snackbar. {node} is a media node's name.",
+    "placeholders": {
+      "node": {
+        "type": "String"
+      }
+    }
+  },
+  "opsWeightSet": "{node} now has weight {weight}.",
+  "@opsWeightSet": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Snackbar. {node} is a media node's name.",
+    "placeholders": {
+      "node": {
+        "type": "String"
+      },
+      "weight": {
+        "type": "int"
+      }
+    }
+  },
+  "opsNoEdgeAddress": "No address at the edge",
+  "@opsNoEdgeAddress": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). A media node the SIP edge does not list."
+  },
+  "opsCalls": "Calls",
+  "@opsCalls": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Media node figure label."
+  },
+  "opsLeases": "Leases",
+  "@opsLeases": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Media node figure label: queues, parking lots and rooms held on the node."
+  },
+  "opsNewSessions": "New sessions",
+  "@opsNewSessions": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Media node figure label: sessions per second."
+  },
+  "opsSessions": "Sessions",
+  "@opsSessions": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Media node meter label."
+  },
+  "opsCpuBusy": "CPU busy",
+  "@opsCpuBusy": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Media node meter label."
+  },
+  "opsNoHeartbeat": "No heartbeat reported yet.",
+  "@opsNoHeartbeat": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). A media node has not reported in."
+  },
+  "opsLastHeartbeat": "Last heartbeat {time} UTC.",
+  "@opsLastHeartbeat": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). {time} is a clock time.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "opsNoWeightHelp": "This node is not in the edge list, so it has no weight.",
+  "@opsNoWeightHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Tooltip of the disabled Set weight button."
+  },
+  "opsWeightHelp": "Its share of new calls against the other nodes.",
+  "@opsWeightHelp": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Tooltip of the Set weight button."
+  },
+  "opsSetWeight": "Set weight",
+  "@opsSetWeight": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Button."
+  },
+  "opsSetWeightTitle": "Set the weight of {node}",
+  "@opsSetWeightTitle": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Dialog title. {node} is a media node's name.",
+    "placeholders": {
+      "node": {
+        "type": "String"
+      }
+    }
+  },
+  "opsWeightExplain": "New calls are shared out by weight: a node with weight 2 takes two calls for every one a node with weight 1 takes. The weight is kept when the edge restarts. To send a node no calls, drain it instead.",
+  "@opsWeightExplain": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Weight dialog explanation."
+  },
+  "opsWeightRange": "From {min} to {max}.",
+  "@opsWeightRange": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Weight field help: the allowed range.",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "opsNothingToShowYet": "Nothing to show yet.",
+  "@opsNothingToShowYet": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Empty chart text."
+  },
+  "opsLineStartsLater": "The line starts after a few readings.",
+  "@opsLineStartsLater": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). A line chart with too few points yet."
+  },
+  "opsCpu": "CPU",
+  "@opsCpu": {
+    "description": "Platform Operations console (live health of services, media nodes, SIP edge, event bus, data stores). Label under a CPU percentage in a gauge."
+  },
+  "trunkChooseTenant": "Choose a tenant to see and manage its trunks.",
+  "@trunkChooseTenant": {
+    "description": "Trunks screen (a tenant's carrier connections). Shown before a tenant is picked."
+  },
+  "trunkIpsTooltip": "IP addresses and status",
+  "@trunkIpsTooltip": {
+    "description": "Trunks screen (a tenant's carrier connections). Tooltip of a trunk's button that opens its allowed addresses and registration status."
+  },
+  "trunkTenant": "Tenant",
+  "@trunkTenant": {
+    "description": "Trunks screen (a tenant's carrier connections). Field label: the tenant whose trunks are shown."
+  },
+  "trunkTenantHelp": "Trunks belong to the tenant they serve.",
+  "@trunkTenantHelp": {
+    "description": "Trunks screen (a tenant's carrier connections). Tenant field help."
+  },
+  "trunkRegistered": "Registered",
+  "@trunkRegistered": {
+    "description": "Trunks screen (a tenant's carrier connections). Registration status."
+  },
+  "trunkRegistering": "Registering…",
+  "@trunkRegistering": {
+    "description": "Trunks screen (a tenant's carrier connections). Registration status."
+  },
+  "trunkRegistrationFailed": "Registration failed",
+  "@trunkRegistrationFailed": {
+    "description": "Trunks screen (a tenant's carrier connections). Registration status."
+  },
+  "trunkNotRegistered": "Not registered",
+  "@trunkNotRegistered": {
+    "description": "Trunks screen (a tenant's carrier connections). Registration status."
+  },
+  "trunkNotApplicable": "Not applicable (IP authentication)",
+  "@trunkNotApplicable": {
+    "description": "Trunks screen (a tenant's carrier connections). Registration status of a trunk that authenticates by IP address."
+  },
+  "trunkStatus": "Status: {status}",
+  "@trunkStatus": {
+    "description": "Trunks screen (a tenant's carrier connections). {status} is the registration status.",
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "trunkAllowedAddresses": "Allowed carrier addresses",
+  "@trunkAllowedAddresses": {
+    "description": "Trunks screen (a tenant's carrier connections). Heading of the IP allowlist."
+  },
+  "trunkNoneYet": "None yet.",
+  "@trunkNoneYet": {
+    "description": "Trunks screen (a tenant's carrier connections). The allowlist is empty."
+  },
+  "trunkRemoveAddress": "Remove {address}",
+  "@trunkRemoveAddress": {
+    "description": "Trunks screen (a tenant's carrier connections). Tooltip. {address} is an IP address or range.",
+    "placeholders": {
+      "address": {
+        "type": "String"
+      }
+    }
+  },
+  "trunkAddressOrRange": "Address or range",
+  "@trunkAddressOrRange": {
+    "description": "Trunks screen (a tenant's carrier connections). Field label: an IP address or CIDR range."
+  },
+  "trunkAddressExample": "For example 203.0.113.0/24",
+  "@trunkAddressExample": {
+    "description": "Trunks screen (a tenant's carrier connections). Field help. Keep the address as is."
+  },
+  "trunkAdd": "Add",
+  "@trunkAdd": {
+    "description": "Trunks screen (a tenant's carrier connections). Button: add the address to the allowlist."
+  },
+  "routeChooseTenant": "Choose a tenant to configure its outbound routes.",
+  "@routeChooseTenant": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Shown before a tenant is picked."
+  },
+  "routeEmergency": "Emergency route",
+  "@routeEmergency": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Tab, page and dialog title."
+  },
+  "routeNotInRole": "Your role doesn't include outbound routing.",
+  "@routeNotInRole": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Shown to someone who may see neither part."
+  },
+  "routeEmergencyHelp": "The trunk that carries emergency calls, and the numbers that count as emergencies. These are dialed exactly as typed.",
+  "@routeEmergencyHelp": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Page subtitle."
+  },
+  "routeSetEmergency": "Set emergency route",
+  "@routeSetEmergency": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Button."
+  },
+  "routeNoEmergency": "No emergency route is set. Emergency calls have no trunk to leave through.",
+  "@routeNoEmergency": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Shown when there is no emergency route."
+  },
+  "routeEmergencyNumbers": "Emergency numbers",
+  "@routeEmergencyNumbers": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Label of the numbers dialed as emergencies."
+  },
+  "routeRemoveEmergency": "Remove emergency route",
+  "@routeRemoveEmergency": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Button."
+  },
+  "routeRemoveTitle": "Remove the emergency route?",
+  "@routeRemoveTitle": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Confirm dialog title."
+  },
+  "routeRemoveBody": "Emergency calls will have no trunk to leave through until a new route is set.",
+  "@routeRemoveBody": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Confirm dialog body."
+  },
+  "routeRemove": "Remove",
+  "@routeRemove": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Confirm button."
+  },
+  "routeTrunkRequired": "Trunk *",
+  "@routeTrunkRequired": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Required field label. The asterisk marks it required."
+  },
+  "routeNumbersRequired": "Emergency numbers *",
+  "@routeNumbersRequired": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Required field label. The asterisk marks it required."
+  },
+  "routeNumbersHelp": "Comma-separated, digits only, such as 911 or 112.",
+  "@routeNumbersHelp": {
+    "description": "Outbound routes screen (how a tenant's outgoing calls leave, and its emergency route). Field help."
+  },
+  "myNotSet": "Not set",
+  "@myNotSet": {
+    "description": "My phone (a person's own call handling, voicemail and call history). A forwarding rule with no destination."
+  },
+  "myAnExtension": "An extension",
+  "@myAnExtension": {
+    "description": "My phone (a person's own call handling, voicemail and call history). A forwarding destination whose extension is not in the directory."
+  },
+  "myYourVoicemail": "Your voicemail",
+  "@myYourVoicemail": {
+    "description": "My phone (a person's own call handling, voicemail and call history). A forwarding destination: the person's own voicemail."
+  },
+  "myAVoicemail": "A voicemail",
+  "@myAVoicemail": {
+    "description": "My phone (a person's own call handling, voicemail and call history). A forwarding destination whose mailbox is not in the directory."
+  },
+  "myVoicemailOf": "Voicemail of {number} · {name}",
+  "@myVoicemailOf": {
+    "description": "My phone (a person's own call handling, voicemail and call history). A forwarding destination: another extension's voicemail.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "myDoNotDisturb": "Do not disturb",
+  "@myDoNotDisturb": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call handling setting."
+  },
+  "myDndOn": "On: callers go to {action, select, busy{a busy signal} other{voicemail}}",
+  "@myDndOn": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Do not disturb is on. {action} is 'busy' when callers hear a busy signal, otherwise they go to voicemail.",
+    "placeholders": {
+      "action": {
+        "type": "String"
+      }
+    }
+  },
+  "myOff": "Off",
+  "@myOff": {
+    "description": "My phone (a person's own call handling, voicemail and call history). A setting that is off."
+  },
+  "myForwardAll": "Forward all calls",
+  "@myForwardAll": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call handling setting."
+  },
+  "myForwardBusy": "Forward when busy",
+  "@myForwardBusy": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call handling setting."
+  },
+  "myForwardNoAnswer": "Forward when there is no answer",
+  "@myForwardNoAnswer": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call handling setting."
+  },
+  "myForwardAfter": "{target} after {seconds} seconds",
+  "@myForwardAfter": {
+    "description": "My phone (a person's own call handling, voicemail and call history). {target} is where calls go; {seconds} how long the phone rings first.",
+    "placeholders": {
+      "target": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "myForwardUnreachable": "Forward when unreachable",
+  "@myForwardUnreachable": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call handling setting."
+  },
+  "myAlsoRing": "Also ring at the same time",
+  "@myAlsoRing": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call handling setting: other phones that ring together."
+  },
+  "myNobody": "Nobody",
+  "@myNobody": {
+    "description": "My phone (a person's own call handling, voicemail and call history). No other phones ring at the same time."
+  },
+  "myCallHandlingSubtitle": "What happens to calls to your phone.",
+  "@myCallHandlingSubtitle": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Page subtitle."
+  },
+  "myCallHandlingSubtitleExt": "What happens to calls to extension {number} ({name}).",
+  "@myCallHandlingSubtitleExt": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Page subtitle. {number} and {name} are the person's extension.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "myChange": "Change",
+  "@myChange": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Button: change call handling."
+  },
+  "myHistorySubtitle": "Calls to and from your extension, newest first.",
+  "@myHistorySubtitle": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call history subtitle."
+  },
+  "myHistoryDirection": "Direction",
+  "@myHistoryDirection": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call history filter and column: inbound, outbound or internal."
+  },
+  "myHistoryAll": "All",
+  "@myHistoryAll": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Direction filter: every direction."
+  },
+  "myHistoryWhen": "When",
+  "@myHistoryWhen": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call history column."
+  },
+  "myHistoryLength": "Length",
+  "@myHistoryLength": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call history column: how long the call lasted."
+  },
+  "myHistoryResult": "Result",
+  "@myHistoryResult": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Call history column: answered, missed and so on."
+  },
+  "myHistoryLoadMore": "Load more",
+  "@myHistoryLoadMore": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Button: load older calls."
+  },
+  "myLiveOnACall": "On a call",
+  "@myLiveOnACall": {
+    "description": "My phone (a person's own call handling, voicemail and call history). State of a call the person is on now."
+  },
+  "myLiveWith": "{state} with {other}",
+  "@myLiveWith": {
+    "description": "My phone (a person's own call handling, voicemail and call history). A call the person is on now. {state} is its state (Ringing, On hold, On a call); {other} the other party.",
+    "placeholders": {
+      "state": {
+        "type": "String"
+      },
+      "other": {
+        "type": "String"
+      }
+    }
+  },
+  "myLiveUnknownNumber": "an unknown number",
+  "@myLiveUnknownNumber": {
+    "description": "My phone (a person's own call handling, voicemail and call history). The other party of a call, when there is no number."
+  },
+  "myLiveRecordingPaused": "Recording paused",
+  "@myLiveRecordingPaused": {
+    "description": "My phone (a person's own call handling, voicemail and call history). Chip on a call whose recording is paused."
+  },
+  "mcListen": "Listen",
+  "@mcListen": {
+    "description": "Live call monitoring buttons (a supervisor joins a call from their own phone). Button: listen silently."
+  },
+  "mcWhisper": "Whisper",
+  "@mcWhisper": {
+    "description": "Live call monitoring buttons (a supervisor joins a call from their own phone). Button: speak to the agent only."
+  },
+  "mcBarge": "Barge",
+  "@mcBarge": {
+    "description": "Live call monitoring buttons (a supervisor joins a call from their own phone). Button: join the call."
+  },
+  "mcListening": "Listening on your phone",
+  "@mcListening": {
+    "description": "Live call monitoring buttons (a supervisor joins a call from their own phone). Snackbar once the supervisor's phone joined."
+  },
+  "mcWhispering": "Whispering on your phone",
+  "@mcWhispering": {
+    "description": "Live call monitoring buttons (a supervisor joins a call from their own phone). Snackbar once the supervisor's phone joined."
+  },
+  "mcBarged": "Barged in on your phone",
+  "@mcBarged": {
+    "description": "Live call monitoring buttons (a supervisor joins a call from their own phone). Snackbar once the supervisor's phone joined."
+  },
+  "mcRingingYourPhone": "Ringing your phone…",
+  "@mcRingingYourPhone": {
+    "description": "Live call monitoring buttons (a supervisor joins a call from their own phone). Shown while the supervisor's own phone rings."
+  },
+  "commonDateHint": "YYYY-MM-DD",
+  "@commonDateHint": {
+    "description": "Hint in a date field: the pattern to type a date in (year, month, day), written with this language's letters for year, month and day. The digits typed are always year-month-day."
   }
 }
