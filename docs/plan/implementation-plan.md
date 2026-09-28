@@ -483,6 +483,10 @@ Principles every task in this stage follows:
 | S9-15 | Monitoring: queue column; tenant admins get listen, whisper and barge (D-021) | S9-13 |
 | S9-16 | Reseller and master: new-tenant setup wizard, dashboards that say what needs attention | S9-05, S9-03 |
 | S9-17 | Sweep: every remaining string externalized, accessibility (semantics, focus order, keyboard use), right-to-left layout, dark mode, `08-console.md` rewritten | all above |
+| S9-18 | Pickup groups (G-125): a tenant defines groups of extensions; anyone may pick up a call ringing within their own group, from the portal and with `*8` (the dialplan intercepts the group's ringing call); `call.control` still picks up any call | S9-12 |
+| S9-19 | Waiting callers (G-125): a caller waiting during an attended transfer, or parked, hears the tenant's hold music (a neutral tone without one); after 5 minutes an attended transfer's waiting caller rings the person who put them on hold instead of being dropped | S9-12 |
+| S9-20 | Agents (G-126): `queue.agent.manage` (new, grantable per queue; admins and supervisors) signs someone else in, out or on a break in place of `call.control`; an agent's home shows their own queues' waiting callers | S9-13 |
+| S9-21 | Receptionists (G-127): a built-in `tenant_receptionist` role (`call.control`, `monitor.calls`, `monitor.presence`, `queue.read`, the `self.*` permissions); each receptionist chooses what dropping a call does (send at once, or talk to them first); attended transfer in the attendant console for calls on the receptionist's own phone | S9-14 |
 
 **S9-01 Localization foundation.** `flutter_localizations` and `intl`, `generate: true`, `l10n.yaml` with `arb-dir: lib/l10n` (inside the brand-leak scan) and `app_en.arb` as the template. Keys are `featureScreenElement` in camelCase with a `@description` on each. Plurals and choices use ICU, never strings assembled from nouns. Tests pin the `en` locale.
 *Done when:* the app runs with localization delegates, the shell and sign-in screens have no literal user-facing strings, the hand-rolled date and number helpers are gone, and CI fails a change that adds a literal `Text('…')`.
