@@ -203,4 +203,16 @@ export const pbxEvents = defineEvents({
       ownerId: Type.String({ minLength: 1 }),
     }),
   },
+  'identity.invitation.accepted': {
+    schemaVersion: 1,
+    description:
+      "Mirrors identity-service's contract (S9-07): someone accepted an invitation that may " +
+      'name the extension waiting for them, which is then linked to their account.',
+    data: Type.Object({
+      invitationId: Type.String({ minLength: 1 }),
+      orgId: Type.String({ minLength: 1 }),
+      userId: Type.String({ minLength: 1 }),
+      extensionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+    }),
+  },
 });

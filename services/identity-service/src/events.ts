@@ -84,4 +84,19 @@ export const identityEvents = defineEvents({
       { additionalProperties: false },
     ),
   },
+  'identity.invitation.accepted': {
+    schemaVersion: 1,
+    description:
+      'Someone accepted an invitation and now has an account (S9-07). When the invitation ' +
+      'named an extension, pbx-config-service links it to them.',
+    data: Type.Object(
+      {
+        invitationId: Type.String({ minLength: 1 }),
+        orgId: Type.String({ minLength: 1 }),
+        userId: Type.String({ minLength: 1 }),
+        extensionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      },
+      { additionalProperties: false },
+    ),
+  },
 });

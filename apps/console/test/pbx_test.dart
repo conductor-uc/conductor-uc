@@ -149,7 +149,7 @@ void main() {
     tester,
   ) async {
     await openSection(tester, 'Phones');
-    expect(find.text('001565aabbcc'), findsOneWidget);
+    expect(find.text('00:15:65:AA:BB:CC'), findsOneWidget);
     expect(find.text('T46U'), findsOneWidget);
     expect(find.text('Front desk'), findsWidgets);
     expect(find.textContaining('Alice Kim'), findsWidgets);
@@ -170,14 +170,14 @@ void main() {
     await pickFromDropdown(tester, 'Extension *', '102 · Bob Osei');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));
     await tester.pumpAndSettle();
-    expect(find.text('00:15:65:aa:bb:dd'), findsOneWidget);
+    expect(find.text('00:15:65:AA:BB:DD'), findsOneWidget);
   });
 
   testWidgets(
     'setting up a phone needs a reason, then shows the address and password once',
     (tester) async {
       await openSection(tester, 'Phones');
-      await tapIn(tester, '001565aabbcc', find.byTooltip('Set up this phone'));
+      await tapIn(tester, '00:15:65:AA:BB:CC', find.byTooltip('Set up this phone'));
 
       expect(find.text('Set up this phone'), findsOneWidget);
       expect(
@@ -218,7 +218,7 @@ void main() {
     await completeSignIn(tester, 'limited@example.test');
     await tapNav(tester, 'Phones');
     await tester.pumpAndSettle();
-    await tapIn(tester, '001565aabbcc', find.byTooltip('Set up this phone'));
+    await tapIn(tester, '00:15:65:AA:BB:CC', find.byTooltip('Set up this phone'));
 
     expect(
       find.text(

@@ -25,6 +25,7 @@ import '../features/cdr/call_records_page.dart';
 import '../features/orgs/brand_page.dart';
 import '../features/orgs/orgs_page.dart';
 import '../features/pbx/resource.dart';
+import '../features/people/people.dart';
 import '../features/pbx/resource_page.dart';
 import '../features/dashboard/dashboard_page.dart';
 import '../features/audit/audit_page.dart';
@@ -164,6 +165,16 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (context, state) =>
                 ResellerPage(resellerId: state.pathParameters['id']!),
           ),
+          // S9-07: adding or changing a person is a page of its own.
+          GoRoute(
+            path: '/people/new',
+            builder: (context, state) => const PersonEditorPage(),
+          ),
+          GoRoute(
+            path: '/people/:id',
+            builder: (context, state) =>
+                PersonEditorPage(extensionId: state.pathParameters['id']),
+          ),
           GoRoute(
             path: '/call-flows/:id',
             builder: (context, state) =>
@@ -195,6 +206,7 @@ Widget _pageFor(Section section) {
   if (section.path == '/call-flows') return const FlowsPage();
   if (section.path == '/brand') return const BrandPage();
   if (section.path == '/users') return const UsersPage();
+  if (section.path == '/people') return const PeoplePage();
   if (section.path == '/certificates') return const CertificatesPage();
   if (section.path == '/security') return const SecurityPage();
   if (section.path == '/media') return const MediaPage();

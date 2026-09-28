@@ -38,6 +38,7 @@ enum NavLabel {
   voicemail,
   callRecords,
   emergencyLocations,
+  people,
 }
 
 extension NavLabelText on NavLabel {
@@ -73,12 +74,14 @@ extension NavLabelText on NavLabel {
     NavLabel.voicemail => l10n.navVoicemail,
     NavLabel.callRecords => l10n.navCallRecords,
     NavLabel.emergencyLocations => l10n.navEmergencyLocations,
+    NavLabel.people => l10n.navPeople,
   };
 }
 
 /// The headings the navigation is grouped under (S9-05), so a tenant's twenty
 /// screens read as a few areas rather than one long list.
 enum NavGroup {
+  advanced,
   platform,
   customers,
   service,
@@ -101,6 +104,7 @@ extension NavGroupText on NavGroup {
     NavGroup.settings => l10n.navGroupSettings,
     NavGroup.you => l10n.navGroupYou,
     NavGroup.admin => l10n.navGroupAdmin,
+    NavGroup.advanced => l10n.navGroupAdvanced,
   };
 }
 
@@ -159,13 +163,14 @@ const _users = Section(
   group: NavGroup.admin,
 );
 
-/// A tenant's people are the first thing it manages, not an afterthought.
+/// Who can sign in, and with what role: after the day-to-day screens, now
+/// that People (S9-07) is where a person is added.
 const _tenantUsers = Section(
   '/users',
   NavLabel.users,
-  Icons.people_outline,
+  Icons.manage_accounts_outlined,
   requires: ['user.read'],
-  group: NavGroup.people,
+  group: NavGroup.admin,
 );
 
 /// The three screens of a person's own phone (end-user self-service). They are
@@ -277,18 +282,10 @@ const sectionsByOrgType = <OrgType, List<Section>>{
   ],
   OrgType.tenant: [
     _dashboard,
-    _tenantUsers,
     Section(
-      '/extensions',
-      NavLabel.extensions,
-      Icons.dialpad_outlined,
-      requires: ['extension.read'],
-      group: NavGroup.people,
-    ),
-    Section(
-      '/phones',
-      NavLabel.phones,
-      Icons.phone_android_outlined,
+      '/people',
+      NavLabel.people,
+      Icons.people_alt_outlined,
       requires: ['extension.read'],
       group: NavGroup.people,
     ),
@@ -314,17 +311,17 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       group: NavGroup.calls,
     ),
     Section(
-      '/outbound-routes',
-      NavLabel.outboundRoutes,
-      Icons.call_made_outlined,
-      requires: ['trunk.read', 'emergency_route.read'],
-      group: NavGroup.calls,
-    ),
-    Section(
       '/queues',
       NavLabel.queues,
       Icons.queue_outlined,
       requires: ['queue.read'],
+      group: NavGroup.calls,
+    ),
+    Section(
+      '/schedules',
+      NavLabel.schedules,
+      Icons.schedule_outlined,
+      requires: ['schedule.read'],
       group: NavGroup.calls,
     ),
     Section(
@@ -342,13 +339,6 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       group: NavGroup.calls,
     ),
     Section(
-      '/schedules',
-      NavLabel.schedules,
-      Icons.schedule_outlined,
-      requires: ['schedule.read'],
-      group: NavGroup.calls,
-    ),
-    Section(
       '/media',
       NavLabel.media,
       Icons.library_music_outlined,
@@ -356,10 +346,25 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       group: NavGroup.calls,
     ),
     Section(
+      '/outbound-routes',
+      NavLabel.outboundRoutes,
+      Icons.call_made_outlined,
+      requires: ['trunk.read', 'emergency_route.read'],
+      group: NavGroup.calls,
+    ),
+    Section(
       '/monitoring',
       NavLabel.monitoring,
       Icons.visibility_outlined,
       requires: ['monitor.presence'],
+      group: NavGroup.activity,
+    ),
+    Section(
+      '/call-records',
+      NavLabel.callRecords,
+      Icons.history_outlined,
+      privateData: true,
+      requires: ['cdr.read'],
       group: NavGroup.activity,
     ),
     Section(
@@ -384,19 +389,26 @@ const sectionsByOrgType = <OrgType, List<Section>>{
       group: NavGroup.activity,
     ),
     Section(
-      '/call-records',
-      NavLabel.callRecords,
-      Icons.history_outlined,
-      privateData: true,
-      requires: ['cdr.read'],
-      group: NavGroup.activity,
-    ),
-    Section(
       '/settings',
       NavLabel.emergencyLocations,
       Icons.settings_outlined,
       requires: ['emergency_location.read'],
       group: NavGroup.settings,
+    ),
+    _tenantUsers,
+    Section(
+      '/extensions',
+      NavLabel.extensions,
+      Icons.dialpad_outlined,
+      requires: ['extension.read'],
+      group: NavGroup.advanced,
+    ),
+    Section(
+      '/phones',
+      NavLabel.phones,
+      Icons.phone_android_outlined,
+      requires: ['extension.read'],
+      group: NavGroup.advanced,
     ),
   ],
 };

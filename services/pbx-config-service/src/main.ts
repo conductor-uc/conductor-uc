@@ -9,6 +9,7 @@ import { storageFromConfig } from '@cuc/storage';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createKekRewrapJob } from './kek-rewrap.js';
 import { createDomainConsumer } from './consumers/domain.consumer.js';
+import { createInvitationConsumer } from './consumers/invitation.consumer.js';
 import { createOrgClient } from './org-client.js';
 import { createDidRepo } from './repo/did.repo.js';
 import { createEmergencyLocationRepo } from './repo/emergency-location.repo.js';
@@ -123,6 +124,10 @@ const conferenceRoomRepo = createConferenceRoomRepo(db, kek);
 const domainConsumer = createDomainConsumer(db, bus, logger, extensionRepo);
 await domainConsumer.ensure();
 const domainConsumerLoop = domainConsumer.run();
+// S9-07: a person who accepts an invitation gets the extension waiting for them.
+const invitationConsumer = createInvitationConsumer(db, bus, logger, extensionRepo);
+await invitationConsumer.ensure();
+const invitationConsumerLoop = invitationConsumer.run();
 
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
@@ -227,12 +232,14 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   relay.stop();
   domainConsumer.stop();
+  invitationConsumer.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   await relayLoop;
   await domainConsumerLoop;
+  await invitationConsumerLoop;
   await bus.close();
   await kekRewrap.stop();
   await db.destroy();

@@ -146,7 +146,7 @@ A `LiveCall` is one channel (leg): `callUuid`, `direction` (`inbound`: the leg c
 
 **Reset and invitation links (G-55):** `POST /internal/v1/orgs/{orgId}/password-resets/{resetId}/link` and `POST /internal/v1/orgs/{orgId}/invitations/{invitationId}/link`, called by notification-service with the service token when it sends the email. A reset request or invitation is created without a token; this call creates one, stores its SHA-256 in place of any earlier one (so the link of an email that was retried stops working) and returns the raw token once, with the request's own expiry: `200 {token, expiresAt}`. `404` when there is no such reset or invitation in that org; `409` `link_used`, `link_expired` or `user_inactive`. No event, outbox row or backup holds a usable token.
 
-**Events:** `identity.user.created|updated|disabled|deleted`, `identity.user.password_reset_requested`, `identity.invitation.created`, `identity.user.mfa_reset`, `identity.grant.changed`. The reset and invitation events carry ids only (version 2, G-55).
+**Events:** `identity.user.created|updated|disabled|deleted`, `identity.user.password_reset_requested`, `identity.invitation.created`, `identity.invitation.accepted`, `identity.user.mfa_reset`, `identity.grant.changed`. An invitation may name the extension waiting for the person (`extensionId`, S9-07; refused for a reseller, `reseller_cannot_link_user`); `identity.invitation.accepted` carries it, and pbx-config-service links the extension to the new account if no one else has it. The reset and invitation events carry ids only (version 2, G-55).
 
 
 ## pbx-config-service
@@ -155,7 +155,7 @@ A `LiveCall` is one channel (leg): `callUuid`, `direction` (`inbound`: the leg c
 
 **Public API:** `/v1/tenants/{t}/extensions`, `/devices`, `/sip-endpoint`, `/dids`, `/ring-groups`, `/queues`, `/parking-lots`, `/conference-rooms`, `/schedules`, `/media-assets` (upload via presigned URL, then `:finalize`, which transcodes to 8 kHz/16 kHz WAV; `/{id}/download-url` plays a ready one back, G-80).
 
-**Events:** `pbx.{entity}.created|updated|deleted` for each entity above.
+**Events:** `pbx.{entity}.created|updated|deleted` for each entity above. **Consumes** `org.domain.added` (recompute SIP digests for a tenant's new realm) and `identity.invitation.accepted` (S9-07: link the invited person to the extension waiting for them).
 
 **Phone setup (G-102, G-103, G-105):**
 

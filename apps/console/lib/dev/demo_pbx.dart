@@ -896,6 +896,12 @@ class DemoPbx {
       if (_peopleOf(invite.group(1)!).any((u) => u['email'] == email)) {
         return _problem(409, 'That email already has an account.');
       }
+      // S9-07: the invitations sent, with the extension each names.
+      invitationsSent.add({
+        'email': email,
+        'displayName': body['displayName'],
+        'extensionId': body['extensionId'],
+      });
       return _json({
         'id': 'inv-${_next++}',
         'email': email,
@@ -1430,6 +1436,9 @@ class DemoPbx {
 
   /// Mailboxes, keyed by id, and their messages. Seeded lazily so the
   /// extensions they point at exist.
+  /// Invitations sent from the demo, for tests to read.
+  final invitationsSent = <Map<String, dynamic>>[];
+
   late final List<Map<String, dynamic>> _mailboxes = [
     {
       'id': 'mb-1',
@@ -1501,6 +1510,34 @@ class DemoPbx {
     final method = options.method.toUpperCase();
     final id = match.group(1);
     if (id == null) {
+      if (method == 'POST') {
+        // S9-07: a person added with voicemail gets a mailbox, one per extension.
+        final body = _body(options);
+        if (_mailboxes.any((b) => b['extensionId'] == body['extensionId'])) {
+          return _problem(
+            409,
+            'That extension already has a mailbox.',
+            code: 'mailbox_already_exists',
+          );
+        }
+        if (!RegExp(r'^\d{4,8}$').hasMatch('${body['pin']}')) {
+          return _problem(
+            400,
+            'A PIN is 4 to 8 digits.',
+            code: 'mailbox_pin_invalid',
+          );
+        }
+        final box = {
+          'id': 'mb-${_next++}',
+          'extensionId': body['extensionId'],
+          'greetingStatus': 'none',
+          'notifyEmail': null,
+          'emailAttachAudio': false,
+          'emailAfter': 'keep',
+        };
+        _mailboxes.add(box);
+        return _json(_mailboxView(box), 201);
+      }
       return method == 'GET'
           ? _json({
               'rows': [for (final b in _mailboxes) _mailboxView(b)],
@@ -2155,6 +2192,19 @@ class DemoPbx {
     Map<String, dynamic> body,
     String? selfId,
   ) {
+    // A phone's MAC is stored without separators, as the service keeps it.
+    if (resource == 'devices' && body['mac'] != null) {
+      String bare(Object? mac) =>
+          '$mac'.replaceAll(RegExp(r'[:.\-\s]'), '').toLowerCase();
+      body['mac'] = bare(body['mac']);
+      if (rows.any((r) => r['id'] != selfId && bare(r['mac']) == body['mac'])) {
+        return _problem(
+          409,
+          'A phone with MAC ${body['mac']} is already added.',
+          code: 'device_mac_taken',
+        );
+      }
+    }
     final unique = {
       'extensions': 'number',
       'dids': 'e164',

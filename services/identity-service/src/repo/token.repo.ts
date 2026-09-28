@@ -16,6 +16,8 @@ export interface Invitation {
   readonly email: string;
   readonly displayName: string;
   readonly expiresAt: Date;
+  /** The extension waiting for them (S9-07), or null. */
+  readonly extensionId: string | null;
 }
 
 export class InvitationConflictError extends Error {
@@ -161,6 +163,7 @@ export function createTokenRepo(db: Database<IdentityServiceDb>) {
         email: string;
         displayName: string;
         invitedBy: string | null;
+        extensionId?: string | null;
       },
       ttlHours: number,
     ): Promise<{ id: string; expiresAt: Date; email: string }> {
@@ -188,6 +191,7 @@ export function createTokenRepo(db: Database<IdentityServiceDb>) {
             email,
             display_name: input.displayName,
             invited_by: input.invitedBy,
+            extension_id: input.extensionId ?? null,
             // Issued when the email is sent (G-55).
             token_hash: null,
             expires_at: expiresAt,
@@ -259,19 +263,43 @@ export function createTokenRepo(db: Database<IdentityServiceDb>) {
             email: row.email,
             displayName: row.display_name,
             expiresAt: row.expires_at,
+            extensionId: row.extension_id,
           };
     },
 
-    /** Marks an invitation accepted; false if it was already taken or has expired. */
-    async markInvitationAccepted(id: string): Promise<boolean> {
-      const result = await db.kysely
-        .updateTable('invitations')
-        .set({ accepted_at: new Date() })
-        .where('id', '=', id)
-        .where('accepted_at', 'is', null)
-        .where('expires_at', '>', new Date())
-        .executeTakeFirst();
-      return Number(result.numUpdatedRows) === 1;
+    /**
+     * Marks an invitation accepted by [userId], and says so on the bus in the
+     * same transaction (`identity.invitation.accepted`, S9-07), so the
+     * extension it names is linked to them. False if it was already taken or
+     * has expired.
+     */
+    async markInvitationAccepted(
+      invitation: Pick<Invitation, 'id' | 'orgId' | 'extensionId'>,
+      userId: string,
+      ctx: DbContext = {},
+    ): Promise<boolean> {
+      return db.kysely.transaction().execute(async (trx) => {
+        const result = await trx
+          .updateTable('invitations')
+          .set({ accepted_at: new Date() })
+          .where('id', '=', invitation.id)
+          .where('accepted_at', 'is', null)
+          .where('expires_at', '>', new Date())
+          .executeTakeFirst();
+        if (Number(result.numUpdatedRows) !== 1) return false;
+        await enqueueEvent(trx, identityEvents, {
+          type: 'identity.invitation.accepted',
+          data: {
+            invitationId: invitation.id,
+            orgId: invitation.orgId,
+            userId,
+            extensionId: invitation.extensionId,
+          },
+          actor: { type: 'user', id: userId, orgId: invitation.orgId },
+          ...(ctx.requestId === undefined ? {} : { correlationId: ctx.requestId }),
+        });
+        return true;
+      });
     },
   };
 }

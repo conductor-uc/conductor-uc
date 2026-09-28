@@ -8,6 +8,7 @@ import * as signingKeyRotation from './005_signing_key_rotation.js';
 import * as stepUp from './006_step_up.js';
 import * as tokenAtSend from './006_token_at_send.js';
 import * as platformSecuritySettings from './007_platform_security_settings.js';
+import * as invitationExtension from './008_invitation_extension.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -27,4 +28,5 @@ export const migrations: Record<string, Migration> = {
   '006_step_up': stepUp,
   '006_token_at_send': tokenAtSend,
   '007_platform_security_settings': platformSecuritySettings,
+  '008_invitation_extension': invitationExtension,
 };

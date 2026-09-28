@@ -75,6 +75,12 @@ const InvitationAcceptBodySchema = Type.Object({
 const CreateInvitationBodySchema = Type.Object({
   email: Type.String({ minLength: 1 }),
   displayName: Type.String({ minLength: 1, maxLength: 255 }),
+  /**
+   * The extension waiting for them (S9-07): linked to their account once they
+   * accept. Not for a reseller, who may not link a person to an extension
+   * (the same rule pbx-config-service applies to linking directly).
+   */
+  extensionId: Type.Optional(Type.String({ minLength: 1, maxLength: 36 })),
 });
 const OrgParamsSchema = Type.Object({ orgId: Type.String({ minLength: 1 }) });
 
@@ -381,6 +387,13 @@ export function registerAuthRoutes(
     },
     async (request, reply) => {
       const target = await access.resolve(request.context, request.params.orgId);
+      if (request.body.extensionId !== undefined && request.context.orgType === 'reseller') {
+        throw ProblemError.forbidden(
+          "A reseller can't link a person to an extension: it gives them the extension's " +
+            'voicemail and call history, which belong to the tenant.',
+          { code: 'reseller_cannot_link_user' },
+        );
+      }
       try {
         const invitation = await auth.invite(
           request.context,
