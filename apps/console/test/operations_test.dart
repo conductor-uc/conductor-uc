@@ -6,6 +6,8 @@ import 'package:console/features/platform/operations_widgets.dart';
 import 'package:dio/dio.dart';
 import 'package:console/features/shell/shell_page.dart' show AppNavigation;
 import 'package:console/l10n/l10n.dart';
+import 'package:console/features/platform/operations_charts.dart'
+    show HistoryLines;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -356,6 +358,7 @@ void main() {
       ('Signalling', 360.0, 'Media nodes at the edge'),
       ('Events', 360.0, 'telephony-config-nodes'),
       ('Data stores', 360.0, 'Redis'),
+      ('History', 360.0, 'Over the last'),
       ('Overview', 1920.0, 'Calls per media node'),
       ('Media nodes', 1920.0, '24 of 1,000'),
     ]) {
@@ -385,6 +388,47 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('fs1 is draining.'), findsOneWidget);
       expect(find.text('Return to service'), findsNWidgets(2));
+    });
+
+    testWidgets('S4-13: History charts the catalog, and changes range', (
+      tester,
+    ) async {
+      await completeSignIn(tester, 'master@example.test');
+      await tapNav(tester, 'Operations');
+      await tester.pumpAndSettle();
+      await openTab(tester, 'History');
+      expect(find.text('Calls on each media node'), findsOneWidget);
+      expect(find.byType(HistoryLines), findsWidgets);
+      // A per-node chart has a legend naming each node.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('history-calls-by-node')),
+          matching: find.text('fs-2'),
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('week'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SegmentedButton<String>>(
+              find.byKey(const ValueKey('history-range')),
+            )
+            .selected,
+        {'7d'},
+      );
+      expect(find.byType(HistoryLines), findsWidgets);
+    });
+
+    testWidgets('S4-13: without a metrics store, History says so once', (
+      tester,
+    ) async {
+      await completeSignIn(tester, 'master-nohistory@example.test');
+      await tapNav(tester, 'Operations');
+      await tester.pumpAndSettle();
+      await openTab(tester, 'History');
+      expect(find.byKey(const ValueKey('history-unavailable')), findsOneWidget);
+      expect(find.byType(HistoryLines), findsNothing);
     });
 
     testWidgets('master support sees Operations but cannot act', (

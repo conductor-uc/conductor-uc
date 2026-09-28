@@ -7,6 +7,7 @@ import '../../core/problem.dart';
 import '../../l10n/l10n.dart';
 import '../../widgets/page.dart';
 import 'operations_api.dart';
+import 'operations_history.dart';
 import 'operations_nodes.dart';
 import 'operations_overview.dart';
 import 'operations_tables.dart';
@@ -35,6 +36,7 @@ class _OperationsPageState extends ConsumerState<OperationsPage> {
     (Icons.router_outlined, l.opsTabSignalling),
     (Icons.hub_outlined, l.opsTabEvents),
     (Icons.storage_outlined, l.opsTabDataStores),
+    (Icons.show_chart, l.opsTabHistory),
   ];
 
   @override
@@ -132,6 +134,7 @@ class _OperationsPageState extends ConsumerState<OperationsPage> {
                   SignallingTab(overview: o),
                   EventsTab(overview: o),
                   DataStoresTab(overview: o),
+                  const HistoryTab(),
                 ],
               ),
             ),
