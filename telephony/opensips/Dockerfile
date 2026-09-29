@@ -32,7 +32,9 @@ RUN apt-get -o Acquire::Check-Valid-Until=false update && \
       opensips-auth-modules \
       opensips-tls-module \
       opensips-tlsmgm-module \
-      opensips-tls-openssl-module && \
+      opensips-tls-openssl-module \
+      keepalived \
+      iproute2 && \
     rm -rf /var/lib/apt/lists/*
 
 COPY opensips.cfg.template /etc/opensips/opensips.cfg.template
@@ -41,7 +43,11 @@ COPY docker-entrypoint.sh /docker-entrypoint.sh
 # `pymysql` (confirmed present — `opensips-cli` itself needs a MySQL driver)
 # means no new package is needed for this.
 COPY seed-dispatcher.py /seed-dispatcher.py
-RUN chmod +x /docker-entrypoint.sh
+# S4-06: the edge pair's floating address (keepalived.sh), and the MI call it
+# makes on failover (opensips-mi.sh). Only run when OPENSIPS_KEEPALIVED=true.
+COPY keepalived.sh /keepalived.sh
+COPY opensips-mi.sh /opensips-mi.sh
+RUN chmod +x /docker-entrypoint.sh /keepalived.sh /opensips-mi.sh
 
 EXPOSE 5060/udp 5060/tcp 5061/tcp
 

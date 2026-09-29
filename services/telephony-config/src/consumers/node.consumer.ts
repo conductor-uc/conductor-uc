@@ -78,7 +78,10 @@ export function createNodeConsumer(
         } catch (error) {
           // Already over (the other leg's end, or the party hung up): nothing left to end.
           if (error instanceof OpenSipsMiClientError && /not found/i.test(error.message)) {
-            logger.info({ callUuid, sipCallId }, 'a lost leg\'s dialog was already over at the edge');
+            logger.info(
+              { callUuid, sipCallId },
+              "a lost leg's dialog was already over at the edge",
+            );
             return;
           }
           throw error;

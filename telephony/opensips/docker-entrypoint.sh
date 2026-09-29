@@ -55,6 +55,27 @@ elif [ "${OPENSIPS_TLS_ENABLED:-}" = "true" ]; then
   TEMPLATE_VARS="$TEMPLATE_VARS \$OPENSIPS_TLS_PORT"
 fi
 
+# S4-06: a pair of edges behind a floating address (OPENSIPS_VIP), replicating
+# registrations and dialogs over `bin` (opensips.cfg.template's `@if-cluster`
+# blocks). Without OPENSIPS_VIP this is one edge on every address, as before.
+if [ -n "${OPENSIPS_VIP:-}" ]; then
+  : "${OPENSIPS_NODE_ID:?OPENSIPS_NODE_ID must be set with OPENSIPS_VIP}"
+  : "${OPENSIPS_PEER_NODE_ID:?OPENSIPS_PEER_NODE_ID must be set with OPENSIPS_VIP}"
+  : "${OPENSIPS_PEER_IP:?OPENSIPS_PEER_IP must be set with OPENSIPS_VIP}"
+  export OPENSIPS_OWN_IP="${OPENSIPS_OWN_IP:-$(hostname -i | awk '{ print $1 }')}"
+  export OPENSIPS_BIN_PORT="${OPENSIPS_BIN_PORT:-5566}"
+  # The seed node (one per pair) is where a restarted edge copies its data from.
+  if [ "${OPENSIPS_SEED:-}" = "true" ]; then
+    export OPENSIPS_NODE_FLAGS=",flags=seed"
+  else
+    export OPENSIPS_NODE_FLAGS=""
+  fi
+  TEMPLATE_VARS="$TEMPLATE_VARS \$OPENSIPS_VIP \$OPENSIPS_OWN_IP \$OPENSIPS_BIN_PORT \$OPENSIPS_NODE_ID \$OPENSIPS_PEER_NODE_ID \$OPENSIPS_PEER_IP \$OPENSIPS_NODE_FLAGS"
+  CLUSTER_DROP='/^[[:space:]]*# @if-single$/,/^[[:space:]]*# @end-single$/d; /^[[:space:]]*# @if-cluster$/d; /^[[:space:]]*# @end-cluster$/d'
+else
+  CLUSTER_DROP='/^[[:space:]]*# @if-cluster$/,/^[[:space:]]*# @end-cluster$/d; /^[[:space:]]*# @if-single$/d; /^[[:space:]]*# @end-single$/d'
+fi
+
 if [ "$KEEP_TLS" = yes ]; then
   DROP='/^# @if-tls$/d; /^# @end-tls$/d'
 else
@@ -65,12 +86,19 @@ if [ "$KEEP_TLS_FILE" = yes ]; then
 else
   DROP="$DROP; /^# @if-tls-file\$/,/^# @end-tls-file\$/d"
 fi
-sed "$DROP" /etc/opensips/opensips.cfg.template | envsubst "$TEMPLATE_VARS" \
+sed "$DROP; $CLUSTER_DROP" /etc/opensips/opensips.cfg.template | envsubst "$TEMPLATE_VARS" \
   > /etc/opensips/opensips.cfg
 
 # S1-14 (G-18): must run before opensips starts — the dispatcher module
 # loads its table into memory once, at init, with no cache-mode indirection
 # the way `domain`/`db_mode=1` has.
 python3 /seed-dispatcher.py
+
+# S4-06: the floating address, when this container runs keepalived itself
+# (it needs NET_ADMIN and, like OpenSIPs' own non-local bind, the address in
+# OPENSIPS_VIP). Its lifetime is this container's: the edge dies as one.
+if [ -n "${OPENSIPS_VIP:-}" ] && [ "${OPENSIPS_KEEPALIVED:-}" = "true" ]; then
+  /keepalived.sh &
+fi
 
 exec /usr/sbin/opensips -F -f /etc/opensips/opensips.cfg

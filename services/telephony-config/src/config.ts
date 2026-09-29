@@ -35,12 +35,19 @@ export const configSchema = Type.Object({
   OPENSIPS_DB_POOL_SIZE: Env.int({ minimum: 1, maximum: 200, default: 10 }),
 
   /**
-   * OpenSIPs' `mi_http` endpoint, e.g. `http://opensips:8888/mi`
+   * OpenSIPs' `mi_http` endpoint, e.g. `http://opensips:8888/mi`; S4-06: comma-separated, one per
+   * edge of the pair
    * (`telephony/opensips/opensips.cfg.template`'s `OPENSIPS_MI_PORT`). Only
    * `domain_reload` is ever called (03 §2) — `auth_db` and `usrloc` query
    * MariaDB live and need no reload for a `subscriber` change to take effect.
    */
-  OPENSIPS_MI_URL: Env.url(),
+  OPENSIPS_MI_URL: Env.list(),
+
+  /**
+   * S4-06: the sharing tag of the edge pair (`opensips.cfg.template`'s `vip/1`), written on every
+   * trunk registration so only the active edge registers it. Unset for a single edge.
+   */
+  OPENSIPS_CLUSTER_SHTAG: Env.string({ default: '' }),
 
   /**
    * OpenSIPs' SIP listener, e.g. `opensips:5060` (03 §2's `OPENSIPS_SIP_PORT`)

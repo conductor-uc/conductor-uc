@@ -116,7 +116,10 @@ const orgClient = createOrgClient({
   baseUrl: config.ORG_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
 });
-const miClient = createOpenSipsMiClient({ url: config.OPENSIPS_MI_URL });
+const miClient = createOpenSipsMiClient({
+  urls: config.OPENSIPS_MI_URL,
+  ...(config.OPENSIPS_CLUSTER_SHTAG === '' ? {} : { activeTag: config.OPENSIPS_CLUSTER_SHTAG }),
+});
 const storage = storageFromConfig(config, logger);
 const voicemailClient = createVoicemailClient({
   baseUrl: config.VOICEMAIL_SERVICE_URL,
@@ -151,7 +154,9 @@ const redisClient = new Redis(config.REDIS_URL, { lazyConnect: false, maxRetries
 const affinityRegistry = createAffinityRegistry(redisClient, config.REDIS_KEY_PREFIX);
 
 const readModel = createReadModelRepo(db);
-const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb);
+const opensipsProjection = createOpenSipsProjectionRepo(opensipsDb, {
+  clusterShtag: config.OPENSIPS_CLUSTER_SHTAG === '' ? null : config.OPENSIPS_CLUSTER_SHTAG,
+});
 const projection = createProjection(
   readModel,
   opensipsProjection,

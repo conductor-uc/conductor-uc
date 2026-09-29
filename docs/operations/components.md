@@ -193,7 +193,7 @@ What the code allows today. "Safe" means the code guards against two copies doin
 | telephony-config | **Works, with duplicated work** | The reconcile and certificate-sync timers run in every copy with no lock. The work is idempotent. Not tested. |
 | media-worker, notification-service | **Safe** | Consumers only |
 | **call-control** | **Yes: two or more** | Every copy connects to every FreeSWITCH node; each node is owned by one copy at a time, which alone handles its events. When a copy dies, another takes its nodes within 8 s and calls carry on (S4-03). Put them behind one address for the services that call it. |
-| **OpenSIPs** | **No: run exactly one** | No clustering (S4-06); telephony-config reloads one MI address |
+| **OpenSIPs** | **Yes: a pair** | Two edges behind a floating address, copying registrations and dialogs to each other (S4-06). Not more than two: the configuration names one peer. telephony-config reloads both (`OPENSIPS_MI_URL`) |
 | FreeSWITCH | One per server; **several servers work** | Weighted round-robin dispatch, verified with two nodes. A call to a queue, parking slot or conference room already active on another node is sent on to that node through OpenSIPs (S4-05, G-128); the node that took the call stays in its media path. `*8` pickup of a call ringing on another node does not work yet. |
 | recording-uploader | One per FreeSWITCH node | It shares that node's spool |
 | MariaDB, Redis, NATS | **One each** | No clustering is configured or tested (S4-07). Replication is possible with the products' own tools, but the platform has no support for failover. |
