@@ -286,7 +286,7 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Security | Master key comes from an environment variable or a file; no KMS (deferred until a customer or auditor needs one) | G-116, 07 §5 |
 | Security | OpenSIPs TLS private keys stored in clear in the `opensips` schema | 07 §5 |
 | Availability | No HA for OpenSIPs, MariaDB, Redis, NATS; call-control single copy; no FreeSWITCH failure cleanup or synthetic CDRs | S4-03 to S4-07 |
-| Telephony | No media relay: media servers need public addresses; no SRTP | O-7 |
+| Telephony | No SRTP termination at the edge (media is relayed as sent) | — |
 | Telephony | Queues, parking and conferences unreliable with more than one media server | G-46, S4-05 |
 | Telephony | Media server list fixed at OpenSIPs start (weights and draining work without a restart); node draining has no console page, only call-control's internal API | S4-02, G-123 |
 | Telephony | Per-tenant call rate fixed at 10 per second; repeated SIP authentication failures not blocked | G-31, G-118 |

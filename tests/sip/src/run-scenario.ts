@@ -1086,6 +1086,8 @@ export interface StartUasOptions {
    * instead, reusing this function's own register-then-listen chaining
    * rather than duplicating it. */
   readonly answerScenario?: string;
+  /** Further SIPp arguments for the answering scenario (S4-10: `-mp`, its media port). */
+  readonly extraArgs?: readonly string[];
 }
 
 /**
@@ -1122,6 +1124,7 @@ export function startUas(opts: StartUasOptions): UasHandle {
       localPort: opts.localPort ?? 6000,
       logPrefix: 'uas_ans',
       traceErrors: true,
+      extraArgs: opts.extraArgs,
     });
     // A container from a prior run that exited naturally is never removed
     // by `docker run -d` alone (unlike `--rm` in the foreground case) —
@@ -1599,6 +1602,8 @@ export async function startDelayedCaller(opts: {
   readonly authUri?: string;
   /** Hold SIPp until `start()`/`startWhenRouted()` (the doc comment above). */
   readonly startOnSignal?: boolean;
+  /** Further SIPp arguments (S4-10: `-mp`, the media port). */
+  readonly extraArgs?: readonly string[];
 }): Promise<DelayedCallerHandle> {
   const env = sipTestEnv();
   await execFileAsync('docker', ['rm', '-f', opts.containerName]).catch(() => undefined);
@@ -1613,6 +1618,7 @@ export async function startDelayedCaller(opts: {
     authUri: opts.authUri,
     remoteHost: env.opensipsTarget,
     logPrefix: 'delayed',
+    extraArgs: opts.extraArgs,
   });
   // `/data` is `hostCsvDir`, so `start()` creating `go` there is visible here.
   const command = startOnSignal

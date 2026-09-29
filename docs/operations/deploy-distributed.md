@@ -297,6 +297,7 @@ Use your cloud provider's security groups or host firewalls. The rules below are
 | 80, 443 | TCP | anywhere | Console, API, provisioning, ACME |
 | 5060 | UDP, TCP | anywhere | SIP (phones, carriers) and media servers |
 | 5061 | TCP | anywhere | SIP over TLS |
+| 30000–39999 | UDP | anywhere | RTP, relayed by RTPengine (S4-10) |
 | 8888 | TCP | 10.10.0.31 | OpenSIPs MI, telephony-config only (**no authentication**) |
 | 22 | TCP | 198.51.100.0/24 | Administration |
 
@@ -304,7 +305,7 @@ Use your cloud provider's security groups or host firewalls. The rules below are
 
 | Port | Protocol | From | Why |
 |---|---|---|---|
-| 16384–32768 | UDP | anywhere | RTP |
+| 16384–32768 | UDP | the edges' private addresses | RTP, from the edges' RTPengine (S4-10; anywhere only without the relay) |
 | 5060 | UDP, TCP | 203.0.113.10 only | SIP from OpenSIPs |
 | 8021 | TCP | 10.10.0.31 | Event socket (call-control) |
 | 9464 | TCP | 10.10.0.50 | Uploader metrics |
@@ -416,7 +417,7 @@ Two edges share one floating address, which phones, carriers and the media serve
 | `OPENSIPS_KEEPALIVED` | `true`, or leave it off and let the provider move the address | the same |
 | `KEEPALIVED_PRIORITY` | `110` | `100` |
 
-Both need `net.ipv4.ip_nonlocal_bind=1` (each listens on the floating address even while it does not hold it) and, with `OPENSIPS_KEEPALIVED`, `NET_ADMIN`. Allow 5566/tcp (replication) and VRRP (IP protocol 112) between the two edges' private addresses. If the provider moves the address instead of keepalived (D-017), have its failover hook run `opensips-cli -x mi clusterer_shtag_set_active vip/1` on the edge that received it. On app-1, set telephony-config's `OPENSIPS_MI_URL` to both edges (`http://10.10.0.10:8888/mi,http://10.10.0.11:8888/mi`), `OPENSIPS_CLUSTER_SHTAG=vip/1`, and `OPENSIPS_SIP_URI` (telephony-config and call-control) to the floating address; the media servers' `FS_OPENSIPS_CIDR` must cover both edges and the floating address.
+For media (S4-10) set on both `OPENSIPS_RTPENGINE=true`, `OPENSIPS_INTERNAL_VIP` (a second, private floating address the media servers send RTP to) and `RTPENGINE_REDIS=<data-1 private address>:6379/5` (the relays follow each other's calls; that Redis needs `notify-keyspace-events KEA`). Both need `net.ipv4.ip_nonlocal_bind=1` (each listens on the floating address even while it does not hold it) and, with `OPENSIPS_KEEPALIVED`, `NET_ADMIN`. Allow 5566/tcp (replication) and VRRP (IP protocol 112) between the two edges' private addresses. If the provider moves the address instead of keepalived (D-017), have its failover hook run `opensips-cli -x mi clusterer_shtag_set_active vip/1` on the edge that received it. On app-1, set telephony-config's `OPENSIPS_MI_URL` to both edges (`http://10.10.0.10:8888/mi,http://10.10.0.11:8888/mi`), `OPENSIPS_CLUSTER_SHTAG=vip/1`, and `OPENSIPS_SIP_URI` (telephony-config and call-control) to the floating address; the media servers' `FS_OPENSIPS_CIDR` must cover both edges and the floating address.
 
 ## 8. What happens when a server fails
 

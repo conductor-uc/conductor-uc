@@ -77,6 +77,9 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # S4-10: the edges' media relays follow each other's calls through
+    # keyspace notifications, which Redis sends only when asked to.
+    command: ['redis-server', '--notify-keyspace-events', 'KEA']
     ports:
       - '${REDIS_PORT:-6379}:6379'
     volumes:
@@ -351,6 +354,17 @@ services:
       OPENSIPS_PEER_NODE_ID: '2'
       OPENSIPS_PEER_IP: ${OPENSIPS_2_IP:-172.18.255.12}
       KEEPALIVED_PRIORITY: '110'
+      # S4-10 (O-7): media anchored by RTPengine on each edge: phones and
+      # carriers see the floating address in SDP, the media nodes this edge's
+      # own. A small range in dev.
+      OPENSIPS_RTPENGINE: 'true'
+      RTPENGINE_PORT_MIN: '30000'
+      RTPENGINE_PORT_MAX: '30999'
+      # The relay's side facing the media nodes has its own floating address,
+      # and each edge's relay keeps the other's calls (through Redis), so the
+      # media of a call in progress survives an edge failover.
+      OPENSIPS_INTERNAL_VIP: ${OPENSIPS_INTERNAL_VIP:-172.18.255.13}
+      RTPENGINE_REDIS: redis:6379/5
     cap_add: [NET_ADMIN]
     sysctls:
       net.ipv4.ip_nonlocal_bind: 1

@@ -76,6 +76,20 @@ else
   CLUSTER_DROP='/^[[:space:]]*# @if-cluster$/,/^[[:space:]]*# @end-cluster$/d; /^[[:space:]]*# @if-single$/d; /^[[:space:]]*# @end-single$/d'
 fi
 
+# S4-10 (O-7): media anchored by RTPengine next to this proxy
+# (opensips.cfg.template's `@if-rtpengine` blocks). Its `internal` side faces
+# the media nodes (this edge's private address), its `external` side phones
+# and carriers: the floating address of an edge pair, or this edge's own. A
+# deployment whose public address is NATed onto the host sets
+# RTPENGINE_EXTERNAL_ADVERTISED to the public one.
+if [ "${OPENSIPS_RTPENGINE:-}" = "true" ]; then
+  export RTPENGINE_NG_PORT="${RTPENGINE_NG_PORT:-2223}"
+  TEMPLATE_VARS="$TEMPLATE_VARS \$RTPENGINE_NG_PORT"
+  RTPENGINE_DROP='/^[[:space:]]*# @if-rtpengine$/d; /^[[:space:]]*# @end-rtpengine$/d'
+else
+  RTPENGINE_DROP='/^[[:space:]]*# @if-rtpengine$/,/^[[:space:]]*# @end-rtpengine$/d'
+fi
+
 if [ "$KEEP_TLS" = yes ]; then
   DROP='/^# @if-tls$/d; /^# @end-tls$/d'
 else
@@ -86,7 +100,7 @@ if [ "$KEEP_TLS_FILE" = yes ]; then
 else
   DROP="$DROP; /^# @if-tls-file\$/,/^# @end-tls-file\$/d"
 fi
-sed "$DROP; $CLUSTER_DROP" /etc/opensips/opensips.cfg.template | envsubst "$TEMPLATE_VARS" \
+sed "$DROP; $CLUSTER_DROP; $RTPENGINE_DROP" /etc/opensips/opensips.cfg.template | envsubst "$TEMPLATE_VARS" \
   > /etc/opensips/opensips.cfg
 
 # S1-14 (G-18): must run before opensips starts — the dispatcher module
@@ -99,6 +113,12 @@ python3 /seed-dispatcher.py
 # OPENSIPS_VIP). Its lifetime is this container's: the edge dies as one.
 if [ -n "${OPENSIPS_VIP:-}" ] && [ "${OPENSIPS_KEEPALIVED:-}" = "true" ]; then
   /keepalived.sh &
+fi
+
+# S4-10: RTPengine, in userspace (no kernel module inside a container). Like
+# keepalived, it lives and dies with this container.
+if [ "${OPENSIPS_RTPENGINE:-}" = "true" ]; then
+  /rtpengine.sh &
 fi
 
 exec /usr/sbin/opensips -F -f /etc/opensips/opensips.cfg
