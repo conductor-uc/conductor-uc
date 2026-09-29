@@ -7,7 +7,8 @@
 # which follow each other's calls through them (S4-10).
 set -eu
 : "${REDIS_BOOTSTRAP_PRIMARY:?}" "${REDIS_SENTINELS:?}"
-SELF_IP="$(hostname -i | awk '{ print $1 }')"
+# On a data server (host networking, S4-11) the server's own address.
+SELF_IP="${REDIS_SELF_IP:-$(hostname -i | awk '{ print $1 }')}"
 PRIMARY=""
 for s in $(echo "$REDIS_SENTINELS" | tr ',' ' '); do
   answer=$(redis-cli -h "$s" -p 26379 --raw SENTINEL get-master-addr-by-name cuc 2>/dev/null | head -1 || true)

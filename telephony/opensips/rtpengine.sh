@@ -24,7 +24,17 @@ if [ -n "${RTPENGINE_REDIS:-}" ]; then
   REDIS_HOST="${RTPENGINE_REDIS%%:*}"
   REDIS_REST="${RTPENGINE_REDIS#*:}"
   REDIS_DB="${REDIS_REST#*/}"
-  REDIS_IP="$(getent hosts "$REDIS_HOST" | awk '{ print $1; exit }')"
+  # An address as it is; a name resolved (getent answers nothing for a bare
+  # address with no hosts entry, found in the S4-11 rehearsal).
+  if echo "$REDIS_HOST" | grep -qE '^[0-9]+(\.[0-9]+){3}$'; then
+    REDIS_IP="$REDIS_HOST"
+  else
+    REDIS_IP="$(getent hosts "$REDIS_HOST" | awk '{ print $1; exit }')"
+  fi
+  if [ -z "$REDIS_IP" ]; then
+    echo "rtpengine: cannot resolve $REDIS_HOST" >&2
+    exit 1
+  fi
   REDIS_ARGS="--redis=${REDIS_IP}:${REDIS_REST} --redis-write=${REDIS_IP}:${REDIS_REST} --subscribe-keyspace=${REDIS_DB}"
 fi
 

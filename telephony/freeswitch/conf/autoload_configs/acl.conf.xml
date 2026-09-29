@@ -7,6 +7,9 @@
          unconfigured or misconfigured $${opensips_cidr} fails closed. -->
     <list name="opensips" default="deny">
       <node type="allow" cidr="$${opensips_cidr}"/>
+      <!-- S4-11: an edge pair sends from its floating address, which on a
+           real network is public, outside the private range above. -->
+      <node type="allow" cidr="$${opensips_vip_cidr}"/>
     </list>
 
     <!-- Gates the event socket (03 §3): "listens on a private interface."

@@ -67,6 +67,24 @@ describe('GET /readyz', () => {
     });
   });
 
+  it('S4-11: fails a check that never settles, instead of hanging, and still reports the rest', async () => {
+    const app = await testServer();
+    app.addReadinessCheck('db', () => ({ status: 'pass' }));
+    // A dependency whose connection hangs: the promise never settles.
+    app.addReadinessCheck('redis', () => new Promise(() => undefined));
+    await app.ready();
+
+    const started = Date.now();
+    const response = await app.inject({ method: 'GET', url: '/readyz' });
+
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      status: 'unavailable',
+      checks: { db: { status: 'pass' }, redis: { status: 'fail', detail: 'timed out' } },
+    });
+  });
+
   it('treats a thrown check as a failure without echoing the message', async () => {
     const app = await testServer();
     app.addReadinessCheck('db', () => {

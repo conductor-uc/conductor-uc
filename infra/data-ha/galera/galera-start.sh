@@ -11,18 +11,21 @@ set -euo pipefail
 
 : "${GALERA_PEERS:?comma-separated peer host names}"
 : "${MARIADB_ROOT_PASSWORD:?}"
-SELF="$(hostname)"
+# On a data server (host networking, S4-11) the member is named and addressed
+# by the server's own address; in a compose project, by its container.
+SELF="${GALERA_NODE_NAME:-$(hostname)}"
+SELF_ADDRESS="${GALERA_NODE_ADDRESS:-$(hostname -i | awk '{ print $1 }')}"
 ARGS=(
   "--wsrep-cluster-address=gcomm://${GALERA_PEERS}"
   "--wsrep-node-name=${SELF}"
-  "--wsrep-node-address=$(hostname -i | awk '{ print $1 }')"
+  "--wsrep-node-address=${SELF_ADDRESS}"
   "--wsrep-sst-auth=root:${MARIADB_ROOT_PASSWORD}"
 )
 
 peer_up() {
   local peer
   for peer in ${GALERA_PEERS//,/ }; do
-    [ "$peer" = "$SELF" ] && continue
+    [ "$peer" = "$SELF" ] || [ "$peer" = "$SELF_ADDRESS" ] && continue
     if timeout 1 bash -c "</dev/tcp/${peer}/4567" 2>/dev/null; then return 0; fi
   done
   return 1

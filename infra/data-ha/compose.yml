@@ -14,7 +14,9 @@
 name: cuc-data-ha
 
 x-galera: &galera
-  build: ./galera
+  build:
+    context: ../..
+    dockerfile: infra/data-ha/galera/Dockerfile
   restart: unless-stopped
   environment: &galera-env
     MARIADB_ROOT_PASSWORD: ${HA_DB_ROOT_PASSWORD:-dev-root-password}
@@ -27,24 +29,20 @@ x-galera: &galera
     start_period: 30s
 
 x-redis: &redis
-  image: redis:7-alpine
+  build: ./redis
   restart: unless-stopped
-  entrypoint: ['/bin/sh', '/redis-start.sh']
+  entrypoint: ['redis-start.sh']
   environment: &redis-env
     REDIS_BOOTSTRAP_PRIMARY: redis-1
     REDIS_SENTINELS: sentinel-1,sentinel-2,sentinel-3
-  volumes:
-    - ./redis/redis-start.sh:/redis-start.sh:ro
 
 x-sentinel: &sentinel
-  image: redis:7-alpine
+  build: ./redis
   restart: unless-stopped
-  entrypoint: ['/bin/sh', '/sentinel-start.sh']
+  entrypoint: ['sentinel-start.sh']
   environment:
     REDIS_BOOTSTRAP_PRIMARY: redis-1
     REDIS_SENTINELS: sentinel-1,sentinel-2,sentinel-3
-  volumes:
-    - ./redis/sentinel-start.sh:/sentinel-start.sh:ro
 
 x-nats: &nats
   image: nats:2.10-alpine
@@ -59,7 +57,6 @@ services:
       GALERA_BOOTSTRAP: 'true'
     volumes:
       - galera-1:/var/lib/mysql
-      - ./galera/init:/docker-entrypoint-initdb.d:ro
   galera-2:
     <<: *galera
     hostname: galera-2

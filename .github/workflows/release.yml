@@ -1,0 +1,194 @@
+name: Release
+
+# O-5 (accepted 2026-09-25), built in S4-11: one version for the whole platform.
+# Pushing a tag `vMAJOR.MINOR.PATCH` builds every image, bakes the console into
+# the gateway image, pushes each to GitHub Container Registry as
+# `ghcr.io/conductor-uc/<image>:<version>` and `:sha-<commit>` (never
+# `latest`), and creates the GitHub release. The deployment files in
+# infra/deploy pull exactly these (IMAGE_REGISTRY, RELEASE).
+#
+# The packages stay private (GHCR's default for an organisation) until O-6's
+# licence steps are done; making them public is a manual step on GitHub.
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io/conductor-uc
+
+jobs:
+  console:
+    name: console (build web)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.5
+          channel: stable
+          cache: true
+      - run: flutter pub get
+        working-directory: apps/console
+      - run: flutter build web --release --no-web-resources-cdn
+        working-directory: apps/console
+      - uses: actions/upload-artifact@v4
+        with:
+          name: console-web
+          path: apps/console/build/web
+          if-no-files-found: error
+
+  images:
+    name: image ${{ matrix.image }}
+    needs: console
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - {
+              image: identity-service,
+              context: .,
+              dockerfile: services/identity-service/Dockerfile,
+            }
+          - { image: org-service, context: ., dockerfile: services/org-service/Dockerfile }
+          - {
+              image: pbx-config-service,
+              context: .,
+              dockerfile: services/pbx-config-service/Dockerfile,
+            }
+          - { image: trunk-service, context: ., dockerfile: services/trunk-service/Dockerfile }
+          - {
+              image: callflow-service,
+              context: .,
+              dockerfile: services/callflow-service/Dockerfile,
+            }
+          - {
+              image: voicemail-service,
+              context: .,
+              dockerfile: services/voicemail-service/Dockerfile,
+            }
+          - {
+              image: recording-service,
+              context: .,
+              dockerfile: services/recording-service/Dockerfile,
+            }
+          - { image: cdr-service, context: ., dockerfile: services/cdr-service/Dockerfile }
+          - {
+              image: telephony-config,
+              context: .,
+              dockerfile: services/telephony-config/Dockerfile,
+            }
+          - { image: call-control, context: ., dockerfile: services/call-control/Dockerfile }
+          - { image: media-worker, context: ., dockerfile: services/media-worker/Dockerfile }
+          - {
+              image: notification-service,
+              context: .,
+              dockerfile: services/notification-service/Dockerfile,
+            }
+          - {
+              image: api-gateway,
+              context: .,
+              dockerfile: services/api-gateway/Dockerfile,
+              console: true,
+            }
+          - {
+              image: opensips,
+              context: telephony/opensips,
+              dockerfile: telephony/opensips/Dockerfile,
+            }
+          - {
+              image: freeswitch,
+              context: telephony/freeswitch,
+              dockerfile: telephony/freeswitch/Dockerfile,
+            }
+          - { image: galera, context: ., dockerfile: infra/data-ha/galera/Dockerfile }
+          - {
+              image: redis-ha,
+              context: infra/data-ha/redis,
+              dockerfile: infra/data-ha/redis/Dockerfile,
+            }
+          - {
+              image: internal-lb,
+              context: infra/data-ha/haproxy,
+              dockerfile: infra/data-ha/haproxy/Dockerfile,
+            }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version from the tag
+        id: version
+        run: |
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          echo "sha=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ matrix.image }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA_TAG: ${{ steps.version.outputs.sha }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.version=${VERSION}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -f "${{ matrix.dockerfile }}" -t "${IMAGE}:build" "${{ matrix.context }}"
+
+      - name: Bring the console
+        if: matrix.console
+        uses: actions/download-artifact@v4
+        with:
+          name: console-web
+          path: console-web
+
+      - name: Bake the console into the gateway image
+        if: matrix.console
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ matrix.image }}
+        run: |
+          docker build --build-arg "BASE=${IMAGE}:build" \
+            -f services/api-gateway/Dockerfile.release -t "${IMAGE}:build" console-web
+
+      - name: Push
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ matrix.image }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA_TAG: ${{ steps.version.outputs.sha }}
+        run: |
+          for tag in "$VERSION" "$SHA_TAG"; do
+            docker tag "${IMAGE}:build" "${IMAGE}:${tag}"
+            docker push "${IMAGE}:${tag}"
+          done
+
+  release:
+    name: GitHub release
+    needs: images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          {
+            echo "Images: \`ghcr.io/conductor-uc/<image>:${version}\` (and \`:sha-${GITHUB_SHA::12}\`)."
+            echo
+            echo "Deploy with the files in \`infra/deploy\` at this tag, \`RELEASE=${version}\` in platform.env."
+          } > notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md --verify-tag

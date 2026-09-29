@@ -1,0 +1,116 @@
+# S4-11: an edge server (two of them: edge-1, edge-2). OpenSIPs with the pair's
+# floating address (keepalived) and the media relay (RTPengine), both inside the
+# OpenSIPs container on host networking (S4-06, S4-10); and api-gateway, which
+# serves the console and the API on 80/443 of every address, the floating one
+# included.
+#
+#   docker compose --env-file ../platform.env --env-file .env up -d
+#
+# .env (this server only): SELF_IP, EDGE_NODE_ID (1 or 2), EDGE_PEER_NODE_ID,
+# EDGE_PEER_IP, EDGE_SEED (true on edge-1), EDGE_PRIORITY (110 on edge-1, 100
+# on edge-2). The host must allow a non-local bind: sysctl
+# net.ipv4.ip_nonlocal_bind=1 (README.md).
+name: voice-edge
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: '50m', max-file: '5' }
+
+services:
+  opensips:
+    image: ${IMAGE_REGISTRY}/opensips:${RELEASE}
+    restart: unless-stopped
+    network_mode: host
+    # keepalived moves the floating addresses.
+    cap_add: [NET_ADMIN, NET_BROADCAST, NET_RAW]
+    logging: *logging
+    environment:
+      OPENSIPS_LOG_LEVEL: '3'
+      OPENSIPS_IDENTITY: ${SIP_IDENTITY}
+      OPENSIPS_SIP_PORT: '5060'
+      OPENSIPS_MI_PORT: '8888'
+      OPENSIPS_DB_URL: mysql://opensips:${OPENSIPS_DB_PASSWORD}@${APP_VIP}:3306/opensips
+      OPENSIPS_REDIS_URL: redis:cuc://${APP_VIP}:6379/0
+      OPENSIPS_FS_DESTINATION: ${MEDIA_DISPATCHER}
+      OPENSIPS_REGISTRANT_TIMER_INTERVAL: '60'
+      OPENSIPS_TLS_ENABLED: 'true'
+      OPENSIPS_TLS_DEV_SELF_SIGNED: 'false'
+      # The pair (S4-06).
+      OPENSIPS_VIP: ${EDGE_VIP}
+      OPENSIPS_VIP_PREFIX: ${VIP_PREFIX}
+      OPENSIPS_KEEPALIVED: 'true'
+      OPENSIPS_OWN_IP: ${SELF_IP}
+      OPENSIPS_NODE_ID: ${EDGE_NODE_ID}
+      OPENSIPS_SEED: ${EDGE_SEED}
+      OPENSIPS_PEER_NODE_ID: ${EDGE_PEER_NODE_ID}
+      OPENSIPS_PEER_IP: ${EDGE_PEER_IP}
+      KEEPALIVED_PRIORITY: ${EDGE_PRIORITY}
+      # The media relay (S4-10): phones and carriers see EDGE_VIP, the media
+      # servers EDGE_MEDIA_VIP; the relays follow each other's calls in Redis.
+      OPENSIPS_RTPENGINE: 'true'
+      OPENSIPS_INTERNAL_VIP: ${EDGE_MEDIA_VIP}
+      OPENSIPS_INTERNAL_VIP_PREFIX: ${VIP_PREFIX}
+      RTPENGINE_REDIS: ${APP_VIP}:6379/5
+      # Set when the public address is NATed onto the host (a cloud floating IP).
+      RTPENGINE_EXTERNAL_ADVERTISED: ${EDGE_PUBLIC_ADDRESS:-}
+    volumes:
+      - opensips-tls:/etc/opensips/tls
+
+  api-gateway:
+    image: ${IMAGE_REGISTRY}/api-gateway:${RELEASE}
+    restart: unless-stopped
+    logging: *logging
+    # Lets the non-root process bind 80 and 443 inside its own network namespace.
+    sysctls: ['net.ipv4.ip_unprivileged_port_start=0']
+    ports: ['80:80', '443:443']
+    volumes:
+      - ./bootstrap-tls:/tls:ro
+    environment:
+      SERVICE_NAME: api-gateway
+      SERVICE_VERSION: ${RELEASE}
+      LOG_LEVEL: info
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: '443' # must be 443: redirects are built from it
+      HTTP_REDIRECT_PORT: '80'
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET}
+      IDENTITY_SERVICE_URL: http://${APP_VIP}:8101
+      ORG_SERVICE_URL: http://${APP_VIP}:8102
+      PBX_CONFIG_SERVICE_URL: http://${APP_VIP}:8103
+      TRUNK_SERVICE_URL: http://${APP_VIP}:8104
+      CALLFLOW_SERVICE_URL: http://${APP_VIP}:8105
+      VOICEMAIL_SERVICE_URL: http://${APP_VIP}:8106
+      RECORDING_SERVICE_URL: http://${APP_VIP}:8107
+      CDR_SERVICE_URL: http://${APP_VIP}:8108
+      TELEPHONY_CONFIG_URL: http://${APP_VIP}:8109
+      CALL_CONTROL_URL: http://${APP_VIP}:8110
+      NATS_SERVERS: nats://${DATA1_IP}:4222,nats://${DATA2_IP}:4222,nats://${DATA3_IP}:4222
+      NATS_USER: ${NATS_USER}
+      NATS_PASSWORD: ${NATS_PASSWORD}
+      REDIS_URL: redis://${APP_VIP}:6379
+      TLS_FROM_ORG_SERVICE: 'true'
+      TLS_CERT_FILE: /tls/fullchain.pem
+      TLS_KEY_FILE: /tls/privkey.pem
+      HSTS_MAX_AGE_SECONDS: '31536000'
+      REQUIRE_HTTPS_FOR_PROVISIONING: 'true'
+      # The console is in the released image (O-5).
+      CONSOLE_DIR: /console
+      CONSOLE_CONNECT_SOURCES: ${STORAGE_ORIGIN}
+      PLATFORM_STATUS_TARGETS: media-worker=http://${APP_VIP}:8111,notification-service=http://${APP_VIP}:8112
+      NATS_MONITOR_URL: http://${DATA1_IP}:8222
+      PROMETHEUS_URL: http://${DATA1_IP}:9090
+    healthcheck:
+      test:
+        [
+          'CMD',
+          '/nodejs/bin/node',
+          '-e',
+          "require('http').get({host:'127.0.0.1',port:80,path:'/'},r=>process.exit(r.statusCode===308?0:1)).on('error',()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+volumes:
+  opensips-tls:

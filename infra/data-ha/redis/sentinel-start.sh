@@ -6,7 +6,7 @@ set -eu
 # A sentinel restarted after a failover watches the primary the others know.
 PRIMARY=""
 for s in $(echo "${REDIS_SENTINELS:-}" | tr ',' ' '); do
-  [ "$s" = "$(hostname)" ] && continue
+  [ "$s" = "$(hostname)" ] || [ "$s" = "${SENTINEL_SELF_IP:-}" ] && continue
   PRIMARY=$(redis-cli -h "$s" -p 26379 --raw SENTINEL get-master-addr-by-name cuc 2>/dev/null | head -1 || true)
   [ -n "$PRIMARY" ] && break
 done
@@ -21,4 +21,9 @@ sentinel down-after-milliseconds cuc 2000
 sentinel failover-timeout cuc 10000
 sentinel parallel-syncs cuc 1
 CONF
+# On a data server (host networking, S4-11) the sentinel says which address
+# the others reach it on.
+if [ -n "${SENTINEL_SELF_IP:-}" ]; then
+  echo "sentinel announce-ip ${SENTINEL_SELF_IP}" >> /tmp/sentinel.conf
+fi
 exec redis-server /tmp/sentinel.conf --sentinel

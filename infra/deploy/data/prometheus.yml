@@ -1,0 +1,53 @@
+# S4-11: the operations console's history (S4-13), on data-1. Prometheus
+# cannot read platform.env: replace these example addresses with the ones in
+# yours (APP1_IP, APP2_IP, EDGE1_IP, EDGE2_IP, the media servers), and add a
+# target when you add a server. The `service` label names the source; the
+# gateway's chart catalog groups by it.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 5s
+
+scrape_configs:
+  - job_name: services
+    static_configs:
+      - targets: ['10.10.0.21:9101', '10.10.0.22:9101']
+        labels: { service: identity-service }
+      - targets: ['10.10.0.21:9102', '10.10.0.22:9102']
+        labels: { service: org-service }
+      - targets: ['10.10.0.21:9103', '10.10.0.22:9103']
+        labels: { service: pbx-config-service }
+      - targets: ['10.10.0.21:9104', '10.10.0.22:9104']
+        labels: { service: trunk-service }
+      - targets: ['10.10.0.21:9105', '10.10.0.22:9105']
+        labels: { service: callflow-service }
+      - targets: ['10.10.0.21:9106', '10.10.0.22:9106']
+        labels: { service: voicemail-service }
+      - targets: ['10.10.0.21:9107', '10.10.0.22:9107']
+        labels: { service: recording-service }
+      - targets: ['10.10.0.21:9108', '10.10.0.22:9108']
+        labels: { service: cdr-service }
+      - targets: ['10.10.0.21:9109', '10.10.0.22:9109']
+        labels: { service: telephony-config }
+      - targets: ['10.10.0.21:9110', '10.10.0.22:9110']
+        labels: { service: call-control }
+      - targets: ['10.10.0.21:9111', '10.10.0.22:9111']
+        labels: { service: media-worker }
+      - targets: ['10.10.0.21:9112', '10.10.0.22:9112']
+        labels: { service: notification-service }
+  # The gateway serves its metrics on its HTTPS listener; by address, so its
+  # certificate (for the platform's names) is not checked.
+  - job_name: gateway
+    scheme: https
+    tls_config: { insecure_skip_verify: true }
+    static_configs:
+      - targets: ['10.10.0.11:443', '10.10.0.12:443']
+        labels: { service: api-gateway }
+  - job_name: uploaders
+    static_configs:
+      - targets: ['10.10.0.41:9464']
+        labels: { service: recording-uploader }
+  # S4-10: each edge's media relay.
+  - job_name: rtpengine
+    static_configs:
+      - targets: ['10.10.0.11:9101', '10.10.0.12:9101']
+        labels: { service: rtpengine }

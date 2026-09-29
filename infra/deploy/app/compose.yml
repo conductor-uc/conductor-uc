@@ -1,0 +1,295 @@
+# S4-11: an app server (two of them: app-1, app-2). The twelve services, each
+# published on this server's private address (SELF_IP, backend ports
+# 9101-9112), and the internal load balancer (HAProxy, host networking) with
+# keepalived, which holds the pair's private floating address APP_VIP. The
+# balancer listens on APP_VIP and on SELF_IP, ports 8101-8112 (the services,
+# on both app servers), 3306 (the MariaDB writer) and 6379 (the Redis primary)
+# (10-production-topology.md §4.1).
+#
+#   docker compose --env-file ../platform.env --env-file .env up -d
+#
+# .env (this server only): SELF_IP, APP_PEER_IP (the other app server),
+# LB_PRIORITY (110 on app-1, 100 on app-2). See README.md.
+name: voice-app
+
+x-service: &service
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: '50m', max-file: '5' }
+
+# Distroless images keep node at /nodejs/bin/node and have no shell or curl.
+x-healthcheck: &healthcheck
+  test:
+    - CMD
+    - /nodejs/bin/node
+    - -e
+    - "fetch('http://127.0.0.1:8080/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 20s
+
+# This server's services reach the data tier and each other through this
+# server's own load balancer (SELF_IP), never the other app server's: when that
+# server dies, no connection here is left pointing at it (found in the S4-11
+# rehearsal: pooled connections to a vanished balancer hung until TCP gave up).
+# Edges and media servers use the pair's floating address, APP_VIP.
+x-db: &db
+  DB_HOST: ${SELF_IP}
+  DB_PORT: '3306'
+x-nats: &nats
+  NATS_SERVERS: nats://${DATA1_IP}:4222,nats://${DATA2_IP}:4222,nats://${DATA3_IP}:4222
+  NATS_USER: ${NATS_USER}
+  NATS_PASSWORD: ${NATS_PASSWORD}
+  # Every stream kept on all three NATS members (S4-07).
+  NATS_STREAM_REPLICAS: '3'
+x-trust: &trust
+  TRUST_INTERNAL_HEADERS: 'true'
+  INTERNAL_HEADER_SIGNING_SECRET: ${INTERNAL_HEADER_SIGNING_SECRET}
+x-crypto: &crypto
+  CRYPTO_KEKS: ${CRYPTO_KEKS}
+  CRYPTO_KEK_CURRENT: ${CRYPTO_KEK_CURRENT}
+x-storage: &storage
+  STORAGE_MODE: bucket-per-tenant
+  STORAGE_BUCKET_PREFIX: ${STORAGE_BUCKET_PREFIX}
+  STORAGE_ENDPOINT: ${STORAGE_ENDPOINT}
+  STORAGE_REGION: ${STORAGE_REGION}
+  STORAGE_ACCESS_KEY_ID: ${STORAGE_ACCESS_KEY_ID}
+  STORAGE_SECRET_ACCESS_KEY: ${STORAGE_SECRET_ACCESS_KEY}
+  STORAGE_FORCE_PATH_STYLE: ${STORAGE_FORCE_PATH_STYLE}
+x-common: &common
+  SERVICE_VERSION: ${RELEASE}
+  LOG_LEVEL: info
+  HTTP_HOST: 0.0.0.0
+  HTTP_PORT: '8080'
+  INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+x-urls: &urls
+  IDENTITY_SERVICE_URL: http://${SELF_IP}:8101
+  ORG_SERVICE_URL: http://${SELF_IP}:8102
+  PBX_CONFIG_SERVICE_URL: http://${SELF_IP}:8103
+  TRUNK_SERVICE_URL: http://${SELF_IP}:8104
+  CALLFLOW_SERVICE_URL: http://${SELF_IP}:8105
+  VOICEMAIL_SERVICE_URL: http://${SELF_IP}:8106
+  RECORDING_SERVICE_URL: http://${SELF_IP}:8107
+  CDR_SERVICE_URL: http://${SELF_IP}:8108
+  TELEPHONY_CONFIG_URL: http://${SELF_IP}:8109
+  CALL_CONTROL_URL: http://${SELF_IP}:8110
+x-redis: &redis
+  REDIS_URL: redis://${SELF_IP}:6379
+  REDIS_KEY_PREFIX: 'voice:prod:'
+
+services:
+  # ---------------------------------------------------------------- load balancer
+  lb:
+    image: ${IMAGE_REGISTRY}/internal-lb:${RELEASE}
+    restart: unless-stopped
+    network_mode: host
+    # keepalived adds the floating address: root and NET_ADMIN (HAProxy drops
+    # to its own user once listening).
+    user: root
+    cap_add: [NET_ADMIN, NET_BROADCAST, NET_RAW]
+    environment:
+      LB_VIP: ${APP_VIP}
+      LB_VIP_PREFIX: ${VIP_PREFIX}
+      LB_OWN_IP: ${SELF_IP}
+      LB_PEER_IP: ${APP_PEER_IP}
+      LB_PRIORITY: ${LB_PRIORITY}
+      GALERA_CHECK_USER: monitor
+      GALERA_CHECK_PASSWORD: ${GALERA_MONITOR_PASSWORD}
+      APP_VIP: ${APP_VIP}
+      APP1_IP: ${APP1_IP}
+      APP2_IP: ${APP2_IP}
+      DATA1_IP: ${DATA1_IP}
+      DATA2_IP: ${DATA2_IP}
+      DATA3_IP: ${DATA3_IP}
+    volumes:
+      - ./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    logging:
+      driver: json-file
+      options: { max-size: '50m', max-file: '5' }
+
+  # ---------------------------------------------------------------- services
+  identity-service:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/identity-service:${RELEASE}
+    ports: ['${SELF_IP}:9101:8080']
+    environment:
+      <<: [*common, *db, *nats, *trust, *crypto, *urls]
+      SERVICE_NAME: identity-service
+      DB_USER: identity_service
+      DB_PASSWORD: ${IDENTITY_SERVICE_DB_PASSWORD}
+      DB_NAME: identity_service
+      COOKIE_SECURE: 'true'
+    healthcheck: *healthcheck
+
+  org-service:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/org-service:${RELEASE}
+    ports: ['${SELF_IP}:9102:8080']
+    environment:
+      <<: [*common, *db, *nats, *trust, *crypto, *storage, *urls]
+      SERVICE_NAME: org-service
+      DB_USER: org_service
+      DB_PASSWORD: ${ORG_SERVICE_DB_PASSWORD}
+      DB_NAME: org_service
+      PLATFORM_BASE_DOMAIN: ${PLATFORM_BASE_DOMAIN}
+    healthcheck: *healthcheck
+
+  pbx-config-service:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/pbx-config-service:${RELEASE}
+    ports: ['${SELF_IP}:9103:8080']
+    environment:
+      <<: [*common, *db, *nats, *trust, *crypto, *storage, *urls]
+      SERVICE_NAME: pbx-config-service
+      DB_USER: pbx_config_service
+      DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD}
+      DB_NAME: pbx_config_service
+      PROVISIONING_BASE_URL: https://console.${PLATFORM_BASE_DOMAIN}
+      PROVISIONING_USERNAME: ${PROVISIONING_USERNAME}
+      PROVISIONING_PASSWORD: ${PROVISIONING_PASSWORD}
+      SIP_PUBLIC_PORT: '5060'
+      SIP_PUBLIC_TLS_PORT: '5061'
+      SIP_PUBLIC_TRANSPORTS: udp,tcp # tls,tcp,udp once SIP certificates are active
+    healthcheck: *healthcheck
+
+  trunk-service:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/trunk-service:${RELEASE}
+    ports: ['${SELF_IP}:9104:8080']
+    environment:
+      <<: [*common, *db, *nats, *trust, *crypto, *urls]
+      SERVICE_NAME: trunk-service
+      DB_USER: trunk_service
+      DB_PASSWORD: ${TRUNK_SERVICE_DB_PASSWORD}
+      DB_NAME: trunk_service
+    healthcheck: *healthcheck
+
+  callflow-service:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/callflow-service:${RELEASE}
+    ports: ['${SELF_IP}:9105:8080']
+    environment:
+      <<: [*common, *db, *nats, *trust, *urls]
+      SERVICE_NAME: callflow-service
+      DB_USER: callflow_service
+      DB_PASSWORD: ${CALLFLOW_SERVICE_DB_PASSWORD}
+      DB_NAME: callflow_service
+    healthcheck: *healthcheck
+
+  voicemail-service:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/voicemail-service:${RELEASE}
+    ports: ['${SELF_IP}:9106:8080']
+    environment:
+      <<: [*common, *db, *nats, *trust, *crypto, *storage, *urls]
+      SERVICE_NAME: voicemail-service
+      DB_USER: voicemail_service
+      DB_PASSWORD: ${VOICEMAIL_SERVICE_DB_PASSWORD}
+      DB_NAME: voicemail_service
+    healthcheck: *healthcheck
+
+  recording-service:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/recording-service:${RELEASE}
+    ports: ['${SELF_IP}:9107:8080']
+    environment:
+      <<: [*common, *db, *nats, *trust, *storage, *urls]
+      SERVICE_NAME: recording-service
+      DB_USER: recording_service
+      DB_PASSWORD: ${RECORDING_SERVICE_DB_PASSWORD}
+      DB_NAME: recording_service
+    healthcheck: *healthcheck
+
+  cdr-service:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/cdr-service:${RELEASE}
+    ports: ['${SELF_IP}:9108:8080']
+    environment:
+      <<: [*common, *db, *nats, *trust, *storage, *urls]
+      SERVICE_NAME: cdr-service
+      DB_USER: cdr_service
+      DB_PASSWORD: ${CDR_SERVICE_DB_PASSWORD}
+      DB_NAME: cdr_service
+      FS_CDR_INGEST_TOKEN: ${FS_CDR_INGEST_TOKEN}
+    healthcheck: *healthcheck
+
+  telephony-config:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/telephony-config:${RELEASE}
+    ports: ['${SELF_IP}:9109:8080']
+    environment:
+      <<: [*common, *db, *nats, *storage, *urls, *redis]
+      SERVICE_NAME: telephony-config
+      DB_USER: telephony_config
+      DB_PASSWORD: ${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD}
+      DB_NAME: telephony_config
+      OPENSIPS_DB_HOST: ${SELF_IP}
+      OPENSIPS_DB_USER: opensips
+      OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD}
+      OPENSIPS_DB_NAME: opensips
+      # Both edges: reloads go to each, the rest to the active one (S4-06).
+      OPENSIPS_MI_URL: http://${EDGE1_IP}:8888/mi,http://${EDGE2_IP}:8888/mi
+      OPENSIPS_CLUSTER_SHTAG: vip/1
+      OPENSIPS_SIP_URI: ${EDGE_VIP}:5060
+      SELF_URL: http://${APP_VIP}:8109 # as the media servers reach it
+      FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN}
+      RECORDING_SPOOL_DIR: /var/spool/cuc/rec
+    healthcheck: *healthcheck
+
+  call-control:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/call-control:${RELEASE}
+    ports: ['${SELF_IP}:9110:8080']
+    environment:
+      <<: [*common, *db, *nats, *trust, *urls, *redis]
+      SERVICE_NAME: call-control
+      DB_USER: call_control
+      DB_PASSWORD: ${CALL_CONTROL_DB_PASSWORD}
+      DB_NAME: call_control
+      FS_NODES: ${MEDIA_EVENT_SOCKETS}
+      FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD}
+      RECORDING_SPOOL_DIR: /var/spool/cuc/rec
+      OPENSIPS_SIP_URI: ${EDGE_VIP}:5060
+    healthcheck: *healthcheck
+
+  media-worker:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/media-worker:${RELEASE}
+    ports: ['${SELF_IP}:9111:8080']
+    environment:
+      <<: [*common, *db, *nats, *storage, *urls]
+      SERVICE_NAME: media-worker
+      DB_USER: media_worker
+      DB_PASSWORD: ${MEDIA_WORKER_DB_PASSWORD}
+      DB_NAME: media_worker
+    healthcheck:
+      <<: *healthcheck
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/readyz').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+
+  notification-service:
+    <<: *service
+    image: ${IMAGE_REGISTRY}/notification-service:${RELEASE}
+    ports: ['${SELF_IP}:9112:8080']
+    environment:
+      <<: [*common, *db, *nats, *urls]
+      SERVICE_NAME: notification-service
+      DB_USER: notification_service
+      DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD}
+      DB_NAME: notification_service
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_SECURE: ${SMTP_SECURE}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      PLATFORM_NOREPLY_ADDRESS: ${PLATFORM_NOREPLY_ADDRESS}
+      PLATFORM_BASE_DOMAIN: ${PLATFORM_BASE_DOMAIN}
+      CONSOLE_LINK_SCHEME: https
+    healthcheck: *healthcheck

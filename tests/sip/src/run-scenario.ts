@@ -235,7 +235,8 @@ export async function seedFixtures(): Promise<SeedResult> {
       '-e',
       'PBX_DB_NAME=pbx_config_service',
       '-e',
-      'ORG_SERVICE_URL=http://org-service:8080',
+      // S4-11's rehearsal reaches org-service through the app servers' load balancer.
+      `ORG_SERVICE_URL=${envOr('SIP_TEST_ORG_SERVICE_URL', 'http://org-service:8080')}`,
       '-e',
       `INTERNAL_SERVICE_TOKEN=${envOr('INTERNAL_SERVICE_TOKEN', 'dev-internal-service-token')}`,
       '-e',
@@ -349,7 +350,8 @@ export async function resetExtensionPassword(
       '-e',
       'PBX_DB_NAME=pbx_config_service',
       '-e',
-      'ORG_SERVICE_URL=http://org-service:8080',
+      // S4-11's rehearsal reaches org-service through the app servers' load balancer.
+      `ORG_SERVICE_URL=${envOr('SIP_TEST_ORG_SERVICE_URL', 'http://org-service:8080')}`,
       '-e',
       `INTERNAL_SERVICE_TOKEN=${envOr('INTERNAL_SERVICE_TOKEN', 'dev-internal-service-token')}`,
       '-e',

@@ -68,6 +68,8 @@ flowchart TB
 - **Zones**: each data server in its own zone (the quorum survives one zone); the two edges and two app servers in different zones; media servers spread so no zone holds more than half of them. Latency between zones must suit synchronous MariaDB replication (low single-digit milliseconds, which cloud zones in one region give).
 - **Single-address settings widen to the role's subnet.** FreeSWITCH accepts SIP only from `FS_OPENSIPS_CIDR` and ESL only from `FS_CLUSTER_CIDR`, one CIDR each: give each role its own subnet (per zone, or one per role), or use a CIDR that covers both edges and both app servers.
 
+**The role files (S4-11)** are in [`infra/deploy`](../../infra/deploy/README.md): one Compose file per role, one shared `platform.env` and a per-server `.env`, the released images (O-5's release workflow), rehearsed end to end on eight simulated servers (`infra/deploy/rehearsal`).
+
 ## 4. Components: how each survives, and the address clients use
 
 ### 4.1 Stable endpoints
@@ -98,7 +100,7 @@ The internal load balancer health-checks what it balances: `/readyz` for service
 | **Redis** | 3 (data) | Sentinel: one primary, two replicas, three sentinels. A failover loses at most the last writes; the call registry is rebuilt from the nodes ([04 §5](04-high-availability.md#5-redis-loss-and-rebuild)) | **Internal LB following the primary** (checks `role:master`). Required, not optional: FreeSWITCH's `mod_redis` (toll-fraud limits) and OpenSIPs' `cachedb_redis` (affinity, S4-05) each take one host and cannot follow Sentinel | Sentinel group behind HAProxy in `infra/data-ha` (S4-07); dev keeps one server | S4-07, S4-11 |
 | **NATS JetStream** | 3 (data) | Cluster with R3 streams; unaffected while two members are up | Every client lists all three (`NATS_SERVERS`) | Three-member cluster in `infra/data-ha`, streams R3 through `NATS_STREAM_REPLICAS` (S4-07); dev keeps one server, R1 | S4-07, S4-11 |
 | **Object storage** | provider | Provider-managed; uploaders buffer on the spool and retry | HTTPS endpoint | Yes | — |
-| **Internal load balancers** | 2 (on the app servers) | Two HAProxy copies behind one keepalived private address, or the provider's internal LB | — | HAProxy for the MariaDB writer and Redis primary in `infra/data-ha` (one copy; the keepalived pair is S4-11) | S4-07/S4-11 |
+| **Internal load balancers** | 2 (on the app servers) | Two HAProxy copies behind one keepalived private address, or the provider's internal LB | — | A pair on the app servers in `infra/deploy/app` (HAProxy with keepalived on `APP_VIP`, each also on its own address for that server's services) | S4-07/S4-11 |
 
 ### 4.3 MariaDB: Galera or primary–replica (D-016, decided: Galera)
 
