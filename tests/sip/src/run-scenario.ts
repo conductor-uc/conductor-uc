@@ -26,7 +26,7 @@ const execFileAsync = promisify(execFile);
 const SRC_DIR = path.dirname(fileURLToPath(import.meta.url));
 const TESTS_SIP_DIR = path.resolve(SRC_DIR, '..');
 const REPO_ROOT = path.resolve(TESTS_SIP_DIR, '../..');
-const SCENARIOS_DIR = path.resolve(TESTS_SIP_DIR, 'scenarios');
+export const SCENARIOS_DIR = path.resolve(TESTS_SIP_DIR, 'scenarios');
 
 /**
  * How long `waitForLog` waits for a background SIPp server container to
@@ -974,7 +974,11 @@ export async function runForeground(opts: RunForegroundOptions): Promise<SippSta
   });
 }
 
-function buildSippCommand(opts: {
+export function buildSippCommand(opts: {
+  /** Calls before SIPp exits (`-m`); null for no limit (S4-08's load). Defaults to 1. */
+  maxCalls?: number | null | undefined;
+  /** Further SIPp arguments, as they go on the command line. */
+  extraArgs?: readonly string[] | undefined;
   scenarioPath: string;
   csvPath: string;
   au?: string | undefined;
@@ -995,8 +999,7 @@ function buildSippCommand(opts: {
     opts.csvPath,
     '-i',
     '$(hostname -i)',
-    '-m',
-    '1',
+    ...(opts.maxCalls === null ? [] : ['-m', String(opts.maxCalls ?? 1)]),
     // SIPp's default Call-ID is `%u-%p@%s` — call number, process number,
     // local IP. Every one of those repeats across our containers: `-m 1`
     // fixes the call number at 1, the process number inside a
@@ -1049,6 +1052,7 @@ function buildSippCommand(opts: {
     '-error_file',
     `/data/${prefix}_errors.log`,
   );
+  if (opts.extraArgs !== undefined) parts.push(...opts.extraArgs);
   if (opts.remoteHost !== undefined) parts.push(opts.remoteHost);
   return parts.join(' ');
 }

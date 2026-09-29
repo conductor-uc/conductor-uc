@@ -20,7 +20,7 @@ x-galera: &galera
     MARIADB_ROOT_PASSWORD: ${HA_DB_ROOT_PASSWORD:-dev-root-password}
     GALERA_PEERS: galera-1,galera-2,galera-3
   healthcheck:
-    test: ['CMD', 'healthcheck.sh', '--connect', '--galera_online']
+    test: ['CMD', 'galera-health.sh']
     interval: 3s
     timeout: 3s
     retries: 40

@@ -1,0 +1,155 @@
+# S4-08: the chaos environment. Layered on the everyday stack, it runs the
+# stack on the highly available data tier (S4-07, infra/data-ha) and a second
+# telephony-config, so every failure the chaos suite causes has something to
+# fail over to:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d --build --wait
+#
+# `mariadb` and `redis` become HAProxy (the data tier's load balancer), in front
+# of a three-member Galera cluster and a Redis group with Sentinel. Everything
+# that already names `mariadb` or `redis` (services, OpenSIPs, FreeSWITCH,
+# tests) reaches the current writer or primary without a setting changed.
+# Going back is `docker compose up -d` without this file: the everyday
+# `mariadb` comes back with its own volume.
+#
+# The chaos suite (tests/sip/chaos) then kills a media node, an edge, a
+# telephony-config, a call-control, the Redis primary and the MariaDB writer,
+# one at a time, under call load.
+
+services:
+  # The data tier's load balancer, under both names the stack already uses.
+  # Written out twice: the `!reset` tags do not survive a YAML alias, and a
+  # kept `image:` would tag this build as mariadb:11.4 or redis:7-alpine.
+  mariadb:
+    image: !reset null
+    build: ../data-ha/haproxy
+    command: !reset null
+    environment: !override
+      GALERA_CHECK_USER: monitor
+      GALERA_CHECK_PASSWORD: dev-monitor-password
+    volumes: !reset []
+    depends_on: !override
+      galera-1:
+        condition: service_healthy
+      galera-2:
+        condition: service_healthy
+      galera-3:
+        condition: service_healthy
+      redis-1:
+        condition: service_started
+      sentinel-1:
+        condition: service_started
+    healthcheck: !override
+      test:
+        - CMD-SHELL
+        - mariadb --defaults-extra-file=/tmp/galera-check.cnf -h 127.0.0.1 -e 'SELECT 1' >/dev/null && redis-cli -h 127.0.0.1 ping | grep -q PONG
+      interval: 3s
+      timeout: 3s
+      retries: 60
+  redis:
+    image: !reset null
+    build: ../data-ha/haproxy
+    command: !reset null
+    environment: !override
+      GALERA_CHECK_USER: monitor
+      GALERA_CHECK_PASSWORD: dev-monitor-password
+    volumes: !reset []
+    depends_on: !override
+      galera-1:
+        condition: service_healthy
+      galera-2:
+        condition: service_healthy
+      galera-3:
+        condition: service_healthy
+      redis-1:
+        condition: service_started
+      sentinel-1:
+        condition: service_started
+    healthcheck: !override
+      test:
+        - CMD-SHELL
+        - mariadb --defaults-extra-file=/tmp/galera-check.cnf -h 127.0.0.1 -e 'SELECT 1' >/dev/null && redis-cli -h 127.0.0.1 ping | grep -q PONG
+      interval: 3s
+      timeout: 3s
+      retries: 60
+
+  galera-1:
+    extends:
+      file: ../data-ha/compose.yml
+      service: galera-1
+    environment:
+      # A throwaway cluster that is often stopped whole (a `down`, a rebuild):
+      # galera-1 starts it again whenever no member answers, rather than
+      # waiting for an operator as infra/data-ha does. It still joins when one
+      # does, as after the chaos suite kills it.
+      GALERA_FORCE_BOOTSTRAP: 'true'
+      # 01-schemas.sh provisions one schema and user per service, as on the
+      # everyday `mariadb`; the members copy them from this one.
+      IDENTITY_SERVICE_DB_PASSWORD: ${IDENTITY_SERVICE_DB_PASSWORD:-dev-identity-password}
+      ORG_SERVICE_DB_PASSWORD: ${ORG_SERVICE_DB_PASSWORD:-dev-org-password}
+      PBX_CONFIG_SERVICE_DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD:-dev-pbx-config-password}
+      EXAMPLE_SERVICE_DB_PASSWORD: ${EXAMPLE_SERVICE_DB_PASSWORD:-dev-example-password}
+      TELEPHONY_CONFIG_SERVICE_DB_PASSWORD: ${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD:-dev-telephony-config-password}
+      TRUNK_SERVICE_DB_PASSWORD: ${TRUNK_SERVICE_DB_PASSWORD:-dev-trunk-service-password}
+      MEDIA_WORKER_DB_PASSWORD: ${MEDIA_WORKER_DB_PASSWORD:-dev-media-worker-password}
+      CALL_CONTROL_DB_PASSWORD: ${CALL_CONTROL_DB_PASSWORD:-dev-call-control-password}
+      CALLFLOW_SERVICE_DB_PASSWORD: ${CALLFLOW_SERVICE_DB_PASSWORD:-dev-callflow-service-password}
+      VOICEMAIL_SERVICE_DB_PASSWORD: ${VOICEMAIL_SERVICE_DB_PASSWORD:-dev-voicemail-service-password}
+      CDR_SERVICE_DB_PASSWORD: ${CDR_SERVICE_DB_PASSWORD:-dev-cdr-service-password}
+      NOTIFICATION_SERVICE_DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD:-dev-notification-service-password}
+      RECORDING_SERVICE_DB_PASSWORD: ${RECORDING_SERVICE_DB_PASSWORD:-dev-recording-service-password}
+      OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
+    volumes: !override
+      - galera-1:/var/lib/mysql
+      - ../data-ha/galera/init/01-monitor.sql:/docker-entrypoint-initdb.d/00-monitor.sql:ro
+      - ./mariadb/init/01-schemas.sh:/docker-entrypoint-initdb.d/01-schemas.sh:ro
+      - ./mariadb/init/02-opensips-schema.sh:/docker-entrypoint-initdb.d/02-opensips-schema.sh:ro
+      - ../../telephony/opensips/db-schema:/opensips-schema:ro
+  galera-2:
+    extends:
+      file: ../data-ha/compose.yml
+      service: galera-2
+  galera-3:
+    extends:
+      file: ../data-ha/compose.yml
+      service: galera-3
+
+  redis-1:
+    extends:
+      file: ../data-ha/compose.yml
+      service: redis-1
+  redis-2:
+    extends:
+      file: ../data-ha/compose.yml
+      service: redis-2
+  redis-3:
+    extends:
+      file: ../data-ha/compose.yml
+      service: redis-3
+  sentinel-1:
+    extends:
+      file: ../data-ha/compose.yml
+      service: sentinel-1
+  sentinel-2:
+    extends:
+      file: ../data-ha/compose.yml
+      service: sentinel-2
+  sentinel-3:
+    extends:
+      file: ../data-ha/compose.yml
+      service: sentinel-3
+
+  # A second telephony-config behind the same name, as call-control-2 is
+  # (S4-03): FreeSWITCH's xml_curl and every service reach either.
+  telephony-config-2:
+    extends:
+      file: docker-compose.yml
+      service: telephony-config
+    networks:
+      default:
+        aliases: [telephony-config]
+
+volumes:
+  galera-1:
+  galera-2:
+  galera-3:

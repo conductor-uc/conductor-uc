@@ -90,10 +90,23 @@ sequenceDiagram
 
 Timing targets:
 
-- Dead-node detection ≤ 10 s. Dispatcher probing interval 2 s with 2 failures to deactivate, tuned in S4-08.
+- Dead-node detection ≤ 10 s. Dispatcher probing interval 2 s with 2 failures to deactivate (kept after S4-08's measurements below).
 - New-call success on the surviving nodes: immediate for calls the dispatcher routes after deactivation.
 - Waiting queue callers on the dead node are lost. Callers can hear a fast-busy or silence for up to the detection window.
 - Recordings not yet uploaded from the dead node are lost (O-13).
+
+**Measured (S4-08).** The chaos suite (`tests/sip/chaos`, nightly in CI on `infra/compose/docker-compose.chaos.yml`: the stack on the data tier of S4-07 with a second telephony-config) causes each failure of 10 §5 in turn under a call a second, and records how long the platform took to fail over and how long new calls failed. First run (2026-09-29), every target met:
+
+| Failure | Failover (target) | New calls failing (target) | Calls failed / succeeded in 40 s |
+|---|---|---|---|
+| A media node | 8.5 s: marked down, out of the dispatcher (≤ 10 s) | 1.0 s (≤ 10 s) | 1 / 39 |
+| The active edge | 3.4 s: floating address and sharing tag moved (≤ 10 s) | 4.0 s (≤ 10 s) | 0 / 40 |
+| A telephony-config replica | none needed: the other answers the same name | 0 s (≤ 10 s) | 0 / 40 |
+| A call-control replica | 4.7 s: every node owned by the survivor (≤ 10 s) | 0 s (≤ 10 s) | 0 / 40 |
+| The Redis primary | 8.6 s: a replica promoted and reached through the load balancer (≤ 15 s) | 0 s (≤ 15 s) | 0 / 40 |
+| The MariaDB writer | 3.6 s: another member writing (≤ 10 s) | 3.0 s (≤ 15 s) | 3 / 37 |
+
+Each run writes its measurements to `tests/sip/chaos-results/` (kept as a CI artifact) and the job summary, and fails when a target is missed.
 
 **As built (S4-04).** call-control's node-failure watcher (`node-failure.ts`) looks every second for nodes in `fsnodes` whose `fsnode:{id}` key has expired, skipping any node this replica's event socket is still connected to, and none at all for the first 2 × `HEARTBEAT_TTL_MS` after it starts (after every replica was down, every key has lapsed until the sockets reconnect). One replica claims each death (`nodelost:{id}`, `SET NX PX` 60 s, cleared by the node's next heartbeat so a node that returns and dies again is handled again at once) and, for each leg in `node:{id}:calls`, commits `call.lost` `{callUuid, nodeId, direction, startedAt, answeredAt, detectedAt, from, to, extension, sipCallId}` (tenant in `orgContext`) to the outbox and removes the leg from the registry; then it releases the node's leases (`handOver`). The teardown at the edge is by SIP Call-ID, not by destination: call-control records each leg's `sip_call_id` (at create, or at answer for an outbound leg), telephony-config ends that dialog with MI `dlg_end_dlg <call-id>` (a dialog already over is not an error), and OpenSIPs creates a dialog for every leg to or from a media node (`create_dialog()` before `topology_hiding()`, which alone did not create one; confirmed live). cdr-service writes one `node_failure` record per leg with a tenant (direction from the numbers, start on the whole second so a late real record deduplicates). api-gateway's live views show `call.lost` as `call.ended` (`NODE_FAILURE`). Confirmed live: a node killed mid-call, both phones got their BYE 10.8 s later (the heartbeat's 10 s expiry, then about a second).
 
