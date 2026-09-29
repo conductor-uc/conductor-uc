@@ -138,4 +138,4 @@ When it happens ([ADR 0001](adr/0001-orchestrator.md#decision) §3), the app rol
 |---|---|---|
 | D-016 | MariaDB HA: Galera, three members, single writer (§4.3) | **Proposed** |
 | D-017 | Stable endpoints: floating edge address (keepalived or the provider's mechanism), HAProxy pair on the app servers for every private endpoint including the Redis primary and the MariaDB writer, or the provider's internal load balancers (§4.1) | **Proposed** |
-| O-7 | Media anchoring (RTPengine) at the edge, which would change what the edge carries | Deferred to S4-10 |
+| O-7 | Media anchoring (RTPengine) at the edge, which would change what the edge carries | Decided and built (S4-10): the edge pair relays all media; size the edges for it (S4-09) |

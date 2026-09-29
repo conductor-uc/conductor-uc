@@ -16,6 +16,12 @@ PRIORITY="${KEEPALIVED_PRIORITY:-100}"
 ROUTER_ID="${KEEPALIVED_ROUTER_ID:-51}"
 PREFIX="${OPENSIPS_VIP_PREFIX:-32}"
 IFACE="${KEEPALIVED_INTERFACE:-$(ip -o -4 addr show | awk -v ip="$OPENSIPS_OWN_IP" '$4 ~ "^"ip"/" { print $2; exit }')}"
+# S4-10: the media relay's private side moves with the pair too, so the media
+# nodes keep sending to an address that follows the surviving edge.
+INTERNAL_VIP_LINE=""
+if [ -n "${OPENSIPS_INTERNAL_VIP:-}" ]; then
+  INTERNAL_VIP_LINE="    ${OPENSIPS_INTERNAL_VIP}/${OPENSIPS_INTERNAL_VIP_PREFIX:-$PREFIX} dev ${KEEPALIVED_INTERNAL_INTERFACE:-$IFACE}"
+fi
 
 cat > /etc/keepalived/keepalived.conf <<CONF
 global_defs {
@@ -43,11 +49,13 @@ vrrp_instance edge {
   }
   virtual_ipaddress {
     ${OPENSIPS_VIP}/${PREFIX} dev ${IFACE}
+${INTERNAL_VIP_LINE}
   }
   track_script {
     opensips_alive
   }
-  notify_master "/opensips-mi.sh --retry clusterer_shtag_set_active vip/1"
+  notify_master "/edge-role.sh active"
+  notify_backup "/edge-role.sh standby"
 }
 CONF
 

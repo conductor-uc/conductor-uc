@@ -34,7 +34,8 @@ RUN apt-get -o Acquire::Check-Valid-Until=false update && \
       opensips-tlsmgm-module \
       opensips-tls-openssl-module \
       keepalived \
-      iproute2 && \
+      iproute2 \
+      rtpengine-daemon && \
     rm -rf /var/lib/apt/lists/*
 
 COPY opensips.cfg.template /etc/opensips/opensips.cfg.template
@@ -47,9 +48,13 @@ COPY seed-dispatcher.py /seed-dispatcher.py
 # makes on failover (opensips-mi.sh). Only run when OPENSIPS_KEEPALIVED=true.
 COPY keepalived.sh /keepalived.sh
 COPY opensips-mi.sh /opensips-mi.sh
-RUN chmod +x /docker-entrypoint.sh /keepalived.sh /opensips-mi.sh
+# S4-10: the edge's media relay (rtpengine.sh). Only run when OPENSIPS_RTPENGINE=true.
+COPY rtpengine.sh /rtpengine.sh
+COPY rtpengine-cli.sh /rtpengine-cli.sh
+COPY edge-role.sh /edge-role.sh
+RUN chmod +x /docker-entrypoint.sh /keepalived.sh /opensips-mi.sh /rtpengine.sh /rtpengine-cli.sh /edge-role.sh
 
-EXPOSE 5060/udp 5060/tcp 5061/tcp
+EXPOSE 5060/udp 5060/tcp 5061/tcp 30000-39999/udp
 
 # opensips-cli defaults to the FIFO transport (its own defaults.py); this
 # image never loads mi_datagram/FIFO, only mi_http — confirmed directly, the

@@ -29,7 +29,8 @@ Everything private can sit behind NAT or on a network with no internet route, **
 | OpenSIPs | 5060 (`OPENSIPS_SIP_PORT`) | UDP | all interfaces | Phones, carriers, FreeSWITCH nodes | Digest for phones; source IP for trunks; dispatcher membership (IP and port) for FreeSWITCH | Flood limit: 30 requests per 2 s per source IP |
 | OpenSIPs | 5060 | TCP | all interfaces | Phones, carriers | Same | |
 | OpenSIPs | 5061 | TCP, SIP over TLS | all interfaces | Phones | Same, inside TLS | Only when TLS is enabled. The container always listens on 5061 (`OPENSIPS_TLS_PORT` is not passed through by the development compose file). |
-| FreeSWITCH | 16384–32768 (`FS_RTP_START_PORT`–`FS_RTP_END_PORT`) | UDP, RTP and RTCP | detected interface address | Phones, carriers | None (unencrypted RTP; SRTP is not built) | Needed open to the whole internet: a phone or carrier sends media from wherever it is |
+| RTPengine (on the edge) | 30000–39999 (`RTPENGINE_PORT_MIN`–`RTPENGINE_PORT_MAX`) | UDP, RTP and RTCP | the edge's public (floating) address | Phones, carriers | None (media is relayed as sent; unencrypted RTP unless the endpoints use SRTP) | Needed open to the whole internet: a phone or carrier sends media from wherever it is (S4-10) |
+| FreeSWITCH | 16384–32768 (`FS_RTP_START_PORT`–`FS_RTP_END_PORT`) | UDP, RTP and RTCP | detected interface address | The edges' RTPengine (private) | None | Only from the edges once media is anchored (S4-10). Without the relay (`OPENSIPS_RTPENGINE` off) it must be open to the whole internet, as §4 explains |
 
 WebSocket SIP (WS/WSS), SIP over IPv6 and HEP capture are not configured.
 
@@ -98,7 +99,9 @@ Phones fetch `GET https://<gateway>/v1/public/provision/yealink/<mac>.cfg` with 
 
 ## 4. Media (RTP), and why FreeSWITCH needs a public address
 
-There is no media relay (no RTPengine or rtpproxy; decision O-7, deferred). OpenSIPs forwards SDP untouched. So the address FreeSWITCH writes into its SDP for audio is where phones and carriers send RTP, and it has to be reachable from the internet.
+**Since S4-10 (O-7), the edge relays all media** with RTPengine: phones and carriers send RTP to the edge's public (floating) address and its range `RTPENGINE_PORT_MIN`–`RTPENGINE_PORT_MAX` (open that range to the internet on the edges), and the media servers exchange RTP only with the edges on their private network. A media server then needs no public address and no public RTP range. An edge whose public address is NATed onto the host (a cloud floating IP) sets `RTPENGINE_EXTERNAL_ADVERTISED` to it.
+
+The rest of this section applies to a deployment that runs **without** the relay (`OPENSIPS_RTPENGINE` off). Then OpenSIPs forwards SDP untouched, so the address FreeSWITCH writes into its SDP for audio is where phones and carriers send RTP, and it has to be reachable from the internet.
 
 By default that address is `local_ip_v4`: the IPv4 address of the interface that carries FreeSWITCH's default route. **`FS_EXTERNAL_RTP_IP` overrides it** for audio only. Signalling stays on the interface address, because only OpenSIPs talks SIP to FreeSWITCH (G-114).
 

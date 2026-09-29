@@ -12,14 +12,14 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
-| S4 HA and scale (11) | 9 | 0 | 2 |
+| S4 HA and scale (11) | 10 | 0 | 1 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **81** | **9** | **37** |
+| **Total (127)** | **82** | **8** | **37** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -116,7 +116,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S4-07 | Done | `infra/data-ha`: Galera (3, one writer through HAProxy, checked Synced), Redis with Sentinel (HAProxy follows `role:master`; a returning primary rejoins as a replica), NATS cluster (3) with `NATS_STREAM_REPLICAS` in every service; identity's role tables get primary keys (migration 010). `tests/data-ha` fails each over live with writes going on (MariaDB 6.1–6.4 s, Redis 8.2 s, NATS 5.7–6.7 s, nothing acknowledged lost) and runs every service's migrations on Galera. Caveats: one HAProxy (the keepalived pair and the data servers' manifests are S4-11); the everyday dev stack keeps single servers |
 | S4-08 | Done | `tests/sip/chaos` (`pnpm chaos`), nightly CI job `chaos` after `sip`: on `docker-compose.chaos.yml` (the stack on S4-07's data tier, a second telephony-config), kills a media node, the active edge, a telephony-config, a call-control, the Redis primary and the MariaDB writer in turn under a call a second, and records failover and outage against 04 §4 / 10 §5 targets (`chaos-results/`, job summary). First run: every target met (failovers 3.4–8.6 s; new calls failing at most 4 s). Caveat: a run on the self-hosted runner only; no SIPp load beyond one call a second |
 | S4-09 | Not started | no capacity benchmarks or sizing guide (`telephony-config/src/bench.ts` is unrelated) |
-| S4-10 | Partial | O-7 recorded as deferred in decisions.md; no RTPengine |
+| S4-10 | Done | O-7 decided (owner, 2026-09-29): RTPengine on the edge pair. Each edge runs it beside OpenSIPs (external side on the floating address, internal side on a private floating address); OpenSIPs anchors every dialog between a media node and a phone or carrier, including re-INVITEs, late offers and trunk failover. The relays follow each other's calls through Redis; keepalived makes the new active one own them. Confirmed live: phones see only the edge in SDP, the media nodes only the private floating address, the audio is relayed and cleaned up, and survives an edge failover mid-call. Caveats: userspace relay (no kernel module in a container); no SRTP termination |
 | S4-11 | Not started | `infra/deploy` empty |
 | S4-12 | Done | G-124: `platform.observe`/`platform.operate`; `/statusz` on every service; `GET /v1/platform/overview`; audited drain, return and weight routes; the console's Operations section (Overview, Services, Media nodes, Signalling, Events, Data stores; History with S4-13). Confirmed live |
 | S4-13 | Done | `/metrics` on every service (OpenTelemetry), node, OpenSIPs, dispatcher, consumer and store gauges, Prometheus in compose (15 days), `GET /v1/platform/metrics/{chart}` from a fixed catalog; the console's **History** tab (every chart over an hour to a week, a line per node, service or consumer; says so once when no history is kept). Confirmed live against Prometheus |

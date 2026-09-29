@@ -289,6 +289,21 @@ modparam("dialog", "dialog_replication_cluster", 1)
 #### a phone or a trunk.
 loadmodule "topology_hiding.so"
 
+#### S4-10 (O-7, decided 2026-09-29): media anchored at the edge by
+#### RTPengine, which runs next to this proxy (docker-entrypoint.sh). Phones
+#### and carriers see only the edge's media address (`external`, the floating
+#### address of the pair); the media nodes only its private one (`internal`).
+#### Every INVITE dialog between the two sides goes through `route[anchor]`;
+#### a call between two media nodes (the S4-05 hairpin) is not anchored.
+# @if-rtpengine
+loadmodule "rtpengine.so"
+modparam("rtpengine", "rtpengine_sock", "udp:127.0.0.1:${RTPENGINE_NG_PORT}")
+# The relay starts beside this proxy and may answer a moment after it: a relay
+# found silent is asked again after 5 s, not the default 60, so no call goes
+# unanchored for long after a restart.
+modparam("rtpengine", "rtpengine_disable_tout", 5)
+# @end-rtpengine
+
 #### Signaling NAT (03 §2's own words: "nathelper for signaling
 #### (fix_nated_contact, keepalive pinging)").
 loadmodule "nathelper.so"
@@ -403,6 +418,13 @@ route{
             send_reply(404, "Not here");
             exit;
         }
+        # @if-rtpengine
+        if ($dlg_val(anchored) == "1") {
+            route(anchor_direction);
+            rtpengine_manage("$var(rtp_flags)");
+            t_on_reply("anchor");
+        }
+        # @end-rtpengine
         route(relay);
         exit;
     }
@@ -573,6 +595,9 @@ route{
             route(outbound_gw);
             exit;
         }
+        # @if-rtpengine
+        route(anchor);
+        # @end-rtpengine
         route(relay);
         exit;
     }
@@ -656,9 +681,52 @@ route{
         exit;
     }
 
+    # @if-rtpengine
+    route(anchor);
+    # @end-rtpengine
     route(relay);
     exit;
 }
+
+# @if-rtpengine
+# S4-10: which of RTPengine's two sides a message comes in on and goes out
+# on. A media node is always the `internal` side; everyone else (phones,
+# carriers) the `external` one, so a message from a media node goes out
+# external and one from anyone else goes out internal.
+route[anchor_direction] {
+    if (ds_is_in_list("$si", $sp)) {
+        $var(rtp_flags) = "in-iface=internal out-iface=external replace-origin replace-session-connection ICE=remove";
+    } else {
+        $var(rtp_flags) = "in-iface=external out-iface=internal replace-origin replace-session-connection ICE=remove";
+    }
+}
+
+# S4-10: anchors a new INVITE dialog between a media node and a phone or
+# carrier: its SDP now names the edge, and so does every answer, re-INVITE and
+# ACK after it (the dialog remembers, and its replicated copy does too).
+route[anchor] {
+    if (!is_method("INVITE")) return;
+    $dlg_val(anchored) = "1";
+    route(anchor_direction);
+    rtpengine_manage("$var(rtp_flags)");
+    t_on_reply("anchor");
+    t_on_failure("anchor");
+}
+
+# Answers (or, for an INVITE without SDP, offers) carried by a provisional or
+# successful reply. A final failure is left to the failure route, so a trunk
+# failover can offer the same session to the next gateway.
+onreply_route[anchor] {
+    if ($rs < 300 && has_body("application/sdp")) {
+        route(anchor_direction);
+        rtpengine_manage("$var(rtp_flags)");
+    }
+}
+
+failure_route[anchor] {
+    rtpengine_delete();
+}
+# @end-rtpengine
 
 route[relay] {
     if (!t_relay()) {
@@ -678,6 +746,9 @@ route[outbound_gw] {
         exit;
     }
     fix_nated_contact();
+    # @if-rtpengine
+    route(anchor);
+    # @end-rtpengine
     route(outbound_gw_auth);
     t_on_failure("outbound_gw");
     route(relay);
@@ -727,8 +798,12 @@ failure_route[outbound_gw] {
             route(outbound_gw_auth);
             t_on_failure("outbound_gw");
             t_relay();
+            exit;
         }
-        exit;
     }
+    # No other gateway takes it: the anchored media goes too (S4-10).
+    # @if-rtpengine
+    rtpengine_delete();
+    # @end-rtpengine
     exit;
 }
