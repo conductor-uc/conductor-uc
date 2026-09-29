@@ -36,7 +36,7 @@ describe.skipIf(skipReason !== undefined)('SIP over TLS', () => {
         env.opensipsContainer,
         'sh',
         '-c',
-        `openssl s_client -connect 127.0.0.1:5061 -servername ${seed.tenantA.fqdn} ${extra.join(' ')} </dev/null 2>&1`,
+        `openssl s_client -connect $(hostname -i | cut -d' ' -f1):5061 -servername ${seed.tenantA.fqdn} ${extra.join(' ')} </dev/null 2>&1`,
       ],
       { maxBuffer: 4 * 1024 * 1024 },
     ).catch((error: { stdout?: string; stderr?: string }) => ({

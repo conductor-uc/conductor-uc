@@ -402,11 +402,27 @@ The node takes no new calls within a second or two, and its queues, parking lots
 - **To upgrade it:** stop it, upgrade, start it, then `POST /internal/v1/nodes/fs2/undrain`. A drain survives the node's restart, so it takes calls again only when you undrain it.
 - **To remove it:** once `calls` is 0, let its uploader empty the spool (`ls /var/spool/cuc/rec`). Take it out of `OPENSIPS_FS_DESTINATION` and restart OpenSIPs in a quiet period. Then remove it from `FS_NODES` and restart call-control.
 
+### 4.3.1 A second edge (S4-06)
+
+Two edges share one floating address, which phones, carriers and the media servers use; the edge holding it handles every call, and the other takes it over within about 4 seconds of the first failing. Registrations, dialogs and the media servers' state are copied between the two, so established calls stay up and phones stay registered. Give edge-2 the same `opensips` service and set on both:
+
+| Setting | edge-1 | edge-2 |
+|---|---|---|
+| `OPENSIPS_VIP` | the floating address | the same |
+| `OPENSIPS_OWN_IP` | its private address | its private address |
+| `OPENSIPS_NODE_ID` / `OPENSIPS_PEER_NODE_ID` | `1` / `2` | `2` / `1` |
+| `OPENSIPS_PEER_IP` | edge-2's private address | edge-1's private address |
+| `OPENSIPS_SEED` | `true` | `false` |
+| `OPENSIPS_KEEPALIVED` | `true`, or leave it off and let the provider move the address | the same |
+| `KEEPALIVED_PRIORITY` | `110` | `100` |
+
+Both need `net.ipv4.ip_nonlocal_bind=1` (each listens on the floating address even while it does not hold it) and, with `OPENSIPS_KEEPALIVED`, `NET_ADMIN`. Allow 5566/tcp (replication) and VRRP (IP protocol 112) between the two edges' private addresses. If the provider moves the address instead of keepalived (D-017), have its failover hook run `opensips-cli -x mi clusterer_shtag_set_active vip/1` on the edge that received it. On app-1, set telephony-config's `OPENSIPS_MI_URL` to both edges (`http://10.10.0.10:8888/mi,http://10.10.0.11:8888/mi`), `OPENSIPS_CLUSTER_SHTAG=vip/1`, and `OPENSIPS_SIP_URI` (telephony-config and call-control) to the floating address; the media servers' `FS_OPENSIPS_CIDR` must cover both edges and the floating address.
+
 ## 8. What happens when a server fails
 
 | Server lost | Effect | Recovery |
 |---|---|---|
-| edge-1 | **All calls and the console stop.** Phones cannot register or call. | Restore or rebuild it. Nothing on it is durable: its state is in MariaDB. |
+| edge-1 | With one edge: **all calls and the console stop.** Phones cannot register or call. With two (§4.3.1): the other takes the floating address within about 4 s; calls in progress stay up and phones stay registered. | Restore or rebuild it. Nothing on it is durable: its state is in MariaDB, and a second edge's copy of registrations and dialogs. |
 | One media server | Its calls drop, and its recordings and voicemail messages not yet uploaded are lost (O-13, accepted; such a message is never listed). OpenSIPs stops sending new calls to it once its OPTIONS probe (every 10 seconds) goes unanswered, so within tens of seconds; calls routed to it before then fail. call-control marks it down within 10 s, ends its calls at the edge (both parties get a BYE), writes a `node_failure` call record for each, and releases its queues, parking lots and conference rooms (S4-04). | Other nodes carry new calls. Restart it; it rejoins without configuration changes. |
 | app-1 | New calls fail, because FreeSWITCH asks telephony-config for every call. Established calls stay up, but anything in them that needs telephony-config (a transfer, an IVR step, voicemail) fails. The console and API stop. | Restart. Services reconnect and catch up on events from NATS. |
 | data-1 | Everything stops: services cannot reach MariaDB, and OpenSIPs cannot authenticate. | Restore MariaDB from backup ([operations §4](operations.md#4-backups-and-restore)). Redis needs no restore. |

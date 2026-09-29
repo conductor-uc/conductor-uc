@@ -88,8 +88,18 @@ const REGISTRANT_EXPIRY_SECONDS = 3600;
 /** The dispatcher set of FS nodes: `ds_select_dst(1, ...)` in `opensips.cfg.template`. */
 export const FS_DISPATCHER_SET = 1;
 
-export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
+export function createOpenSipsProjectionRepo(
+  db: Database<OpenSipsDb>,
+  options: {
+    /**
+     * S4-06: the edge pair's sharing tag (`vip/1`), on every trunk registration, so only the
+     * active edge sends its REGISTERs. Null for a single edge.
+     */
+    readonly clusterShtag?: string | null;
+  } = {},
+) {
   const k: Kysely<OpenSipsDb> = db.kysely;
+  const clusterShtag = options.clusterShtag ?? null;
 
   return {
     /**
@@ -317,15 +327,34 @@ export function createOpenSipsProjectionRepo(db: Database<OpenSipsDb>) {
           binding_params: null,
           expiry: REGISTRANT_EXPIRY_SECONDS,
           forced_socket: null,
-          cluster_shtag: null,
+          cluster_shtag: clusterShtag,
           state: 0,
         })
         .onDuplicateKeyUpdate({
           username: registrant.username,
           password: registrant.password,
           expiry: REGISTRANT_EXPIRY_SECONDS,
+          cluster_shtag: clusterShtag,
         })
         .execute();
+    },
+
+    /**
+     * S4-06: puts the configured sharing tag on every trunk registration that lacks it (rows
+     * written before the edge pair, or by a single edge). Returns how many changed, so the caller
+     * reloads the registrations only then.
+     */
+    async alignRegistrantShtags(): Promise<number> {
+      const result = await k
+        .updateTable('registrant')
+        .set({ cluster_shtag: clusterShtag })
+        .where((eb) =>
+          clusterShtag === null
+            ? eb('cluster_shtag', 'is not', null)
+            : eb.or([eb('cluster_shtag', 'is', null), eb('cluster_shtag', '!=', clusterShtag)]),
+        )
+        .executeTakeFirst();
+      return Number(result.numUpdatedRows);
     },
 
     async deleteRegistrant(aor: string, registrar: string, bindingUri: string): Promise<void> {

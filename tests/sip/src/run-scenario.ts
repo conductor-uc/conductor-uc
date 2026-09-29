@@ -69,6 +69,8 @@ function envOr(name: string, fallback: string): string {
 export interface SipTestEnv {
   readonly network: string;
   readonly opensipsContainer: string;
+  /** S4-06: every edge of the pair; MI goes to the active one ({@link activeOpensipsContainer}). */
+  readonly opensipsContainers: readonly string[];
   readonly opensipsTarget: string;
   readonly sippImage: string;
   readonly freeswitchContainer: string;
@@ -92,7 +94,13 @@ export function sipTestEnv(): SipTestEnv {
     opensipsContainer: envOr('SIP_TEST_OPENSIPS_CONTAINER', 'conductor-uc-opensips-1'),
     // The compose *service* name, not the container name — resolvable from
     // any container on the network regardless of compose project prefix.
-    opensipsTarget: envOr('SIP_TEST_OPENSIPS_TARGET', 'opensips:5060'),
+    // S4-06: the edge pair's floating address (compose's OPENSIPS_VIP), which keepalived moves
+    // to whichever edge is alive; the edges' own names reach one edge only.
+    opensipsTarget: envOr('SIP_TEST_OPENSIPS_TARGET', '172.18.255.10:5060'),
+    opensipsContainers: envOr(
+      'SIP_TEST_OPENSIPS_CONTAINERS',
+      'conductor-uc-opensips-1,conductor-uc-opensips-2-1',
+    ).split(','),
     sippImage: envOr('SIP_TEST_SIPP_IMAGE', 'ctaloi/sipp'),
     freeswitchContainer,
     freeswitchContainers: envOr(
@@ -562,10 +570,14 @@ export function internalServiceHeaders(): Record<string, string> {
  * prior run (same AOR) can make a fresh REGISTER fail with "Invalid CSeq
  * number". Call this before registering an AOR a test is about to use. */
 export async function clearRegistration(aor: string): Promise<void> {
-  const env = sipTestEnv();
-  await execFileAsync('docker', [
+  await opensipsMi('ul_rm', 'location', aor);
+}
+
+/** One MI command on one edge's container, answered as its raw output. */
+async function miOn(container: string, command: string, args: readonly string[]): Promise<string> {
+  const { stdout } = await execFileAsync('docker', [
     'exec',
-    env.opensipsContainer,
+    container,
     'opensips-cli',
     '-o',
     'communication_type=http',
@@ -573,18 +585,37 @@ export async function clearRegistration(aor: string): Promise<void> {
     'url=http://127.0.0.1:8888/mi',
     '-x',
     'mi',
-    'ul_rm',
-    'location',
-    aor,
+    command,
+    ...args,
   ]);
+  return stdout;
 }
 
-/** `docker exec`s a real MI command — the same `opensips-cli -x mi` shape {@link clearRegistration} already establishes. */
-export async function opensipsMi(command: string, ...args: readonly string[]): Promise<void> {
+/**
+ * S4-06: the edge holding the sharing tag `vip` active, the one that routes, registers trunks
+ * and probes media nodes; the first edge when none says so (or there is only one).
+ */
+export async function activeOpensipsContainer(): Promise<string> {
   const env = sipTestEnv();
+  for (const container of env.opensipsContainers) {
+    try {
+      const tags = JSON.parse(await miOn(container, 'clusterer_list_shtags', [])) as {
+        Tag?: string;
+        State?: string;
+      }[];
+      if (tags.some((tag) => tag.Tag === 'vip' && tag.State === 'active')) return container;
+    } catch {
+      // Down, or not clustered.
+    }
+  }
+  return env.opensipsContainers[0] ?? env.opensipsContainer;
+}
+
+/** `docker exec`s a real MI command on the active edge — the same `opensips-cli -x mi` shape {@link clearRegistration} already establishes. */
+export async function opensipsMi(command: string, ...args: readonly string[]): Promise<void> {
   await execFileAsync('docker', [
     'exec',
-    env.opensipsContainer,
+    await activeOpensipsContainer(),
     'opensips-cli',
     '-o',
     'communication_type=http',
@@ -610,10 +641,9 @@ export async function opensipsMiJson(
   command: string,
   ...args: readonly string[]
 ): Promise<unknown> {
-  const env = sipTestEnv();
   const { stdout } = await execFileAsync('docker', [
     'exec',
-    env.opensipsContainer,
+    await activeOpensipsContainer(),
     'opensips-cli',
     '-o',
     'communication_type=http',

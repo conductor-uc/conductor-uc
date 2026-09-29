@@ -180,7 +180,11 @@ export function createReconciler(
         registrantsRemoved += 1;
       }
     }
-    if (registrantsAdded + registrantsRemoved > 0) await mi.call('reg_reload');
+    // S4-06: every registration carries the edge pair's sharing tag (or none, for one edge).
+    const registrantsRetagged = await opensips.alignRegistrantShtags();
+    if (registrantsAdded + registrantsRemoved + registrantsRetagged > 0) {
+      await mi.call('reg_reload');
+    }
 
     // Trunks with IPs (ip/both mode) -> `address` (S2-02).
     const addressTrunkIds = new Set(

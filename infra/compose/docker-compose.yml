@@ -338,12 +338,48 @@ services:
       OPENSIPS_TLS_ENABLED: ${OPENSIPS_TLS_ENABLED:-true}
       OPENSIPS_TLS_DEV_SELF_SIGNED: ${OPENSIPS_TLS_DEV_SELF_SIGNED:-true}
       OPENSIPS_TLS_DEV_NAMES: ${OPENSIPS_TLS_DEV_NAMES:-platform.test,*.platform.test}
+      # S4-06 (04 §2, D-017): the edge pair. Both edges answer on the floating
+      # address, which keepalived (in each container) holds on one of them;
+      # phones, carriers and the media nodes use only that address. Each edge
+      # also keeps its own address, and this one publishes the host ports.
+      OPENSIPS_VIP: ${OPENSIPS_VIP:-172.18.255.10}
+      OPENSIPS_VIP_PREFIX: '16'
+      OPENSIPS_KEEPALIVED: 'true'
+      OPENSIPS_OWN_IP: ${OPENSIPS_1_IP:-172.18.255.11}
+      OPENSIPS_NODE_ID: '1'
+      OPENSIPS_SEED: 'true'
+      OPENSIPS_PEER_NODE_ID: '2'
+      OPENSIPS_PEER_IP: ${OPENSIPS_2_IP:-172.18.255.12}
+      KEEPALIVED_PRIORITY: '110'
+    cap_add: [NET_ADMIN]
+    sysctls:
+      net.ipv4.ip_nonlocal_bind: 1
+    networks:
+      default:
+        ipv4_address: ${OPENSIPS_1_IP:-172.18.255.11}
     volumes:
       - opensips-tls:/etc/opensips/tls
     ports:
       - '${OPENSIPS_SIP_PORT:-5060}:5060/udp'
       - '${OPENSIPS_SIP_PORT:-5060}:5060/tcp'
       - '${OPENSIPS_TLS_PORT:-5061}:5061/tcp'
+
+  opensips-2:
+    # S4-06: the second edge. Same image and settings; its own node id and
+    # address, and no host ports (the host's reach the first edge's address).
+    extends:
+      service: opensips
+    environment:
+      OPENSIPS_OWN_IP: ${OPENSIPS_2_IP:-172.18.255.12}
+      OPENSIPS_NODE_ID: '2'
+      OPENSIPS_SEED: 'false'
+      OPENSIPS_PEER_NODE_ID: '1'
+      OPENSIPS_PEER_IP: ${OPENSIPS_1_IP:-172.18.255.11}
+      KEEPALIVED_PRIORITY: '100'
+    networks:
+      default:
+        ipv4_address: ${OPENSIPS_2_IP:-172.18.255.12}
+    ports: !reset []
 
   org-service:
     # S1-14: the first Node service to run in this stack. Its image also
@@ -524,8 +560,11 @@ services:
       OPENSIPS_DB_USER: opensips
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
       OPENSIPS_DB_NAME: opensips
-      OPENSIPS_MI_URL: http://opensips:${OPENSIPS_MI_PORT:-8888}/mi
-      OPENSIPS_SIP_URI: opensips:${OPENSIPS_SIP_PORT:-5060}
+      # S4-06: both edges; reloads go to each, and the rest to the active one.
+      OPENSIPS_MI_URL: http://opensips:${OPENSIPS_MI_PORT:-8888}/mi,http://opensips-2:${OPENSIPS_MI_PORT:-8888}/mi
+      # The edge pair's floating address (S4-06).
+      OPENSIPS_SIP_URI: ${OPENSIPS_VIP:-172.18.255.10}:${OPENSIPS_SIP_PORT:-5060}
+      OPENSIPS_CLUSTER_SHTAG: vip/1
       PBX_CONFIG_SERVICE_URL: http://pbx-config-service:8080
       TRUNK_SERVICE_URL: http://trunk-service:8080
       STORAGE_BUCKET_PREFIX: cuc-dev
@@ -668,7 +707,7 @@ services:
       # OpenSIPs like any call to a phone (the same address as telephony-config's
       # OPENSIPS_SIP_URI), under the tenant's SIP domain from org-service.
       ORG_SERVICE_URL: http://org-service:8080
-      OPENSIPS_SIP_URI: opensips:${OPENSIPS_SIP_PORT:-5060}
+      OPENSIPS_SIP_URI: ${OPENSIPS_VIP:-172.18.255.10}:${OPENSIPS_SIP_PORT:-5060}
     healthcheck: *node-healthcheck
 
   call-control-2:
@@ -975,6 +1014,16 @@ services:
       CONSOLE_LINK_SCHEME: ${CONSOLE_LINK_SCHEME:-http}
       CONSOLE_URL_OVERRIDE: ${CONSOLE_URL_OVERRIDE:-}
     healthcheck: *node-healthcheck
+
+# S4-06: a fixed subnet, so the edge pair's addresses and their floating
+# address are known in advance. Containers without a fixed address are given
+# one from the lower half; the fixed ones sit at the top.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${CUC_SUBNET:-172.18.0.0/16}
+          ip_range: ${CUC_DYNAMIC_RANGE:-172.18.0.0/17}
 
 volumes:
   # The node spool recordings are written to before upload (S5-03). tmpfs-backed, so it is
