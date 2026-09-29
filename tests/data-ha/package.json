@@ -1,0 +1,35 @@
+{
+  "name": "@cuc/tests-data-ha",
+  "version": "0.0.0",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@cuc/db": "workspace:*",
+    "@cuc/events": "workspace:*",
+    "@cuc/testing": "workspace:*",
+    "ioredis": "^5.9.0",
+    "kysely": "^0.29.5"
+  },
+  "devDependencies": {
+    "@cuc/call-control": "workspace:*",
+    "@cuc/callflow-service": "workspace:*",
+    "@cuc/cdr-service": "workspace:*",
+    "@cuc/identity-service": "workspace:*",
+    "@cuc/media-worker": "workspace:*",
+    "@cuc/notification-service": "workspace:*",
+    "@cuc/org-service": "workspace:*",
+    "@cuc/pbx-config-service": "workspace:*",
+    "@cuc/recording-service": "workspace:*",
+    "@cuc/telephony-config": "workspace:*",
+    "@cuc/trunk-service": "workspace:*",
+    "@cuc/voicemail-service": "workspace:*",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

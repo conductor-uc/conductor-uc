@@ -10,6 +10,7 @@ import * as tokenAtSend from './006_token_at_send.js';
 import * as platformSecuritySettings from './007_platform_security_settings.js';
 import * as invitationExtension from './008_invitation_extension.js';
 import * as apiKeys from './009_api_keys.js';
+import * as rolePrimaryKeys from './010_role_primary_keys.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -31,4 +32,5 @@ export const migrations: Record<string, Migration> = {
   '007_platform_security_settings': platformSecuritySettings,
   '008_invitation_extension': invitationExtension,
   '009_api_keys': apiKeys,
+  '010_role_primary_keys': rolePrimaryKeys,
 };
