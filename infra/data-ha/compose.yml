@@ -1,0 +1,150 @@
+# S4-07 (10 §4, D-016, D-017): the highly available data tier, as its own
+# project so it can be run and failed over apart from the everyday dev stack:
+#
+#   docker compose -f infra/data-ha/compose.yml -p cuc-data-ha up -d --build
+#
+# - MariaDB: a three-member Galera cluster, one writer at a time.
+# - Redis: a primary, two replicas and three sentinels.
+# - NATS: a three-member JetStream cluster; services set NATS_STREAM_REPLICAS=3.
+# - HAProxy: the one address services use for the MariaDB writer and the Redis
+#   primary (127.0.0.1:13306 and :16379 here; stats on :18404).
+#
+# tests/data-ha fails each over. S4-11 turns this into the data servers'
+# production manifests.
+name: cuc-data-ha
+
+x-galera: &galera
+  build: ./galera
+  restart: unless-stopped
+  environment: &galera-env
+    MARIADB_ROOT_PASSWORD: ${HA_DB_ROOT_PASSWORD:-dev-root-password}
+    GALERA_PEERS: galera-1,galera-2,galera-3
+  healthcheck:
+    test: ['CMD', 'healthcheck.sh', '--connect', '--galera_online']
+    interval: 3s
+    timeout: 3s
+    retries: 40
+    start_period: 30s
+
+x-redis: &redis
+  image: redis:7-alpine
+  restart: unless-stopped
+  entrypoint: ['/bin/sh', '/redis-start.sh']
+  environment: &redis-env
+    REDIS_BOOTSTRAP_PRIMARY: redis-1
+    REDIS_SENTINELS: sentinel-1,sentinel-2,sentinel-3
+  volumes:
+    - ./redis/redis-start.sh:/redis-start.sh:ro
+
+x-sentinel: &sentinel
+  image: redis:7-alpine
+  restart: unless-stopped
+  entrypoint: ['/bin/sh', '/sentinel-start.sh']
+  environment:
+    REDIS_BOOTSTRAP_PRIMARY: redis-1
+    REDIS_SENTINELS: sentinel-1,sentinel-2,sentinel-3
+  volumes:
+    - ./redis/sentinel-start.sh:/sentinel-start.sh:ro
+
+x-nats: &nats
+  image: nats:2.10-alpine
+  restart: unless-stopped
+
+services:
+  galera-1:
+    <<: *galera
+    hostname: galera-1
+    environment:
+      <<: *galera-env
+      GALERA_BOOTSTRAP: 'true'
+    volumes:
+      - galera-1:/var/lib/mysql
+      - ./galera/init:/docker-entrypoint-initdb.d:ro
+  galera-2:
+    <<: *galera
+    hostname: galera-2
+    volumes:
+      - galera-2:/var/lib/mysql
+  galera-3:
+    <<: *galera
+    hostname: galera-3
+    volumes:
+      - galera-3:/var/lib/mysql
+
+  redis-1:
+    <<: *redis
+    hostname: redis-1
+  redis-2:
+    <<: *redis
+    hostname: redis-2
+  redis-3:
+    <<: *redis
+    hostname: redis-3
+  sentinel-1:
+    <<: *sentinel
+    hostname: sentinel-1
+  sentinel-2:
+    <<: *sentinel
+    hostname: sentinel-2
+  sentinel-3:
+    <<: *sentinel
+    hostname: sentinel-3
+
+  nats-1:
+    <<: *nats
+    hostname: nats-1
+    command:
+      - --jetstream
+      - --store_dir=/data
+      - --server_name=nats-1
+      - --cluster_name=cuc
+      - --cluster=nats://0.0.0.0:6222
+      - --routes=nats://nats-1:6222,nats://nats-2:6222,nats://nats-3:6222
+      - --http_port=8222
+    ports: ['14222:4222']
+    volumes: [nats-1:/data]
+  nats-2:
+    <<: *nats
+    hostname: nats-2
+    command:
+      - --jetstream
+      - --store_dir=/data
+      - --server_name=nats-2
+      - --cluster_name=cuc
+      - --cluster=nats://0.0.0.0:6222
+      - --routes=nats://nats-1:6222,nats://nats-2:6222,nats://nats-3:6222
+      - --http_port=8222
+    ports: ['14223:4222']
+    volumes: [nats-2:/data]
+  nats-3:
+    <<: *nats
+    hostname: nats-3
+    command:
+      - --jetstream
+      - --store_dir=/data
+      - --server_name=nats-3
+      - --cluster_name=cuc
+      - --cluster=nats://0.0.0.0:6222
+      - --routes=nats://nats-1:6222,nats://nats-2:6222,nats://nats-3:6222
+      - --http_port=8222
+    ports: ['14224:4222']
+    volumes: [nats-3:/data]
+
+  haproxy:
+    build: ./haproxy
+    restart: unless-stopped
+    environment:
+      GALERA_CHECK_USER: monitor
+      GALERA_CHECK_PASSWORD: dev-monitor-password
+    ports:
+      - '13306:3306'
+      - '16379:6379'
+      - '18404:8404'
+
+volumes:
+  galera-1:
+  galera-2:
+  galera-3:
+  nats-1:
+  nats-2:
+  nats-3:

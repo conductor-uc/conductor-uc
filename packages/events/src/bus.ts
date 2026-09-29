@@ -45,6 +45,11 @@ export interface BusOptions {
    * {@link DEFAULT_STREAM_MAX_AGE_DAYS}.
    */
   readonly streamMaxAgeDays?: number;
+  /**
+   * S4-07: copies of every stream `ensureStreams()` makes or updates (`NATS_STREAM_REPLICAS`):
+   * 3 on a three-member cluster. An existing stream is scaled to it. Defaults to 1.
+   */
+  readonly streamReplicas?: number;
 }
 
 export interface Bus {
@@ -67,6 +72,10 @@ export interface Bus {
 export async function connectBus(options: BusOptions): Promise<Bus> {
   const { logger } = options;
   const maxAgeDays = options.streamMaxAgeDays ?? DEFAULT_STREAM_MAX_AGE_DAYS;
+  const replicas = options.streamReplicas ?? 1;
+  if (!Number.isInteger(replicas) || replicas < 1) {
+    throw new Error('streamReplicas must be a whole number, 1 or more.');
+  }
   if (!Number.isInteger(maxAgeDays) || maxAgeDays < 0) {
     throw new Error('streamMaxAgeDays must be a whole number of days, 0 or more.');
   }
@@ -109,10 +118,13 @@ export async function connectBus(options: BusOptions): Promise<Bus> {
           // `max_age` to change on a live stream, and a shorter one removes the
           // older messages at once.
           max_age: maxAgeDays * NANOS_PER_DAY,
+          // S4-07: a stream on a cluster keeps this many copies; JetStream scales an existing
+          // stream up or down through the update below.
+          num_replicas: replicas,
         };
         try {
           await jsm.streams.add(config);
-          logger.info({ stream: stream.name, maxAgeDays }, 'stream created');
+          logger.info({ stream: stream.name, maxAgeDays, replicas }, 'stream created');
         } catch (error) {
           // Already present: bring its config up to date rather than failing
           // startup, so adding a domain or changing the age limit does not

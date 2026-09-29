@@ -33,6 +33,13 @@ export const eventsEnvSchema = Type.Object({
     description:
       'Published outbox rows older than this many days are deleted by the relay (G-55). 0 keeps them.',
   }),
+  NATS_STREAM_REPLICAS: Env.int({
+    minimum: 1,
+    maximum: 5,
+    default: 1,
+    description:
+      'Copies of every JetStream stream (S4-07): 3 on a three-member cluster, so a stream survives the loss of one; 1 on a single server. Set the same value in every service.',
+  }),
   NATS_STREAM_MAX_AGE_DAYS: Env.int({
     minimum: 0,
     maximum: 3650,

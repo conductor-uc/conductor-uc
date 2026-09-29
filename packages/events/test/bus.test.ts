@@ -78,4 +78,18 @@ describe.skipIf(skipReason !== undefined)('stream age limit (G-55)', () => {
     await expect(bus(-1)).rejects.toThrow(/whole number of days/);
     await expect(bus(1.5)).rejects.toThrow(/whole number of days/);
   });
+
+  it('S4-07: gives every stream the configured copies (one on a single server), and refuses fewer than one', async () => {
+    const opened = await bus();
+    await opened.ensureStreams();
+    expect((await opened.jsm.streams.info('CALL')).config.num_replicas).toBe(1);
+    await expect(
+      connectBus({
+        servers: [nats.server],
+        logger: silentLogger(),
+        name: 'bus-test',
+        streamReplicas: 0,
+      }),
+    ).rejects.toThrow(/whole number, 1 or more/);
+  });
 });

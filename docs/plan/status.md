@@ -12,14 +12,14 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
-| S4 HA and scale (11) | 7 | 0 | 4 |
+| S4 HA and scale (11) | 8 | 0 | 3 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **79** | **9** | **39** |
+| **Total (127)** | **80** | **9** | **38** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -113,7 +113,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S4-04 | Done | Node death (04 §4): call-control's watcher announces each leg as `call.lost` and clears it, releases the node's leases; telephony-config ends each leg's dialog at the edge by Call-ID; cdr-service writes `node_failure` records; the live views drop the calls (live: both parties sent a BYE about 10.7 s after the node was killed). Redis loss (04 §5): a registry epoch; one replica rebuilds every live call from the nodes (`show channels`, `uuid_dump`), each replica restores the leases it renews (live: the call back 0.6 s after its keys were deleted). The 10 nodes × 1,000 calls target is for S4-09's benchmarks |
 | S4-05 | Done | G-128: a call to a queue, parking lot or conference room leased to another node is hairpinned there through OpenSIPs (`X-Affinity-Node`/`-Target`/`-Tenant`, trusted only from a media node), by `/fs/dialplan` for DIDs and internal dials and by the flow runner's queue node; the owning node serves it directly, never passes it on, and keeps no second call record. OpenSIPs does not read the lease (`cachedb_redis` stays unused). Fixed on the way: a node that came back and died again within 60 s was not handled the second time (S4-04's claim now clears on heartbeat). Confirmed live on two nodes: queue callers and conference callers reaching the resource's node from the other one, one record per call, a phone's forged headers ignored, and the next caller re-leasing on the surviving node after the owner is killed. Caveats: `*8` pickup across nodes is still a miss; the owner accepts G-128 |
 | S4-06 | Done | Two edges (`opensips`, `opensips-2`) behind a floating address moved by keepalived: `clusterer` over `bin`, the sharing tag `vip/1` on the address holder (trunk registration with `cluster_shtag`, dispatcher probing `by-shtag`, NAT pings, dialog actions), `usrloc` full sharing, dialog replication; telephony-config reloads both edges and asks the active one. Compose pins its subnet (172.18.0.0/16) for the fixed addresses. Confirmed live both ways: the call kept, the new edge active in under 4 s, a phone registered only with the dead edge reached, registrations copied back to the restarted edge. Caveats: the operations console shows the active edge only; exactly two edges |
-| S4-07 | Not started | compose has single MariaDB, Redis, NATS |
+| S4-07 | Done | `infra/data-ha`: Galera (3, one writer through HAProxy, checked Synced), Redis with Sentinel (HAProxy follows `role:master`; a returning primary rejoins as a replica), NATS cluster (3) with `NATS_STREAM_REPLICAS` in every service; identity's role tables get primary keys (migration 010). `tests/data-ha` fails each over live with writes going on (MariaDB 6.1–6.4 s, Redis 8.2 s, NATS 5.7–6.7 s, nothing acknowledged lost) and runs every service's migrations on Galera. Caveats: one HAProxy (the keepalived pair and the data servers' manifests are S4-11); the everyday dev stack keeps single servers |
 | S4-08 | Not started | no chaos tests |
 | S4-09 | Not started | no capacity benchmarks or sizing guide (`telephony-config/src/bench.ts` is unrelated) |
 | S4-10 | Partial | O-7 recorded as deferred in decisions.md; no RTPengine |

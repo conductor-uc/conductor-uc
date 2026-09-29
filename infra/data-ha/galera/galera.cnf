@@ -1,0 +1,10 @@
+# S4-07 (D-016): three members, one writer at a time (through the internal load
+# balancer), row-based replication.
+[mariadb]
+binlog_format = ROW
+default_storage_engine = InnoDB
+innodb_autoinc_lock_mode = 2
+wsrep_on = ON
+wsrep_provider = /usr/lib/galera/libgalera_smm.so
+wsrep_cluster_name = cuc
+wsrep_sst_method = mariabackup
