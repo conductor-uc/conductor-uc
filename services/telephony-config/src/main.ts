@@ -148,7 +148,16 @@ const recordingClient = createRecordingClient({
 // same `lazyConnect: false`/`maxRetriesPerRequest` shape api-gateway's own
 // rate-limiter client uses, so this fails fast at startup rather than
 // retrying forever silently.
-const redisClient = new Redis(config.REDIS_URL, { lazyConnect: false, maxRetriesPerRequest: 2 });
+const redisClient = new Redis(config.REDIS_URL, {
+  lazyConnect: false,
+  maxRetriesPerRequest: 2,
+  // S4-11: a connection whose far end vanished without a reset (a load
+  // balancer or Redis server killed, its floating address moved) never
+  // answers; without this the client waits on it forever. With it, a command
+  // left unanswered for 3 s drops the socket and reconnects.
+  socketTimeout: 3_000,
+  keepAlive: 10_000,
+});
 // S2-12: a direct read of call-control's own affinity-lease keys — see
 // `fs.routes.ts`'s own doc comment on why this is a shared-Redis read
 // rather than an HTTP call to call-control.

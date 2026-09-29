@@ -118,6 +118,17 @@ describe.skipIf(skipReason !== undefined)('S4-10 media survives an edge failover
     for (const number of ['801', '802']) await clearRegistration(`${number}@${fqdn}`);
     const active = await activeOpensipsContainer();
     const survivor = sipTestEnv().opensipsContainers.find((c) => c !== active)!;
+    // Start from empty relays: a call that just ended elsewhere keeps its sessions for the
+    // relays' 5 s delete delay.
+    await expect
+      .poll(
+        async () => {
+          const [a, b] = await Promise.all([relay(active), relay(survivor)]);
+          return a.own + a.foreign + b.own + b.foreign;
+        },
+        { timeout: 20_000, interval: 500 },
+      )
+      .toBe(0);
 
     const person = startUas({
       au: '802',

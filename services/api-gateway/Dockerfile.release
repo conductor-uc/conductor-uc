@@ -1,0 +1,8 @@
+# O-5 / S4-11: the released gateway image, with the console in it. The release
+# workflow builds the gateway (Dockerfile, as BASE) and the console
+# (`flutter build web`, this build's context), then this. The gateway serves
+# /console by default (CONSOLE_DIR).
+ARG BASE
+FROM ${BASE}
+COPY --chown=nonroot:nonroot . /console
+ENV CONSOLE_DIR=/console

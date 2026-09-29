@@ -83,8 +83,9 @@ services:
       # waiting for an operator as infra/data-ha does. It still joins when one
       # does, as after the chaos suite kills it.
       GALERA_FORCE_BOOTSTRAP: 'true'
-      # 01-schemas.sh provisions one schema and user per service, as on the
-      # everyday `mariadb`; the members copy them from this one.
+      # The image's initdb scripts (01-schemas.sh) provision one schema and
+      # user per service, as on the everyday `mariadb`, from these passwords;
+      # the members copy them from this one.
       IDENTITY_SERVICE_DB_PASSWORD: ${IDENTITY_SERVICE_DB_PASSWORD:-dev-identity-password}
       ORG_SERVICE_DB_PASSWORD: ${ORG_SERVICE_DB_PASSWORD:-dev-org-password}
       PBX_CONFIG_SERVICE_DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD:-dev-pbx-config-password}
@@ -101,10 +102,6 @@ services:
       OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD:-dev-opensips-password}
     volumes: !override
       - galera-1:/var/lib/mysql
-      - ../data-ha/galera/init/01-monitor.sql:/docker-entrypoint-initdb.d/00-monitor.sql:ro
-      - ./mariadb/init/01-schemas.sh:/docker-entrypoint-initdb.d/01-schemas.sh:ro
-      - ./mariadb/init/02-opensips-schema.sh:/docker-entrypoint-initdb.d/02-opensips-schema.sh:ro
-      - ../../telephony/opensips/db-schema:/opensips-schema:ro
   galera-2:
     extends:
       file: ../data-ha/compose.yml

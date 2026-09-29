@@ -1,0 +1,70 @@
+# S4-11: a media server (as many as the call load needs). FreeSWITCH on host
+# networking, reached only on the private network: SIP from the edges, RTP from
+# the edges' media relay (S4-10), its event socket from the app servers. The
+# recording uploader moves finished recordings and voicemail messages from the
+# spool to the recording and voicemail services.
+#
+#   docker compose --env-file ../platform.env --env-file .env up -d
+#
+# .env (this server only): SELF_IP, MEDIA_NODE_ID (its id in MEDIA_DISPATCHER
+# and MEDIA_EVENT_SOCKETS, e.g. fs1). See README.md.
+name: voice-media
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: '50m', max-file: '5' }
+
+volumes:
+  # FreeSWITCH writes recordings and voicemail messages here (as root); the
+  # uploader (uid 65532) uploads and deletes them. tmpfs: nothing durable on
+  # the media server. 0777, not 1777.
+  recording-spool:
+    driver: local
+    driver_opts: { type: tmpfs, device: tmpfs, o: 'size=2g,mode=0777' }
+
+services:
+  freeswitch:
+    image: ${IMAGE_REGISTRY}/freeswitch:${RELEASE}
+    restart: unless-stopped
+    network_mode: host
+    logging: *logging
+    environment:
+      FS_NODE_ID: ${MEDIA_NODE_ID}
+      FS_SIP_PORT: '5080'
+      # SIP only from the edges: their private addresses, and the pair's
+      # floating address they send from.
+      FS_OPENSIPS_CIDR: ${PRIVATE_CIDR}
+      FS_OPENSIPS_VIP_CIDR: ${EDGE_VIP}/32
+      FS_CLUSTER_CIDR: ${PRIVATE_CIDR} # call-control's event sockets
+      FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD}
+      TELEPHONY_CONFIG_URL: http://${APP_VIP}:8109
+      FS_XML_CURL_TOKEN: ${FS_XML_CURL_TOKEN}
+      CDR_SERVICE_URL: http://${APP_VIP}:8108
+      FS_CDR_INGEST_TOKEN: ${FS_CDR_INGEST_TOKEN}
+      FS_REDIS_HOST: ${APP_VIP}
+      FS_REDIS_PORT: '6379'
+      FS_RTP_START_PORT: '16384'
+      FS_RTP_END_PORT: '32768'
+      FS_SIP_IDENTITY: ${SIP_IDENTITY}
+      FS_SDP_IDENTITY: SIP-Media-Server
+      FS_LOG_LEVEL: info
+    volumes:
+      - recording-spool:/var/spool/cuc/rec
+    tmpfs:
+      - /var/cache/cuc/flow
+      - /var/cache/cuc/http
+
+  recording-uploader:
+    image: ${IMAGE_REGISTRY}/recording-service:${RELEASE}
+    restart: unless-stopped
+    logging: *logging
+    command: ['dist/src/uploader/main.js']
+    ports: ['${SELF_IP}:9464:9464'] # health and metrics
+    volumes:
+      - recording-spool:/var/spool/cuc/rec
+    environment:
+      SERVICE_NAME: recording-uploader-${MEDIA_NODE_ID}
+      RECORDING_SERVICE_URL: http://${APP_VIP}:8107
+      VOICEMAIL_SERVICE_URL: http://${APP_VIP}:8106
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN}
+      SPOOL_DIR: /var/spool/cuc/rec

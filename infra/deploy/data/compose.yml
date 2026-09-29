@@ -1,0 +1,129 @@
+# S4-11: a data server (three of them: data-1, data-2, data-3). One Galera
+# member, one member of the Redis group with its sentinel, one NATS member; all
+# on host networking, each on this server's private address (SELF_IP). The app
+# servers' load balancer is the one address services use for the MariaDB
+# writer and the Redis primary; NATS clients list all three members.
+#
+#   docker compose --env-file ../platform.env --env-file .env up -d
+#   (data-1 also: --profile prometheus)
+#
+# .env (this server only): SELF_IP, DATA_NODE_NAME (data-1...), and on data-1
+# GALERA_BOOTSTRAP=true. See README.md.
+name: voice-data
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: '50m', max-file: '5' }
+
+services:
+  galera:
+    image: ${IMAGE_REGISTRY}/galera:${RELEASE}
+    restart: unless-stopped
+    network_mode: host
+    logging: *logging
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      GALERA_MONITOR_PASSWORD: ${GALERA_MONITOR_PASSWORD}
+      GALERA_PEERS: ${DATA1_IP},${DATA2_IP},${DATA3_IP}
+      GALERA_NODE_NAME: ${DATA_NODE_NAME}
+      GALERA_NODE_ADDRESS: ${SELF_IP}
+      # data-1 starts a new cluster on its first start (an empty data
+      # directory); every other start joins. After a whole-cluster stop, see
+      # README.md ("Restarting the whole data tier").
+      GALERA_BOOTSTRAP: ${GALERA_BOOTSTRAP:-false}
+      # Each service's schema and user (the image's initdb scripts), created
+      # once by data-1 and copied to the others.
+      IDENTITY_SERVICE_DB_PASSWORD: ${IDENTITY_SERVICE_DB_PASSWORD}
+      ORG_SERVICE_DB_PASSWORD: ${ORG_SERVICE_DB_PASSWORD}
+      PBX_CONFIG_SERVICE_DB_PASSWORD: ${PBX_CONFIG_SERVICE_DB_PASSWORD}
+      EXAMPLE_SERVICE_DB_PASSWORD: ${EXAMPLE_SERVICE_DB_PASSWORD}
+      TELEPHONY_CONFIG_SERVICE_DB_PASSWORD: ${TELEPHONY_CONFIG_SERVICE_DB_PASSWORD}
+      TRUNK_SERVICE_DB_PASSWORD: ${TRUNK_SERVICE_DB_PASSWORD}
+      MEDIA_WORKER_DB_PASSWORD: ${MEDIA_WORKER_DB_PASSWORD}
+      CALL_CONTROL_DB_PASSWORD: ${CALL_CONTROL_DB_PASSWORD}
+      CALLFLOW_SERVICE_DB_PASSWORD: ${CALLFLOW_SERVICE_DB_PASSWORD}
+      VOICEMAIL_SERVICE_DB_PASSWORD: ${VOICEMAIL_SERVICE_DB_PASSWORD}
+      CDR_SERVICE_DB_PASSWORD: ${CDR_SERVICE_DB_PASSWORD}
+      NOTIFICATION_SERVICE_DB_PASSWORD: ${NOTIFICATION_SERVICE_DB_PASSWORD}
+      RECORDING_SERVICE_DB_PASSWORD: ${RECORDING_SERVICE_DB_PASSWORD}
+      OPENSIPS_DB_PASSWORD: ${OPENSIPS_DB_PASSWORD}
+    command: ['--max-connections=500', '--bind-address=${SELF_IP}']
+    volumes:
+      - galera-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'galera-health.sh']
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 60s
+
+  redis:
+    image: ${IMAGE_REGISTRY}/redis-ha:${RELEASE}
+    restart: unless-stopped
+    network_mode: host
+    logging: *logging
+    entrypoint: ['redis-start.sh']
+    environment:
+      REDIS_BOOTSTRAP_PRIMARY: ${DATA1_IP}
+      REDIS_SENTINELS: ${DATA1_IP},${DATA2_IP},${DATA3_IP}
+      REDIS_SELF_IP: ${SELF_IP}
+    volumes:
+      - redis-data:/data
+
+  sentinel:
+    image: ${IMAGE_REGISTRY}/redis-ha:${RELEASE}
+    restart: unless-stopped
+    network_mode: host
+    logging: *logging
+    entrypoint: ['sentinel-start.sh']
+    environment:
+      REDIS_BOOTSTRAP_PRIMARY: ${DATA1_IP}
+      REDIS_SENTINELS: ${DATA1_IP},${DATA2_IP},${DATA3_IP}
+      SENTINEL_SELF_IP: ${SELF_IP}
+
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    network_mode: host
+    logging: *logging
+    command:
+      - --jetstream
+      - --store_dir=/data
+      - --server_name=${DATA_NODE_NAME}
+      - --addr=${SELF_IP}
+      - --user=${NATS_USER}
+      - --pass=${NATS_PASSWORD}
+      - --http_port=8222
+      - --cluster_name=voice
+      - --cluster=nats://${SELF_IP}:6222
+      - --routes=nats://${DATA1_IP}:6222,nats://${DATA2_IP}:6222,nats://${DATA3_IP}:6222
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      # Monitoring listens on the server's address (--addr), not loopback.
+      test: ['CMD', 'wget', '-qO-', 'http://${SELF_IP}:8222/healthz']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # The operations console's history (S4-13), on data-1 only.
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [prometheus]
+    restart: unless-stopped
+    network_mode: host
+    logging: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.listen-address=${SELF_IP}:9090
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+volumes:
+  galera-data:
+  redis-data:
+  nats-data:
+  prometheus-data:

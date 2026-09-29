@@ -63,6 +63,10 @@
        deployment that forgets to set this fails closed, not open. -->
   <X-PRE-PROCESS cmd="set" data="opensips_cidr=127.0.0.1/32"/>
   <X-PRE-PROCESS cmd="env-set" data="opensips_cidr=$FS_OPENSIPS_CIDR"/>
+  <!-- S4-11: a second address OpenSIPs reaches this node from: the edge
+       pair's floating address (`<address>/32`). Loopback when unset. -->
+  <X-PRE-PROCESS cmd="set" data="opensips_vip_cidr=127.0.0.1/32"/>
+  <X-PRE-PROCESS cmd="env-set" data="opensips_vip_cidr=$FS_OPENSIPS_VIP_CIDR"/>
 
   <!-- Gates the event socket (autoload_configs/acl.conf.xml's "cluster"
        list) — the private cluster/orchestrator network call-control (S2+)

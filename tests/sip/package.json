@@ -11,7 +11,8 @@
     "seed": "node dist/src/seed.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "chaos": "vitest run -c vitest.chaos.config.ts"
+    "chaos": "vitest run -c vitest.chaos.config.ts",
+    "rehearsal": "vitest run -c vitest.rehearsal.config.ts"
   },
   "dependencies": {
     "@cuc/crypto": "workspace:*",

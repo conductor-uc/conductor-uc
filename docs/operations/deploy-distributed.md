@@ -2,7 +2,7 @@
 
 Components spread over several servers: an edge, media servers, application servers and data servers, joined by a private network. Use this to separate what faces the internet from what holds data, to add media capacity, or to place media servers near users. Read [components](components.md), [network and firewall](network-and-firewall.md) and the [all-in-one guide](deploy-all-in-one.md) first: this guide reuses the all-in-one configuration and explains only what changes.
 
-> **Status.** A reference built from the code, **not verified end to end on real servers.** In particular the platform has **no high availability**: distributing it adds capacity and separation, not redundancy. Every server except the media servers is a single point of failure ([§8](#8-what-happens-when-a-server-fails)).
+> **Status.** A reference built from the code, **not verified end to end on real servers**, for a small layout with one server per role (plus media servers): it adds capacity and separation, not redundancy. **For the highly available layout (two edges, two app servers, three data servers) use the rehearsed role files in [`infra/deploy`](../../infra/deploy/README.md) (S4-11)** instead of adapting this guide.
 
 ## 1. Roles
 

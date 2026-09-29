@@ -16,6 +16,9 @@ export type ReadinessCheck = () => ReadinessResult | Promise<ReadinessResult>;
  */
 export type StatusSection = () => unknown;
 
+/** How long one readiness check may take before it counts as failed. */
+export const READINESS_CHECK_TIMEOUT_MS = 3_000;
+
 export interface HealthOptions {
   readonly serviceName: string;
   readonly serviceVersion: string;
@@ -41,21 +44,36 @@ export function registerHealthRoutes(app: Server, options: HealthOptions): void 
     sections.set(name, section);
   });
 
+  /**
+   * Runs every check at once, each with {@link READINESS_CHECK_TIMEOUT_MS}. S4-11: a dependency
+   * whose connection hangs (its far end vanished without a reset) made a check never settle, and
+   * with it `/readyz` and `/statusz`, so the load balancer saw a timeout rather than a failure and
+   * the operations console saw nothing. A check that takes too long now fails, and says so.
+   */
   async function runChecks(log: {
     error: (obj: object, msg: string) => void;
   }): Promise<Record<string, ReadinessResult>> {
-    const results: Record<string, ReadinessResult> = {};
-    for (const [name, check] of checks) {
-      try {
-        results[name] = await check();
-      } catch (error) {
-        // The thrown message may carry a DSN or credentials, so it is logged
-        // and not echoed to the caller.
-        log.error({ err: error, check: name }, 'readiness check threw');
-        results[name] = { status: 'fail' };
-      }
-    }
-    return results;
+    const entries = await Promise.all(
+      [...checks].map(async ([name, check]): Promise<[string, ReadinessResult]> => {
+        let timer: NodeJS.Timeout | undefined;
+        const timedOut = new Promise<ReadinessResult>((resolve) => {
+          timer = setTimeout(() => {
+            resolve({ status: 'fail', detail: 'timed out' });
+          }, READINESS_CHECK_TIMEOUT_MS);
+        });
+        try {
+          return [name, await Promise.race([Promise.resolve().then(check), timedOut])];
+        } catch (error) {
+          // The thrown message may carry a DSN or credentials, so it is logged
+          // and not echoed to the caller.
+          log.error({ err: error, check: name }, 'readiness check threw');
+          return [name, { status: 'fail' }];
+        } finally {
+          clearTimeout(timer);
+        }
+      }),
+    );
+    return Object.fromEntries(entries);
   }
 
   app.route({
