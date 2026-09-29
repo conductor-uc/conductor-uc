@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "seed": "node dist/src/seed.js",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "chaos": "vitest run -c vitest.chaos.config.ts"
   },
   "dependencies": {
     "@cuc/crypto": "workspace:*",

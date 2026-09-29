@@ -12,14 +12,14 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
-| S4 HA and scale (11) | 8 | 0 | 3 |
+| S4 HA and scale (11) | 9 | 0 | 2 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (127)** | **80** | **9** | **38** |
+| **Total (127)** | **81** | **9** | **37** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -114,7 +114,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S4-05 | Done | G-128: a call to a queue, parking lot or conference room leased to another node is hairpinned there through OpenSIPs (`X-Affinity-Node`/`-Target`/`-Tenant`, trusted only from a media node), by `/fs/dialplan` for DIDs and internal dials and by the flow runner's queue node; the owning node serves it directly, never passes it on, and keeps no second call record. OpenSIPs does not read the lease (`cachedb_redis` stays unused). Fixed on the way: a node that came back and died again within 60 s was not handled the second time (S4-04's claim now clears on heartbeat). Confirmed live on two nodes: queue callers and conference callers reaching the resource's node from the other one, one record per call, a phone's forged headers ignored, and the next caller re-leasing on the surviving node after the owner is killed. Caveats: `*8` pickup across nodes is still a miss; the owner accepts G-128 |
 | S4-06 | Done | Two edges (`opensips`, `opensips-2`) behind a floating address moved by keepalived: `clusterer` over `bin`, the sharing tag `vip/1` on the address holder (trunk registration with `cluster_shtag`, dispatcher probing `by-shtag`, NAT pings, dialog actions), `usrloc` full sharing, dialog replication; telephony-config reloads both edges and asks the active one. Compose pins its subnet (172.18.0.0/16) for the fixed addresses. Confirmed live both ways: the call kept, the new edge active in under 4 s, a phone registered only with the dead edge reached, registrations copied back to the restarted edge. Caveats: the operations console shows the active edge only; exactly two edges |
 | S4-07 | Done | `infra/data-ha`: Galera (3, one writer through HAProxy, checked Synced), Redis with Sentinel (HAProxy follows `role:master`; a returning primary rejoins as a replica), NATS cluster (3) with `NATS_STREAM_REPLICAS` in every service; identity's role tables get primary keys (migration 010). `tests/data-ha` fails each over live with writes going on (MariaDB 6.1–6.4 s, Redis 8.2 s, NATS 5.7–6.7 s, nothing acknowledged lost) and runs every service's migrations on Galera. Caveats: one HAProxy (the keepalived pair and the data servers' manifests are S4-11); the everyday dev stack keeps single servers |
-| S4-08 | Not started | no chaos tests |
+| S4-08 | Done | `tests/sip/chaos` (`pnpm chaos`), nightly CI job `chaos` after `sip`: on `docker-compose.chaos.yml` (the stack on S4-07's data tier, a second telephony-config), kills a media node, the active edge, a telephony-config, a call-control, the Redis primary and the MariaDB writer in turn under a call a second, and records failover and outage against 04 §4 / 10 §5 targets (`chaos-results/`, job summary). First run: every target met (failovers 3.4–8.6 s; new calls failing at most 4 s). Caveat: a run on the self-hosted runner only; no SIPp load beyond one call a second |
 | S4-09 | Not started | no capacity benchmarks or sizing guide (`telephony-config/src/bench.ts` is unrelated) |
 | S4-10 | Partial | O-7 recorded as deferred in decisions.md; no RTPengine |
 | S4-11 | Not started | `infra/deploy` empty |
@@ -244,7 +244,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 
 ## Ten biggest gaps
 
-1. No HA (S4-02 to S4-08): every server but the media nodes is a single point of failure; no failover handling (`call.lost`), OpenSIPs clustering, data-store HA, or chaos tests; only one dispatcher path over two nodes.
+1. HA is built and measured (S4-02 to S4-08) but not load-tested: capacity per node is unmeasured (S4-09), and the chaos suite runs at one call a second.
 2. No tested production deployment: the orchestrator ADR and HA topology exist (S4-01), but there are no manifests (S4-11, `infra/deploy` empty); the `docs/operations` guides are unverified on real servers; the release workflow and image publishing (O-5) are not built.
 3. Release readiness: no security review or penetration test; backup/restore and operations are documented (`docs/operations/operations.md`) but untested, with no failover drills; O-6 still needs a contributor licence agreement and counsel's confirmation.
 4. Queues need a hand-added tier: tier assignments are not loaded into `mod_callcenter` on a running node, so distribution to agents depends on it (G-47 (a), S2-13).

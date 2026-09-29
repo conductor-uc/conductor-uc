@@ -1,8 +1,9 @@
 # S4-07 (D-017): the internal load balancer in front of the data tier. The
-# MariaDB client is for the Galera health check (galera-check.sh).
+# MariaDB client is for the Galera health check (galera-check.sh); both
+# clients serve the container's own health check.
 FROM haproxy:2.8
 USER root
-RUN apt-get update && apt-get install -y --no-install-recommends mariadb-client && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends mariadb-client redis-tools && rm -rf /var/lib/apt/lists/*
 COPY haproxy.cfg /usr/local/etc/haproxy/haproxy.cfg
 COPY galera-check.sh /usr/local/bin/galera-check.sh
 COPY haproxy-start.sh /usr/local/bin/haproxy-start.sh

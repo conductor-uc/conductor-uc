@@ -351,6 +351,69 @@ jobs:
           docker rm -f sip-test-curl >/dev/null 2>&1 || true
           docker compose down -v
 
+  # S4-08: the chaos suite. The stack on the highly available data tier
+  # (docker-compose.chaos.yml), then each failure 10 §5 plans for, one at a
+  # time under call load, measured against its targets. Same runner and compose
+  # project as `sip`, so it runs after it rather than beside it.
+  chaos:
+    name: Chaos suite (S4-08)
+    needs: sip
+    if: always()
+    runs-on: self-hosted
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build tests/sip and its workspace dependencies
+        run: pnpm exec turbo run build --filter=@cuc/tests-sip...
+
+      - name: Build and start the chaos stack
+        working-directory: infra/compose
+        run: |
+          docker rm -f sip-test-curl >/dev/null 2>&1 || true
+          docker compose -f docker-compose.yml -f docker-compose.chaos.yml down -v --remove-orphans
+          docker compose -f docker-compose.yml -f docker-compose.chaos.yml build
+          docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d --wait --wait-timeout 400
+
+      - name: Run the chaos suite
+        working-directory: tests/sip
+        env:
+          REQUIRE_SIP_TESTS: '1'
+          # The test helpers that read a schema directly use a Galera member,
+          # not the load balancer the everyday `mariadb` name now points at.
+          SIP_TEST_MARIADB_CONTAINER: conductor-uc-galera-2-1
+        run: pnpm chaos --reporter=verbose
+
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-results
+          path: tests/sip/chaos-results/
+          if-no-files-found: ignore
+
+      - name: Show compose logs on failure
+        if: failure()
+        working-directory: infra/compose
+        run: docker compose -f docker-compose.yml -f docker-compose.chaos.yml logs
+
+      - name: Tear down the chaos stack
+        if: always()
+        working-directory: infra/compose
+        run: |
+          docker rm -f sip-test-curl chaos-load-caller chaos-load-callee >/dev/null 2>&1 || true
+          docker compose -f docker-compose.yml -f docker-compose.chaos.yml down -v --remove-orphans
+
   # The Flutter console (D-001): not a pnpm workspace member, so it has its own
   # job. brand-leak runs here, after `flutter build web`, because that is the
   # only place `apps/console/build/web` exists to be scanned.

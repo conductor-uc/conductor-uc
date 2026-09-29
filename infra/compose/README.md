@@ -162,6 +162,18 @@ the platform is set up. From then on the answer is
 `POST /v1/auth/mfa/enroll/confirm` with the ticket and a code finishes the
 sign-in. Reseller administrators always enrol.
 
+## The chaos environment (S4-08)
+
+`docker-compose.chaos.yml` runs the same stack on the highly available data tier (`infra/data-ha`: Galera, Redis with Sentinel) with a second telephony-config. `mariadb` and `redis` become the data tier's load balancer, so nothing else changes:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d --build --wait
+(cd ../../tests/sip && SIP_TEST_MARIADB_CONTAINER=conductor-uc-galera-2-1 REQUIRE_SIP_TESTS=1 pnpm chaos)
+docker compose up -d --remove-orphans   # back to the everyday stack and its own data
+```
+
+The chaos suite kills a media node, the active edge, a telephony-config, a call-control, the Redis primary and the MariaDB writer in turn under call load, and writes what it measured to `tests/sip/chaos-results/`. It runs nightly in CI (the `chaos` job).
+
 ## Troubleshooting
 
 - **A container never goes healthy.** `make logs` to see why, or

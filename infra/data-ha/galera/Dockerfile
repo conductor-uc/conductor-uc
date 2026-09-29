@@ -5,5 +5,6 @@ FROM mariadb:11.4
 RUN apt-get update && apt-get install -y --no-install-recommends socat && rm -rf /var/lib/apt/lists/*
 COPY galera.cnf /etc/mysql/conf.d/galera.cnf
 COPY galera-start.sh /usr/local/bin/galera-start.sh
-RUN chmod +x /usr/local/bin/galera-start.sh
+COPY galera-health.sh /usr/local/bin/galera-health.sh
+RUN chmod +x /usr/local/bin/galera-start.sh /usr/local/bin/galera-health.sh
 ENTRYPOINT ["galera-start.sh"]
