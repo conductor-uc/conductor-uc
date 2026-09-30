@@ -49,6 +49,8 @@ request from FS:
                                      uac_auth with trunk creds; failover to next gw on 5xx/timeout
 ```
 
+**As built (G-129).** "Authenticated in its domain" holds for every request a phone sends to start a call, not only REGISTER and SUBSCRIBE: OpenSIPs challenges it (`proxy_authorize` against the tenant's subscribers), refuses it (403) when the credentials are not the From user's own, and removes them before the call goes on. Trunks are recognised by address and media nodes by dispatcher membership, as above.
+
 All calls, including extension-to-extension calls, pass through FreeSWITCH so that recording, forwarding, voicemail-on-no-answer, and CDRs apply consistently. The cost is some extra media hops. That's an accepted trade-off in v1.
 
 ### 2.2 Presence / BLF (S2-17)

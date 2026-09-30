@@ -623,6 +623,22 @@ route{
         append_hf("X-Call-Direction: inbound\r\n");
         append_hf("X-Trunk-Id: $avp(trunk_ctx)\r\n");
     } else if (is_from_local($var(tenant_id))) {
+        # Every request a phone sends to start a call is authenticated, as its
+        # REGISTER is: a From domain alone proves nothing, and without this
+        # anyone who can reach the edge could call as any tenant, out through
+        # its trunks included. The credentials must be the From user's own, so
+        # a phone cannot call as another extension; they are not passed on.
+        if (!proxy_authorize("", "subscriber")) {
+            proxy_challenge("", "auth");
+            exit;
+        }
+        if ($au != $fU) {
+            xlog("L_WARN", "auth: $au@$ar placed a call as $fU@$fd; refused\n");
+            send_reply(403, "Forbidden");
+            exit;
+        }
+        consume_credentials();
+
         # Registered phone in a known domain, calling out. `$var(tenant_id)`
         # is the domain row's own `attrs` column (S1-14) — telephony-config
         # is the only writer of that table (05 §1.1), and this is the one
