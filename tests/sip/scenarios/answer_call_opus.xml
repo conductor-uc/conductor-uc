@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="ISO-8859-1"?>
 <!DOCTYPE scenario SYSTEM "sipp.dtd">
 <!--
-  S4-09 (the capacity benchmark): `answer_bench_pcmu.xml`, with Opus. Answers
-  every call it is sent with Opus alone, under the payload type FreeSWITCH
-  offers it (102), and plays Opus audio (media/opus-440hz-40s.pcap, made by
-  media/make-opus-pcap.py) until the call ends.
+  G-134: a phone that speaks Opus. Answers every call it is sent with Opus
+  alone, under the payload type FreeSWITCH offers it (102), and plays Opus
+  audio (media/opus-440hz-40s.pcap, made by media/make-opus-pcap.py) until
+  the call ends.
 -->
 <scenario name="Answer every call with Opus audio until it ends">
   <recv request="INVITE" crlf="true" timeout="60000">
