@@ -6,6 +6,10 @@
 #
 # Usage: see the root Makefile (`make up` / `make down` / `make reset`) or
 # ./README.md for details and troubleshooting.
+#
+# `COMPOSE_PROJECT_NAME` in the environment overrides this name. CI sets it
+# (ci.env), with its own subnet and host ports, so its stack runs beside this
+# one on the same machine and its `down -v` never touches the dev stack.
 name: conductor-uc
 
 # G-115: health checks for the Node services, so `make up` (wait-healthy.sh)
@@ -374,8 +378,11 @@ services:
     volumes:
       - opensips-tls:/etc/opensips/tls
     ports:
-      - '${OPENSIPS_SIP_PORT:-5060}:5060/udp'
-      - '${OPENSIPS_SIP_PORT:-5060}:5060/tcp'
+      # The host's port has its own variable: OPENSIPS_SIP_PORT is also the
+      # port OpenSIPs listens on inside the network, which a second stack on
+      # this machine (ci.env) has no reason to move.
+      - '${OPENSIPS_HOST_SIP_PORT:-${OPENSIPS_SIP_PORT:-5060}}:${OPENSIPS_SIP_PORT:-5060}/udp'
+      - '${OPENSIPS_HOST_SIP_PORT:-${OPENSIPS_SIP_PORT:-5060}}:${OPENSIPS_SIP_PORT:-5060}/tcp'
       - '${OPENSIPS_TLS_PORT:-5061}:5061/tcp'
 
   opensips-2:

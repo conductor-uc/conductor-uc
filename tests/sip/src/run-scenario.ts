@@ -72,6 +72,10 @@ export interface SipTestEnv {
   /** S4-06: every edge of the pair; MI goes to the active one ({@link activeOpensipsContainer}). */
   readonly opensipsContainers: readonly string[];
   readonly opensipsTarget: string;
+  /** The edge pair's floating address (compose's `OPENSIPS_VIP`). */
+  readonly opensipsVip: string;
+  /** The edge pair's address on the media nodes' side (compose's `OPENSIPS_INTERNAL_VIP`). */
+  readonly opensipsInternalVip: string;
   readonly sippImage: string;
   readonly freeswitchContainer: string;
   /**
@@ -86,26 +90,46 @@ export interface SipTestEnv {
   readonly eventSocketPassword: string;
 }
 
+/**
+ * The compose project the suite runs against, by compose's own `COMPOSE_PROJECT_NAME`. The dev
+ * stack is `conductor-uc`; CI brings up its own (`conductor-uc-ci`) beside it on the same
+ * machine, so every container and network name here is derived from this, never written out.
+ */
+export function composeProject(): string {
+  return envOr('COMPOSE_PROJECT_NAME', 'conductor-uc');
+}
+
+/** The container compose gives a service: `{project}-{service}-{replica}`. */
+export function composeContainer(service: string, replica = 1): string {
+  return `${composeProject()}-${service}-${String(replica)}`;
+}
+
 /** Same variable names/defaults `infra/compose/.env(.example)` itself uses. */
 export function sipTestEnv(): SipTestEnv {
-  const freeswitchContainer = envOr('SIP_TEST_FREESWITCH_CONTAINER', 'conductor-uc-freeswitch-1');
+  const freeswitchContainer = envOr(
+    'SIP_TEST_FREESWITCH_CONTAINER',
+    composeContainer('freeswitch'),
+  );
+  const opensipsVip = envOr('OPENSIPS_VIP', '172.18.255.10');
   return {
-    network: envOr('SIP_TEST_NETWORK', 'conductor-uc_default'),
-    opensipsContainer: envOr('SIP_TEST_OPENSIPS_CONTAINER', 'conductor-uc-opensips-1'),
+    network: envOr('SIP_TEST_NETWORK', `${composeProject()}_default`),
+    opensipsContainer: envOr('SIP_TEST_OPENSIPS_CONTAINER', composeContainer('opensips')),
     // The compose *service* name, not the container name — resolvable from
     // any container on the network regardless of compose project prefix.
     // S4-06: the edge pair's floating address (compose's OPENSIPS_VIP), which keepalived moves
     // to whichever edge is alive; the edges' own names reach one edge only.
-    opensipsTarget: envOr('SIP_TEST_OPENSIPS_TARGET', '172.18.255.10:5060'),
+    opensipsTarget: envOr('SIP_TEST_OPENSIPS_TARGET', `${opensipsVip}:5060`),
+    opensipsVip,
+    opensipsInternalVip: envOr('OPENSIPS_INTERNAL_VIP', '172.18.255.13'),
     opensipsContainers: envOr(
       'SIP_TEST_OPENSIPS_CONTAINERS',
-      'conductor-uc-opensips-1,conductor-uc-opensips-2-1',
+      `${composeContainer('opensips')},${composeContainer('opensips-2')}`,
     ).split(','),
     sippImage: envOr('SIP_TEST_SIPP_IMAGE', 'ctaloi/sipp'),
     freeswitchContainer,
     freeswitchContainers: envOr(
       'SIP_TEST_FREESWITCH_CONTAINERS',
-      `${freeswitchContainer},${envOr('SIP_TEST_FREESWITCH_2_CONTAINER', 'conductor-uc-freeswitch-2-1')}`,
+      `${freeswitchContainer},${envOr('SIP_TEST_FREESWITCH_2_CONTAINER', composeContainer('freeswitch-2'))}`,
     )
       .split(',')
       .map((name) => name.trim())
@@ -632,7 +656,7 @@ export async function opensipsMi(command: string, ...args: readonly string[]): P
 
 /** The compose stack's MariaDB container, named like the others so a stack under another project name works too. */
 function mariadbContainer(): string {
-  return envOr('SIP_TEST_MARIADB_CONTAINER', 'conductor-uc-mariadb-1');
+  return envOr('SIP_TEST_MARIADB_CONTAINER', composeContainer('mariadb'));
 }
 
 /**
@@ -745,7 +769,7 @@ export async function callControlSql(sql: string): Promise<string> {
 export async function redisGet(key: string): Promise<string | undefined> {
   const { stdout } = await execFileAsync('docker', [
     'exec',
-    envOr('SIP_TEST_REDIS_CONTAINER', 'conductor-uc-redis-1'),
+    envOr('SIP_TEST_REDIS_CONTAINER', composeContainer('redis')),
     'redis-cli',
     'GET',
     key,
@@ -756,7 +780,7 @@ export async function redisGet(key: string): Promise<string | undefined> {
 
 /** The recording-service container, which S5-12's test stops to make recording decisions unavailable. */
 export function recordingServiceContainer(): string {
-  return envOr('SIP_TEST_RECORDING_SERVICE_CONTAINER', 'conductor-uc-recording-service-1');
+  return envOr('SIP_TEST_RECORDING_SERVICE_CONTAINER', composeContainer('recording-service'));
 }
 
 /**

@@ -174,6 +174,21 @@ docker compose up -d --remove-orphans   # back to the everyday stack and its own
 
 The chaos suite kills a media node, the active edge, a telephony-config, a call-control, the Redis primary and the MariaDB writer in turn under call load, and writes what it measured to `tests/sip/chaos-results/`. It runs nightly in CI (the `chaos` job).
 
+## A second stack on the same machine (CI)
+
+The compose project is `conductor-uc` unless `COMPOSE_PROJECT_NAME` says otherwise. CI's `sip` and `chaos` jobs run on a self-hosted runner, which can be this machine, so they load `ci.env`: project `conductor-uc-ci`, subnet `172.31.0.0/16`, and every host port 10000 higher. CI's stack comes up beside the dev stack, and its `docker compose down -v` removes only its own containers and volumes.
+
+To bring that stack up by hand and run the suite against it:
+
+```sh
+set -a; . ./ci.env; set +a
+docker compose up -d --build --wait
+(cd ../../tests/sip && REQUIRE_SIP_TESTS=1 pnpm vitest run)
+docker compose down -v
+```
+
+The suite takes its container names, network and the edge's addresses from the same variables (`COMPOSE_PROJECT_NAME`, `OPENSIPS_VIP`, `OPENSIPS_INTERNAL_VIP`). Its own SIPp containers (`sip-test-*`) have fixed names, so two runs of the suite cannot overlap, whichever stacks they use. Each stack uses about 1.5 GB of memory at rest.
+
 ## Troubleshooting
 
 - **A container never goes healthy.** `make logs` to see why, or

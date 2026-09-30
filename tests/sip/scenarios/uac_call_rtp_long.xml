@@ -2,7 +2,7 @@
 <!DOCTYPE scenario SYSTEM "sipp.dtd">
 <!--
   S4-10 (O-7): `uac_call_rtp.xml`, held until the far end hangs up. The 200 OK's SDP must name the
-  edge's floating address (172.18.255.10, compose's OPENSIPS_VIP), where
+  edge's floating address (compose's OPENSIPS_VIP, 172.18.255.10 in dev), where
   RTPengine anchors the call; the caller then streams a tone (8 kHz PCMU)
   until the far end hangs up, for 45 s at most (S4-10's media failover test
   ends it from the media node). Run with `-mp` set apart from the SIP port.
@@ -140,7 +140,9 @@
     <action>
       <ereg regexp="sip:[^&gt;]*" search_in="hdr" header="Contact:" assign_to="1"/>
       <!-- The answer names the edge's floating address, not a media node. -->
-      <ereg regexp="c=IN IP4 172\.18\.255\.10" search_in="body" check_it="true" assign_to="media"/>
+      <!-- By its host part (.255.10): the subnet differs by compose project
+           (ci.env), and every phone and media node is in the lower half. -->
+      <ereg regexp="c=IN IP4 [0-9]+\.[0-9]+\.255\.10" search_in="body" check_it="true" assign_to="media"/>
       <!-- SIPp refuses a variable that is set and never read. -->
       <log message="media offered at [$media]"/>
     </action>

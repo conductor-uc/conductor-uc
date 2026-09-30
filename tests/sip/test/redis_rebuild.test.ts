@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
+  composeContainer,
   dockerCurlJson,
   fsCliAll,
   internalServiceHeaders,
@@ -21,7 +22,7 @@ const execFileAsync = promisify(execFile);
 const skipReason = await sipInfraOrSkipReason();
 
 const CALL_CONTROL_URL = 'http://call-control:8080';
-const REDIS_CONTAINER = 'conductor-uc-redis-1';
+const REDIS_CONTAINER = composeContainer('redis');
 /** call-control's (and the nodes' shared) keyspace in the dev stack's Redis. */
 const KEY_PREFIX = 'cuc:dev:';
 const CALLER = 'sip-test-rebuild-801';

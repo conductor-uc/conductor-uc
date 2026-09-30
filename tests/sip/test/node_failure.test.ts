@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
+  composeContainer,
   dispatcherStates,
   dockerCurlJson,
   internalServiceHeaders,
@@ -28,7 +29,7 @@ const PERSON = 'sip-test-nodefail-802';
 /** The node this test kills: the second one, so the rest of the suite keeps its first. */
 const NODE = 'freeswitch-2';
 const NODE_URI = `sip:${NODE}:5060`;
-const NODE_CONTAINER = 'conductor-uc-freeswitch-2-1';
+const NODE_CONTAINER = composeContainer('freeswitch-2');
 
 interface LiveLeg {
   readonly callUuid: string;

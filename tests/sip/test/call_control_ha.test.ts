@@ -6,6 +6,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import {
   callControlSql,
   clearRegistration,
+  composeContainer,
   dispatcherStates,
   dockerCurlJson,
   fsCliOn,
@@ -26,12 +27,12 @@ const skipReason = await sipInfraOrSkipReason();
 
 const CALL_CONTROL_URL = 'http://call-control:8080';
 const CDR_SERVICE_URL = 'http://cdr-service:8080';
-const REPLICAS = ['conductor-uc-call-control-1', 'conductor-uc-call-control-2-1'];
+const REPLICAS = [composeContainer('call-control'), composeContainer('call-control-2')];
 const KEY_PREFIX = 'cuc:dev:';
 /** The call is kept on the first node, whichever replica owns it. */
 const NODE = 'freeswitch';
 const NODE_URI = 'sip:freeswitch:5060';
-const NODE_CONTAINER = 'conductor-uc-freeswitch-1';
+const NODE_CONTAINER = composeContainer('freeswitch');
 const CALLER = 'sip-test-ha-801';
 const PERSON = 'sip-test-ha-802';
 
