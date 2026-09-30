@@ -161,6 +161,30 @@ describe.skipIf(skipReason !== undefined)('mailbox repo', () => {
     expect(await h.mailboxes.findById(ctxFor(tenantId), mailbox.id)).toBeUndefined();
   });
 
+  it('announces a mailbox created and a mailbox removed, with its extension (G-42)', async () => {
+    const tenantId = crypto.randomUUID();
+    const extensionId = crypto.randomUUID();
+    const mailbox = await h.mailboxes.create(ctxFor(tenantId), { extensionId, pin: '1234' });
+    await h.mailboxes.remove(ctxFor(tenantId), mailbox.id);
+
+    const rows = await h.db.kysely
+      .selectFrom('outbox')
+      .select(['type', 'payload'])
+      .where('tenant_id', '=', tenantId)
+      .orderBy('id')
+      .execute();
+    expect(rows).toEqual([
+      {
+        type: 'voicemail.mailbox.mwi_changed',
+        payload: { mailboxId: mailbox.id, extensionId },
+      },
+      {
+        type: 'voicemail.mailbox.mwi_changed',
+        payload: { mailboxId: mailbox.id, extensionId },
+      },
+    ]);
+  });
+
   it('stores email settings per mailbox and rejects invalid ones without changing the row', async () => {
     const tenantId = crypto.randomUUID();
     const mailbox = await h.mailboxes.create(ctxFor(tenantId), {

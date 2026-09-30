@@ -191,8 +191,8 @@ describe.skipIf(skipReason !== undefined)('message repo', () => {
       .select('type')
       .where('type', '=', 'voicemail.mailbox.mwi_changed')
       .execute();
-    // One from `complete`, one from this first `markRead`.
-    expect(afterFirst).toHaveLength(2);
+    // One from creating the mailbox, one from `complete`, one from this first `markRead`.
+    expect(afterFirst).toHaveLength(3);
 
     await h.messages.markRead(ctxFor(tenantId), message.id);
     const afterSecond = await h.db.kysely
@@ -201,7 +201,7 @@ describe.skipIf(skipReason !== undefined)('message repo', () => {
       .where('type', '=', 'voicemail.mailbox.mwi_changed')
       .execute();
     // A second `markRead` on an already-read message is a no-op event-wise.
-    expect(afterSecond).toHaveLength(2);
+    expect(afterSecond).toHaveLength(3);
   });
 
   it('lists only ready messages, oldest first', async () => {

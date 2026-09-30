@@ -39,6 +39,20 @@ const MailboxResponseSchema = Type.Object({
   /** Ready, unread messages: what a message-waiting indicator needs. */
   unreadCount: Type.Number(),
 });
+const TenantParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
+const MwiQuerySchema = Type.Object({ mailboxId: Type.Optional(Type.String({ minLength: 1 })) });
+const MwiResponseSchema = Type.Object({
+  rows: Type.Array(
+    Type.Object({
+      mailboxId: Type.String(),
+      extensionId: Type.String(),
+      /** Ready messages not yet listened to. */
+      newMessages: Type.Number(),
+      /** Ready messages already listened to. */
+      savedMessages: Type.Number(),
+    }),
+  ),
+});
 const VerifyPinBodySchema = Type.Object({ pin: Type.String({ minLength: 1 }) });
 const VerifyPinResponseSchema = Type.Object({ valid: Type.Boolean() });
 const CreateMessageBodySchema = Type.Object({
@@ -161,6 +175,42 @@ export function registerInternalRoutes(
       const mailbox = await mailboxes.findByExtensionId({ tenantId }, extensionId);
       if (mailbox === undefined) throw extensionHasNoMailbox();
       return toMailboxResponse(tenantId, mailbox);
+    },
+  );
+
+  /**
+   * S2-16 (G-42): what each mailbox's message-waiting lamp should show. telephony-config reads
+   * one mailbox (`?mailboxId=`) when `voicemail.mailbox.mwi_changed` arrives, and every mailbox
+   * of the tenant on its renewing pass. A mailbox with no messages is listed with zeros, so its
+   * lamp is put out.
+   */
+  app.get(
+    '/internal/v1/tenants/:tenantId/voicemail/mwi',
+    {
+      config: { public: true },
+      schema: {
+        params: TenantParamsSchema,
+        querystring: MwiQuerySchema,
+        response: { 200: MwiResponseSchema },
+      },
+    },
+    async (request) => {
+      requireToken(request);
+      const ctx = { tenantId: request.params.tenantId };
+      const { mailboxId } = request.query;
+      let boxes = await mailboxes.list(ctx);
+      if (mailboxId !== undefined) boxes = boxes.filter((mailbox) => mailbox.id === mailboxId);
+      const counts = new Map(
+        (await messages.counts(ctx, mailboxId)).map((row) => [row.mailboxId, row]),
+      );
+      return {
+        rows: boxes.map((mailbox) => ({
+          mailboxId: mailbox.id,
+          extensionId: mailbox.extensionId,
+          newMessages: counts.get(mailbox.id)?.newMessages ?? 0,
+          savedMessages: counts.get(mailbox.id)?.savedMessages ?? 0,
+        })),
+      };
     },
   );
 

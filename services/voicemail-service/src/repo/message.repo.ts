@@ -43,6 +43,13 @@ export class MessageNotFoundError extends Error {
   }
 }
 
+/** A mailbox's ready messages, counted for its message-waiting lamp. */
+export interface MessageCounts {
+  readonly mailboxId: string;
+  readonly newMessages: number;
+  readonly savedMessages: number;
+}
+
 /** The message is already ready: its audio arrived before. */
 export class MessageAlreadyReadyError extends Error {
   override readonly name = 'MessageAlreadyReadyError';
@@ -112,6 +119,30 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>) {
         .orderBy('created_at', 'asc')
         .execute()
         .then((rows) => rows.map(toMessage));
+    },
+
+    /**
+     * S2-16 (G-42): the counts a phone's message-waiting lamp shows, per mailbox: ready messages
+     * not yet listened to (`newMessages`) and listened to (`savedMessages`). One mailbox, or every
+     * mailbox of the tenant that has a ready message; a mailbox with none is absent.
+     */
+    async counts(ctx: DbContext, mailboxId?: string): Promise<MessageCounts[]> {
+      let query = db
+        .scoped(ctx)
+        .selectFrom('messages')
+        .select(['mailbox_id as mailboxId', 'is_read as isRead'])
+        .select((eb) => eb.fn.countAll().as('count'))
+        .where('status', '=', 'ready')
+        .groupBy(['mailbox_id', 'is_read']);
+      if (mailboxId !== undefined) query = query.where('mailbox_id', '=', mailboxId);
+      const byMailbox = new Map<string, { newMessages: number; savedMessages: number }>();
+      for (const row of await query.execute()) {
+        const counts = byMailbox.get(row.mailboxId) ?? { newMessages: 0, savedMessages: 0 };
+        if (row.isRead) counts.savedMessages += Number(row.count);
+        else counts.newMessages += Number(row.count);
+        byMailbox.set(row.mailboxId, counts);
+      }
+      return [...byMailbox].map(([id, counts]) => ({ mailboxId: id, ...counts }));
     },
 
     findById(ctx: DbContext, id: string): Promise<VoicemailMessage | undefined> {

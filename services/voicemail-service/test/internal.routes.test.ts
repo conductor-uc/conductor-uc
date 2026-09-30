@@ -65,6 +65,57 @@ describe.skipIf(skipReason !== undefined)('voicemail-service internal routes (S2
     expect(response.statusCode).toBe(404);
   });
 
+  it('lists what each mailbox’s message-waiting lamp should show (G-42)', async () => {
+    const tenantId = crypto.randomUUID();
+    const ctx = { tenantId };
+    const busy = await h.mailboxes.create(ctx, { extensionId: crypto.randomUUID(), pin: '1234' });
+    const empty = await h.mailboxes.create(ctx, { extensionId: crypto.randomUUID(), pin: '1234' });
+    // Three ready messages, one of them listened to; one still pending, which is not counted.
+    const ready = [];
+    for (let i = 0; i < 3; i += 1) {
+      const { message } = await h.messages.create(ctx, busy.id, {});
+      await h.messages.complete(ctx, message.id, { durationMs: 1000, sizeBytes: 1 });
+      ready.push(message);
+    }
+    await h.messages.markRead(ctx, ready[0]!.id);
+    await h.messages.create(ctx, busy.id, {});
+    // Another tenant's mailbox is not listed.
+    const other = { tenantId: crypto.randomUUID() };
+    await h.mailboxes.create(other, { extensionId: crypto.randomUUID(), pin: '1234' });
+
+    const all = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${tenantId}/voicemail/mwi`,
+      headers: authHeader(),
+    });
+    expect(all.statusCode).toBe(200);
+    const rows = all.json<{ rows: { mailboxId: string }[] }>().rows;
+    expect(rows).toHaveLength(2);
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { mailboxId: busy.id, extensionId: busy.extensionId, newMessages: 2, savedMessages: 1 },
+        { mailboxId: empty.id, extensionId: empty.extensionId, newMessages: 0, savedMessages: 0 },
+      ]),
+    );
+
+    const one = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${tenantId}/voicemail/mwi?mailboxId=${empty.id}`,
+      headers: authHeader(),
+    });
+    expect(one.json()).toEqual({
+      rows: [
+        { mailboxId: empty.id, extensionId: empty.extensionId, newMessages: 0, savedMessages: 0 },
+      ],
+    });
+
+    const denied = await app.inject({
+      method: 'GET',
+      url: `/internal/v1/tenants/${tenantId}/voicemail/mwi`,
+    });
+    expect(denied.statusCode).toBe(401);
+  });
+
   it('verifies a PIN', async () => {
     const tenantId = crypto.randomUUID();
     const mailbox = await h.mailboxes.create(

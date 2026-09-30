@@ -298,6 +298,7 @@ Groups: base, database (`telephony_config`), events, storage. It accepts the sig
 | `PBX_CONFIG_SERVICE_URL`, `TRUNK_SERVICE_URL`, `ORG_SERVICE_URL`, `VOICEMAIL_SERVICE_URL`, `CALLFLOW_SERVICE_URL`, `CALL_CONTROL_URL`, `RECORDING_SERVICE_URL` | — | **yes** | |
 | `RECORDING_SPOOL_DIR` | `/var/spool/cuc/rec` | no | Must match the uploader's `SPOOL_DIR` and FreeSWITCH's (fixed) recordings directory |
 | `PRESENCE_POLL_INTERVAL_MS` | `5000` | no | S5-10: how often OpenSIPs is asked for every registration (MI `ul_dump`, over `OPENSIPS_MI_URL`) to announce which phones came and went and which extensions changed do not disturb (`call.presence.changed`). The presence board lags by at most this |
+| `MWI_RENEW_INTERVAL_MS` | `3600000` | no | S2-16: how often every mailbox's message-waiting summary is published to the edge again (MI `pua_publish`). A summary also goes out whenever a mailbox's unread messages change; this renews each before it lapses (a week) and repairs one a missed event left wrong. |
 | `RECORDING_POLICY_TIMEOUT_MS` | `800` | no | After this, a call proceeds unrecorded and flagged |
 | `RECORDING_POLICY_CACHE_TTL_MS` | `30000` | no | A recording-rule change takes effect within this |
 | `REDIS_URL` | — | **yes** | |

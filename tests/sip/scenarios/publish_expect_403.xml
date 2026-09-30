@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-16 (G-42): a phone sends a PUBLISH claiming another extension has new
+  messages. Presence state is published by the edge alone (telephony-config,
+  over MI), so the edge answers 403 whatever the credentials.
+
+  `[field0]`=sender, `[field1]`=domain, `[field2]`=the extension it names.
+-->
+<scenario name="Publish a message summary from a phone, expect 403">
+  <send retrans="500">
+    <![CDATA[
+      PUBLISH sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 PUBLISH
+      Event: message-summary
+      Expires: 3600
+      Max-Forwards: 70
+      Content-Type: application/simple-message-summary
+      Content-Length: [len]
+
+      Messages-Waiting: yes
+      Message-Account: sip:[field2]@[field1]
+      Voice-Message: 9/0 (0/0)
+    ]]>
+  </send>
+
+  <recv response="403" crlf="true">
+  </recv>
+
+</scenario>

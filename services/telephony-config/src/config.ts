@@ -133,6 +133,12 @@ export const configSchema = Type.Object({
    * seconds, not less.
    */
   PRESENCE_POLL_INTERVAL_MS: Env.int({ minimum: 1000, default: 5000 }),
+  /**
+   * S2-16 (G-42): how often every mailbox's message-waiting summary is announced to the edge
+   * again. A summary lasts a week there (`mwi.ts`); this also repairs a lamp a missed event left
+   * wrong, so it is much shorter.
+   */
+  MWI_RENEW_INTERVAL_MS: Env.int({ minimum: 1000, default: 60 * 60 * 1000 }),
 
   /**
    * Shared secret FreeSWITCH presents as the password half of HTTP Basic

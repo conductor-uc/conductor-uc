@@ -19,6 +19,7 @@ import { createOrgConsumer } from './consumers/org.consumer.js';
 import { createPbxConsumer } from './consumers/pbx.consumer.js';
 import { createRecordingConsumer } from './consumers/recording.consumer.js';
 import { createTrunkConsumer } from './consumers/trunk.consumer.js';
+import { createVoicemailConsumer } from './consumers/voicemail.consumer.js';
 import { createOpenSipsMiClient } from './opensips-mi-client.js';
 import type { OpenSipsDb } from './opensips-schema.js';
 import { createOrgClient } from './org-client.js';
@@ -28,6 +29,7 @@ import { createRecordingClient } from './recording-client.js';
 import { createOpenSipsProjectionRepo } from './repo/opensips-projection.repo.js';
 import { createReadModelRepo } from './repo/read-model.repo.js';
 import { createCertificateSync, startCertificateSync } from './certificate-sync.js';
+import { createMwiPublisher } from './mwi.js';
 import { createPresenceWatcher } from './presence.js';
 import { createReconciler } from './reconcile.js';
 import { registerFsRoutes } from './routes/fs.routes.js';
@@ -211,6 +213,14 @@ const nodeConsumer = createNodeConsumer(db, bus, logger, opensipsProjection, miC
 await nodeConsumer.ensure();
 const nodeConsumerLoop = nodeConsumer.run();
 
+// S2-16 (G-42): the message-waiting lamp. A mailbox's summary is announced to the edge when its
+// unread state changes, and every mailbox's again on a timer.
+const mwi = createMwiPublisher({ db, voicemail: voicemailClient, mi: miClient, logger });
+const voicemailConsumer = createVoicemailConsumer(db, bus, logger, mwi);
+await voicemailConsumer.ensure();
+const voicemailConsumerLoop = voicemailConsumer.run();
+mwi.start(config.MWI_RENEW_INTERVAL_MS);
+
 const reconciler = createReconciler(
   readModel,
   opensipsProjection,
@@ -296,6 +306,8 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   reconciler.stop();
   presence.stop();
+  mwi.stop();
+  voicemailConsumer.stop();
   orgConsumer.stop();
   certificateConsumer.stop();
   certificateSyncTimer.stop();
@@ -309,6 +321,7 @@ async function shutdown(signal: string): Promise<void> {
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),
   ]);
   await orgConsumerLoop;
+  await voicemailConsumerLoop;
   await certificateConsumerLoop;
   await pbxConsumerLoop;
   await trunkConsumerLoop;
