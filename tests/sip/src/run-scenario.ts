@@ -1257,6 +1257,11 @@ export function startAgentUas(opts: StartAgentUasOptions): UasHandle {
     const loginCmd = buildSippCommand({
       scenarioPath: '/scenarios/login_feature_code.xml',
       csvPath: '/data/fields.csv',
+      // The feature code is a call like any other: challenged, and answered with the agent's
+      // own credentials (G-129). Without them SIPp offers its default password and never logs in.
+      au: opts.au,
+      ap: opts.ap,
+      authUri: opts.authUri,
       localPort: opts.localPort ?? 6000,
       remoteHost: env.opensipsTarget,
       logPrefix: 'agent_login',
