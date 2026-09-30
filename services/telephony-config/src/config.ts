@@ -47,7 +47,7 @@ export const configSchema = Type.Object({
    * S4-06: the sharing tag of the edge pair (`opensips.cfg.template`'s `vip/1`), written on every
    * trunk registration so only the active edge registers it. Unset for a single edge.
    */
-  OPENSIPS_CLUSTER_SHTAG: Env.string({ default: '' }),
+  OPENSIPS_CLUSTER_SHTAG: Env.string({ default: '', minLength: 0 }),
 
   /**
    * OpenSIPs' SIP listener, e.g. `opensips:5060` (03 §2's `OPENSIPS_SIP_PORT`)

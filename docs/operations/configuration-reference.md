@@ -79,6 +79,7 @@ api-gateway takes only `NATS_SERVERS`, `NATS_USER` and `NATS_PASSWORD` from this
 | `OUTBOX_POLL_INTERVAL_MS` | `250` | no | Wait after an empty pass |
 | `OUTBOX_MAX_ATTEMPTS` | `10` | no | After this many failed publishes an event is set aside for an operator |
 | `OUTBOX_RETENTION_DAYS` | `7` | no | Published events older than this are deleted from the service's `outbox` table, hourly and in batches of 1,000. `0` keeps them. Unpublished (including set-aside) events are never deleted. |
+| `NATS_STREAM_REPLICAS` | `1` | no | S4-07: copies of every stream the service creates or updates at startup. `1` for a single NATS server; `3` for the three-server cluster of the highly available data tier. **Use the same value in every service.** |
 | `NATS_STREAM_MAX_AGE_DAYS` | `7` | no | Every service sets this age limit on **every** stream at startup, including streams that already exist; messages older than it are removed. `0` means no age limit. **Use the same value in every service**, or the last one to start wins. Keep it longer than any consumer outage you would want to recover from without losing events. |
 
 media-worker and notification-service accept the `OUTBOX_*` variables but do not publish events.
@@ -301,7 +302,8 @@ Groups: base, database (`telephony_config`), events, storage. It accepts the sig
 | `OPENSIPS_DB_PASSWORD` | — | **yes** (secret) | |
 | `OPENSIPS_DB_NAME` | `opensips` | no | |
 | `OPENSIPS_DB_POOL_SIZE` | `10` | no | |
-| `OPENSIPS_MI_URL` | — | **yes** | OpenSIPs' management interface, for example `http://10.10.0.10:8888/mi`. Only one OpenSIPs is supported. |
+| `OPENSIPS_MI_URL` | — | **yes** | OpenSIPs' management interface, for example `http://10.10.0.10:8888/mi`; with an edge pair (S4-06), both edges' comma-separated. |
+| `OPENSIPS_CLUSTER_SHTAG` | — (empty) | no | S4-06: the edge pair's sharing tag (`vip/1`), written on every trunk registration so only the edge holding the floating address registers it. **Leave unset for a single edge.** |
 | `OPENSIPS_SIP_URI` | — | **yes** | `host:port` of OpenSIPs, without `sip:`. **Used two ways:** FreeSWITCH sends every outbound leg there, and it is the contact address OpenSIPs gives carriers when it registers a trunk. **It must be reachable by FreeSWITCH and by carriers**: use OpenSIPs' public IP or `sip.<domain>`, with port 5060, for example `203.0.113.10:5060`. |
 | `SELF_URL` | — | **yes** | This service's address **as FreeSWITCH reaches it**. Must equal FreeSWITCH's `TELEPHONY_CONFIG_URL`. Written into prompt URLs. |
 | `PBX_CONFIG_SERVICE_URL`, `TRUNK_SERVICE_URL`, `ORG_SERVICE_URL`, `VOICEMAIL_SERVICE_URL`, `CALLFLOW_SERVICE_URL`, `CALL_CONTROL_URL`, `RECORDING_SERVICE_URL` | — | **yes** | |
@@ -316,7 +318,7 @@ Groups: base, database (`telephony_config`), events, storage. It accepts the sig
 
 ### 4.11 call-control
 
-Groups: base, database (`call_control`), events. Run **exactly one copy**.
+Groups: base, database (`call_control`), events. One copy, or several (S4-03): each media node is owned by one copy at a time ([components §6](components.md#6-running-more-than-one-copy)).
 
 | Variable | Default | Required | Meaning |
 |---|---|---|---|
@@ -377,6 +379,7 @@ Set as environment variables on the FreeSWITCH container. `vars.xml` reads them 
 |---|---|---|
 | `FS_NODE_ID` | `change-me-FS_NODE_ID` | **Set it.** Unique per node. Must match the node's `id` in call-control's `FS_NODES`. |
 | `FS_OPENSIPS_CIDR` | `127.0.0.1/32` | The **one** CIDR allowed to send SIP to this node: OpenSIPs' address as this node sees it |
+| `FS_OPENSIPS_VIP_CIDR` | `127.0.0.1/32` | S4-06: the edge pair's floating address(es), also allowed to send SIP. Leave unset for a single edge. |
 | `FS_CLUSTER_CIDR` | `127.0.0.1/32` | The **one** CIDR (plus 127.0.0.1) allowed on the event socket: call-control's address |
 | `FS_EVENT_SOCKET_PASSWORD` | `change-me-…` | Same as call-control's |
 | `FS_EVENT_SOCKET_BIND_IP` | `0.0.0.0` | Where the event socket listens (port fixed at 8021) |
@@ -414,6 +417,31 @@ Directories: `/var/spool/cuc/rec` (recording and voicemail spool, shared with th
 | `OPENSIPS_TLS_DEV_SELF_SIGNED` | `true` | Generates a self-signed fallback certificate. **Set `false` in production.** |
 | `OPENSIPS_TLS_DEV_NAMES` | `platform.test,*.platform.test` | Names for that self-signed certificate |
 
+**Edge pair (S4-06).** Leave all of these unset for a single edge.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENSIPS_VIP` | — | The pair's public floating address. Setting it turns on the pair: registrations and dialogs replicated over `bin`, and the sharing tag `vip/1` on the holder of the address. |
+| `OPENSIPS_NODE_ID`, `OPENSIPS_PEER_NODE_ID`, `OPENSIPS_PEER_IP` | — | **Required with `OPENSIPS_VIP`**: this edge's cluster id, the other edge's id, and its private address |
+| `OPENSIPS_OWN_IP` | `hostname -i` | This edge's private address (set it under host networking) |
+| `OPENSIPS_BIN_PORT` | `5566` | Replication port between the two edges |
+| `OPENSIPS_SEED` | — | `true` on one edge of the pair: a restarted edge copies its data from the seed |
+| `OPENSIPS_KEEPALIVED` | — | `true` to run keepalived in the container, moving `OPENSIPS_VIP` (needs `NET_ADMIN`) |
+| `OPENSIPS_VIP_PREFIX`, `OPENSIPS_INTERNAL_VIP`, `OPENSIPS_INTERNAL_VIP_PREFIX` | — | The floating address's prefix length, and the private floating address the media servers send RTP to (with RTPengine) |
+| `KEEPALIVED_PRIORITY`, `KEEPALIVED_ROUTER_ID`, `KEEPALIVED_INTERFACE`, `KEEPALIVED_INTERNAL_INTERFACE` | — | keepalived's election priority, VRRP router id and interfaces |
+
+**Media relay (S4-10, O-7).** RTPengine beside OpenSIPs. Off unless `OPENSIPS_RTPENGINE=true`; the single-server guide runs without it.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `OPENSIPS_RTPENGINE` | — | `true` to relay every call's media through the edge |
+| `RTPENGINE_PORT_MIN` / `RTPENGINE_PORT_MAX` | `30000` / `39999` | The relay's public RTP range. Must not overlap FreeSWITCH's range on the same server. |
+| `RTPENGINE_EXTERNAL_IP`, `RTPENGINE_INTERNAL_IP` | the floating addresses, else `OPENSIPS_OWN_IP` | The phone-facing and media-node-facing addresses |
+| `RTPENGINE_EXTERNAL_ADVERTISED` | — | The public address to put in SDP when the external address is NATed onto the host |
+| `RTPENGINE_REDIS` | — | `host:port/db` (an IP address): with a pair, each relay mirrors the other's calls through Redis |
+| `RTPENGINE_NG_PORT`, `RTPENGINE_HTTP_PORT`, `RTPENGINE_CLI_PORT` | `2223`, `9101`, `9900` | Control (loopback), metrics (`/metrics` on the private address) and CLI (loopback) ports |
+| `RTPENGINE_DELETE_DELAY`, `RTPENGINE_LOG_LEVEL` | `5`, `5` | Seconds a finished call's ports are kept; log level |
+
 The entrypoint substitutes only these variables into `opensips.cfg.template`. Anything else (flood limits, timers, workers) means editing the template and rebuilding the image.
 
 ## 7. recording-uploader
@@ -433,7 +461,7 @@ One per FreeSWITCH node, on the same server, sharing the spool directory. It upl
 | `STUCK_AFTER_SECONDS` | `3600` | no | Raise the stuck alert after this |
 | `BACKOFF_BASE_MS` / `BACKOFF_MAX_MS` | `2000` / `300000` | no | Retry backoff |
 | `CONCURRENCY` | `2` | no | Up to 16 |
-| `METRICS_PORT` / `METRICS_HOST` | `9464` / `0.0.0.0` | no | `/metrics`, `/healthz` |
+| `METRICS_PORT` / `METRICS_HOST` | `9464` / `0.0.0.0` | no | `/metrics`, `/healthz`, and `/statusz` for the operations console (S4-12) |
 | `LOG_LEVEL` | `info` | no | |
 
 The spool directory must be writable by FreeSWITCH (root) and deletable by the uploader (uid 65532): mode `0777` **without** the sticky bit. With `1777` the uploader uploads but cannot delete, and audio stays on the server.

@@ -239,7 +239,7 @@ Any secret can be given to the services as a file instead of an environment vari
 - OpenSIPs and FreeSWITCH log to stdout at `OPENSIPS_LOG_LEVEL` and `FS_LOG_LEVEL`.
 - Rotate with Docker's `json-file` options (`max-size`, `max-file`, as in the reference compose file) or ship to a collector (journald, Loki, Elasticsearch, your SIEM).
 - The platform's **audit log** (who did what, private-data access) is in the database (`identity_service.audit_events`) and visible in the console. It is not in the container logs.
-- The audit table is partitioned by month for a window fixed when the migration was written, with a catch-all partition after it, so inserts never fail. But nothing adds new monthly partitions or drops old ones, so there is no automatic retention and rows past the window pile into the catch-all (G-12). `cdrs` is the same (G-52). Prune and re-partition by hand until that is built.
+- The audit table and `cdrs` are partitioned by month. Every 6 hours identity-service and cdr-service each drop the months past their retention (`AUDIT_RETENTION_MONTHS`, 12 by default; `CDR_RETENTION_MONTHS`, 13) and add the next three months (S2-21, G-12, G-52). Set these to your legal minimum before you have data you must keep.
 
 Logs may contain telephone numbers and tenant identifiers. Treat log storage as personal data under your privacy obligations.
 
@@ -262,7 +262,6 @@ Logs may contain telephone numbers and tenant identifiers. Treat log storage as 
 | Calls to extensions fail, FreeSWITCH log shows xml_curl errors | telephony-config unreachable from FreeSWITCH; `FS_XML_CURL_TOKEN` mismatch; `SELF_URL` ≠ `TELEPHONY_CONFIG_URL` | FreeSWITCH log; telephony-config log (401s) |
 | Outbound calls fail | No outbound route; trunk not registered; carrier rejects the caller ID; tenant fraud limits | `reg_list`, `dr_gw_status`; OpenSIPs and telephony-config logs |
 | Carrier cannot reach you after registration | `OPENSIPS_SIP_URI` is a private address (it is the contact sent to carriers) | telephony-config environment; `reg_list` |
-| Calls to queues, parking or conferences fail intermittently | Several FreeSWITCH nodes (G-46, S4-05) | Run one media server |
 | No call records | FreeSWITCH cannot reach cdr-service; `FS_CDR_INGEST_TOKEN` mismatch | FreeSWITCH log (json_cdr); cdr-service log |
 | Calls to one tenant fail with a short tone, then fail (SIP 500 at the caller, `Reason: Q.850;cause=41`); other tenants' calls work | The tenant has **Recording required** on (Recordings, Rules) and recording-service is unreachable or slow from telephony-config, or cannot register the recording (its database). Calls no rule records are not affected | telephony-config log `recording_required_refused`; recording-service `/readyz`; `RECORDING_SERVICE_URL`. Restore recording-service; the tenant can also turn the option off |
 | Recordings never appear | No recording rule matches; recording-service unreachable at call setup (`recording_policy_unavailable`); uploader cannot reach recording-service or storage | telephony-config, uploader and recording-service logs; uploader metrics |
@@ -285,13 +284,11 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Security | One shared internal token for all services; FreeSWITCH tokens are static | 07 §1 |
 | Security | Master key comes from an environment variable or a file; no KMS (deferred until a customer or auditor needs one) | G-116, 07 §5 |
 | Security | OpenSIPs TLS private keys stored in clear in the `opensips` schema | 07 §5 |
-| Availability | No HA for OpenSIPs, MariaDB, Redis, NATS; call-control single copy; no FreeSWITCH failure cleanup or synthetic CDRs | S4-03 to S4-07 |
+| Availability | High availability needs the multi-server layout (`infra/deploy`, S4-03 to S4-11); a single server has none | 10-production-topology |
 | Telephony | No SRTP termination at the edge (media is relayed as sent) | — |
-| Telephony | Queues, parking and conferences unreliable with more than one media server | G-46, S4-05 |
-| Telephony | Media server list fixed at OpenSIPs start (weights and draining work without a restart); node draining has no console page, only call-control's internal API | S4-02, G-123 |
+| Telephony | Media server list fixed at OpenSIPs start (weights and draining work without a restart, from the console's **Operations**) | S4-02, S4-12, G-123 |
 | Telephony | Per-tenant call rate fixed at 10 per second; repeated SIP authentication failures not blocked | G-31, G-118 |
 | Telephony | Phones behind NAT not verified | network §6.5 |
 | Telephony | Only Yealink auto-provisioning, not verified on hardware | G-103 |
-| Operations | No production manifests; no backup tooling; no metrics beyond the uploader; no tracing | S4-11, release readiness |
-| Operations | Audit and CDR tables have no retention: partitions are never extended or pruned | G-12, G-52 |
+| Operations | No backup tooling; no tracing | release readiness |
 | Capacity | CPU per call is measured for media servers and the edge, on one development machine ([sizing](sizing.md)). Nothing has been run to the point of failure, and the application and data servers are unmeasured | S4-09 |

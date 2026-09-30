@@ -99,7 +99,7 @@ Phones fetch `GET https://<gateway>/v1/public/provision/yealink/<mac>.cfg` with 
 
 ## 4. Media (RTP), and why FreeSWITCH needs a public address
 
-**Since S4-10 (O-7), the edge relays all media** with RTPengine: phones and carriers send RTP to the edge's public (floating) address and its range `RTPENGINE_PORT_MIN`–`RTPENGINE_PORT_MAX` (open that range to the internet on the edges), and the media servers exchange RTP only with the edges on their private network. A media server then needs no public address and no public RTP range. An edge whose public address is NATed onto the host (a cloud floating IP) sets `RTPENGINE_EXTERNAL_ADVERTISED` to it.
+**Since S4-10 (O-7), the edge can relay all media** with RTPengine (`OPENSIPS_RTPENGINE=true`, as the highly available layout in `infra/deploy` does; the [single-server guide](deploy-all-in-one.md#74-opensips) runs without it): phones and carriers send RTP to the edge's public (floating) address and its range `RTPENGINE_PORT_MIN`–`RTPENGINE_PORT_MAX` (open that range to the internet on the edges), and the media servers exchange RTP only with the edges on their private network. A media server then needs no public address and no public RTP range. An edge whose public address is NATed onto the host (a cloud floating IP) sets `RTPENGINE_EXTERNAL_ADVERTISED` to it.
 
 The rest of this section applies to a deployment that runs **without** the relay (`OPENSIPS_RTPENGINE` off). Then OpenSIPs forwards SDP untouched, so the address FreeSWITCH writes into its SDP for audio is where phones and carriers send RTP, and it has to be reachable from the internet.
 

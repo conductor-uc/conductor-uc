@@ -3,6 +3,10 @@
 Every component on one server. It suits a pilot, a small operator, or a staging copy of a larger installation. Read [components](components.md) and [network and firewall](network-and-firewall.md) first.
 
 > **Status.** This guide and its compose file are a reference built from the code and the development stack. Every value was checked against the source, but **the whole procedure has not been run end to end on a real server.** Items that were never observed working are marked *not verified*. Do the first installation on a server you can rebuild, and test every step in §10.
+>
+> Checked on 2026-09-30 against `main`: every service's settings in the compose file below were validated with the service's own configuration loader, and the OpenSIPs configuration this layout produces passes `opensips -C`. Since S4-06 and S4-10 the development stack and CI run an **edge pair with the RTPengine media relay**; this guide's layout (one edge, no relay, FreeSWITCH on the public address) is no longer exercised by an automated call test, so treat §10's calls as the proof.
+>
+> **Deploy from a commit that includes the fix for telephony-config's `OPENSIPS_CLUSTER_SHTAG`** (it refused to start with the setting unset, as it is here). Any commit after that fix merged is fine.
 
 ## 1. What you get and what you give up
 
@@ -11,7 +15,7 @@ One server runs everything: api-gateway, OpenSIPs, one FreeSWITCH node and its r
 What an all-in-one server cannot do:
 
 - **No redundancy.** If the server stops, calls stop. Plan for restore time ([operations §4](operations.md#4-backups-and-restore)).
-- **One FreeSWITCH node**, so one server's call capacity. That is also the configuration in which queues, parking and conferences work reliably ([components §6](components.md#6-running-more-than-one-copy)).
+- **One FreeSWITCH node**, so one server's call capacity ([components §6](components.md#6-running-more-than-one-copy) for what several servers add).
 - **Capacity is measured per call, not for this layout.** [Sizing](sizing.md) gives the CPU a call costs the media server and the edge; here both share one server with everything else. A starting point for a pilot of a few hundred extensions and a few dozen simultaneous calls is 4 vCPU, 8 GB RAM and 60 GB SSD, with recordings in hosted object storage. Watch CPU during busy hours, especially with recording and conferences, and grow from there.
 
 ## 2. Server requirements
@@ -146,7 +150,9 @@ flutter build web --release --no-web-resources-cdn
 
 `--no-web-resources-cdn` matters: without it the console loads its rendering engine from a Google CDN, which the gateway's content security policy blocks. The console calls the API on its own origin, so no API address is compiled in.
 
-**Images** are built by `docker compose build` from the compose file below (contexts under `./src`). Every Node.js image builds from the repository root and installs its dependencies with pnpm inside the build, so the first build takes a while. To build elsewhere, run `docker compose build` on a build machine, push the images to your registry, and set `image:` accordingly.
+**Images** are built by `docker compose build` from the compose file below (contexts under `./src`). Every Node.js image builds from the repository root and installs its dependencies with pnpm inside the build, so the first build takes a while: allow 8 GB of RAM for it, and build one image at a time on a small server (`docker compose build <service>`, or `COMPOSE_PARALLEL_LIMIT=1`). To build elsewhere, run `docker compose build` on a build machine, push the images to your registry, and set `image:` accordingly.
+
+**Released images.** A `vX.Y.Z` tag runs the release workflow (`.github/workflows/release.yml`), which publishes every image to `ghcr.io/conductor-uc/<name>:<version>`, with the console already inside the gateway image. No release has been tagged yet. Once one is, you can use those images instead of building (set each `image:` and drop the `build:` lines; also drop the gateway's `./src/apps/console/build/web:/console` mount, which would hide the copy the released gateway image carries at `/console`).
 
 ## 7. Configuration
 
@@ -519,6 +525,7 @@ services:
       REDIS_KEY_PREFIX: 'voice:prod:'
       FS_NODES: fs1:host.docker.internal:8021
       FS_EVENT_SOCKET_PASSWORD: ${FS_EVENT_SOCKET_PASSWORD}
+      OPENSIPS_SIP_URI: ${PUBLIC_IP}:5060     # listen, whisper and barge ring the supervisor through it (S5-09)
     healthcheck: *healthcheck
 
   telephony-config:
@@ -725,6 +732,8 @@ services:
 - `OPENSIPS_REGISTRANT_TIMER_INTERVAL` is 60 here (the development stack uses 10 for fast tests).
 - If the database password contains characters that are special in a URL, encode them in `OPENSIPS_DB_URL`. Hex passwords avoid this.
 - OpenSIPs listens on every address, including the Docker bridge addresses. That is harmless: the firewall does not expose them.
+- **One edge, no pair.** Leave `OPENSIPS_VIP` and the other edge-pair settings unset, and leave telephony-config's `OPENSIPS_CLUSTER_SHTAG` unset: that is the single-edge configuration (the template's `@if-single` blocks).
+- **No media relay.** This layout leaves `OPENSIPS_RTPENGINE` unset, so phones and carriers exchange audio with FreeSWITCH directly on the public address (UDP 16384–32768), as before S4-10. The highly available layout relays media through RTPengine on the edge (O-7, [network §4](network-and-firewall.md#4-media-rtp-and-why-freeswitch-needs-a-public-address)). On one server the relay hides nothing, since FreeSWITCH is on the same public address, and adds a process. To run it anyway (*not verified* on one server): set `OPENSIPS_RTPENGINE: 'true'`, `OPENSIPS_OWN_IP: ${PUBLIC_IP}` (under host networking `hostname -i` may give `127.0.1.1`), and `RTPENGINE_PORT_MIN`/`RTPENGINE_PORT_MAX` to a range that does not overlap FreeSWITCH's, for example `40000`/`49999`; open that range to the internet and FreeSWITCH's range may then be closed.
 
 ### 7.5 api-gateway
 
@@ -778,7 +787,7 @@ scrape_configs:
       - { targets: ['notification-service:8080'], labels: { service: notification-service } }
   - job_name: gateway
     scheme: https
-    tls_config: { server_name: console.example.com }   # your console hostname
+    tls_config: { server_name: console.voice.example.net }   # your console hostname
     static_configs:
       - { targets: ['api-gateway:443'], labels: { service: api-gateway } }
 ```
@@ -855,7 +864,7 @@ Work through this list on a new installation, and after every upgrade.
 |---|---|---|---|
 | 1 | All containers up | `docker compose ps` | Every service `running`; Node services `healthy` |
 | 2 | Operations | In the console as master, **Operations** | Every service ready; the media node in service |
-| 3 | Internal readiness | `docker run --rm --network voice_backplane curlimages/curl -s http://telephony-config:8080/readyz` | `"status":"pass"`, including `opensips_db` and `redis` |
+| 3 | Internal readiness | `docker run --rm --network voice_backplane curlimages/curl -s http://telephony-config:8080/readyz` | `"status":"ok"`, and `"pass"` for every check, including `opensips_db` and `redis` |
 | 4 | OpenSIPs up | `docker compose logs opensips | tail` and `ss -lunp | grep 5060` | Listening; no DB errors |
 | 5 | FreeSWITCH up, SDP address right | `docker compose exec freeswitch fs_cli -p "$FS_EVENT_SOCKET_PASSWORD" -x 'sofia status profile internal'` | `RUNNING`; `SIP-IP` and `Ext-RTP-IP` are the public address |
 | 6 | call-control sees the node | `docker compose logs call-control | grep -i connect` | Connected to `fs1` |

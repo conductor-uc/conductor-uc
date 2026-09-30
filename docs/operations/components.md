@@ -100,9 +100,9 @@ It believes `X-Forwarded-For` and `X-Forwarded-Proto` only from the proxies list
 | Source | `telephony/opensips`: `opensips.cfg.template` (rendered at start by `docker-entrypoint.sh`), `seed-dispatcher.py`, `db-schema/` |
 | Image | `opensips/opensips:3.6` plus the MySQL, HTTP, Redis, presence, auth and TLS modules. Runs as root. |
 | Listens | SIP UDP and TCP on `OPENSIPS_SIP_PORT` (5060) on all interfaces; SIP TLS on 5061 when TLS is on; the **management interface (MI)** over HTTP on `OPENSIPS_MI_PORT` (8888) on all interfaces, **with no authentication**. |
-| Connects to | MariaDB `opensips` schema (users, domains, trunks, routes, registrations, TLS certificates); Redis (the module is loaded but nothing uses it yet); FreeSWITCH nodes on SIP 5060 (calls, plus an OPTIONS probe every 10 seconds); carriers; phones. |
+| Connects to | MariaDB `opensips` schema (users, domains, trunks, routes, registrations, TLS certificates); Redis (the module is loaded but nothing uses it yet); FreeSWITCH nodes on SIP 5060 (calls, plus an OPTIONS probe every 2 seconds, S4-02); carriers; phones. |
 | Stores | Its tables in the `opensips` schema. telephony-config writes them; OpenSIPs reads them. Registrations (`location`) and dialogs are written back. |
-| Copies | **Exactly one.** There is no clustering, no dialog replication and no floating IP (plan task S4-06). telephony-config sends reload commands to a single MI address. |
+| Copies | One edge, or a pair behind a floating address (S4-06; [§6](#6-running-more-than-one-copy)). The single-server layout runs one. |
 
 What it does on each request:
 
