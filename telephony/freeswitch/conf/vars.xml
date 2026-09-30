@@ -127,6 +127,17 @@
        image ships (M1 is audio-only; video arrives with S6-01). -->
   <X-PRE-PROCESS cmd="set" data="global_codec_prefs=OPUS,G722,PCMU,PCMA"/>
   <X-PRE-PROCESS cmd="set" data="outbound_codec_prefs=OPUS,G722,PCMU,PCMA"/>
+  <!-- G-134: what the called leg of a bridged call is offered. Without this,
+       once the caller's leg has media FreeSWITCH offers the called leg that
+       one codec and nothing else, so a caller on Opus could not reach a phone
+       or carrier that speaks only G.711, although the node can convert
+       between them. With it the called leg is offered the caller's codec
+       first, then the list above: it answers the caller's codec when it
+       speaks it (nothing is converted), and another when it does not (the
+       node converts; docs/operations/sizing.md has what that costs). A global
+       variable, so it holds for every leg a node places: phones, carriers,
+       queue agents. -->
+  <X-PRE-PROCESS cmd="set" data="media_mix_inbound_outbound_codecs=true"/>
 
   <!-- 06's recording pipeline: FS spools here (tmpfs — see the Dockerfile and
        compose's volume mount), call recordings and voicemail messages

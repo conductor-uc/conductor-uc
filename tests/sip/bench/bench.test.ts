@@ -10,7 +10,6 @@ import {
   activeOpensipsContainer,
   buildSippCommand,
   clearRegistration,
-  composeContainer,
   fsCliOn,
   SCENARIOS_DIR,
   seedFixtures,
@@ -26,8 +25,6 @@ const skipReason = await sipInfraOrSkipReason();
 
 const PBX_CONFIG_SERVICE_URL = 'http://pbx-config-service:8080';
 const RECORDING_SERVICE_URL = 'http://recording-service:8080';
-/** The media node that places the transcoded calls itself. */
-const NODE_CONTAINER = composeContainer('freeswitch-2');
 const RESULTS_DIR = path.resolve(new URL('..', import.meta.url).pathname, 'bench-results');
 /** A node is sized to run at most this share of each vCPU, leaving headroom for bursts. */
 const TARGET_CPU_PERCENT = 80;
@@ -110,7 +107,7 @@ function parseTotals(log: string): { succeeded: number; failed: number } {
  *
  * Each workload also says which legs it expects on the nodes, by codec, and fails when they are
  * not there: a number for a load that was not the one named is worse than none. (The first
- * "transcoded" figure was for calls that were Opus on both legs; see {@link measure}.)
+ * "transcoded" figure was for calls that were Opus on both legs, G-134.)
  *
  * Runs only with `pnpm bench` (its own vitest config), on the development stack. The figures
  * depend on the machine; they are written to `bench-results/` and printed, and sizing.md records
@@ -311,13 +308,15 @@ describe.skipIf(skipReason !== undefined)('S4-09 capacity per media node', () =>
   }
 
   /**
-   * `concurrent` calls from 801 to `destination` through the platform, as a phone places them
-   * (`uac_bench_pcmu.xml`, G.711); 802 answers when `answered` (a conference answers its own).
+   * `concurrent` calls from 801 to `destination` through the platform, as a phone places them:
+   * G.711 (`uac_bench_pcmu.xml`), or `opus`, preferring Opus (`uac_bench_opus.xml`). 802 answers
+   * with G.711 alone when `answered` (a conference answers its own).
    */
   function dialed(options: {
     readonly concurrent: number;
     readonly destination: string;
     readonly answered: boolean;
+    readonly opus?: boolean;
   }) {
     return async (dir: string, containers: string[]) => {
       const env = sipTestEnv();
@@ -331,7 +330,7 @@ describe.skipIf(skipReason !== undefined)('S4-09 capacity per media node', () =>
         await phone('bench-callee', dir, '802', 'answer_bench_pcmu.xml');
       }
       const calls = buildSippCommand({
-        scenarioPath: '/scenarios/uac_bench_pcmu.xml',
+        scenarioPath: `/scenarios/${options.opus === true ? 'uac_bench_opus.xml' : 'uac_bench_pcmu.xml'}`,
         csvPath: '/data/caller.csv',
         au: '801',
         ap: password('801'),
@@ -358,45 +357,6 @@ describe.skipIf(skipReason !== undefined)('S4-09 capacity per media node', () =>
       const ramp = options.concurrent / CALLS_PER_SECOND;
       return async () =>
         parseTotals(await waitForExit('bench-caller', (CALL_SECONDS + ramp + 60) * 1000));
-    };
-  }
-
-  /**
-   * `concurrent` calls placed by one media node itself: each rings 802 offering Opus alone, and
-   * is bridged to 803 offering G.711 alone, so the node decodes and encodes Opus for every
-   * packet each way. Both legs go out through the edge, as a call's leg to a phone does.
-   *
-   * Placed by the node because a call through the platform is never transcoded on a node: the
-   * leg to the person called is offered the caller's codec alone (G-134). A phone offering Opus
-   * that called 802 had Opus on both legs, whatever 802 answered, and the first figure measured
-   * here as "transcoded" was for exactly that.
-   */
-  function transcoded(options: { readonly concurrent: number }) {
-    return async (dir: string, containers: string[]) => {
-      const route = `sip_route_uri=sip:${sipTestEnv().opensipsTarget}`;
-      containers.push('bench-callee', 'bench-callee-2');
-      await phone('bench-callee', dir, '802', 'answer_bench_opus.xml');
-      await phone('bench-callee-2', dir, '803', 'answer_bench_pcmu.xml');
-      const hangup = `execute_on_answer='sched_hangup +${String(CALL_SECONDS)} normal_clearing'`;
-      const call =
-        `originate {absolute_codec_string=OPUS,${route},origination_caller_id_number=801,` +
-        `ignore_early_media=true,${hangup}}sofia/internal/802@${fqdn} ` +
-        `&bridge({absolute_codec_string=PCMU,${route}}sofia/internal/803@${fqdn})`;
-      const placed: Promise<string>[] = [];
-      for (let i = 0; i < options.concurrent; i += 1) {
-        placed.push(fsCliOn(NODE_CONTAINER, call).catch((error: unknown) => String(error)));
-        await new Promise((resolve) => setTimeout(resolve, 1000 / CALLS_PER_SECOND));
-      }
-      return async () => {
-        const answers = await Promise.all(placed);
-        const succeeded = answers.filter((answer) => answer.trim().startsWith('+OK')).length;
-        // Each call ends itself CALL_SECONDS after it was answered.
-        const deadline = Date.now() + (CALL_SECONDS + 30) * 1000;
-        while (Date.now() < deadline && Object.keys(await legsNow()).length > 0) {
-          await new Promise((resolve) => setTimeout(resolve, 1_000));
-        }
-        return { succeeded, failed: options.concurrent - succeeded };
-      };
     };
   }
 
@@ -447,10 +407,12 @@ describe.skipIf(skipReason !== undefined)('S4-09 capacity per media node', () =>
   }, 300_000);
 
   it('Opus ↔ G.711 transcoded', async () => {
+    // The caller's phone prefers Opus and the one called speaks only G.711: the called leg is
+    // offered G.711 after the caller's Opus (G-134), and the node converts every packet.
     await measure('Opus ↔ G.711 transcoded', {
       concurrent: 30,
-      legs: { 'outbound opus': 30, 'outbound PCMU': 30 },
-      place: transcoded({ concurrent: 30 }),
+      legs: { 'inbound opus': 30, 'outbound PCMU': 30 },
+      place: dialed({ concurrent: 30, destination: '802', answered: true, opus: true }),
     });
   }, 300_000);
 

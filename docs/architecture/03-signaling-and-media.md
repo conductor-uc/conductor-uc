@@ -84,6 +84,7 @@ The private key sits in clear in the `opensips` schema, because that is how Open
 - **Profiles:** a single `internal` Sofia profile that receives only from OpenSIPs. It has no gateways and no registrations. Its brand-neutral params are `user-agent-string` and `username` (the SDP `o=` line), plus a neutral `s=` session name.
 - **Config delivery (D-006):** `mod_xml_curl` bindings `directory`, `dialplan`, and `configuration` point at `telephony-config`, reached through a node-local caching proxy (or FS's own XML cache with a TTL). Static bootstrap XML contains only node identity, ACLs, and the xml_curl URLs.
 - **Event socket:** `mod_event_socket` listens on a private interface. `call-control` connects inbound to every node.
+- **Codecs (as built, G-134):** a node's list is Opus, G.722, G.711 (`vars.xml`). The caller's leg takes the caller's first choice from it. The called leg is offered the caller's codec first and then the rest of the list (`media_mix_inbound_outbound_codecs`): it answers the caller's codec when it speaks it, and nothing is converted; otherwise the node transcodes between the legs. What a transcoded call costs a node is in [`docs/operations/sizing.md`](../operations/sizing.md).
 
 ### 3.1 xml_curl endpoints (`telephony-config`)
 
