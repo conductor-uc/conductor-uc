@@ -38,10 +38,22 @@ if [ -n "${OPENSIPS_TLS_CERT_FILE:-}" ]; then
     SAN=$(echo "$NAMES" | awk -F, '{ for (i = 1; i <= NF; i++) printf "%sDNS:%s", (i > 1 ? "," : ""), $i }')
     FIRST=$(echo "$NAMES" | cut -d, -f1)
     mkdir -p "$(dirname "$OPENSIPS_TLS_CERT_FILE")" "$(dirname "$OPENSIPS_TLS_KEY_FILE")"
-    openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
-      -subj "/CN=$FIRST" -addext "subjectAltName=$SAN" \
-      -keyout "$OPENSIPS_TLS_KEY_FILE" -out "$OPENSIPS_TLS_CERT_FILE" 2>/dev/null
-    echo "opensips: made a self-signed development certificate for $NAMES" >&2
+    # One at a time, and checked again once inside: both edges of a pair share
+    # this volume and start together on a new one. Unlocked, each wrote its own
+    # key and certificate over the other's, leaving a key that did not match
+    # the certificate, and neither edge could start (G-131). The certificate
+    # goes in place last, so one that is there always has its key.
+    (
+      flock 9
+      if [ ! -s "$OPENSIPS_TLS_CERT_FILE" ]; then
+        openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+          -subj "/CN=$FIRST" -addext "subjectAltName=$SAN" \
+          -keyout "$OPENSIPS_TLS_KEY_FILE.new" -out "$OPENSIPS_TLS_CERT_FILE.new" 2>/dev/null
+        mv "$OPENSIPS_TLS_KEY_FILE.new" "$OPENSIPS_TLS_KEY_FILE"
+        mv "$OPENSIPS_TLS_CERT_FILE.new" "$OPENSIPS_TLS_CERT_FILE"
+        echo "opensips: made a self-signed development certificate for $NAMES" >&2
+      fi
+    ) 9>"$OPENSIPS_TLS_CERT_FILE.lock"
   fi
 
   [ -s "$OPENSIPS_TLS_CERT_FILE" ] || { echo "opensips: TLS certificate $OPENSIPS_TLS_CERT_FILE is missing" >&2; exit 1; }
