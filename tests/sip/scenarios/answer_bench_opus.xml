@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S4-09 (the capacity benchmark): `answer_bench_pcmu.xml`, with Opus. Answers
+  every call it is sent with Opus alone, under the payload type FreeSWITCH
+  offers it (102), and plays Opus audio (media/opus-440hz-40s.pcap, made by
+  media/make-opus-pcap.py) until the call ends.
+-->
+<scenario name="Answer every call with Opus audio until it ends">
+  <recv request="INVITE" crlf="true" timeout="60000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 180 Ringing
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <send retrans="500">
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 102
+      a=rtpmap:102 opus/48000/2
+      a=fmtp:102 useinbandfec=1
+    ]]>
+  </send>
+
+  <recv request="ACK" rtd="true" crlf="true">
+  </recv>
+
+  <nop>
+    <action>
+      <exec play_pcap_audio="/scenarios/media/opus-440hz-40s.pcap"/>
+    </action>
+  </nop>
+
+  <recv request="BYE" crlf="true" timeout="60000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>

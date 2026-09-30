@@ -15,6 +15,7 @@ Everything here was written from the code, the container images and `infra/compo
 | 5 | [All-in-one deployment](deploy-all-in-one.md) | Scenario A: every component on one server. |
 | 6 | [Distributed deployment](deploy-distributed.md) | Scenario B: components spread over several servers. |
 | 7 | [Day-2 operations](operations.md) | After install. First administrator, upgrades, backups and restore, monitoring, logs, secret rotation, troubleshooting. |
+| 8 | [Sizing](sizing.md) | Before you choose server sizes. Measured CPU cost per call on media servers and the edge, and how to turn it into a server count. |
 
 ## Before you start: what state the platform is in
 

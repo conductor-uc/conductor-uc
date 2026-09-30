@@ -294,4 +294,4 @@ Plan around these. IDs refer to [decisions](../decisions.md) and the [implementa
 | Telephony | Only Yealink auto-provisioning, not verified on hardware | G-103 |
 | Operations | No production manifests; no backup tooling; no metrics beyond the uploader; no tracing | S4-11, release readiness |
 | Operations | Audit and CDR tables have no retention: partitions are never extended or pruned | G-12, G-52 |
-| Capacity | No capacity benchmarks | S4-09 |
+| Capacity | CPU per call is measured for media servers and the edge, on one development machine ([sizing](sizing.md)). Nothing has been run to the point of failure, and the application and data servers are unmeasured | S4-09 |

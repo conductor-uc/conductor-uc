@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S4-09 (the capacity benchmark): the callee. Answers every call it is sent
+  (run with no call limit), offering only G.711 (PCMU), and streams audio
+  until the caller hangs up.
+-->
+<scenario name="Answer every call with G.711 audio until it ends">
+  <recv request="INVITE" crlf="true" timeout="60000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 180 Ringing
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <send retrans="500">
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:];tag=[call_number]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0
+      a=rtpmap:0 PCMU/8000
+    ]]>
+  </send>
+
+  <recv request="ACK" rtd="true" crlf="true">
+  </recv>
+
+  <nop>
+    <action>
+      <exec rtp_stream="/scenarios/media/tone-440hz-1s.pcmu,-1,0"/>
+    </action>
+  </nop>
+
+  <recv request="BYE" crlf="true" timeout="60000">
+  </recv>
+
+  <nop>
+    <action>
+      <exec rtp_stream="pause"/>
+    </action>
+  </nop>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>

@@ -22,7 +22,7 @@ The layout the platform runs in when it is highly available: which servers exist
 | object storage | Hosted S3 | provider | provider | HTTPS |
 | SMTP relay | Mail provider | provider | — | — |
 
-Minimum HA footprint: 2 edge + 2 media + 2 app + 3 data = **9 servers**, plus hosted object storage. Sizes come from S4-09's measurements (`docs/operations/sizing.md`); until then [`deploy-distributed.md`](../operations/deploy-distributed.md) §1 is the guide.
+Minimum HA footprint: 2 edge + 2 media + 2 app + 3 data = **9 servers**, plus hosted object storage. Media and edge sizes come from S4-09's measurements ([`sizing.md`](../operations/sizing.md)); the application and data servers are not measured yet.
 
 ```mermaid
 flowchart TB

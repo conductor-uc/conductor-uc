@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S4-09 (the capacity benchmark): `uac_call.xml`, holding the call for 30 s
+  while streaming G.711 (PCMU) audio, so a media node carries real media for
+  the whole measurement. Run many at once (`-l`), not one.
+
+  `[field0]`=username, `[field1]`=domain, `[field2]`=destination number.
+-->
+<scenario name="Call with G.711 audio for 30 s, hang up">
+  <send retrans="4000">
+    <![CDATA[
+      INVITE sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      [extraheader]
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0
+      a=rtpmap:0 PCMU/8000
+    ]]>
+  </send>
+
+
+  <!-- Every call a phone starts is challenged, and must be the From user's own
+       credentials (opensips.cfg.template, proxy_authorize): answer the 407
+       (acknowledged hop by hop) and send the INVITE again with them. The
+       caller does not register: calls need credentials, not a registration. -->
+  <recv response="100" optional="true">
+  </recv>
+
+  <recv response="407" auth="true">
+  </recv>
+
+  <send>
+    <![CDATA[
+      ACK sip:[field2]@[field1] SIP/2.0
+      [last_Via:]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <send retrans="4000">
+    <![CDATA[
+      INVITE sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 2 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      [extraheader]
+      [authentication]
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0
+      a=rtpmap:0 PCMU/8000
+    ]]>
+  </send>
+
+  <recv response="100" optional="true">
+  </recv>
+
+  <recv response="180" optional="true">
+  </recv>
+
+  <!-- OpenSIPs' `topology_hiding()` (opensips.cfg.template) hides the whole
+       topology by rewriting Contact alone — confirmed directly (module
+       docs) it never adds a Record-Route, so there is no Route header for
+       SIPp's own `[routes]` keyword to build (tried first: with no
+       Record-Route ever seen, it expands to nothing, and an empty line in
+       its place ends the SIP header section early per RFC 3261 — the exact
+       same blank-line-terminates-headers failure `[extraheader]` hit
+       above). Per the module's own design, in-dialog requests must target
+       the hidden Contact URI itself as the R-URI (`sip:172.18.0.8;thinfo=`
+       ..., not the original `[field2]@[field1]`) — that's what carries the
+       encoded routing state `topology_hiding_match()` decodes on the way
+       back in. -->
+  <recv response="200" rtd="true">
+    <action>
+      <ereg regexp="sip:[^&gt;]*" search_in="hdr" header="Contact:" assign_to="1"/>
+    </action>
+  </recv>
+
+  <send>
+    <![CDATA[
+      ACK [$1] SIP/2.0
+      [last_Via:]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 2 ACK
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <nop>
+    <action>
+      <exec rtp_stream="/scenarios/media/tone-440hz-1s.pcmu,-1,0"/>
+    </action>
+  </nop>
+
+  <pause milliseconds="30000"/>
+  <nop>
+    <action>
+      <exec rtp_stream="pause"/>
+    </action>
+  </nop>
+
+  <send retrans="500">
+    <![CDATA[
+      BYE [$1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 3 BYE
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true">
+  </recv>
+
+</scenario>
