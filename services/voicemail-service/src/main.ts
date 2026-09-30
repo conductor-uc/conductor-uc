@@ -9,7 +9,14 @@ import { storageFromConfig } from '@cuc/storage';
 import { configSchema, loadServiceConfig } from './config.js';
 import { createKekRewrapJob } from './kek-rewrap.js';
 import { createMailboxRepo } from './repo/mailbox.repo.js';
+import type { Engine } from './domain/transcription.js';
 import { createMessageRepo } from './repo/message.repo.js';
+import { createTranscriptionSettingsRepo } from './repo/transcription-settings.repo.js';
+import { createTranscriber } from './transcriber.js';
+import {
+  createOpenAiCompatibleProvider,
+  type TranscriptionProvider,
+} from './transcription/provider.js';
 import { registerInternalRoutes } from './routes/internal.routes.js';
 import { createPbxClient } from './pbx-client.js';
 import { createPendingSweep } from './pending-sweep.js';
@@ -74,7 +81,38 @@ const orgDeletionLoop = orgDeletion.run();
 const kek = fileKekFromConfig(config);
 const storage = storageFromConfig(config, logger);
 const mailboxRepo = createMailboxRepo(db, storage, kek);
-const messageRepo = createMessageRepo(db);
+// S5-06 (O-3): the transcription engines the operator configured.
+const engines = new Map<Engine, TranscriptionProvider>();
+for (const [engine, url, apiKey, model] of [
+  [
+    'default',
+    config.TRANSCRIPTION_DEFAULT_URL,
+    config.TRANSCRIPTION_DEFAULT_API_KEY,
+    config.TRANSCRIPTION_DEFAULT_MODEL,
+  ],
+  [
+    'self_hosted',
+    config.TRANSCRIPTION_SELF_HOSTED_URL,
+    config.TRANSCRIPTION_SELF_HOSTED_API_KEY,
+    config.TRANSCRIPTION_SELF_HOSTED_MODEL,
+  ],
+] as const) {
+  if (url === undefined) continue;
+  engines.set(
+    engine,
+    createOpenAiCompatibleProvider({
+      baseUrl: url,
+      model,
+      timeoutMs: config.TRANSCRIPTION_TIMEOUT_MS,
+      ...(apiKey === undefined ? {} : { apiKey }),
+      ...(config.TRANSCRIPTION_LANGUAGE === undefined
+        ? {}
+        : { language: config.TRANSCRIPTION_LANGUAGE }),
+    }),
+  );
+}
+const messageRepo = createMessageRepo(db, { transcriptionEngines: [...engines.keys()] });
+const transcriptionSettings = createTranscriptionSettingsRepo(db);
 
 const app = await createServer({
   serviceName: config.SERVICE_NAME,
@@ -103,7 +141,10 @@ app.addReadinessCheck('outbox', async () => {
   return { status: 'pass', detail: `${String(lag)} pending` };
 });
 
-registerMailboxRoutes(app, mailboxRepo, messageRepo, storage);
+registerMailboxRoutes(app, mailboxRepo, messageRepo, storage, {
+  transcriptionSettings,
+  availableEngines: [...engines.keys()],
+});
 const pbxClient = createPbxClient({
   baseUrl: config.PBX_CONFIG_SERVICE_URL,
   internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
@@ -125,6 +166,16 @@ const pendingSweep = createPendingSweep({
 });
 pendingSweep.start(config.PENDING_SWEEP_INTERVAL_MS);
 
+// S5-06: transcribes the messages that asked for it, when any engine is configured.
+const transcriber = createTranscriber({
+  messages: messageRepo,
+  storage,
+  engines,
+  logger,
+  now: () => new Date(),
+});
+if (engines.size > 0) transcriber.start(config.TRANSCRIPTION_POLL_INTERVAL_MS);
+
 // G-116: values still under an older KEK version are moved to the current one
 // in the background, and `/readyz` says how many remain, so an old version
 // can be removed from CRYPTO_KEKS once every service reports 0.
@@ -138,6 +189,7 @@ logger.info({ port: config.HTTP_PORT }, 'listening');
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   pendingSweep.stop();
+  transcriber.stop();
   relay.stop();
   await Promise.race([
     app.close(),

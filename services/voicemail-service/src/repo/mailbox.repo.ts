@@ -13,6 +13,11 @@ import {
   type EmailAfter,
   type EmailSettings,
 } from '../domain/mailbox.js';
+import {
+  InvalidTranscriptionSettingsError,
+  isMailboxTranscription,
+  type MailboxTranscription,
+} from '../domain/transcription.js';
 import { voicemailEvents } from '../events.js';
 import type { VoicemailServiceDb } from '../schema.js';
 
@@ -26,6 +31,8 @@ export interface Mailbox {
   readonly notifyEmail: string | null;
   readonly emailAttachAudio: boolean;
   readonly emailAfter: EmailAfter;
+  /** S5-06: whether new messages are transcribed: the tenant's choice (`inherit`), `on` or `off`. */
+  readonly transcribe: MailboxTranscription;
 }
 
 export interface CreateMailboxInput {
@@ -58,6 +65,7 @@ const COLUMNS = [
   'notify_email as notifyEmail',
   'email_attach_audio as emailAttachAudio',
   'email_after as emailAfter',
+  'transcribe',
 ] as const;
 
 function toMailbox(row: {
@@ -69,9 +77,11 @@ function toMailbox(row: {
   notifyEmail: string | null;
   emailAttachAudio: boolean | number;
   emailAfter: string;
+  transcribe: string;
 }): Mailbox {
   return {
     ...row,
+    transcribe: isMailboxTranscription(row.transcribe) ? row.transcribe : 'inherit',
     greetingStatus: row.greetingStatus as Mailbox['greetingStatus'],
     emailAttachAudio: Boolean(row.emailAttachAudio),
     emailAfter: row.emailAfter as EmailAfter,
@@ -171,6 +181,7 @@ export function createMailboxRepo(
             notify_email: null,
             email_attach_audio: false,
             email_after: 'keep',
+            transcribe: 'inherit',
             created_at: now,
             updated_at: now,
             version: 1,
@@ -194,7 +205,25 @@ export function createMailboxRepo(
         notifyEmail: null,
         emailAttachAudio: false,
         emailAfter: 'keep',
+        transcribe: 'inherit',
       };
+    },
+
+    /** S5-06: whether the mailbox's new messages are transcribed. */
+    async setTranscription(ctx: DbContext, id: string, transcribe: string): Promise<Mailbox> {
+      if (!isMailboxTranscription(transcribe)) {
+        throw new InvalidTranscriptionSettingsError(`'${transcribe}' is not inherit, on or off.`);
+      }
+      const result = await db
+        .scoped(ctx)
+        .updateTable('mailboxes')
+        .set({ transcribe, updated_at: new Date() })
+        .where('id', '=', id)
+        .executeTakeFirst();
+      if (Number(result.numUpdatedRows) === 0) throw new MailboxNotFoundError(id);
+      const updated = await this.findById(ctx, id);
+      if (updated === undefined) throw new MailboxNotFoundError(id);
+      return updated;
     },
 
     /** Replaces the mailbox's voicemail-to-email settings (S5-07). */

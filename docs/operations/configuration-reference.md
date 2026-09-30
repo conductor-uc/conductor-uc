@@ -252,6 +252,15 @@ Groups: base, database (`voicemail_service`), events, signed headers, crypto, st
 | `IDENTITY_SERVICE_URL` | — | **yes** | |
 | `PENDING_MESSAGE_MAX_AGE_HOURS` | `72` | no | A message whose audio never reached storage (the caller hung up before anything was recorded, or the node died with the file) is marked failed after this. Pending messages are never listed either way. |
 | `PENDING_SWEEP_INTERVAL_MS` | `3600000` | no | First sweep runs one interval after startup |
+| `TRANSCRIPTION_DEFAULT_URL` | — | no | S5-06: the hosted speech-to-text engine tenants may choose, an OpenAI-compatible `/v1/audio/transcriptions` endpoint (the base URL, without the path). Choose it by your own evaluation, under a data-processing agreement with no retention of or training on customer audio. Unset: not offered. |
+| `TRANSCRIPTION_DEFAULT_API_KEY` | — | no (secret) | Sent as a bearer token to the hosted engine |
+| `TRANSCRIPTION_DEFAULT_MODEL` | `whisper-1` | no | The model name the hosted engine expects |
+| `TRANSCRIPTION_SELF_HOSTED_URL` | — | no | The engine you run yourself, so audio never leaves the platform: for example faster-whisper behind the same API (the development stack's `whisper` service, compose profile `transcription`). Unset: not offered. |
+| `TRANSCRIPTION_SELF_HOSTED_API_KEY` | — | no (secret) | |
+| `TRANSCRIPTION_SELF_HOSTED_MODEL` | `Systran/faster-whisper-small` | no | Must be downloaded to that engine first |
+| `TRANSCRIPTION_LANGUAGE` | — | no | An ISO-639-1 hint (`en`) sent to either engine; unset lets it detect |
+| `TRANSCRIPTION_POLL_INTERVAL_MS` | `5000` | no | How often the transcriber looks for messages waiting |
+| `TRANSCRIPTION_TIMEOUT_MS` | `120000` | no | How long one engine call may take; a message is tried three times, then marked failed |
 
 ### 4.8 recording-service
 

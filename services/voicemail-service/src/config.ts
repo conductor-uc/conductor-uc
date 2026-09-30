@@ -36,6 +36,27 @@ export const configSchema = Type.Object({
   PENDING_MESSAGE_MAX_AGE_HOURS: Env.int({ minimum: 1, default: 72 }),
   /** How often that sweep runs. */
   PENDING_SWEEP_INTERVAL_MS: Env.int({ minimum: 1_000, default: 60 * 60 * 1000 }),
+
+  /**
+   * S5-06 (O-3): the speech-to-text engines this platform offers, each an OpenAI-compatible
+   * `/v1/audio/transcriptions` endpoint. An engine without a URL does not exist, and a tenant
+   * cannot pick it. `DEFAULT` is the platform's hosted engine, chosen by the operator's
+   * evaluation (no retention or training on customer audio, under a data-processing agreement;
+   * an EU option); `SELF_HOSTED` runs on the operator's own servers, so audio never leaves the
+   * platform. Neither is set by default, so nothing is transcribed.
+   */
+  TRANSCRIPTION_DEFAULT_URL: Env.optional(Env.url()),
+  TRANSCRIPTION_DEFAULT_API_KEY: Env.optional(Env.secret()),
+  TRANSCRIPTION_DEFAULT_MODEL: Env.string({ default: 'whisper-1' }),
+  TRANSCRIPTION_SELF_HOSTED_URL: Env.optional(Env.url()),
+  TRANSCRIPTION_SELF_HOSTED_API_KEY: Env.optional(Env.secret()),
+  TRANSCRIPTION_SELF_HOSTED_MODEL: Env.string({ default: 'Systran/faster-whisper-small' }),
+  /** Asked of either engine as a hint (an ISO-639-1 code such as `en`); unset lets it detect. */
+  TRANSCRIPTION_LANGUAGE: Env.optional(Env.string()),
+  /** How often the transcriber looks for messages waiting. */
+  TRANSCRIPTION_POLL_INTERVAL_MS: Env.int({ minimum: 500, default: 5_000 }),
+  /** How long one engine call may take. */
+  TRANSCRIPTION_TIMEOUT_MS: Env.int({ minimum: 1_000, default: 120_000 }),
 });
 
 export type ServiceConfig = ReturnType<typeof loadServiceConfig>;

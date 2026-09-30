@@ -174,6 +174,18 @@ docker compose up -d --remove-orphans   # back to the everyday stack and its own
 
 The chaos suite kills a media node, the active edge, a telephony-config, a call-control, the Redis primary and the MariaDB writer in turn under call load, and writes what it measured to `tests/sip/chaos-results/`. It runs nightly in CI (the `chaos` job).
 
+## Voicemail transcription (S5-06)
+
+Nothing is transcribed unless an engine is configured. To try the self-hosted one (faster-whisper behind the OpenAI-compatible API), start the `transcription` profile and tell voicemail-service where it is:
+
+```sh
+export COMPOSE_PROFILES=transcription TRANSCRIPTION_SELF_HOSTED_URL=http://whisper:8000
+docker compose up -d --wait whisper voicemail-service
+docker compose up whisper-model   # downloads the model, once (Systran/faster-whisper-small by default)
+```
+
+The image is about 3 GB and the model a few hundred MB, which is why the profile is off by default. Then turn transcription on for a tenant in the console (Voicemail, Transcription). `tests/sip/test/transcription.test.ts` runs against it; without the engine it skips itself. For a hosted engine, set `TRANSCRIPTION_DEFAULT_URL`, `TRANSCRIPTION_DEFAULT_API_KEY` and `TRANSCRIPTION_DEFAULT_MODEL` instead.
+
 ## A second stack on the same machine (CI)
 
 The compose project is `conductor-uc` unless `COMPOSE_PROJECT_NAME` says otherwise. CI's `sip` and `chaos` jobs run on a self-hosted runner, which can be this machine, so they load `ci.env`: project `conductor-uc-ci`, subnet `172.31.0.0/16`, and every host port 10000 higher. CI's stack comes up beside the dev stack, and its `docker compose down -v` removes only its own containers and volumes.

@@ -13,7 +13,12 @@ import {
   type MailboxRepo,
 } from '../repo/mailbox.repo.js';
 import { MessageNotFoundError, type MessageRepo } from '../repo/message.repo.js';
+import { InvalidTranscriptionSettingsError, type Engine } from '../domain/transcription.js';
+import type { TranscriptionSettingsRepo } from '../repo/transcription-settings.repo.js';
+import { publicTranscriptStatus } from './transcript-status.js';
 import {
+  transcriptionEngineUnavailable,
+  transcriptionSettingsInvalid,
   emailSettingsInvalid,
   extensionIdRequired,
   mailboxAlreadyExists,
@@ -40,6 +45,25 @@ const EmailAfterSchema = Type.Union([
   Type.Literal('delete'),
 ]);
 
+const MailboxTranscriptionSchema = Type.Union([
+  Type.Literal('inherit'),
+  Type.Literal('on'),
+  Type.Literal('off'),
+]);
+const EngineSchema = Type.Union([Type.Literal('default'), Type.Literal('self_hosted')]);
+const TranscriptionSettingsSchema = Type.Object({
+  /** Whether the tenant's mailboxes that follow it are transcribed. */
+  enabled: Type.Boolean(),
+  engine: EngineSchema,
+  /** The engines this platform offers; empty when the operator configured none. */
+  availableEngines: Type.Array(EngineSchema),
+});
+const TranscriptionSettingsBodySchema = Type.Object({
+  enabled: Type.Boolean(),
+  engine: EngineSchema,
+});
+const MailboxTranscriptionBodySchema = Type.Object({ transcribe: MailboxTranscriptionSchema });
+
 const MailboxSchema = Type.Object({
   id: Type.String(),
   extensionId: Type.String(),
@@ -53,6 +77,8 @@ const MailboxSchema = Type.Object({
   notifyEmail: Type.Union([Type.String(), Type.Null()]),
   emailAttachAudio: Type.Boolean(),
   emailAfter: EmailAfterSchema,
+  /** S5-06: whether new messages are transcribed: the tenant's choice (`inherit`), `on` or `off`. */
+  transcribe: MailboxTranscriptionSchema,
 });
 type MailboxResponse = Static<typeof MailboxSchema>;
 
@@ -63,6 +89,15 @@ const MessageSchema = Type.Object({
   callerIdNumber: Type.Union([Type.String(), Type.Null()]),
   durationMs: Type.Union([Type.Number(), Type.Null()]),
   isRead: Type.Boolean(),
+  /** S5-06: the text of the message, once transcribed (private-class data). */
+  transcript: Type.Union([Type.String(), Type.Null()]),
+  /** `none` (not asked for), `pending` (waiting or being transcribed), `done` or `failed`. */
+  transcriptStatus: Type.Union([
+    Type.Literal('none'),
+    Type.Literal('pending'),
+    Type.Literal('done'),
+    Type.Literal('failed'),
+  ]),
   createdAt: Type.String(),
 });
 
@@ -91,6 +126,8 @@ function toProblem(error: unknown): ProblemError {
   if (error instanceof MailboxAlreadyExistsError) return mailboxAlreadyExists(error);
   if (error instanceof MailboxNotFoundError) return mailboxNotFound(error);
   if (error instanceof MessageNotFoundError) return messageNotFound(error);
+  if (error instanceof InvalidTranscriptionSettingsError)
+    return transcriptionSettingsInvalid(error);
   throw error;
 }
 
@@ -112,6 +149,11 @@ export function registerMailboxRoutes(
   mailboxes: MailboxRepo,
   messages: MessageRepo,
   storage: Storage,
+  transcription: {
+    readonly transcriptionSettings: TranscriptionSettingsRepo;
+    /** The engines the operator configured (S5-06). */
+    readonly availableEngines: readonly Engine[];
+  },
 ): void {
   async function toResponse(
     ctx: DbContext,
@@ -122,6 +164,7 @@ export function registerMailboxRoutes(
       notifyEmail: string | null;
       emailAttachAudio: boolean;
       emailAfter: MailboxResponse['emailAfter'];
+      transcribe: MailboxResponse['transcribe'];
     },
   ): Promise<MailboxResponse> {
     const ready = await messages.listReady(ctx, mailbox.id);
@@ -133,8 +176,77 @@ export function registerMailboxRoutes(
       notifyEmail: mailbox.notifyEmail,
       emailAttachAudio: mailbox.emailAttachAudio,
       emailAfter: mailbox.emailAfter,
+      transcribe: mailbox.transcribe,
     };
   }
+
+  /**
+   * S5-06 (O-3): the tenant's transcription opt-in. Off by default. Turning it on sends every
+   * new message of the mailboxes that follow the tenant to the engine chosen: the platform's
+   * hosted default, or the self-hosted one for a tenant that must keep audio in-house. Private,
+   * like the messages it concerns.
+   */
+  app.get(
+    '/v1/tenants/:tenantId/voicemail/transcription',
+    {
+      config: { permission: 'voicemail.access', dataClass: 'private' },
+      schema: { params: TenantParamsSchema, response: { 200: TranscriptionSettingsSchema } },
+    },
+    async (request) => ({
+      ...(await transcription.transcriptionSettings.get(ctxFor(request))),
+      availableEngines: [...transcription.availableEngines],
+    }),
+  );
+
+  app.put(
+    '/v1/tenants/:tenantId/voicemail/transcription',
+    {
+      config: { permission: 'voicemail.access', dataClass: 'private' },
+      schema: {
+        params: TenantParamsSchema,
+        body: TranscriptionSettingsBodySchema,
+        response: { 200: TranscriptionSettingsSchema },
+      },
+    },
+    async (request) => {
+      const { enabled, engine } = request.body;
+      if (enabled && !transcription.availableEngines.includes(engine)) {
+        throw transcriptionEngineUnavailable(engine);
+      }
+      try {
+        return {
+          ...(await transcription.transcriptionSettings.put(ctxFor(request), { enabled, engine })),
+          availableEngines: [...transcription.availableEngines],
+        };
+      } catch (error) {
+        throw toProblem(error);
+      }
+    },
+  );
+
+  /** S5-06: one mailbox's transcription: follow the tenant (`inherit`), `on` or `off`. */
+  app.put(
+    '/v1/tenants/:tenantId/voicemail/mailboxes/:id/transcription',
+    {
+      config: { permission: 'voicemail.access', dataClass: 'private' },
+      schema: {
+        params: MailboxParamsSchema,
+        body: MailboxTranscriptionBodySchema,
+        response: { 200: MailboxSchema },
+      },
+    },
+    async (request) => {
+      try {
+        const ctx = ctxFor(request);
+        return toResponse(
+          ctx,
+          await mailboxes.setTranscription(ctx, request.params.id, request.body.transcribe),
+        );
+      } catch (error) {
+        throw toProblem(error);
+      }
+    },
+  );
 
   app.get(
     '/v1/tenants/:tenantId/voicemail/mailboxes',
@@ -295,6 +407,8 @@ export function registerMailboxRoutes(
         callerIdNumber: m.callerIdNumber,
         durationMs: m.durationMs,
         isRead: m.isRead,
+        transcript: m.transcript,
+        transcriptStatus: publicTranscriptStatus(m.transcriptStatus),
         createdAt: m.createdAt.toISOString(),
       }));
       return { rows };

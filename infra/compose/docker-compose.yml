@@ -807,7 +807,45 @@ services:
       STORAGE_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-dev-minio}
       STORAGE_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-dev-minio-password}
       STORAGE_FORCE_PATH_STYLE: 'true'
+      # S5-06 (O-3): voicemail transcription engines. None by default, so nothing is
+      # transcribed. For the self-hosted one in this stack, start the `transcription`
+      # profile and point at it: COMPOSE_PROFILES=transcription
+      # TRANSCRIPTION_SELF_HOSTED_URL=http://whisper:8000 (see ./README.md).
+      TRANSCRIPTION_DEFAULT_URL: ${TRANSCRIPTION_DEFAULT_URL:-}
+      TRANSCRIPTION_DEFAULT_API_KEY: ${TRANSCRIPTION_DEFAULT_API_KEY:-}
+      TRANSCRIPTION_SELF_HOSTED_URL: ${TRANSCRIPTION_SELF_HOSTED_URL:-}
+      TRANSCRIPTION_SELF_HOSTED_MODEL: ${TRANSCRIPTION_SELF_HOSTED_MODEL:-Systran/faster-whisper-small}
     healthcheck: *node-healthcheck
+
+  # S5-06 (O-3): the self-hosted speech-to-text engine (faster-whisper behind the
+  # OpenAI-compatible transcription API), for voicemail transcription that keeps audio
+  # in-house. Optional (profile `transcription`): the image is large and the model is
+  # downloaded from Hugging Face on first start, into the whisper-models volume.
+  whisper:
+    profiles: [transcription]
+    image: ghcr.io/speaches-ai/speaches:latest-cpu@sha256:21e3df06d842fb7802ab470dd77c25f0e8c0d22950e8d8c6ae886e851af53ef8
+    restart: unless-stopped
+    volumes:
+      - whisper-models:/home/ubuntu/.cache/huggingface
+    healthcheck:
+      test: ['CMD', 'curl', '-sf', 'http://127.0.0.1:8000/health']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  # Downloads the model the engine is asked to use (the engine does not fetch one by itself).
+  whisper-model:
+    profiles: [transcription]
+    image: curlimages/curl:latest
+    restart: 'no'
+    depends_on:
+      whisper:
+        condition: service_healthy
+    command:
+      - -sf
+      - -X
+      - POST
+      - http://whisper:8000/v1/models/${TRANSCRIPTION_SELF_HOSTED_MODEL:-Systran/faster-whisper-small}
 
   recording-service:
     # S5-01, S5-04, S5-05: policies, recording metadata, playback URLs, retention.
@@ -1072,4 +1110,5 @@ volumes:
   nats-data:
   minio-data:
   mailpit-data:
+  whisper-models:
   prometheus-data:

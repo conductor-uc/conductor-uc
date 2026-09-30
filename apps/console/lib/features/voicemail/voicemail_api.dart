@@ -108,7 +108,42 @@ class VoicemailApi implements MailboxOps {
   @override
   Future<void> resetPin(String mailboxId, String pin) =>
       _api.call('POST', _mailboxes, mailboxId, 'reset-pin', body: {'pin': pin});
+
+  /// S5-06: the tenant's transcription opt-in, with the engines offered.
+  Future<Json> transcription() => _api
+      .call('GET', 'voicemail', 'transcription', null)
+      .then((data) => (data as Map).cast<String, dynamic>());
+
+  Future<Json> saveTranscription({
+    required bool enabled,
+    required String engine,
+  }) => _api
+      .call(
+        'PUT',
+        'voicemail',
+        'transcription',
+        null,
+        body: {'enabled': enabled, 'engine': engine},
+      )
+      .then((data) => (data as Map).cast<String, dynamic>());
+
+  /// S5-06: one mailbox follows the tenant (`inherit`), or is `on` or `off`.
+  Future<Json> setMailboxTranscription(String mailboxId, String mode) => _api
+      .call(
+        'PUT',
+        _mailboxes,
+        mailboxId,
+        'transcription',
+        body: {'transcribe': mode},
+      )
+      .then((data) => (data as Map).cast<String, dynamic>());
 }
+
+/// S5-06: the tenant's transcription opt-in. Invalidate it after a change.
+final transcriptionProvider = FutureProvider<Json?>((ref) async {
+  final api = ref.watch(voicemailApiProvider);
+  return api?.transcription();
+});
 
 final voicemailApiProvider = Provider<VoicemailApi?>((ref) {
   final api = ref.watch(pbxApiProvider);
