@@ -22,6 +22,8 @@ export const configSchema = Type.Object({
 
   /** voicemail-service: mailbox email settings, message details and audio for voicemail-to-email (S5-07). */
   VOICEMAIL_SERVICE_URL: Env.url(),
+  /** trunk-service: who is emailed when someone dials an emergency number (S2-06, G-1). */
+  TRUNK_SERVICE_URL: Env.url(),
   /**
    * The largest recording attached to a voicemail email, in bytes. A longer one
    * is sent without the audio and says so. Many relays refuse a message over

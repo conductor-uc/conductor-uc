@@ -33,3 +33,34 @@ export function validateNumbers(numbers: readonly string[]): string[] {
   }
   return [...seen];
 }
+
+/** At most this many addresses are emailed on an emergency call. */
+export const MAX_NOTIFY_EMAILS = 10;
+
+// Deliberately loose: something@something.something, no spaces. The address is only ever a mail
+// recipient; a typo shows as mail that never arrives, which the console's own form helps avoid.
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * S2-06 (G-1): who is emailed when someone in the tenant dials an emergency number (the on-site
+ * notification). Lowercased, duplicates refused; none is allowed.
+ */
+export function validateNotifyEmails(emails: readonly string[]): string[] {
+  if (emails.length > MAX_NOTIFY_EMAILS) {
+    throw new InvalidEmergencyRouteError(
+      `At most ${String(MAX_NOTIFY_EMAILS)} notification addresses are allowed.`,
+    );
+  }
+  const seen = new Set<string>();
+  for (const email of emails) {
+    const normalized = email.trim().toLowerCase();
+    if (normalized.length > 254 || !EMAIL.test(normalized)) {
+      throw new InvalidEmergencyRouteError(`'${email}' is not a valid email address.`);
+    }
+    if (seen.has(normalized)) {
+      throw new InvalidEmergencyRouteError(`'${normalized}' is listed more than once.`);
+    }
+    seen.add(normalized);
+  }
+  return [...seen];
+}

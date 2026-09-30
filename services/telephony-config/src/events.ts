@@ -338,6 +338,27 @@ export const telephonyEvents = defineEvents({
       dialedNumber: Type.String({ minLength: 1 }),
       callingExtensionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
       emergencyLocationId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      /**
+       * S2-06 (G-1's notification): who called and from where, as this service resolved them for
+       * the call itself, so the email and the console alert say it without asking again. Absent
+       * from events enqueued before; null when the caller or the location was not found.
+       */
+      callingNumber: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+      callingName: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+      location: Type.Optional(
+        Type.Union([
+          Type.Object({
+            label: Type.String(),
+            addressLine1: Type.String(),
+            addressLine2: Type.Union([Type.String(), Type.Null()]),
+            city: Type.String(),
+            state: Type.String(),
+            postalCode: Type.String(),
+            country: Type.String(),
+          }),
+          Type.Null(),
+        ]),
+      ),
     }),
   },
   /**

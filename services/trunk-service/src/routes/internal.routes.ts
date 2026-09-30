@@ -16,6 +16,7 @@ const EmergencyRouteViewSchema = Type.Object({
   tenantId: Type.String(),
   trunkId: Type.String(),
   numbers: Type.Array(Type.String()),
+  notifyEmails: Type.Array(Type.String()),
 });
 
 const OutboundRouteViewSchema = Type.Object({
@@ -175,9 +176,11 @@ export function registerInternalRoutes(
           code: 'emergency_route_not_found',
         });
       }
-      return { ...route, numbers: [...route.numbers] } satisfies Static<
-        typeof EmergencyRouteViewSchema
-      >;
+      return {
+        ...route,
+        numbers: [...route.numbers],
+        notifyEmails: [...route.notifyEmails],
+      } satisfies Static<typeof EmergencyRouteViewSchema>;
     },
   );
 
@@ -190,7 +193,13 @@ export function registerInternalRoutes(
     async (request) => {
       requireInternalToken(request.headers.authorization, internalServiceToken);
       const routes = await emergencyRoutes.listAll();
-      return { rows: routes.map((route) => ({ ...route, numbers: [...route.numbers] })) };
+      return {
+        rows: routes.map((route) => ({
+          ...route,
+          numbers: [...route.numbers],
+          notifyEmails: [...route.notifyEmails],
+        })),
+      };
     },
   );
 }

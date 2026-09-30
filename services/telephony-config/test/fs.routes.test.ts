@@ -1481,6 +1481,16 @@ describe.skipIf(skipReason !== undefined)('/fs/directory and /fs/dialplan', () =
           dialedNumber: '911',
           callingExtensionId: extensionId,
           emergencyLocationId: locationId,
+          callingNumber: '101',
+          location: {
+            label: 'HQ',
+            addressLine1: '123 Main St',
+            addressLine2: null,
+            city: 'Springfield',
+            state: 'IL',
+            postalCode: '62701',
+            country: 'US',
+          },
         },
       });
     });

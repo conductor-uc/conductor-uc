@@ -646,6 +646,13 @@ class DemoRealtimeSocket implements RealtimeSocket {
             'topic': topic,
             'data': {'extensions': demoPresence},
           });
+        } else if (topic.endsWith(':emergencies')) {
+          // S2-06: the hub keeps no alerts; none happen in the demo.
+          _reply({
+            'type': 'snapshot',
+            'topic': topic,
+            'data': {'alerts': <Object>[]},
+          });
         }
       case 'unsubscribe' when topic != null:
         _topics.remove(topic);

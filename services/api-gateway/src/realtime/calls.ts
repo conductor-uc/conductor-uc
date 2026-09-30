@@ -64,6 +64,8 @@ export type CallTopicEvent =
 
 /** The part of an event envelope (05 §5) the hub reads. */
 export interface BusEnvelope {
+  /** The event's id (every envelope on the bus has one; optional for older callers of this type). */
+  readonly id?: string;
   readonly type: string;
   readonly occurredAt: string;
   readonly orgContext: { readonly tenantId?: string };

@@ -4,7 +4,7 @@ import type { Database, DbContext } from '@cuc/db';
 import { requireTenant } from '@cuc/db';
 import { enqueueEvent } from '@cuc/events';
 
-import { validateNumbers } from '../domain/emergency-route.js';
+import { validateNotifyEmails, validateNumbers } from '../domain/emergency-route.js';
 import { trunkEvents } from '../events.js';
 import type { TrunkServiceDb } from '../schema.js';
 
@@ -13,11 +13,15 @@ export interface EmergencyRoute {
   readonly tenantId: string;
   readonly trunkId: string;
   readonly numbers: readonly string[];
+  /** S2-06 (G-1): emailed on every emergency call. */
+  readonly notifyEmails: readonly string[];
 }
 
 export interface UpsertEmergencyRouteInput {
   readonly trunkId: string;
   readonly numbers: readonly string[];
+  /** Replaces the list; none when omitted. */
+  readonly notifyEmails?: readonly string[];
 }
 
 export class EmergencyRouteNotFoundError extends Error {
@@ -29,6 +33,7 @@ interface EmergencyRouteRow {
   tenant_id: string;
   trunk_id: string;
   numbers: unknown;
+  notify_emails: unknown;
   version: number;
 }
 
@@ -43,10 +48,11 @@ function toEmergencyRoute(row: EmergencyRouteRow): EmergencyRoute {
     tenantId: row.tenant_id,
     trunkId: row.trunk_id,
     numbers: parseNumbers(row.numbers),
+    notifyEmails: row.notify_emails === null ? [] : parseNumbers(row.notify_emails),
   };
 }
 
-const COLUMNS = ['id', 'tenant_id', 'trunk_id', 'numbers', 'version'] as const;
+const COLUMNS = ['id', 'tenant_id', 'trunk_id', 'numbers', 'notify_emails', 'version'] as const;
 
 /**
  * Data access for a tenant's own emergency route (S2-06; 05 §3.4, G-1).
@@ -81,6 +87,7 @@ export function createEmergencyRouteRepo(db: Database<TrunkServiceDb>) {
     async upsert(ctx: DbContext, input: UpsertEmergencyRouteInput): Promise<EmergencyRoute> {
       const { tenantId } = requireTenant(ctx);
       const numbers = validateNumbers(input.numbers);
+      const notifyEmails = validateNotifyEmails(input.notifyEmails ?? []);
       const now = new Date();
 
       const existing = await db
@@ -101,6 +108,7 @@ export function createEmergencyRouteRepo(db: Database<TrunkServiceDb>) {
               id,
               trunk_id: input.trunkId,
               numbers: JSON.stringify(numbers),
+              notify_emails: JSON.stringify(notifyEmails),
               created_at: now,
               updated_at: now,
               version: 1,
@@ -112,6 +120,7 @@ export function createEmergencyRouteRepo(db: Database<TrunkServiceDb>) {
             .set({
               trunk_id: input.trunkId,
               numbers: JSON.stringify(numbers),
+              notify_emails: JSON.stringify(notifyEmails),
               updated_at: now,
               version: existing.version + 1,
             })
@@ -130,7 +139,7 @@ export function createEmergencyRouteRepo(db: Database<TrunkServiceDb>) {
         });
       });
 
-      return { id, tenantId, trunkId: input.trunkId, numbers };
+      return { id, tenantId, trunkId: input.trunkId, numbers, notifyEmails };
     },
 
     async remove(ctx: DbContext): Promise<void> {

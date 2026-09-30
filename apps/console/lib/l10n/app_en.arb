@@ -7772,5 +7772,60 @@
   "opsChartConsumerBacklog": "Events waiting to be handled, by consumer",
   "@opsChartConsumerBacklog": {
     "description": "Operations console, History tab (the platform's measures over past hours or days). Chart title."
+  },
+  "routeNotifyEmails": "Email when someone dials an emergency number",
+  "@routeNotifyEmails": {
+    "description": "Outbound routes screen, emergency route dialog. Label of the field listing who is emailed when anyone in the organization dials an emergency number."
+  },
+  "routeNotifyEmailsHelp": "Comma-separated addresses, such as a front desk or security. Up to 10.",
+  "@routeNotifyEmailsHelp": {
+    "description": "Outbound routes screen, emergency route dialog. Field help for the addresses emailed on an emergency call."
+  },
+  "routeNotifyEmailsInvalid": "One of these is not an email address.",
+  "@routeNotifyEmailsInvalid": {
+    "description": "Outbound routes screen, emergency route dialog. Validation message for the emergency notification addresses."
+  },
+  "emergencyAlertTitle": "Emergency call: {number} dialled from {caller} at {time}",
+  "@emergencyAlertTitle": {
+    "description": "Alert shown at the top of every screen when someone in the organization dials an emergency number. {number} is the number dialled (such as 911), {caller} the extension that dialled it, {time} the time of day.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "caller": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "emergencyAlertCaller": "{number} ({name})",
+  "@emergencyAlertCaller": {
+    "description": "Emergency alert. The extension that dialled, with its caller ID name. {number} is the extension number, {name} its name.",
+    "placeholders": {
+      "number": {
+        "type": "String"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "emergencyAlertUnknownCaller": "an unknown extension",
+  "@emergencyAlertUnknownCaller": {
+    "description": "Emergency alert. Shown as the caller when the call did not come from an extension the platform knows."
+  },
+  "emergencyAlertNoLocation": "No location was found for this extension.",
+  "@emergencyAlertNoLocation": {
+    "description": "Emergency alert. Shown in place of the address when no location is on file for the caller's extension."
+  },
+  "emergencyAlertDismiss": "Dismiss",
+  "@emergencyAlertDismiss": {
+    "description": "Emergency alert. Button that removes the alert from this screen."
+  },
+  "routeNotifyNobody": "Nobody. Add an address so that people on site hear about an emergency call.",
+  "@routeNotifyNobody": {
+    "description": "Outbound routes screen, emergency route panel. Shown when nobody is set to be emailed on an emergency call."
   }
 }

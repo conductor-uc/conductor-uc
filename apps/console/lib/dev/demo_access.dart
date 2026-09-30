@@ -59,6 +59,7 @@ const _tenantAdmin = [
   'voicemail.access',
   'monitor.presence',
   'monitor.calls',
+  'emergency.alert',
   // D-021: administrators listen, whisper and barge as supervisors do.
   'monitor.listen',
   'monitor.whisper',
@@ -127,6 +128,7 @@ const _tenantSupervisor = [
   'extension.read',
   'monitor.presence',
   'monitor.calls',
+  'emergency.alert',
   'monitor.listen',
   'monitor.whisper',
   'monitor.barge',
@@ -143,6 +145,7 @@ const _tenantReceptionist = [
   'queue.read',
   'monitor.presence',
   'monitor.calls',
+  'emergency.alert',
   'call.control',
   ...demoSelfService,
 ];
@@ -179,6 +182,7 @@ List<String> _support(String orgType) => switch (orgType) {
     'audit.read',
     'monitor.presence',
     'monitor.calls',
+    'emergency.alert',
     'billing.read',
     'reseller.read',
     'tenant.read',

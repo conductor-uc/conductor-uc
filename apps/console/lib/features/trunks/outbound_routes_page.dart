@@ -124,6 +124,15 @@ class EmergencyRoutePanel extends ConsumerWidget {
                             [...(data['numbers'] as List)].join(', '),
                           ),
                         ),
+                        ListTile(
+                          title: Text(l.routeNotifyEmails),
+                          subtitle: Text(
+                            [...?(data['notifyEmails'] as List?)].isEmpty
+                                ? l.routeNotifyNobody
+                                : [...(data['notifyEmails'] as List)]
+                                      .join(', '),
+                          ),
+                        ),
                         if (canChange)
                           Align(
                             alignment: AlignmentDirectional.centerEnd,
@@ -197,6 +206,10 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
   late final _numbers = TextEditingController(
     text: [...?(widget.current?['numbers'] as List?)].join(', '),
   );
+  // S2-06 (G-1): who is emailed when someone dials an emergency number.
+  late final _notifyEmails = TextEditingController(
+    text: [...?(widget.current?['notifyEmails'] as List?)].join(', '),
+  );
   late String? _trunkId = widget.current?['trunkId'] as String?;
   String? _error;
   bool _busy = false;
@@ -204,6 +217,7 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
   @override
   void dispose() {
     _numbers.dispose();
+    _notifyEmails.dispose();
     super.dispose();
   }
 
@@ -222,6 +236,7 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
           for (final n in _numbers.text.split(','))
             if (n.trim().isNotEmpty) n.trim(),
         ],
+        'notifyEmails': _addresses(_notifyEmails.text),
       });
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -278,6 +293,19 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
                     ? null
                     : context.l10n.fieldRequired,
               ),
+              TextFormField(
+                key: const ValueKey('emergency-notify-emails'),
+                controller: _notifyEmails,
+                keyboardType: TextInputType.emailAddress,
+                decoration: InputDecoration(
+                  labelText: l.routeNotifyEmails,
+                  helperText: l.routeNotifyEmailsHelp,
+                  helperMaxLines: 2,
+                ),
+                validator: (v) => _addresses(v ?? '').every(_looksLikeEmail)
+                    ? null
+                    : l.routeNotifyEmailsInvalid,
+              ),
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -300,3 +328,13 @@ class _EmergencyRouteDialogState extends ConsumerState<EmergencyRouteDialog> {
     );
   }
 }
+
+/// The addresses in a comma-separated field, trimmed, blanks left out.
+List<String> _addresses(String text) => [
+  for (final part in text.split(','))
+    if (part.trim().isNotEmpty) part.trim(),
+];
+
+/// The same loose check the server makes: something@something.something.
+bool _looksLikeEmail(String value) =>
+    RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value);

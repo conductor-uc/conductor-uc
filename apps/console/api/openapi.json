@@ -19275,7 +19275,8 @@
                   "required": [
                     "id",
                     "trunkId",
-                    "numbers"
+                    "numbers",
+                    "notifyEmails"
                   ],
                   "properties": {
                     "id": {
@@ -19285,6 +19286,12 @@
                       "type": "string"
                     },
                     "numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "notifyEmails": {
                       "type": "array",
                       "items": {
                         "type": "string"
@@ -19324,6 +19331,15 @@
                       "minLength": 1
                     },
                     "minItems": 1
+                  },
+                  "notifyEmails": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 254
+                    },
+                    "maxItems": 10
                   }
                 }
               }
@@ -19351,7 +19367,8 @@
                   "required": [
                     "id",
                     "trunkId",
-                    "numbers"
+                    "numbers",
+                    "notifyEmails"
                   ],
                   "properties": {
                     "id": {
@@ -19361,6 +19378,12 @@
                       "type": "string"
                     },
                     "numbers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "notifyEmails": {
                       "type": "array",
                       "items": {
                         "type": "string"

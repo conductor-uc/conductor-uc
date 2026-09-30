@@ -1231,6 +1231,10 @@ class DemoPbx {
             'id': _emergencyRoute?['id'] ?? 'er-1',
             'trunkId': body['trunkId'],
             'numbers': numbers,
+            'notifyEmails': [
+              for (final e in (body['notifyEmails'] as List?) ?? const [])
+                '$e'.trim().toLowerCase(),
+            ],
           };
           return _json(_emergencyRoute!);
         case 'DELETE':

@@ -65,4 +65,30 @@ export const notificationEvents = defineEvents({
       mailboxId: Type.String({ minLength: 1 }),
     }),
   },
+  /** Mirrors telephony-config's contract (S2-06, G-1): someone in the tenant dialled an emergency number. */
+  'call.emergency.initiated': {
+    schemaVersion: 1,
+    description: 'A call to a tenant emergency number was dialplan-resolved and bridged.',
+    data: Type.Object({
+      dialedNumber: Type.String({ minLength: 1 }),
+      callingExtensionId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      emergencyLocationId: Type.Union([Type.String({ minLength: 1 }), Type.Null()]),
+      callingNumber: Type.Optional(Type.Union([Type.String({ minLength: 1 }), Type.Null()])),
+      callingName: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+      location: Type.Optional(
+        Type.Union([
+          Type.Object({
+            label: Type.String(),
+            addressLine1: Type.String(),
+            addressLine2: Type.Union([Type.String(), Type.Null()]),
+            city: Type.String(),
+            state: Type.String(),
+            postalCode: Type.String(),
+            country: Type.String(),
+          }),
+          Type.Null(),
+        ]),
+      ),
+    }),
+  },
 });

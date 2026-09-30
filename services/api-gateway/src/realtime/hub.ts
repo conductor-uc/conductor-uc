@@ -717,6 +717,11 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
         snapshot = { extensions: tracker.presence.snapshot() };
         break;
       }
+      case 'emergencies': {
+        // S2-06: nothing is kept; only alerts from now on.
+        snapshot = { alerts: [] };
+        break;
+      }
       case 'queues': {
         const tracker = acquireQueues(topic.tenantId);
         if (tracker === undefined) {
@@ -966,6 +971,15 @@ export function createRealtimeHub(options: RealtimeHubOptions): RealtimeHub {
   }
 
   function dispatch(envelope: BusEnvelope): void {
+    // S2-06 (G-1): someone dialled an emergency number; the tenant's alert.
+    if (envelope.type === 'call.emergency.initiated') {
+      const tenantId = envelope.orgContext.tenantId;
+      const alert = emergencyAlertOf(envelope);
+      if (tenantId !== undefined && alert !== undefined) {
+        deliver(topicName(tenantId, 'emergencies'), alert);
+      }
+      return;
+    }
     // S5-10 (G-122): telephony-config's registration and do not disturb, for presence only.
     if (envelope.type === 'call.presence.changed') {
       const tenantId = envelope.orgContext.tenantId;
@@ -1083,4 +1097,51 @@ function applyToLegs(legs: Map<string, LiveCall>, event: CallTopicEvent): void {
       legs.delete(event.callUuid);
       return;
   }
+}
+
+/** The location on file, as an emergency alert carries it. */
+interface EmergencyAlertLocation {
+  readonly label: string;
+  readonly addressLine1: string;
+  readonly addressLine2: string | null;
+  readonly city: string;
+  readonly state: string;
+  readonly postalCode: string;
+  readonly country: string;
+}
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
+ * S2-06 (G-1): the `emergencies` topic's event for a `call.emergency.initiated`, or undefined when
+ * the event does not say what was dialled. Only the fields the alert shows are passed on.
+ */
+export function emergencyAlertOf(envelope: BusEnvelope): object | undefined {
+  const data = envelope.data as Record<string, unknown> | null;
+  const dialedNumber = textOrNull(data?.['dialedNumber']);
+  if (data === null || dialedNumber === null) return undefined;
+  const raw = data['location'] as Record<string, unknown> | null | undefined;
+  const location: EmergencyAlertLocation | null =
+    raw === null || raw === undefined || typeof raw !== 'object'
+      ? null
+      : {
+          label: textOrNull(raw['label']) ?? '',
+          addressLine1: textOrNull(raw['addressLine1']) ?? '',
+          addressLine2: textOrNull(raw['addressLine2']),
+          city: textOrNull(raw['city']) ?? '',
+          state: textOrNull(raw['state']) ?? '',
+          postalCode: textOrNull(raw['postalCode']) ?? '',
+          country: textOrNull(raw['country']) ?? '',
+        };
+  return {
+    type: 'emergency.initiated',
+    id: envelope.id ?? `${envelope.occurredAt}:${dialedNumber}`,
+    at: envelope.occurredAt,
+    dialedNumber,
+    callingNumber: textOrNull(data['callingNumber']),
+    callingName: textOrNull(data['callingName']),
+    location,
+  };
 }

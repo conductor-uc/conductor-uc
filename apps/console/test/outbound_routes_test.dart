@@ -215,6 +215,44 @@ void main() {
       expect(find.text('Emergency route'), findsWidgets);
     });
 
+    testWidgets('lists who is emailed on an emergency call (S2-06)', (
+      tester,
+    ) async {
+      await openRoutes(tester);
+      await openEmergency(tester);
+      await tester.tap(find.text('Set emergency route'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('emergency-trunk')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Primary trunk').last);
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Emergency numbers *'), '911');
+      final emails = find.byKey(const ValueKey('emergency-notify-emails'));
+      await tester.enterText(emails, 'front desk');
+      await save(tester);
+      expect(
+        find.text('One of these is not an email address.'),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+        emails,
+        'Front.Desk@Example.test, security@example.test',
+      );
+      await save(tester);
+      expect(
+        find.text('front.desk@example.test, security@example.test'),
+        findsOneWidget,
+      );
+
+      // Emptied, the panel says nobody is told.
+      await tester.tap(find.widgetWithText(FilledButton, 'Edit'));
+      await tester.pumpAndSettle();
+      await tester.enterText(emails, '');
+      await save(tester);
+      expect(find.textContaining('Nobody. Add an address'), findsOneWidget);
+    });
+
     testWidgets('can be changed and removed', (tester) async {
       await openRoutes(tester);
       await openEmergency(tester);
