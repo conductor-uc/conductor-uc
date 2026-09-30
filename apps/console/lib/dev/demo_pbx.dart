@@ -1555,6 +1555,7 @@ class DemoPbx {
       'notifyEmail': 'alice@acme-dental.example',
       'emailAttachAudio': true,
       'emailAfter': 'mark_read',
+      'transcribe': 'inherit',
     },
     {
       'id': 'mb-2',
@@ -1563,13 +1564,31 @@ class DemoPbx {
       'notifyEmail': null,
       'emailAttachAudio': false,
       'emailAfter': 'keep',
+      'transcribe': 'inherit',
     },
   ];
 
+  /// S5-06: the tenant's transcription opt-in, and the engines the demo offers.
+  final Map<String, dynamic> _transcription = {
+    'enabled': true,
+    'engine': 'self_hosted',
+  };
+  static const _transcriptionEngines = ['default', 'self_hosted'];
+
   late final Map<String, List<Map<String, dynamic>>> _messages = {
     'mb-1': [
-      _message('vm-1', 'Pat Caller', '+15005550123', 42000, false, 2),
-      _message('vm-2', null, '+15005550188', 8000, false, 26),
+      _message(
+        'vm-1',
+        'Pat Caller',
+        '+15005550123',
+        42000,
+        false,
+        2,
+        transcript:
+            'Hi, this is Pat. Could you call me back about Thursday\'s '
+            'appointment? Thanks.',
+      ),
+      _message('vm-2', null, '+15005550188', 8000, false, 26, pending: true),
       _message('vm-3', 'Dr. Lee', '+15005550199', 95000, true, 50),
     ],
     'mb-2': <Map<String, dynamic>>[],
@@ -1581,9 +1600,17 @@ class DemoPbx {
     String? number,
     int durationMs,
     bool isRead,
-    int hoursAgo,
-  ) => {
+    int hoursAgo, {
+    String? transcript,
+    bool pending = false,
+  }) => {
     'id': id,
+    'transcript': transcript,
+    'transcriptStatus': transcript != null
+        ? 'done'
+        : pending
+        ? 'pending'
+        : 'none',
     'status': 'ready',
     'callerIdName': name,
     'callerIdNumber': number,
@@ -1613,9 +1640,22 @@ class DemoPbx {
   /// The voicemail API (`voicemail-service`): mailboxes, their messages,
   /// presigned play addresses, PIN reset and the email settings.
   ResponseBody? _voicemail(RequestOptions options) {
+    final method = options.method.toUpperCase();
+    if (RegExp(r'^/v1/tenants/[^/]+/voicemail/transcription$')
+        .hasMatch(options.path)) {
+      if (method == 'PUT') {
+        final body = _body(options);
+        _transcription
+          ..['enabled'] = body['enabled'] == true
+          ..['engine'] = '${body['engine']}';
+      }
+      return _json({
+        ..._transcription,
+        'availableEngines': _transcriptionEngines,
+      });
+    }
     final match = _voicemailRoute.firstMatch(options.path);
     if (match == null) return null;
-    final method = options.method.toUpperCase();
     final id = match.group(1);
     if (id == null) {
       if (method == 'POST') {
@@ -1642,6 +1682,7 @@ class DemoPbx {
           'notifyEmail': null,
           'emailAttachAudio': false,
           'emailAfter': 'keep',
+          'transcribe': 'inherit',
         };
         _mailboxes.add(box);
         return _json(_mailboxView(box), 201);
@@ -1688,6 +1729,18 @@ class DemoPbx {
       box['notifyEmail'] = address.isEmpty ? null : address;
       box['emailAttachAudio'] = attach;
       box['emailAfter'] = after;
+      return _json(_mailboxView(box));
+    }
+    if (part == 'transcription' && method == 'PUT') {
+      final mode = '${_body(options)['transcribe']}';
+      if (!const ['inherit', 'on', 'off'].contains(mode)) {
+        return _problem(
+          400,
+          "'$mode' is not inherit, on or off.",
+          code: 'transcription_settings_invalid',
+        );
+      }
+      box['transcribe'] = mode;
       return _json(_mailboxView(box));
     }
     if (part == 'reset-pin' && method == 'POST') {

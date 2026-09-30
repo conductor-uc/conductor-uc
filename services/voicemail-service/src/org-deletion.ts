@@ -13,6 +13,7 @@ export async function purgeTenant(
   const tenant = scopedFor(trx, { tenantId });
   await tenant.deleteFrom('messages').execute();
   await tenant.deleteFrom('mailboxes').execute();
+  await tenant.deleteFrom('transcription_settings').execute();
 }
 
 /** S1-16: `org.*.deleted`, handled once per org (`voicemail-org-deleted`). */

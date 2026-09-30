@@ -16,6 +16,10 @@ import {
 } from '@cuc/testing';
 
 import { createMailboxRepo, type MailboxRepo } from '../src/repo/mailbox.repo.js';
+import {
+  createTranscriptionSettingsRepo,
+  type TranscriptionSettingsRepo,
+} from '../src/repo/transcription-settings.repo.js';
 import { createMessageRepo, type MessageRepo } from '../src/repo/message.repo.js';
 import type { VoicemailServiceDb } from '../src/schema.js';
 import { migrations } from '../migrations/index.js';
@@ -26,9 +30,13 @@ export interface Harness {
   readonly storage: Storage;
   readonly mailboxes: MailboxRepo;
   readonly messages: MessageRepo;
+  readonly transcriptionSettings: TranscriptionSettingsRepo;
   readonly logger: Logger;
   close(): Promise<void>;
 }
+
+/** The transcription engines a test harness offers (S5-06): the self-hosted one only. */
+export const TEST_ENGINES = ['self_hosted'] as const;
 
 const TEST_KEK = randomBytes(32).toString('base64');
 
@@ -61,7 +69,8 @@ export async function startHarness(): Promise<Harness> {
     logger,
   });
   const mailboxes = createMailboxRepo(db, storage, kek);
-  const messages = createMessageRepo(db);
+  const messages = createMessageRepo(db, { transcriptionEngines: TEST_ENGINES });
+  const transcriptionSettings = createTranscriptionSettingsRepo(db);
 
   return {
     db,
@@ -69,6 +78,7 @@ export async function startHarness(): Promise<Harness> {
     storage,
     mailboxes,
     messages,
+    transcriptionSettings,
     logger,
     async close() {
       await db.destroy();
@@ -120,6 +130,7 @@ export async function storeAudio(
 export async function resetSchema(db: Database<VoicemailServiceDb>): Promise<void> {
   await db.kysely.deleteFrom('messages').execute();
   await db.kysely.deleteFrom('mailboxes').execute();
+  await db.kysely.deleteFrom('transcription_settings').execute();
   await db.kysely.deleteFrom('outbox').execute();
   await db.kysely.deleteFrom('consumed_events').execute();
 }

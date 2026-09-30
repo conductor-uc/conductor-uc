@@ -15,6 +15,7 @@ import { InvalidEmailSettingsError, InvalidPinError } from '../domain/mailbox.js
 import { PbxClientError, type UserExtensionLookup } from '../pbx-client.js';
 import { MailboxNotFoundError, type Mailbox, type MailboxRepo } from '../repo/mailbox.repo.js';
 import { MessageNotFoundError, type MessageRepo } from '../repo/message.repo.js';
+import { publicTranscriptStatus } from './transcript-status.js';
 import { emailSettingsInvalid, mailboxNotFound, messageNotFound, pinInvalid } from './problems.js';
 
 const TenantParamsSchema = Type.Object({ tenantId: Type.String({ minLength: 1 }) });
@@ -49,6 +50,15 @@ const MessageSchema = Type.Object({
   callerIdNumber: Type.Union([Type.String(), Type.Null()]),
   durationMs: Type.Union([Type.Number(), Type.Null()]),
   isRead: Type.Boolean(),
+  /** S5-06: the text of the message, once transcribed (private-class data). */
+  transcript: Type.Union([Type.String(), Type.Null()]),
+  /** `none` (not asked for), `pending` (waiting or being transcribed), `done` or `failed`. */
+  transcriptStatus: Type.Union([
+    Type.Literal('none'),
+    Type.Literal('pending'),
+    Type.Literal('done'),
+    Type.Literal('failed'),
+  ]),
   createdAt: Type.String(),
 });
 
@@ -189,6 +199,8 @@ export function registerMeRoutes(
         callerIdNumber: m.callerIdNumber,
         durationMs: m.durationMs,
         isRead: m.isRead,
+        transcript: m.transcript,
+        transcriptStatus: publicTranscriptStatus(m.transcriptStatus),
         createdAt: m.createdAt.toISOString(),
       }));
       return { rows };

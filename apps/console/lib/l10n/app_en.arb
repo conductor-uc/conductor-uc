@@ -7827,5 +7827,61 @@
   "routeNotifyNobody": "Nobody. Add an address so that people on site hear about an emergency call.",
   "@routeNotifyNobody": {
     "description": "Outbound routes screen, emergency route panel. Shown when nobody is set to be emailed on an emergency call."
+  },
+  "vmTranscript": "Transcript",
+  "@vmTranscript": {
+    "description": "Voicemail message list. Column heading for the text of each message."
+  },
+  "vmTranscribing": "Transcribing…",
+  "@vmTranscribing": {
+    "description": "Voicemail message list. Shown while a message's text is being made."
+  },
+  "vmTranscriptFailed": "Could not transcribe",
+  "@vmTranscriptFailed": {
+    "description": "Voicemail message list. Shown when the text of a message could not be made."
+  },
+  "vmTranscriptEmpty": "No words heard",
+  "@vmTranscriptEmpty": {
+    "description": "Voicemail message list. Shown when a message was transcribed and contained no speech."
+  },
+  "vmTranscription": "Transcription",
+  "@vmTranscription": {
+    "description": "Voicemail screen. Button and column heading for turning voicemail messages into text."
+  },
+  "vmTranscribeInherit": "As the organization",
+  "@vmTranscribeInherit": {
+    "description": "Voicemail mailbox list, transcription choice: follow the organization's setting."
+  },
+  "vmTranscribeOn": "On",
+  "@vmTranscribeOn": {
+    "description": "Voicemail mailbox list, transcription choice: always transcribe this mailbox."
+  },
+  "vmTranscribeOff": "Off",
+  "@vmTranscribeOff": {
+    "description": "Voicemail mailbox list, transcription choice: never transcribe this mailbox."
+  },
+  "vmTranscriptionHelp": "Turn new voicemail messages into text, shown beside each message. Mailboxes set to \"As the organization\" follow this; each mailbox can also be turned on or off by itself.",
+  "@vmTranscriptionHelp": {
+    "description": "Voicemail transcription settings dialog. Explanation."
+  },
+  "vmTranscriptionEnabled": "Transcribe voicemail",
+  "@vmTranscriptionEnabled": {
+    "description": "Voicemail transcription settings dialog. Switch that turns transcription on for the organization."
+  },
+  "vmEngine": "Engine",
+  "@vmEngine": {
+    "description": "Voicemail transcription settings dialog. Label of the choice of speech-to-text engine."
+  },
+  "vmEngineDefault": "Platform engine (hosted)",
+  "@vmEngineDefault": {
+    "description": "Voicemail transcription settings dialog. The platform's hosted speech-to-text engine."
+  },
+  "vmEngineSelfHosted": "In-house engine (audio stays on the platform)",
+  "@vmEngineSelfHosted": {
+    "description": "Voicemail transcription settings dialog. The speech-to-text engine run on the operator's own servers."
+  },
+  "vmTranscriptionNoEngine": "Transcription is not offered on this platform yet.",
+  "@vmTranscriptionNoEngine": {
+    "description": "Voicemail transcription settings dialog. Shown when the operator has configured no speech-to-text engine."
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../widgets/feedback.dart';
 import '../../widgets/page.dart';
 import '../pbx/pbx_api.dart';
 import '../myphone/my_phone_api.dart';
@@ -56,7 +57,21 @@ class MailboxesView extends ConsumerWidget {
     final boxes = ref.watch(mailboxesProvider);
     return PageFrame(
       children: [
-        PageHeader(title: l10n.vmTitle, subtitle: l10n.vmSubtitle),
+        PageHeader(
+          title: l10n.vmTitle,
+          subtitle: l10n.vmSubtitle,
+          actions: [
+            OutlinedButton.icon(
+              key: const ValueKey('vm-transcription-settings'),
+              onPressed: () => showDialog<bool>(
+                context: context,
+                builder: (_) => const TranscriptionSettingsDialog(),
+              ),
+              icon: const Icon(Icons.subtitles_outlined),
+              label: Text(l10n.vmTranscription),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
         Expanded(
           child: AsyncBody(
@@ -73,6 +88,7 @@ class MailboxesView extends ConsumerWidget {
                     DataColumn(label: Text(l10n.vmNewMessages), numeric: true),
                     DataColumn(label: Text(l10n.vmGreeting)),
                     DataColumn(label: Text(l10n.vmEmailTo)),
+                    DataColumn(label: Text(l10n.vmTranscription)),
                     const DataColumn(label: Text('')),
                   ],
                   rows: [for (final m in data) _row(context, ref, m)],
@@ -108,6 +124,7 @@ class MailboxesView extends ConsumerWidget {
           ),
         ),
         DataCell(Text(address ?? l10n.vmEmailOff)),
+        DataCell(MailboxTranscriptionField(mailbox: m)),
         DataCell(
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -239,6 +256,7 @@ class MessagesView extends ConsumerWidget {
                     DataColumn(label: Text(l10n.vmFrom)),
                     DataColumn(label: Text(l10n.vmReceived)),
                     DataColumn(label: Text(l10n.vmLength), numeric: true),
+                    DataColumn(label: Text(l10n.vmTranscript)),
                     const DataColumn(label: Text('')),
                     const DataColumn(label: Text('')),
                   ],
@@ -269,6 +287,7 @@ class MessagesView extends ConsumerWidget {
         ),
         DataCell(Text(formatDateTime(when))),
         DataCell(Text(formatClockMs(m['durationMs'] as num?))),
+        DataCell(TranscriptText(message: m)),
         DataCell(Chip(label: Text(read ? l10n.vmRead : l10n.vmNew))),
         DataCell(
           Row(
@@ -593,4 +612,208 @@ class _ResetPinDialogState extends ConsumerState<ResetPinDialog> {
       ),
     ],
   );
+}
+
+/// S5-06: a message's transcript, or where it stands: being made, failed, or
+/// not asked for (nothing shown).
+class TranscriptText extends StatelessWidget {
+  const TranscriptText({super.key, required this.message});
+
+  final Json message;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final text = message['transcript'] as String?;
+    final muted = TextStyle(color: Theme.of(context).hintColor);
+    return switch (message['transcriptStatus']) {
+      'done' when text != null && text.isNotEmpty => ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
+        child: Tooltip(
+          message: text,
+          child: Text(text, maxLines: 2, overflow: TextOverflow.ellipsis),
+        ),
+      ),
+      'done' => Text(l10n.vmTranscriptEmpty, style: muted),
+      'pending' => Text(l10n.vmTranscribing, style: muted),
+      'failed' => Text(l10n.vmTranscriptFailed, style: muted),
+      _ => const SizedBox.shrink(),
+    };
+  }
+}
+
+/// S5-06: whether a mailbox's new messages are transcribed: as the
+/// organization chose, always, or never.
+class MailboxTranscriptionField extends ConsumerStatefulWidget {
+  const MailboxTranscriptionField({super.key, required this.mailbox});
+
+  final Json mailbox;
+
+  @override
+  ConsumerState<MailboxTranscriptionField> createState() =>
+      _MailboxTranscriptionFieldState();
+}
+
+class _MailboxTranscriptionFieldState
+    extends ConsumerState<MailboxTranscriptionField> {
+  bool _busy = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final current = '${widget.mailbox['transcribe'] ?? 'inherit'}';
+    return DropdownButton<String>(
+      key: ValueKey('vm-transcribe-${widget.mailbox['id']}'),
+      value: const ['inherit', 'on', 'off'].contains(current)
+          ? current
+          : 'inherit',
+      underline: const SizedBox.shrink(),
+      items: [
+        DropdownMenuItem(
+          value: 'inherit',
+          child: Text(l10n.vmTranscribeInherit),
+        ),
+        DropdownMenuItem(value: 'on', child: Text(l10n.vmTranscribeOn)),
+        DropdownMenuItem(value: 'off', child: Text(l10n.vmTranscribeOff)),
+      ],
+      onChanged: _busy
+          ? null
+          : (mode) async {
+              if (mode == null || mode == current) return;
+              final api = ref.read(voicemailApiProvider);
+              final messenger = ScaffoldMessenger.of(context);
+              if (api == null) return;
+              setState(() => _busy = true);
+              try {
+                await api.setMailboxTranscription(
+                  '${widget.mailbox['id']}',
+                  mode,
+                );
+                ref.invalidate(mailboxesProvider);
+              } catch (e) {
+                showToast(messenger, problemMessage(e));
+              } finally {
+                if (mounted) setState(() => _busy = false);
+              }
+            },
+    );
+  }
+}
+
+/// S5-06 (O-3): the organization's transcription opt-in. Off unless turned on;
+/// the engine is the platform's hosted one or the in-house one, among those
+/// the operator offers.
+class TranscriptionSettingsDialog extends ConsumerStatefulWidget {
+  const TranscriptionSettingsDialog({super.key});
+
+  @override
+  ConsumerState<TranscriptionSettingsDialog> createState() =>
+      _TranscriptionSettingsDialogState();
+}
+
+class _TranscriptionSettingsDialogState
+    extends ConsumerState<TranscriptionSettingsDialog> {
+  bool? _enabled;
+  String? _engine;
+  String? _error;
+  bool _busy = false;
+
+  String _engineName(String engine) => switch (engine) {
+    'self_hosted' => context.l10n.vmEngineSelfHosted,
+    _ => context.l10n.vmEngineDefault,
+  };
+
+  Future<void> _save() async {
+    final api = ref.read(voicemailApiProvider);
+    if (api == null || _engine == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await api.saveTranscription(enabled: _enabled ?? false, engine: _engine!);
+      ref.invalidate(transcriptionProvider);
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) setState(() => _error = problemMessage(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final settings = ref.watch(transcriptionProvider);
+    return AlertDialog(
+      title: Text(l10n.vmTranscription),
+      content: SizedBox(
+        width: 440,
+        child: settings.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (e, _) => ErrorText(problemMessage(e)),
+          data: (data) {
+            final engines = [
+              for (final e in (data?['availableEngines'] as List?) ?? const [])
+                '$e',
+            ];
+            if (engines.isEmpty) return Text(l10n.vmTranscriptionNoEngine);
+            _enabled ??= data?['enabled'] == true;
+            _engine ??= engines.contains(data?['engine'])
+                ? '${data?['engine']}'
+                : engines.first;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.vmTranscriptionHelp),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  key: const ValueKey('vm-transcription-enabled'),
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(l10n.vmTranscriptionEnabled),
+                  value: _enabled!,
+                  onChanged: (v) => setState(() => _enabled = v),
+                ),
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('vm-transcription-engine'),
+                  initialValue: _engine,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: l10n.vmEngine),
+                  items: [
+                    for (final e in engines)
+                      DropdownMenuItem(
+                        value: e,
+                        child: Text(
+                          _engineName(e),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _engine = v),
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: ErrorText(_error!),
+                  ),
+              ],
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: Text(l10n.commonCancel),
+        ),
+        if (settings.asData?.value?['availableEngines'] case final List list
+            when list.isNotEmpty)
+          FilledButton(
+            onPressed: _busy ? null : _save,
+            child: Text(l10n.commonSave),
+          ),
+      ],
+    );
+  }
 }

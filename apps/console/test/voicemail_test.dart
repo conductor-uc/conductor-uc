@@ -112,6 +112,65 @@ void main() {
     expect(find.text('Email to'), findsOneWidget);
   });
 
+  group('transcription (S5-06)', () {
+    testWidgets('shows each message\'s text, or where it stands', (
+      tester,
+    ) async {
+      await openVoicemail(tester);
+      await openMessages(tester, alice);
+      expect(find.text('Transcript'), findsOneWidget);
+      expect(
+        find.textContaining('Could you call me back about Thursday'),
+        findsOneWidget,
+      );
+      expect(find.text('Transcribing…'), findsOneWidget);
+    });
+
+    testWidgets('a mailbox follows the organization, or is turned on or off', (
+      tester,
+    ) async {
+      await openVoicemail(tester);
+      expect(find.text('As the organization'), findsNWidgets(2));
+      await tester.tap(find.byKey(const ValueKey('vm-transcribe-mb-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Off').last);
+      await tester.pumpAndSettle();
+      expect(find.text('As the organization'), findsOneWidget);
+    });
+
+    testWidgets('the organization turns it on or off and picks the engine', (
+      tester,
+    ) async {
+      await openVoicemail(tester);
+      await tester.tap(find.byKey(const ValueKey('vm-transcription-settings')));
+      await tester.pumpAndSettle();
+      expect(find.text('Transcribe voicemail'), findsOneWidget);
+      expect(
+        find.text('In-house engine (audio stays on the platform)'),
+        findsOneWidget,
+      );
+      final toggle = find.byKey(const ValueKey('vm-transcription-enabled'));
+      expect(tester.widget<SwitchListTile>(toggle).value, isTrue);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Transcribe voicemail'), findsNothing);
+
+      // Opened again, it shows what was saved.
+      await tester.tap(find.byKey(const ValueKey('vm-transcription-settings')));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.byKey(const ValueKey('vm-transcription-enabled')),
+            )
+            .value,
+        isFalse,
+      );
+    });
+  });
+
   testWidgets('an empty mailbox says so', (tester) async {
     await openVoicemail(tester);
     await openMessages(tester, bob);

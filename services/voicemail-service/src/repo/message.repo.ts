@@ -5,6 +5,13 @@ import { requireTenant } from '@cuc/db';
 import { enqueueEvent } from '@cuc/events';
 
 import { messageObjectKey } from '../domain/message.js';
+import {
+  engineFor,
+  isEngine,
+  isMailboxTranscription,
+  TENANT_DEFAULT,
+  type Engine,
+} from '../domain/transcription.js';
 import { voicemailEvents } from '../events.js';
 import type { VoicemailServiceDb } from '../schema.js';
 
@@ -21,7 +28,28 @@ export interface VoicemailMessage {
   readonly sha256: string | null;
   readonly failureReason: string | null;
   readonly isRead: boolean;
+  /** S5-06: the text, once transcribed; null until then or when not asked for. Private-class data. */
+  readonly transcript: string | null;
+  readonly transcriptStatus: TranscriptStatus;
   readonly createdAt: Date;
+}
+
+/** S5-06: `none` (not asked for), `pending`, `working`, `done` or `failed`. */
+export type TranscriptStatus = 'none' | 'pending' | 'working' | 'done' | 'failed';
+
+/** A message a transcriber has taken: what it needs to fetch the audio and send it on. */
+export interface TranscriptionJob {
+  readonly id: string;
+  readonly tenantId: string;
+  readonly objectKey: string;
+  readonly engine: Engine;
+  /** How many times it has been taken, this one included. */
+  readonly attempts: number;
+}
+
+export interface MessageRepoOptions {
+  /** The engines the operator configured (S5-06); a message is only sent to one of these. */
+  readonly transcriptionEngines?: readonly Engine[];
 }
 
 export interface CreateMessageInput {
@@ -68,6 +96,8 @@ const COLUMNS = [
   'sha256',
   'failure_reason as failureReason',
   'is_read as isRead',
+  'transcript',
+  'transcript_status as transcriptStatus',
   'created_at as createdAt',
 ] as const;
 
@@ -84,12 +114,15 @@ function toMessage(row: {
   sha256: string | null;
   failureReason: string | null;
   isRead: boolean | number;
+  transcript: string | null;
+  transcriptStatus: string;
   createdAt: Date;
 }): VoicemailMessage {
   return {
     ...row,
     status: row.status as VoicemailMessage['status'],
     isRead: Boolean(row.isRead),
+    transcriptStatus: row.transcriptStatus as TranscriptStatus,
   };
 }
 
@@ -106,7 +139,14 @@ function toMessage(row: {
  * `remove` of an unread message) — CLAUDE.md rule 6, the transactional
  * outbox, not a direct publish.
  */
-export function createMessageRepo(db: Database<VoicemailServiceDb>) {
+export function createMessageRepo(
+  db: Database<VoicemailServiceDb>,
+  options: MessageRepoOptions = {},
+) {
+  const engines = options.transcriptionEngines ?? [];
+  // The transcriber's cross-tenant access, declared (and reported) once rather than on every
+  // poll, as the KEK rewrap does.
+  let transcriberAccess: ReturnType<typeof db.unscoped> | undefined;
   return {
     /** Ready messages only, oldest first — what the retrieval menu and the console both walk through. */
     listReady(ctx: DbContext, mailboxId: string): Promise<VoicemailMessage[]> {
@@ -196,6 +236,11 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>) {
           sha256: null,
           failure_reason: null,
           is_read: false,
+          transcript: null,
+          transcript_status: 'none',
+          transcript_engine: null,
+          transcript_attempts: 0,
+          transcript_claimed_at: null,
           created_at: now,
           updated_at: now,
           version: 1,
@@ -216,6 +261,8 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>) {
           sha256: null,
           failureReason: null,
           isRead: false,
+          transcript: null,
+          transcriptStatus: 'none',
           createdAt: now,
         },
       };
@@ -246,10 +293,36 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>) {
           throw new MessageAlreadyReadyError(`Message '${id}' is already ready.`);
         }
 
+        // S5-06 (O-3): transcribed only when the tenant or the mailbox asked for it.
+        const mailbox = await trx
+          .selectFrom('mailboxes')
+          .select('transcribe')
+          .where('id', '=', existing.mailboxId)
+          .executeTakeFirst();
+        const tenant = await trx
+          .selectFrom('transcription_settings')
+          .select(['enabled', 'engine'])
+          .executeTakeFirst();
+        const engine = engineFor(
+          tenant === undefined
+            ? TENANT_DEFAULT
+            : {
+                enabled: Boolean(tenant.enabled),
+                engine: isEngine(tenant.engine) ? tenant.engine : 'default',
+              },
+          isMailboxTranscription(mailbox?.transcribe) ? mailbox.transcribe : 'inherit',
+          engines,
+        );
+
         await trx
           .updateTable('messages')
           .set({
             status: 'ready',
+            transcript: null,
+            transcript_status: engine === null ? 'none' : 'pending',
+            transcript_engine: engine,
+            transcript_attempts: 0,
+            transcript_claimed_at: null,
             duration_ms: input.durationMs,
             size_bytes: input.sizeBytes,
             sha256: input.sha256 ?? null,
@@ -277,10 +350,96 @@ export function createMessageRepo(db: Database<VoicemailServiceDb>) {
           sizeBytes: input.sizeBytes,
           sha256: input.sha256 ?? null,
           failureReason: null,
+          transcript: null,
+          transcriptStatus: engine === null ? 'none' : 'pending',
         });
       });
 
       return result!;
+    },
+
+    /**
+     * S5-06: takes the oldest message waiting to be transcribed, across tenants, or one a
+     * transcriber took before `staleBefore` and never finished (it died): marks it `working` and
+     * returns it. Only one of several transcribers gets any one message. Background job only.
+     */
+    async claimTranscription(
+      ctx: DbContext,
+      now: Date,
+      staleBefore: Date,
+    ): Promise<TranscriptionJob | undefined> {
+      transcriberAccess ??= db.unscoped(
+        ctx,
+        'transcriber: the next voicemail message to transcribe',
+      );
+      const any = transcriberAccess;
+      for (let tries = 0; tries < 3; tries += 1) {
+        const next = await any
+          .selectFrom('messages')
+          .select([
+            'id',
+            'tenant_id as tenantId',
+            'object_key as objectKey',
+            'transcript_engine as engine',
+            'transcript_attempts as attempts',
+          ])
+          .where('status', '=', 'ready')
+          .where((eb) =>
+            eb.or([
+              eb('transcript_status', '=', 'pending'),
+              eb.and([
+                eb('transcript_status', '=', 'working'),
+                eb('transcript_claimed_at', '<', staleBefore),
+              ]),
+            ]),
+          )
+          .orderBy('created_at', 'asc')
+          .limit(1)
+          .executeTakeFirst();
+        if (next === undefined) return undefined;
+        const taken = await any
+          .updateTable('messages')
+          .set({
+            transcript_status: 'working',
+            transcript_claimed_at: now,
+            transcript_attempts: next.attempts + 1,
+          })
+          .where('id', '=', next.id)
+          .where('transcript_attempts', '=', next.attempts)
+          .where('transcript_status', 'in', ['pending', 'working'])
+          .executeTakeFirst();
+        // Another transcriber took it first: look again.
+        if (Number(taken.numUpdatedRows) === 0) continue;
+        if (!isEngine(next.engine)) {
+          await this.finishTranscription({ ...ctx, tenantId: next.tenantId }, next.id, null);
+          continue;
+        }
+        return { ...next, engine: next.engine, attempts: next.attempts + 1 };
+      }
+      return undefined;
+    },
+
+    /**
+     * S5-06: the transcriber's answer. A text marks the message `done`; null marks it `failed`,
+     * or, with `retry`, puts it back to be taken again.
+     */
+    async finishTranscription(
+      ctx: DbContext,
+      id: string,
+      text: string | null,
+      retry = false,
+    ): Promise<void> {
+      await db
+        .scoped(ctx)
+        .updateTable('messages')
+        .set(
+          text !== null
+            ? { transcript: text, transcript_status: 'done', transcript_claimed_at: null }
+            : { transcript_status: retry ? 'pending' : 'failed', transcript_claimed_at: null },
+        )
+        .where('id', '=', id)
+        .where('transcript_status', '=', 'working')
+        .execute();
     },
 
     /** Marks a message that never got usable audio failed. A ready message is left alone. */

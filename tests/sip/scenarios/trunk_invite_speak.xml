@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S5-06 (O-3): `trunk_invite_wait_for_bye.xml`, with a caller that speaks. After
+  the ACK it streams a short spoken message once (media/speech-8k.pcmu: 8 kHz
+  G.711, 1.5 s of silence first, since the voicemail app plays a second of
+  silence before it records) and then waits for FreeSWITCH to hang up, which it
+  does after three seconds of silence. So a mailbox gets a message with real
+  words in it, for the transcription test. Run with `-mp` set apart from the
+  SIP port.
+
+  `[field0]`=caller user, `[field1]`=the R-URI/To domain, `[field2]`=the dialed
+  DID, in E.164, as `trunk_invite.xml`.
+-->
+<scenario name="Trunk INVITE to a DID, speak a message, wait for the far end's own BYE">
+  <send retrans="4000">
+    <![CDATA[
+      INVITE sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0
+      a=rtpmap:0 PCMU/8000
+    ]]>
+  </send>
+
+  <recv response="100" optional="true">
+  </recv>
+
+  <recv response="180" optional="true">
+  </recv>
+
+  <recv response="200" rtd="true">
+    <action>
+      <ereg regexp="sip:[^&gt;]*" search_in="hdr" header="Contact:" assign_to="1"/>
+    </action>
+  </recv>
+
+  <send>
+    <![CDATA[
+      ACK [$1] SIP/2.0
+      [last_Via:]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <nop>
+    <action>
+      <exec rtp_stream="/scenarios/media/speech-8k.pcmu,1,0"/>
+    </action>
+  </nop>
+
+  <recv request="BYE" crlf="true" timeout="30000">
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+</scenario>

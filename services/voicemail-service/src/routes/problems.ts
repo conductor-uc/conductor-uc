@@ -6,6 +6,7 @@ import type {
   InvalidPinError,
 } from '../domain/mailbox.js';
 import type { MailboxAlreadyExistsError, MailboxNotFoundError } from '../repo/mailbox.repo.js';
+import type { InvalidTranscriptionSettingsError } from '../domain/transcription.js';
 import type { MessageNotFoundError } from '../repo/message.repo.js';
 
 /**
@@ -71,4 +72,19 @@ export function extensionIdRequired(error: InvalidExtensionIdError): ProblemErro
 
 export function emailSettingsInvalid(error: InvalidEmailSettingsError): ProblemError {
   return ProblemError.badRequest(error.message, { code: error.code });
+}
+
+/** S5-06: an engine the operator did not configure was chosen. */
+export function transcriptionEngineUnavailable(engine: string): ProblemError {
+  return ProblemError.badRequest(`The '${engine}' transcription engine is not offered here.`, {
+    code: 'transcription_engine_unavailable',
+    params: { engine },
+  });
+}
+
+/** S5-06: a transcription setting that is not one of the allowed values. */
+export function transcriptionSettingsInvalid(
+  error: InvalidTranscriptionSettingsError,
+): ProblemError {
+  return ProblemError.badRequest(error.message, { code: 'transcription_settings_invalid' });
 }

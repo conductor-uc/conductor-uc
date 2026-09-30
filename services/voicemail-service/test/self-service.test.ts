@@ -7,7 +7,7 @@ import { createServer, signInternalHeaders, type Server } from '@cuc/http';
 import { PbxClientError, type UserExtensionLookup } from '../src/pbx-client.js';
 import { registerMailboxRoutes } from '../src/routes/mailbox.routes.js';
 import { registerMeRoutes } from '../src/routes/me.routes.js';
-import { resetSchema, startHarness, storeAudio, type Harness } from './harness.js';
+import { resetSchema, startHarness, storeAudio, TEST_ENGINES, type Harness } from './harness.js';
 
 const skipReason = (await databaseOrSkipReason()) ?? (await s3OrSkipReason());
 const SECRET = 'test-internal-header-secret';
@@ -55,7 +55,10 @@ describe.skipIf(skipReason !== undefined)('end-user self-service in voicemail-se
       permissions: (actor, permission) =>
         Promise.resolve(held[actor.id]?.includes(permission) ?? false),
     });
-    registerMailboxRoutes(app, h.mailboxes, h.messages, h.storage);
+    registerMailboxRoutes(app, h.mailboxes, h.messages, h.storage, {
+      transcriptionSettings: h.transcriptionSettings,
+      availableEngines: TEST_ENGINES,
+    });
     registerMeRoutes(app, h.mailboxes, h.messages, h.storage, userExtension, bus);
     await app.ready();
   });

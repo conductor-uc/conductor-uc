@@ -51,7 +51,7 @@ const SOURCES = [
   ['pbx-config-service', 'me', 'registerMeRoutes', 3],
   ['callflow-service', 'flow', 'registerFlowRoutes', 1],
   ['trunk-service', 'trunk', 'registerTrunkRoutes', 3],
-  ['voicemail-service', 'mailbox', 'registerMailboxRoutes', 3],
+  ['voicemail-service', 'mailbox', 'registerMailboxRoutes', 4],
   ['voicemail-service', 'me', 'registerMeRoutes', 5],
   ['trunk-service', 'outbound-route', 'registerOutboundRouteRoutes', 1],
   ['trunk-service', 'emergency-route', 'registerEmergencyRouteRoutes', 1],
@@ -101,6 +101,9 @@ const singular = (word) =>
 const pascal = (kebab) => kebab.replace(/(^|-)(\w)/g, (_, __, c) => c.toUpperCase());
 // Routes whose path does not follow the resource conventions below.
 const OVERRIDES = {
+  'get /v1/tenants/{tenantId}/voicemail/transcription': 'getVoicemailTranscription',
+  'put /v1/tenants/{tenantId}/voicemail/transcription': 'saveVoicemailTranscription',
+  'put /v1/tenants/{tenantId}/voicemail/mailboxes/{id}/transcription': 'saveMailboxTranscription',
   'post /v1/auth/login': 'login',
   'post /v1/auth/mfa/enroll/confirm': 'confirmMfaEnrollment',
   'post /v1/auth/mfa/verify': 'verifyMfa',

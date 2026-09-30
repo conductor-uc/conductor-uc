@@ -13,13 +13,13 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S2 Core telephony (21) | 21 | 0 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (13) | 13 | 0 | 0 |
-| S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
+| S5 Recording, voicemail features, monitoring (16) | 16 | 0 | 0 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (133)** | **109** | **6** | **18** |
+| **Total (133)** | **110** | **6** | **17** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -130,7 +130,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S5-03 | Done | `recording-service/src/uploader` (settle, presigned PUT, server-side size and MD5 check, delete, backoff, stuck-file alert and metrics); one sidecar per node in compose on a shared tmpfs spool; verified live by `tests/sip/test/recording.test.ts` (G-111) |
 | S5-04 | Done | search with filters and cursor paging, play and download URLs, delete; per-request grants scoped to extension, queue or DID (`authorize.ts`, identity `/access`); every URL issuance and delete audited |
 | S5-05 | Done | tenant retention days (`recording_settings`), `retention.ts` sweep (audio deleted, row marked expired, stale pending marked failed) and an S3 lifecycle rule as a backstop |
-| S5-06 | Not started | O-3 accepted 2026-09-25 (a hosted engine chosen by evaluation, plus self-hosted Whisper; off by default, opt-in per tenant or mailbox); no `TranscriptionProvider` or adapter in the code |
+| S5-06 | Done | O-3 as built: a `TranscriptionProvider` interface and an OpenAI-compatible adapter (`/v1/audio/transcriptions`), configured twice in voicemail-service: the platform's hosted engine (`TRANSCRIPTION_DEFAULT_*`) and a self-hosted one (`TRANSCRIPTION_SELF_HOSTED_*`; faster-whisper in the dev stack's `transcription` profile). Off by default; a tenant opts in and picks the engine, a mailbox follows it or is turned on or off by itself. A ready message is marked for transcription in the same transaction, and a background transcriber sends its audio to the engine and keeps the text (private). Console: the opt-in dialog, a per-mailbox choice, a transcript column. Live: a spoken carrier voicemail comes back as its words. The hosted vendor itself is still to be chosen by the owner's evaluation (O-3) |
 | S5-07 | Done | voicemail-to-email: `voicemail.consumer.ts`, `voicemail.mjml`, mailbox email settings in voicemail-service (G-107). Not tried with a real call or SMTP server |
 | S5-08 | Done | `api-gateway/src/realtime/`: `GET /v1/ws` (auth by first message and renewal, origin check, per-address/person/connection limits, heartbeat), topics `tenant:{t}:calls` (`monitor.calls`, private, new in `@cuc/authz`), `:presence` (`monitor.presence`, derived from live calls), `:queues` (`queue.read`, nothing publishes yet), each authorized like a route (ancestry via org lineage, H1, identity permission lookup) and rechecked every 30 s; private subscriptions audited. Ordered NATS consumer per gateway process; snapshot from call-control's new `GET /internal/v1/tenants/:t/calls`, which also gained tenant on every channel event, trunk-call tenant attachment, unhold and recording events. Console `core/realtime.dart` and a Live calls panel on Monitoring. Tests: `api-gateway/test/realtime.test.ts` (real NATS, 25), `realtime-model.test.ts`, call-control `live-calls.route.test.ts`, console `monitoring_test.dart`. Live test `tests/sip/test/realtime.test.ts` (a recorded carrier call: legs, answer, recording, presence, end; hold/unhold not tried live). Registration/DND presence and queue events are G-119 |
 | S5-09 | Done | Listen, whisper and barge from the supervisor's own phone (G-121): call-control `POST /v1/tenants/:t/calls/:uuid/listen|whisper|barge` (`monitor.*`, private; `scopedPermission`, new in `@cuc/http`, so a grant on an extension or queue is checked against the call), audited before the phone rings, `bgapi originate` through OpenSIPs into `eavesdrop`/`three_way`, `eavesdrop_enable_dtmf=false`; pbx-config-service's extension-by-number lookup with agent queues; live test `tests/sip/test/monitor.test.ts`. No one in a tenant can create a scoped `monitor.*` grant yet (G-121 (7), owner to decide) |

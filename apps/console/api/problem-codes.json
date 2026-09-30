@@ -204,6 +204,8 @@
   "tenant_not_found",
   "tenant_reseller_not_found",
   "too_many_connections",
+  "transcription_engine_unavailable",
+  "transcription_settings_invalid",
   "transfer_in_progress",
   "trunk_config_invalid",
   "trunk_has_no_credential",

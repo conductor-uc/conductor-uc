@@ -4,6 +4,7 @@ import * as initial from './001_initial.js';
 import * as addVoicemailTables from './002_add_voicemail_tables.js';
 import * as addEmailSettings from './003_add_email_settings.js';
 import * as addMessageUploadFields from './004_add_message_upload_fields.js';
+import * as addTranscription from './005_add_transcription.js';
 
 /**
  * A manifest of statically imported migrations, for tests and anywhere else
@@ -16,4 +17,5 @@ export const migrations: Record<string, Migration> = {
   '002_add_voicemail_tables': addVoicemailTables,
   '003_add_email_settings': addEmailSettings,
   '004_add_message_upload_fields': addMessageUploadFields,
+  '005_add_transcription': addTranscription,
 };
