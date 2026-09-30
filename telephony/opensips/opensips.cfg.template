@@ -315,23 +315,33 @@ modparam("nathelper", "cluster_sharing_tag", "vip")
 # @end-cluster
 
 #### Presence / BLF (03 §1: "Owns (presence, pua_dialoginfo)"; S2-17).
-#### `dialog.so` above already creates a dialog for every dialog-forming
-#### request relayed through `topology_hiding()` (its own docs: internally
-#### calls `create_dialog()` when none exists yet) — `pua_dialoginfo`
-#### registers its own dialog callbacks the moment the module loads, so no
-#### extra per-call action is needed in route{} beyond that existing
-#### `topology_hiding()` call to get early/confirmed/terminated state
-#### changes flowing into `pua`, and from there into `presence`'s own
-#### `presentity`/`active_watchers` tables (`db-schema/presence-create.sql`,
-#### already provisioned since S1-11). Only the SUBSCRIBE side (route{}'s
-#### own `is_method("SUBSCRIBE")` block) is new here — see G-38 for what
-#### could not be confirmed against a real running instance.
+#### A phone watches a colleague's calls by subscribing to their `dialog`
+#### state (route{}'s SUBSCRIBE block). `pua_dialoginfo` publishes a call's
+#### early/confirmed/terminated states for the dialogs route{} marks with
+#### `dialoginfo_set()`; it publishes nothing for a dialog not marked (the
+#### first version assumed otherwise, and no call state ever reached a
+#### watcher: G-38). Publications reach `presence` through this proxy's own
+#### PUBLISH path (route{}'s PUBLISH block), stored in `presentity` and
+#### `active_watchers` (`db-schema/presence-create.sql`).
 loadmodule "presence.so"
 modparam("presence", "db_url", "${OPENSIPS_DB_URL}")
 loadmodule "presence_dialoginfo.so"
 loadmodule "pua.so"
 modparam("pua", "db_url", "${OPENSIPS_DB_URL}")
 loadmodule "pua_dialoginfo.so"
+# S2-17 (G-38): a phone's call state is published only for the dialogs route{}
+# marks (`dialoginfo_set`): a phone's own call to a media node (its caller
+# side) and a media node's call to a phone (its callee side). The callee is
+# named from the request before `lookup()` turns it into the phone's contact.
+# Each publication goes to this proxy itself (`presence_server`), like the
+# message summaries below.
+modparam("pua_dialoginfo", "callee_spec_param", "$avp(blf_callee)")
+# @if-single
+modparam("pua_dialoginfo", "presence_server", "sip:127.0.0.1:${OPENSIPS_SIP_PORT}")
+# @end-single
+# @if-cluster
+modparam("pua_dialoginfo", "presence_server", "sip:${OPENSIPS_OWN_IP}:${OPENSIPS_SIP_PORT}")
+# @end-cluster
 
 #### Message waiting (S2-16, G-42): the lamp and count a phone shows for its
 #### mailbox. The phone subscribes to `message-summary` for its own address
@@ -580,6 +590,8 @@ route{
             route(relay);
             exit;
         }
+        # S2-17: the phone this call is for, as its colleagues watch it.
+        $avp(blf_callee) = "sip:" + $rU + "@" + $rd;
         if (!lookup("location")) {
             # Not a registered local user — S2-04: 03 §2.1's "else ->
             # do_routing(group = tenant's dr group)" branch.
@@ -634,6 +646,9 @@ route{
             route(outbound_gw);
             exit;
         }
+        # S2-17: the phone being called shows ringing, then busy, to those
+        # watching it.
+        dialoginfo_set("B");
         # @if-rtpengine
         route(anchor);
         # @end-rtpengine
@@ -647,6 +662,9 @@ route{
     # telephony-config's projection (S1-12), which is empty until then:
     # every check below simply finds nothing and falls through, which is
     # the correct, honest behavior for an unprovisioned deployment.
+    # S2-17: set below for a phone's own call. A `$var` keeps its value from
+    # the last request this process handled, so it is cleared first.
+    $var(blf_caller) = 0;
     if (check_source_address(1, $avp(trunk_ctx))) {
         # Inbound trunk call (S2-03). `$avp(trunk_ctx)` is the matched
         # `address` row's own `context_info` — the owning trunk's id, hyphens
@@ -700,6 +718,7 @@ route{
 
         append_hf("X-Call-Direction: internal\r\n");
         append_hf("X-Tenant-Id: $var(tenant_id)\r\n");
+        $var(blf_caller) = 1;
     } else {
         send_reply(403, "Forbidden");
         exit;
@@ -710,6 +729,10 @@ route{
     # @if-cluster
     set_dlg_sharing_tag("vip");
     # @end-cluster
+    # S2-17: a phone placing a call shows busy to those watching it.
+    if ($var(blf_caller) == 1) {
+        dialoginfo_set("A");
+    }
     if (!topology_hiding()) {
         xlog("L_ERR", "topology_hiding failed for $ru\n");
         send_reply(500, "Server Internal Error");
