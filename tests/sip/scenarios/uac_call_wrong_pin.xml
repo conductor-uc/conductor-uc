@@ -118,6 +118,55 @@
     ]]>
   </send>
 
+  <!-- Every call a phone starts is challenged, and must be the From user's own
+       credentials (opensips.cfg.template, proxy_authorize): answer the 407
+       (acknowledged hop by hop) and send the INVITE again with them. -->
+  <recv response="100" optional="true">
+  </recv>
+
+  <recv response="407" auth="true">
+  </recv>
+
+  <send>
+    <![CDATA[
+      ACK sip:[field2]@[field1] SIP/2.0
+      [last_Via:]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      [last_To:]
+      Call-ID: [call_id]
+      CSeq: 1 ACK
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <send retrans="4000">
+    <![CDATA[
+      INVITE sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 2 INVITE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Max-Forwards: 70
+      [extraheader]
+      [authentication]
+      Content-Type: application/sdp
+      Content-Length: [len]
+
+      v=0
+      o=- [call_number] [call_number] IN IP4 [local_ip]
+      s=-
+      c=IN IP4 [local_ip]
+      t=0 0
+      m=audio [media_port] RTP/AVP 0 101
+      a=rtpmap:0 PCMU/8000
+      a=rtpmap:101 telephone-event/8000
+      a=fmtp:101 0-16
+    ]]>
+  </send>
+
   <recv response="100" optional="true">
   </recv>
 
@@ -137,7 +186,7 @@
       From: <sip:[field0]@[field1]>;tag=[call_number]
       [last_To:]
       Call-ID: [call_id]
-      CSeq: 1 ACK
+      CSeq: 2 ACK
       Contact: <sip:[field0]@[local_ip]:[local_port]>
       Max-Forwards: 70
       Content-Length: 0
