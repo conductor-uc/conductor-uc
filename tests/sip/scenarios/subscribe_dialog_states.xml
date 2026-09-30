@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-17 (G-38): a colleague watches an extension's calls (a BLF key). It
+  subscribes to the extension's `dialog` state, authenticated as REGISTER
+  is, and answers every NOTIFY until none has come for 15 s. Run with
+  `-message_file` on the output: the test reads the states from the NOTIFY
+  bodies there. (A loop that stops on a state it has matched was tried
+  first: SIPp aborts a call when a NOTIFY arrives while it is between the
+  loop's steps, and NOTIFYs here come in bursts.)
+
+  `[field0]`=watcher, `[field1]`=domain (also the auth realm),
+  `[field2]`=the extension watched.
+-->
+<scenario name="Watch an extension's calls, answering every NOTIFY">
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: dialog
+      Accept: application/dialog-info+xml
+      Expires: 300
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="401" auth="true">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field2]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 2 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: dialog
+      Accept: application/dialog-info+xml
+      Expires: 300
+      Max-Forwards: 70
+      [authentication]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true">
+  </recv>
+
+  <label id="1"/>
+  <recv request="NOTIFY" crlf="true" timeout="15000" ontimeout="2">
+  </recv>
+
+  <send next="1">
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <label id="2"/>
+
+</scenario>
