@@ -333,6 +333,25 @@ loadmodule "pua.so"
 modparam("pua", "db_url", "${OPENSIPS_DB_URL}")
 loadmodule "pua_dialoginfo.so"
 
+#### Message waiting (S2-16, G-42): the lamp and count a phone shows for its
+#### mailbox. The phone subscribes to `message-summary` for its own address
+#### (route{}'s SUBSCRIBE block); `presence_mwi` is that event package.
+#### telephony-config announces a mailbox's counts over MI (`pua_publish`,
+#### from `pua_mi`), which has this proxy send itself a PUBLISH: route{}'s
+#### PUBLISH block takes it from this proxy alone and hands it to `presence`,
+#### which notifies the subscribed phones. A publication is kept for a week
+#### (telephony-config renews each well inside that), not presence's default
+#### hour.
+loadmodule "presence_mwi.so"
+modparam("presence", "max_expires_publish", 604800)
+loadmodule "pua_mi.so"
+# @if-single
+modparam("pua_mi", "presence_server", "sip:127.0.0.1:${OPENSIPS_SIP_PORT}")
+# @end-single
+# @if-cluster
+modparam("pua_mi", "presence_server", "sip:${OPENSIPS_OWN_IP}:${OPENSIPS_SIP_PORT}")
+# @end-cluster
+
 #### Affinity leases (D-010) — read by call-control (S2+), not by
 #### anything in this script: S4-05 routes a pinned call on the hairpin
 #### headers a media node sets (see the "request from FS" branch below), not
@@ -456,6 +475,20 @@ route{
         exit;
     }
 
+    if (is_method("PUBLISH")) {
+        # S2-16: presence state is published by this proxy alone (`pua`, asked
+        # over MI by telephony-config). A PUBLISH from anywhere else would let
+        # a phone set any extension's message count or call state.
+        if (!is_myself("$si")) {
+            send_reply(403, "Forbidden");
+            exit;
+        }
+        if (!handle_publish()) {
+            xlog("L_ERR", "presence: handle_publish failed for $ru\n");
+        }
+        exit;
+    }
+
     if (is_method("SUBSCRIBE")) {
         # S2-17: extension BLF. Authenticated the same way REGISTER is
         # (phones already hold the same digest credentials) — an
@@ -478,6 +511,12 @@ route{
         # are keyed by (username, domain) with no cross-domain check of
         # their own (`db-schema/presence-create.sql`).
         if ($fd != $td) {
+            send_reply(403, "Forbidden");
+            exit;
+        }
+        # S2-16: a mailbox's message counts are its owner's alone, where a
+        # colleague may watch an extension's call state.
+        if ($hdr(Event) =~ "^message-summary" && $au != $tU) {
             send_reply(403, "Forbidden");
             exit;
         }

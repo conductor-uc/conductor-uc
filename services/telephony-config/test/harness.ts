@@ -355,6 +355,17 @@ function fakeVoicemailClient(storage: Storage): FakeVoicemailClient {
       ),
     findMailbox: (_tenantId: string, mailboxId: string) =>
       Promise.resolve(state.mailboxes[mailboxId]),
+    mailboxLamps: (tenantId: string, mailboxId?: string) =>
+      Promise.resolve(
+        Object.values(state.mailboxes)
+          .filter((m) => m.tenantId === tenantId && (mailboxId === undefined || m.id === mailboxId))
+          .map((m) => ({
+            mailboxId: m.id,
+            extensionId: m.extensionId,
+            newMessages: 0,
+            savedMessages: 0,
+          })),
+      ),
     findMessage: (_tenantId: string, _mailboxId: string, messageId: string) =>
       Promise.resolve(state.messages[messageId]),
     verifyPin: (_tenantId: string, mailboxId: string, pin: string) =>

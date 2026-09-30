@@ -27,6 +27,16 @@ export interface VoicemailMessage {
   readonly createdAt: string;
 }
 
+/** What one mailbox's message-waiting lamp should show (S2-16, G-42). */
+export interface MailboxLamp {
+  readonly mailboxId: string;
+  readonly extensionId: string;
+  /** Ready messages not yet listened to. */
+  readonly newMessages: number;
+  /** Ready messages already listened to. */
+  readonly savedMessages: number;
+}
+
 export interface CreateVoicemailMessageInput {
   readonly callerIdName?: string | null;
   readonly callerIdNumber?: string | null;
@@ -60,6 +70,8 @@ export interface VoicemailClient {
     extensionId: string,
   ): Promise<VoicemailMailbox | undefined>;
   findMailbox(tenantId: string, mailboxId: string): Promise<VoicemailMailbox | undefined>;
+  /** Every mailbox of the tenant, or the one given (none when it does not exist). */
+  mailboxLamps(tenantId: string, mailboxId?: string): Promise<MailboxLamp[]>;
   findMessage(
     tenantId: string,
     mailboxId: string,
@@ -134,6 +146,15 @@ export function createVoicemailClient(options: VoicemailClientOptions): Voicemai
       const response = await call('GET', mailboxUrl(tenantId, mailboxId));
       if (response === undefined) return undefined;
       return (await response.json()) as VoicemailMailbox;
+    },
+    async mailboxLamps(tenantId, mailboxId) {
+      const response = await call(
+        'GET',
+        `${baseUrl}/internal/v1/tenants/${encodeURIComponent(tenantId)}/voicemail/mwi` +
+          (mailboxId === undefined ? '' : `?mailboxId=${encodeURIComponent(mailboxId)}`),
+      );
+      if (response === undefined) return [];
+      return ((await response.json()) as { rows: MailboxLamp[] }).rows;
     },
     async findMessage(tenantId, mailboxId, messageId) {
       const response = await call(

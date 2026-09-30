@@ -308,6 +308,17 @@ export const telephonyEvents = defineEvents({
       failClosed: Type.Boolean(),
     }),
   },
+  /** Mirrors voicemail-service's contract (S2-16, G-42): the trigger for a message-waiting summary. */
+  'voicemail.mailbox.mwi_changed': {
+    schemaVersion: 1,
+    description:
+      "A mailbox's unread-message state changed (a message arrived, was read, or was deleted).",
+    data: Type.Object({
+      mailboxId: Type.String({ minLength: 1 }),
+      /** Given on a mailbox created or deleted, so a gone mailbox's lamp can still go out. */
+      extensionId: Type.Optional(Type.String({ minLength: 1 })),
+    }),
+  },
   /**
    * S2-06 (G-1: "a notification hook (email/SMS/console) on every emergency
    * call") — published by this service itself, the first event it ever

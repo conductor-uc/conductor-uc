@@ -181,12 +181,15 @@ describe.skipIf(skipReason !== undefined)(
       expect(wrongSum.json()).toMatchObject({ code: 'checksum_mismatch' });
 
       expect((await h.messages.findById({ tenantId }, message.id))?.status).toBe('pending');
+      // Nothing but the mailbox's own creation.
       const events = await h.db.kysely
         .selectFrom('outbox')
-        .select('type')
+        .select('payload')
         .where('tenant_id', '=', tenantId)
         .execute();
-      expect(events).toEqual([]);
+      expect(events.map((event) => event.payload)).toEqual([
+        expect.objectContaining({ extensionId: expect.any(String) as unknown }),
+      ]);
     });
 
     it('fail marks a message failed with its reason, and never a ready one', async () => {

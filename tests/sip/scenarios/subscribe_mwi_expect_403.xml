@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-16 (G-42): `subscribe_dialog_info_expect_403.xml`, for the message
+  summary of another extension in the same tenant: a mailbox's counts are
+  its owner's alone, so the edge answers 403. `[field0]`=watcher,
+  `[field1]`=its domain, `[field2]`=the other extension, `[field3]`=its
+  domain (the same tenant's).
+-->
+<scenario name="Subscribe to another extension's message summary, expect 403">
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field2]@[field3] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field3]>
+      Call-ID: [call_id]
+      CSeq: 1 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: message-summary
+      Accept: application/simple-message-summary
+      Expires: 3600
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="401" auth="true">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field2]@[field3] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field2]@[field3]>
+      Call-ID: [call_id]
+      CSeq: 2 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: message-summary
+      Accept: application/simple-message-summary
+      Expires: 3600
+      Max-Forwards: 70
+      [authentication]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="403" crlf="true">
+  </recv>
+
+</scenario>

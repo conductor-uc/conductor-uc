@@ -378,7 +378,7 @@ The **billing view** for resellers is pending decision D-013.
 **Integrations:**
 
 - On `complete` (the uploader's, once the audio is verified in storage), emits `voicemail.message.created` (thin: ids only). notification-service reads the settings, message details and audio through the internal API and sends voicemail-to-email using a brand-aware template (built, G-107).
-- MWI is to be sent through the OpenSIPs presence `message-summary` PUBLISH; not wired yet (G-42, G-108).
+- MWI (G-42, as built): `voicemail.mailbox.mwi_changed` (`{mailboxId, extensionId?}`, on every change of a mailbox's unread state and on a mailbox created or deleted) is consumed by telephony-config, which reads the counts (`GET /internal/v1/tenants/:t/voicemail/mwi`) and has the edge publish the `message-summary` over MI (`pua_publish`); it also renews every mailbox's summary hourly. The edge notifies the phones subscribed to it.
 - Transcription uses a `TranscriptionProvider` interface with one adapter per vendor (O-3). It is off by default and enabled per tenant or mailbox.
 
 ## notification-service

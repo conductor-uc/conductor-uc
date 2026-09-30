@@ -10,7 +10,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 |---|---|---|---|
 | S0 Foundations (10) | 10 | 0 | 0 |
 | S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
-| S2 Core telephony (21) | 18 | 3 | 0 |
+| S2 Core telephony (21) | 19 | 2 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (13) | 13 | 0 | 0 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
@@ -19,7 +19,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (133)** | **106** | **9** | **18** |
+| **Total (133)** | **107** | **8** | **18** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -80,7 +80,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S2-13 | Done | queue/agent/tier CRUD in pbx-config-service, callcenter projection; `queue.test.ts`. G-47 (a) open: tier assignments are not loaded into `mod_callcenter` on a running node; `recording_agent.test.ts` sees distribution to an agent live only after adding the tier by hand |
 | S2-14 | Done | `parking-lot.routes.ts`, `parking.test.ts`. `valet_parking` return-on-timeout unimplemented (G-48) |
 | S2-15 | Done | `conference-room.routes.ts`, `conference.test.ts` (audio, PIN). Video fields absent (G-50) |
-| S2-16 | Partial | `services/voicemail-service` (mailboxes, messages, greeting, PIN), Lua app, `voicemail.test.ts`. MWI event has no consumer (G-42) |
+| S2-16 | Done | `services/voicemail-service` (mailboxes, messages, greeting, PIN), Lua app, `voicemail.test.ts`. Message waiting (G-42): telephony-config publishes each mailbox's summary to the edge over MI (`pua_publish`) on `voicemail.mailbox.mwi_changed` and hourly; the edge takes PUBLISH from itself alone and notifies a phone subscribed to its own `message-summary` (`mwi.test.ts`, live: the lamp goes from out to lit when a message is left) |
 | S2-17 | Partial | SUBSCRIBE dialog-info handled in `opensips.cfg.template`; `presence.test.ts` proves handshake and one NOTIFY. State transitions unproven (G-38) |
 | S2-18 | Done | `services/cdr-service`: `/ingest/json-cdr`, CDR v1, `/cdrs`, `/cdr-exports`, `/billing-records` (D-013). Gaps: G-51 fields, G-52 partitions, G-53 master rollup |
 | S2-19 | Done | `freeswitch-2` in compose; dispatcher over two nodes; per-test cleanup covers both |

@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE scenario SYSTEM "sipp.dtd">
+<!--
+  S2-16 (G-42): a phone subscribes to its own mailbox's message summary
+  (`message-summary`, RFC 3842), authenticated as REGISTER is. The first
+  NOTIFY must show the lamp out; the phone then waits, answering every NOTIFY,
+  until one shows it lit ("Messages-Waiting: yes").
+
+  `[field0]`=user, `[field1]`=domain (also the auth realm).
+-->
+<scenario name="Subscribe to my message summary and wait for the lamp">
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field0]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 1 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: message-summary
+      Accept: application/simple-message-summary
+      Expires: 300
+      Max-Forwards: 70
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="401" auth="true">
+  </recv>
+
+  <send retrans="500">
+    <![CDATA[
+      SUBSCRIBE sip:[field0]@[field1] SIP/2.0
+      Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+      From: <sip:[field0]@[field1]>;tag=[call_number]
+      To: <sip:[field0]@[field1]>
+      Call-ID: [call_id]
+      CSeq: 2 SUBSCRIBE
+      Contact: <sip:[field0]@[local_ip]:[local_port]>
+      Event: message-summary
+      Accept: application/simple-message-summary
+      Expires: 300
+      Max-Forwards: 70
+      [authentication]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200" crlf="true">
+  </recv>
+
+  <!-- The state now: no new messages. -->
+  <recv request="NOTIFY" crlf="true" timeout="10000">
+    <action>
+      <ereg regexp="Messages-Waiting: no" search_in="body" check_it="true" assign_to="out"/>
+      <!-- SIPp refuses a variable that is set and never read. -->
+      <log message="first summary: [$out]"/>
+    </action>
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <!-- Every later NOTIFY is answered; the one that lights the lamp ends it. -->
+  <label id="1"/>
+  <recv request="NOTIFY" crlf="true" timeout="120000">
+    <action>
+      <ereg regexp="Messages-Waiting: yes" search_in="body" check_it="false" assign_to="lit"/>
+    </action>
+  </recv>
+
+  <send>
+    <![CDATA[
+      SIP/2.0 200 OK
+      [last_Via:]
+      [last_From:]
+      [last_To:]
+      [last_Call-ID:]
+      [last_CSeq:]
+      Content-Length: 0
+    ]]>
+  </send>
+
+  <nop test="lit" next="2"/>
+  <nop next="1"/>
+
+  <label id="2"/>
+  <nop>
+    <action>
+      <log message="lamp lit: [$lit]"/>
+    </action>
+  </nop>
+
+</scenario>

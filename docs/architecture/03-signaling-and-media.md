@@ -155,7 +155,7 @@ Node types, by stage:
 | Queues (`mod_callcenter`) | In memory, per node | **Affinity:** each queue is leased to one node at a time ([04](04-high-availability.md)) |
 | Call parking (`mod_valet_parking`) | In memory, per node | **Affinity** per parking lot |
 | Conferences / video rooms | In memory, per node | **Affinity** per active room |
-| MWI | `voicemail-service` | Sent as NOTIFY via OpenSIPs presence (message-summary) |
+| MWI | `voicemail-service` | Sent as NOTIFY via OpenSIPs presence (message-summary). As built (G-42): telephony-config asks the edge over MI (`pua_publish`); the edge sends itself the PUBLISH (accepted from itself alone) and notifies a phone subscribed to its own address (another extension's summary is refused) |
 | BLF | OpenSIPs dialog state | Native at the edge |
 
 ## 6. Recording pipeline (summary)

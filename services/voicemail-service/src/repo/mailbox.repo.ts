@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Database, DbContext } from '@cuc/db';
 import { requireTenant } from '@cuc/db';
 import { decryptString, encrypt, secretEquals, type KekProvider } from '@cuc/crypto';
+import { enqueueEvent } from '@cuc/events';
 import type { Storage } from '@cuc/storage';
 
 import {
@@ -12,6 +13,7 @@ import {
   type EmailAfter,
   type EmailSettings,
 } from '../domain/mailbox.js';
+import { voicemailEvents } from '../events.js';
 import type { VoicemailServiceDb } from '../schema.js';
 
 export interface Mailbox {
@@ -157,23 +159,31 @@ export function createMailboxRepo(
       await storage.forTenant(tenantId).provisionBucket();
 
       const now = new Date();
-      await db
-        .scoped(ctx)
-        .insertInto('mailboxes')
-        .values({
-          id,
-          extension_id: extensionId,
-          pin_enc: pinEnc,
-          greeting_status: 'none',
-          greeting_object_key: null,
-          notify_email: null,
-          email_attach_audio: false,
-          email_after: 'keep',
-          created_at: now,
-          updated_at: now,
-          version: 1,
-        })
-        .execute();
+      await db.scoped(ctx).transaction(async (trx, raw) => {
+        await trx
+          .insertInto('mailboxes')
+          .values({
+            id,
+            extension_id: extensionId,
+            pin_enc: pinEnc,
+            greeting_status: 'none',
+            greeting_object_key: null,
+            notify_email: null,
+            email_attach_audio: false,
+            email_after: 'keep',
+            created_at: now,
+            updated_at: now,
+            version: 1,
+          })
+          .execute();
+        // S2-16 (G-42): the extension's lamp is announced from its new, empty mailbox, which
+        // puts out one a mailbox deleted before may have left lit.
+        await enqueueEvent(raw, voicemailEvents, {
+          type: 'voicemail.mailbox.mwi_changed',
+          data: { mailboxId: id, extensionId },
+          orgContext: { tenantId },
+        });
+      });
 
       return {
         id,
@@ -262,14 +272,22 @@ export function createMailboxRepo(
     },
 
     async remove(ctx: DbContext, id: string): Promise<void> {
-      const result = await db
-        .scoped(ctx)
-        .deleteFrom('mailboxes')
-        .where('id', '=', id)
-        .executeTakeFirst();
-      if (Number(result.numDeletedRows) === 0) {
-        throw new MailboxNotFoundError(id);
-      }
+      const { tenantId } = requireTenant(ctx);
+      await db.scoped(ctx).transaction(async (trx, raw) => {
+        const existing = await trx
+          .selectFrom('mailboxes')
+          .select('extension_id as extensionId')
+          .where('id', '=', id)
+          .executeTakeFirst();
+        if (existing === undefined) throw new MailboxNotFoundError(id);
+        await trx.deleteFrom('mailboxes').where('id', '=', id).execute();
+        // S2-16 (G-42): the lamp of a mailbox that is gone goes out.
+        await enqueueEvent(raw, voicemailEvents, {
+          type: 'voicemail.mailbox.mwi_changed',
+          data: { mailboxId: id, extensionId: existing.extensionId },
+          orgContext: { tenantId },
+        });
+      });
       // Messages are left orphaned in the DB and in S3 (same as media-asset's
       // own `remove()` in S2-07 — no cascade/cleanup convention exists yet
       // anywhere in this codebase; out of scope to invent here).

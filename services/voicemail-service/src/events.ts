@@ -29,7 +29,14 @@ export const voicemailEvents = defineEvents({
   'voicemail.mailbox.mwi_changed': {
     schemaVersion: 1,
     description:
-      "A mailbox's unread-message state changed (a message arrived, was read, or was deleted) — the trigger for an MWI NOTIFY.",
-    data: Type.Object({ mailboxId: Type.String({ minLength: 1 }) }),
+      "A mailbox's unread-message state changed (a message arrived, was read, or was deleted, or the mailbox was created or deleted) — the trigger for an MWI NOTIFY.",
+    data: Type.Object({
+      mailboxId: Type.String({ minLength: 1 }),
+      /**
+       * The mailbox's extension, on a mailbox created or deleted (S2-16, G-42): once a mailbox is
+       * gone there is nothing left to read it from, and its extension's lamp must still go out.
+       */
+      extensionId: Type.Optional(Type.String({ minLength: 1 })),
+    }),
   },
 });
