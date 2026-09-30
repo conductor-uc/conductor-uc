@@ -275,12 +275,16 @@ export async function seedFixtures(): Promise<SeedResult> {
     ],
     { maxBuffer: 16 * 1024 * 1024 },
   );
-  // seed.ts's own `if (import.meta.url === ...)` block prints one final
-  // pretty-printed JSON object after all its (expected, idempotent) pino
-  // "already exists" log lines — the JSON is the last `{...}` in stdout.
-  const start = stdout.lastIndexOf('\n{');
-  const jsonText = start === -1 ? stdout : stdout.slice(start + 1);
-  return JSON.parse(jsonText) as SeedResult;
+  return seedOutput<SeedResult>(stdout);
+}
+
+/**
+ * What a `seed.js` command printed: its result as JSON, and nothing else (its log lines go to
+ * stderr). Parsed whole, so anything else that reaches stdout fails here, loudly, rather than
+ * being taken for the result (G-132).
+ */
+function seedOutput<T>(stdout: string): T {
+  return JSON.parse(stdout) as T;
 }
 
 /**
@@ -391,11 +395,10 @@ export async function resetExtensionPassword(
     ],
     { maxBuffer: 16 * 1024 * 1024 },
   );
-  const start = stdout.lastIndexOf('\n{');
-  return JSON.parse(start === -1 ? stdout : stdout.slice(start + 1)) as {
+  return seedOutput<{
     password: string;
     realm: string;
-  };
+  }>(stdout);
 }
 
 const tenantAdmins = new Map<string, string>();
@@ -446,9 +449,7 @@ export async function tenantAdminHeaders(
       ],
       { maxBuffer: 16 * 1024 * 1024 },
     );
-    const start = stdout.lastIndexOf('\n{');
-    userId = (JSON.parse(start === -1 ? stdout : stdout.slice(start + 1)) as { userId: string })
-      .userId;
+    userId = seedOutput<{ userId: string }>(stdout).userId;
     tenantAdmins.set(tenantId, userId);
   }
   return signInternalHeaders(
@@ -506,12 +507,11 @@ export async function createSignInAdmin(
     ],
     { maxBuffer: 16 * 1024 * 1024 },
   );
-  const start = stdout.lastIndexOf('\n{');
-  return JSON.parse(start === -1 ? stdout : stdout.slice(start + 1)) as {
+  return seedOutput<{
     userId: string;
     email: string;
     password: string;
-  };
+  }>(stdout);
 }
 
 /**
@@ -553,12 +553,11 @@ export async function createSignInMaster(
     ],
     { maxBuffer: 16 * 1024 * 1024 },
   );
-  const start = stdout.lastIndexOf('\n{');
-  return JSON.parse(start === -1 ? stdout : stdout.slice(start + 1)) as {
+  return seedOutput<{
     userId: string;
     email: string;
     password: string;
-  };
+  }>(stdout);
 }
 
 /**
@@ -1258,6 +1257,11 @@ export function startAgentUas(opts: StartAgentUasOptions): UasHandle {
     const loginCmd = buildSippCommand({
       scenarioPath: '/scenarios/login_feature_code.xml',
       csvPath: '/data/fields.csv',
+      // The feature code is a call like any other: challenged, and answered with the agent's
+      // own credentials (G-129). Without them SIPp offers its default password and never logs in.
+      au: opts.au,
+      ap: opts.ap,
+      authUri: opts.authUri,
       localPort: opts.localPort ?? 6000,
       remoteHost: env.opensipsTarget,
       logPrefix: 'agent_login',

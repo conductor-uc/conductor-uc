@@ -93,7 +93,18 @@ export interface SeedResult {
   readonly extensions: Record<string, { readonly password: string; readonly realm: string }>;
 }
 
-const logger = createLogger({ name: 'tests-sip-seed', level: 'info' });
+/**
+ * Logs go to stderr: stdout carries a command's result and nothing else, and run-scenario.ts
+ * parses it whole. When both went to stdout the caller took the last JSON object in it, and the
+ * logger writes on its own schedule: under load, the "seed complete" line (the same result, its
+ * passwords masked as the logger masks every password) could land after the result, and a whole
+ * test file then registered its phones with the password `[redacted]` (G-132).
+ */
+const logger = createLogger({
+  name: 'tests-sip-seed',
+  level: 'info',
+  destination: process.stderr,
+});
 
 function env(name: string): string {
   const value = process.env[name];
