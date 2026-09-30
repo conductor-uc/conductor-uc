@@ -81,6 +81,7 @@ Every route declares its data class in its route schema (`config.dataClass`), an
 | `voicemail.access` | private | Mailbox owner; grantable per `mailbox` |
 | `monitor.presence` | config | Tenant users (tenant-wide) |
 | `monitor.calls` | private | Tenant admin, tenant supervisor, master support: watching the tenant's live calls (the realtime `calls` topic, S5-08, G-119) |
+| `emergency.alert` | private | Tenant admin, tenant supervisor, tenant receptionist, master support: the live alert when someone in the tenant dials an emergency number (the realtime `emergencies` topic, S2-06, G-1) |
 | `monitor.listen` / `monitor.whisper` / `monitor.barge` | private | Tenant supervisors and (D-021) tenant admins (the whole tenant); anyone else **granted them on an extension or a queue**, which a tenant's own administrator may grant without holding them (G-121 (7)) |
 | `analytics.view` | private | Tenant admin / supervisor |
 | `audit.read` | config/private | Org admins (private entries are visible only to the tenant and the master) |

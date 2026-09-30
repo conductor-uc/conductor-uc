@@ -15,7 +15,7 @@ import { destinationCountry, normalizeToE164 } from '../domain/e164.js';
 import { isOutboundCallAllowed, parseFraudLimits } from '../domain/fraud-limits.js';
 import { telephonyEvents } from '../events.js';
 import type { OrgClient } from '../org-client.js';
-import type { PbxConfigClient } from '../pbx-config-client.js';
+import type { EmergencyLocationConfig, PbxConfigClient } from '../pbx-config-client.js';
 import type { RecordingClient, RecordingDirective } from '../recording-client.js';
 import { decodeRecordingContext, encodeRecordingContext } from '../recording-context.js';
 import type { ExtensionRow, OutboundRouteRow, ReadModelRepo } from '../repo/read-model.repo.js';
@@ -67,7 +67,6 @@ import {
   type CallcenterAgentEntry,
   type CallcenterQueueEntry,
   type CallHandlingPlan,
-  type EmergencyLocationDetail,
   type FallbackTarget,
   type PlanLeg,
   type PlanTarget,
@@ -572,7 +571,8 @@ export function registerFsRoutes(
     // none was ever set. Either way, the call still goes out: a missing
     // *address* is not a reason to refuse an emergency call, only a
     // reason to log it loudly.
-    let location: EmergencyLocationDetail | null = null;
+    // The location as pbx-config-service keeps it (its label too, for the notification).
+    let location: EmergencyLocationConfig | null = null;
     if (callingExtension !== undefined) {
       try {
         const resolved = await pbxConfigClient.findEmergencyLocation(
@@ -610,6 +610,20 @@ export function registerFsRoutes(
             dialedNumber,
             callingExtensionId: callingExtension?.id ?? null,
             emergencyLocationId: callingExtension?.emergencyLocationId ?? null,
+            callingNumber: callingExtension?.number ?? null,
+            callingName: callingExtension?.callerIdName ?? null,
+            location:
+              location === null
+                ? null
+                : {
+                    label: location.label,
+                    addressLine1: location.addressLine1,
+                    addressLine2: location.addressLine2,
+                    city: location.city,
+                    state: location.state,
+                    postalCode: location.postalCode,
+                    country: location.country,
+                  },
           },
           orgContext: { tenantId },
         });

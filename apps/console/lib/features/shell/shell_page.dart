@@ -13,6 +13,7 @@ import '../../core/session.dart';
 import '../../l10n/l10n.dart';
 import '../../widgets/brand_header.dart';
 import '../../widgets/feedback.dart';
+import '../emergency/emergency_alerts.dart';
 import '../myphone/my_phone_api.dart';
 import '../orgs/orgs_api.dart';
 import '../pbx/pbx_api.dart';
@@ -105,6 +106,8 @@ class _ShellPageState extends ConsumerState<ShellPage> {
           Expanded(
             child: Column(
               children: [
+                // S2-06 (G-1): an emergency call anywhere in the tenant.
+                const EmergencyAlertBanners(),
                 if (acting != null)
                   _ActingBanner(
                     tenant: acting,

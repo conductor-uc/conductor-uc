@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
+  dockerCurlJson,
   clearRegistration,
   tenantAdminCurlJson,
   runForeground,
@@ -17,6 +18,8 @@ import {
 const skipReason = await sipInfraOrSkipReason();
 
 const TRUNK_SERVICE_URL = 'http://trunk-service:8080';
+/** The stack's mail catcher, as the suite's curl container reaches it. */
+const MAILPIT_URL = 'http://mailpit:8025';
 const CARRIER_CONTAINER = 'sip-test-emergency-carrier';
 const HELD_CALLER_CONTAINER = 'sip-test-emergency-held-caller';
 const EMERGENCY_CALLER_CONTAINER = 'sip-test-emergency-caller';
@@ -34,13 +37,11 @@ interface CreatedOutboundRoute {
  * discipline every S2 telephony task has established. This covers the half
  * of that "Done when" only a live stack can actually prove: "an emergency
  * number reaches the emergency trunk even when the tenant is at its channel
- * limit." The other half — "a notification event is emitted" — is
- * unit-tested precisely against the real outbox row shape in
- * `services/telephony-config/test/fs.routes.test.ts`'s own S2-06 block;
- * `call.emergency.initiated` has no consumer yet (docs/decisions.md), so
- * there is no live, black-box-observable side effect for a SIPp scenario to
- * check here beyond what that unit test already proves against the exact
- * same code path (`handleEmergencyDial`).
+ * limit." The other half, the notification, is checked here too since G-1's
+ * email exists: the emergency route lists an address, and the call must put an
+ * email about it in the stack's Mailpit (notification-service, through
+ * `call.emergency.initiated`). The console alert is covered by the gateway's
+ * and the console's own tests.
  *
  * Uses `seed.tenantEmergency`, not `tenantFraud`/`tenantOutbound` — kept
  * separate for the same reason those two are kept apart from each other
@@ -120,12 +121,13 @@ describe.skipIf(skipReason !== undefined)('S2-06 emergency calling', () => {
     tenantId: string,
     trunkId: string,
     numbers: readonly string[],
+    notifyEmails: readonly string[] = [],
   ): Promise<void> {
     const result = await tenantAdminCurlJson(
       seed.resellerId,
       'PUT',
       `${TRUNK_SERVICE_URL}/v1/tenants/${tenantId}/emergency-route`,
-      { trunkId, numbers },
+      { trunkId, numbers, notifyEmails },
     );
     expect(result.status, JSON.stringify(result.json)).toBe(200);
   }
@@ -151,6 +153,8 @@ describe.skipIf(skipReason !== undefined)('S2-06 emergency calling', () => {
     let trunk: CreatedTrunk | undefined;
     let route: CreatedOutboundRoute | undefined;
     let emergencyRouteCreated = false;
+    // S2-06 (G-1): who is emailed when someone dials an emergency number.
+    const frontDesk = `front-desk-${crypto.randomUUID()}@example.test`;
     try {
       trunk = await createIpTrunk(tenantId, CARRIER_CONTAINER, 5094);
       // A normal outbound route — this is what the *held* call below rides,
@@ -159,7 +163,7 @@ describe.skipIf(skipReason !== undefined)('S2-06 emergency calling', () => {
       // underlying trunk/carrier, since nothing about this test needs them
       // to be different carriers, and G-1 never requires a dedicated one.
       route = await createOutboundRoute(tenantId, [trunk.id], '+1');
-      await putEmergencyRoute(tenantId, trunk.id, ['911']);
+      await putEmergencyRoute(tenantId, trunk.id, ['911'], [frontDesk]);
       emergencyRouteCreated = true;
       // Wait for telephony-config's copy of the outbound and emergency routes.
       await waitForProjected('outbound_routes', 'id', route.id);
@@ -202,6 +206,22 @@ describe.skipIf(skipReason !== undefined)('S2-06 emergency calling', () => {
       // not merely unset.
       const heldResult = await held.result();
       expect(heldResult.successfulCalls, heldResult.stdout).toBe(1);
+
+      // The on-site notification reached the address on the route.
+      await expect
+        .poll(
+          async () => {
+            const found = await dockerCurlJson(
+              'GET',
+              `${MAILPIT_URL}/api/v1/search?query=${encodeURIComponent(`to:"${frontDesk}"`)}`,
+            );
+            return ((found.json as { messages?: { Subject: string }[] }).messages ?? []).map(
+              (message) => message.Subject,
+            );
+          },
+          { timeout: 20_000, interval: 500 },
+        )
+        .toEqual([expect.stringContaining('Emergency call: 911 dialled from 106')]);
     } finally {
       await carrier.stop();
       if (emergencyRouteCreated) await deleteEmergencyRoute(tenantId);

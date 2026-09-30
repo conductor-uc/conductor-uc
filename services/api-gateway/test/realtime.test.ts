@@ -790,6 +790,73 @@ describe.skipIf(skipReason !== undefined)('api-gateway: realtime hub (S5-08)', (
     });
   });
 
+  describe('emergency alerts (S2-06)', () => {
+    const location = {
+      label: 'Head office',
+      addressLine1: '123 Main St',
+      addressLine2: null,
+      city: 'Springfield',
+      state: 'IL',
+      postalCode: '62701',
+      country: 'US',
+    };
+
+    it('alerts those holding emergency.alert when someone dials an emergency number, and audits it', async () => {
+      const watcher = await connectAs(person(TENANT_A, 'tenant', ['emergency.alert']));
+      expect(await watcher.subscribe(topic(TENANT_A, 'emergencies'))).toMatchObject({
+        type: 'subscribed',
+      });
+      expect((await watcher.next((m) => m.type === 'snapshot'))['data']).toEqual({ alerts: [] });
+      const other = await connectAs(person(TENANT_B, 'tenant', ['emergency.alert']));
+      expect(await other.subscribe(topic(TENANT_B, 'emergencies'))).toMatchObject({
+        type: 'subscribed',
+      });
+
+      await publish('call.emergency.initiated', TENANT_A, {
+        dialedNumber: '911',
+        callingExtensionId: 'e-101',
+        emergencyLocationId: 'loc-1',
+        callingNumber: '101',
+        callingName: 'Front Desk',
+        location,
+      });
+      const alert = await watcher.next((m) => m.type === 'event');
+      expect(alert['event']).toMatchObject({
+        type: 'emergency.initiated',
+        dialedNumber: '911',
+        callingNumber: '101',
+        callingName: 'Front Desk',
+        location,
+      });
+      expect(typeof (alert['event'] as { id: unknown }).id).toBe('string');
+      expect(typeof (alert['event'] as { at: unknown }).at).toBe('string');
+
+      // Another tenant hears nothing; the subscription was audited like every private one.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect(other.messages.filter((m) => m.type === 'event')).toEqual([]);
+      expect(auditRecords.map((r) => JSON.stringify(r)).join()).toContain(
+        topic(TENANT_A, 'emergencies'),
+      );
+      watcher.close();
+      other.close();
+    });
+
+    it('refuses someone without emergency.alert, and any reseller (H1)', async () => {
+      const client = await connectAs(person(TENANT_A, 'tenant', ['monitor.presence']));
+      expect(await client.subscribe(topic(TENANT_A, 'emergencies'))).toMatchObject({
+        type: 'error',
+        code: 'permission_denied',
+      });
+      client.close();
+      const reseller = await connectAs(person(RESELLER_A, 'reseller', ['emergency.alert']));
+      expect(await reseller.subscribe(topic(TENANT_A, 'emergencies'))).toMatchObject({
+        type: 'error',
+        code: 'reseller_private_data_denied',
+      });
+      reseller.close();
+    });
+  });
+
   describe('live queues (S9-13)', () => {
     const queue = (waiting: number, status = 'available') => ({
       queueId: 'q1',

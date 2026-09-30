@@ -558,7 +558,11 @@ void main() {
               as Map<String, dynamic>;
       expect(route.keys, containsAll(['get', 'put', 'delete']));
       final put = _schema(route['put'] as Map<String, dynamic>);
-      expect((put['properties'] as Map).keys.toSet(), {'trunkId', 'numbers'});
+      expect((put['properties'] as Map).keys.toSet(), {
+        'trunkId',
+        'numbers',
+        'notifyEmails',
+      });
     });
   });
 

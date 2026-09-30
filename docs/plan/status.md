@@ -10,7 +10,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 |---|---|---|---|
 | S0 Foundations (10) | 10 | 0 | 0 |
 | S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
-| S2 Core telephony (21) | 20 | 1 | 0 |
+| S2 Core telephony (21) | 21 | 0 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
 | S4 HA and scale (13) | 13 | 0 | 0 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
@@ -19,7 +19,7 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (133)** | **108** | **7** | **18** |
+| **Total (133)** | **109** | **6** | **18** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -70,7 +70,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S2-03 | Done | `pbx-config-service` `routes/did.routes.ts`; `fs.routes.ts` resolves extension, ring_group, flow, queue, voicemail; `trunk_did_routing.test.ts` |
 | S2-04 | Done | `trunk-service` `outbound-route.ts`, `e164.ts`; `outbound_failover.test.ts` |
 | S2-05 | Done | `domain/fraud-limits.ts`; `toll_fraud.test.ts`. Caveat: CPS is one platform constant, not per-tenant (G-31) |
-| S2-06 | Partial | `emergency-route.routes.ts`, `emergency-locations`, `emergency_calling.test.ts`. Missing: notification hook on emergency calls; `X-Emergency-Location` is a generic header (G-33) |
+| S2-06 | Done | `emergency-route.routes.ts`, `emergency-locations`, `emergency_calling.test.ts`. Notification (G-1): the emergency route lists who is emailed; notification-service emails them on `call.emergency.initiated` (caller, number, time, location on file), and the realtime hub's `emergencies` topic alerts signed-in holders of `emergency.alert` (tenant admin, supervisor, receptionist) with a banner on every console screen. Live: a 911 call puts the email in Mailpit. Still open: `X-Emergency-Location` is a generic header until a carrier's format is known (G-33) |
 | S2-07 | Done | `pbx-config-service` `media-asset.routes.ts`, `services/media-worker` transcode; `media_playback.test.ts` |
 | S2-08 | Done | `ring-group.routes.ts`; ring-group dialplan in `fs.routes.ts` |
 | S2-09 | Done | `packages/callflow-ir` (9 node types, validator, compiler), `services/callflow-service` (draft, validate, publish, rollback) |
@@ -210,7 +210,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | Backup and restore runbook | Partial | `docs/operations/operations.md` §4: what to back up, logical dump and restore, binary logs for point-in-time recovery, object storage versioning or replication. Not tested |
 | Operations runbooks | Partial | `docs/operations/operations.md`: upgrades, monitoring, secret rotation, troubleshooting (incl. trunks); node drain in `deploy-distributed.md` §7 (S4-02); no failover drills |
 | License decision (O-6) | Done | O-6 accepted 2026-09-25: `LICENSE` (AGPL-3.0), `"license": "AGPL-3.0-only"` in every `package.json`, `THIRD_PARTY_NOTICES.md`. Still open under O-6: a contributor licence agreement before outside contributions, counsel's confirmation |
-| Emergency calling scope (G-1) | Partial | routes, locations, and dialplan built; notification hook and reseller documentation missing |
+| Emergency calling scope (G-1) | Partial | routes, locations, dialplan and the notification (email and console alert, S2-06) built; reseller documentation missing |
 | Billing data access (D-013) | Done | `billing.read` permission, `GET /v1/tenants/:tenantId/billing-records`; master rollup missing (G-53) |
 
 ## Built but not in the plan

@@ -94,6 +94,7 @@ const TENANT_ADMIN_PERMISSIONS: readonly Permission[] = [
   'voicemail.access',
   'monitor.presence',
   'monitor.calls',
+  'emergency.alert',
   // D-021 (the owner, 2026-09-28): an administrator listens, whispers and
   // barges as a supervisor does; each use is audited (`call.monitor.*`).
   'monitor.listen',
@@ -133,6 +134,7 @@ const MASTER_SUPPORT_PERMISSIONS: readonly Permission[] = [
   'audit.read',
   'monitor.presence',
   'monitor.calls',
+  'emergency.alert',
   'billing.read',
   ...CONFIG_READ_PERMISSIONS,
 ];
@@ -162,6 +164,7 @@ const TENANT_SUPERVISOR_PERMISSIONS: readonly Permission[] = [
   'extension.read',
   'monitor.presence',
   'monitor.calls',
+  'emergency.alert',
   'monitor.listen',
   'monitor.whisper',
   'monitor.barge',
@@ -186,6 +189,7 @@ const TENANT_RECEPTIONIST_PERMISSIONS: readonly Permission[] = [
   'queue.read',
   'monitor.presence',
   'monitor.calls',
+  'emergency.alert',
   'call.control',
   ...SELF_PERMISSIONS,
 ];

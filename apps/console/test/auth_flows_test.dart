@@ -4,8 +4,10 @@ import 'package:console/app/app.dart';
 import 'package:console/app/brand.dart';
 import 'package:console/app/router.dart';
 import 'package:console/core/api_client.dart';
+import 'package:console/core/realtime.dart';
 import 'package:console/core/session.dart';
 import 'package:console/dev/demo_backend.dart';
+import 'package:console/dev/demo_realtime.dart';
 import 'package:console_api/console_api.dart';
 import 'package:dio/dio.dart';
 import 'package:console/features/shell/shell_page.dart' show AppNavigation;
@@ -122,6 +124,9 @@ void main() {
         overrides: [
           brandProvider.overrideWithValue(const Brand.neutral()),
           apiProvider.overrideWithValue(api),
+          // Signed in, an administrator's console watches for emergency
+          // alerts (S2-06); the demo hub answers it.
+          realtimeConnectorProvider.overrideWithValue(demoRealtimeConnector),
         ],
       );
       addTearDown(container.dispose);

@@ -6,11 +6,13 @@ import { createLogger } from '@cuc/logger';
 
 import { configSchema, loadServiceConfig } from './config.js';
 import { createIdentityConsumer } from './consumers/identity.consumer.js';
+import { createEmergencyConsumer } from './consumers/emergency.consumer.js';
 import { createVoicemailConsumer } from './consumers/voicemail.consumer.js';
 import { createIdentityClient } from './identity-client.js';
 import { createMailer } from './mailer.js';
 import { createOrgClient } from './org-client.js';
 import type { NotificationServiceDb } from './schema.js';
+import { createTrunkClient } from './trunk-client.js';
 import { createVoicemailClient } from './voicemail-client.js';
 import { createOrgDeletionConsumer } from './org-deletion.js';
 
@@ -96,9 +98,27 @@ const voicemailConsumer = createVoicemailConsumer(
   mailer,
   { ...linkOptions, maxAttachmentBytes: config.VOICEMAIL_MAX_ATTACHMENT_BYTES },
 );
+// S2-06 (G-1): the on-site notification when someone dials an emergency number.
+const emergencyConsumer = createEmergencyConsumer(
+  db,
+  bus,
+  logger,
+  orgClient,
+  createTrunkClient({
+    baseUrl: config.TRUNK_SERVICE_URL,
+    internalServiceToken: config.INTERNAL_SERVICE_TOKEN,
+  }),
+  mailer,
+  linkOptions,
+);
 await consumer.ensure();
 await voicemailConsumer.ensure();
-const consumerLoop = Promise.all([consumer.run(), voicemailConsumer.run()]);
+await emergencyConsumer.ensure();
+const consumerLoop = Promise.all([
+  consumer.run(),
+  voicemailConsumer.run(),
+  emergencyConsumer.run(),
+]);
 
 // S1-16 (G-11): a deleted org's rows go when org-service says so.
 const orgDeletion = createOrgDeletionConsumer(db, bus, logger);
@@ -124,6 +144,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'shutting down');
   consumer.stop();
   voicemailConsumer.stop();
+  emergencyConsumer.stop();
   await Promise.race([
     app.close(),
     new Promise((resolve) => setTimeout(resolve, config.SHUTDOWN_GRACE_MS)),

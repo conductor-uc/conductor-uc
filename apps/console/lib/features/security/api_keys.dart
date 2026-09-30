@@ -239,6 +239,7 @@ bool privatePermission(String permission) => const {
   'data.export',
   'voicemail.access',
   'monitor.calls',
+  'emergency.alert',
   'monitor.listen',
   'monitor.whisper',
   'monitor.barge',

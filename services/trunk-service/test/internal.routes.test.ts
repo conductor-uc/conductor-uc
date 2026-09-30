@@ -207,7 +207,10 @@ describe.skipIf(skipReason !== undefined)('trunk-service internal routes', () =>
     it("returns the tenant's emergency route", async () => {
       const tenantId = crypto.randomUUID();
       const trunkId = crypto.randomUUID();
-      await h.emergencyRoutes.upsert({ tenantId }, { trunkId, numbers: ['911'] });
+      await h.emergencyRoutes.upsert(
+        { tenantId },
+        { trunkId, numbers: ['911'], notifyEmails: ['desk@example.com'] },
+      );
 
       const response = await app.inject({
         method: 'GET',
@@ -216,7 +219,11 @@ describe.skipIf(skipReason !== undefined)('trunk-service internal routes', () =>
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.json()).toMatchObject({ trunkId, numbers: ['911'] });
+      expect(response.json()).toMatchObject({
+        trunkId,
+        numbers: ['911'],
+        notifyEmails: ['desk@example.com'],
+      });
     });
 
     it('404s a tenant with no emergency route', async () => {

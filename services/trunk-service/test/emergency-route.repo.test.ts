@@ -85,6 +85,40 @@ describe.skipIf(skipReason !== undefined)('emergency route repo', () => {
     ).rejects.toThrow(InvalidEmergencyRouteError);
   });
 
+  it('keeps the addresses emailed on an emergency call, lowercased; none when omitted (G-1)', async () => {
+    const tenantId = crypto.randomUUID();
+    const trunkId = crypto.randomUUID();
+
+    const created = await h.emergencyRoutes.upsert(ctxFor(tenantId), {
+      trunkId,
+      numbers: ['911'],
+      notifyEmails: [' Front.Desk@Example.com', 'security@example.com'],
+    });
+    expect(created.notifyEmails).toEqual(['front.desk@example.com', 'security@example.com']);
+    expect((await h.emergencyRoutes.find(ctxFor(tenantId)))?.notifyEmails).toEqual([
+      'front.desk@example.com',
+      'security@example.com',
+    ]);
+
+    // A PUT replaces the route: without the field, nobody is emailed.
+    await h.emergencyRoutes.upsert(ctxFor(tenantId), { trunkId, numbers: ['911'] });
+    expect((await h.emergencyRoutes.find(ctxFor(tenantId)))?.notifyEmails).toEqual([]);
+  });
+
+  it('rejects a malformed or repeated notification address, and more than ten', async () => {
+    const tenantId = crypto.randomUUID();
+    const trunkId = crypto.randomUUID();
+    for (const notifyEmails of [
+      ['not-an-address'],
+      ['a@example.com', 'A@example.com'],
+      Array.from({ length: 11 }, (_, i) => `person${String(i)}@example.com`),
+    ]) {
+      await expect(
+        h.emergencyRoutes.upsert(ctxFor(tenantId), { trunkId, numbers: ['911'], notifyEmails }),
+      ).rejects.toThrow(InvalidEmergencyRouteError);
+    }
+  });
+
   it('404s removing a route that does not exist', async () => {
     const tenantId = crypto.randomUUID();
     await expect(h.emergencyRoutes.remove(ctxFor(tenantId))).rejects.toThrow(

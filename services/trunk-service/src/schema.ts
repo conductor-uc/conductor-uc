@@ -78,6 +78,8 @@ export interface TrunkServiceDb extends EventTables {
     trunk_id: string;
     /** JSON array of direct-dial emergency numbers, e.g. `["911"]`. */
     numbers: string;
+    /** S2-06 (G-1): JSON array of addresses emailed on every emergency call; null reads as none. */
+    notify_emails: string | null;
     created_at: Date;
     updated_at: Date;
     version: number;

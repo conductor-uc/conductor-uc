@@ -74,6 +74,9 @@ export const PERMISSION_CATALOG: Readonly<Record<Permission, DataClass>> = {
   'emergency_location.read': 'config',
   'emergency_route.manage': 'config',
   'emergency_route.read': 'config',
+  // S2-06 (G-1): the live alert when someone in the tenant dials an emergency number. Private: it
+  // names the caller and where they are.
+  'emergency.alert': 'private',
   'group.manage': 'config',
   'group.read': 'config',
   'queue.manage': 'config',

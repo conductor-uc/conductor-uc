@@ -13,20 +13,32 @@ const EmergencyRouteSchema = Type.Object({
   id: Type.String(),
   trunkId: Type.String(),
   numbers: Type.Array(Type.String()),
+  /** S2-06 (G-1): emailed on every emergency call. */
+  notifyEmails: Type.Array(Type.String()),
 });
 type EmergencyRouteResponse = Static<typeof EmergencyRouteSchema>;
 
 const UpsertEmergencyRouteBodySchema = Type.Object({
   trunkId: Type.String({ minLength: 1 }),
   numbers: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+  /** Replaces the list; none when omitted. */
+  notifyEmails: Type.Optional(
+    Type.Array(Type.String({ minLength: 1, maxLength: 254 }), { maxItems: 10 }),
+  ),
 });
 
 function toResponse(route: {
   id: string;
   trunkId: string;
   numbers: readonly string[];
+  notifyEmails: readonly string[];
 }): EmergencyRouteResponse {
-  return { id: route.id, trunkId: route.trunkId, numbers: [...route.numbers] };
+  return {
+    id: route.id,
+    trunkId: route.trunkId,
+    numbers: [...route.numbers],
+    notifyEmails: [...route.notifyEmails],
+  };
 }
 
 function ctxFor(request: {

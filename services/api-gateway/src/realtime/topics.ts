@@ -34,8 +34,20 @@ import type { DataClass } from '@cuc/authz';
  *   subscribe; `private`, so never a reseller; audited like `calls`. The permission is checked by
  *   the hub against the person's grants (`scoped`), since the permission lookup counts only
  *   holdings across the organization.
+ * - `emergencies` (S2-06, G-1) is `emergency.alert` (private): each time someone in the tenant
+ *   dials an emergency number, who, the number and the location on file
+ *   (`{type:"emergency.initiated", id, at, dialedNumber, callingNumber, callingName, location}`),
+ *   for the console's alert. Nothing is kept: the snapshot is always `{alerts: []}`, so an alert
+ *   reaches only those connected when it happens (the email does not depend on that).
  */
-export const TOPIC_KINDS = ['calls', 'presence', 'queues', 'mycalls', 'supervised'] as const;
+export const TOPIC_KINDS = [
+  'calls',
+  'presence',
+  'queues',
+  'mycalls',
+  'supervised',
+  'emergencies',
+] as const;
 export type TopicKind = (typeof TOPIC_KINDS)[number];
 
 export interface TopicDefinition {
@@ -54,6 +66,7 @@ export const TOPICS: Readonly<Record<TopicKind, TopicDefinition>> = {
   queues: { permission: 'queue.read', dataClass: 'config' },
   mycalls: { permission: 'self.history', dataClass: 'private' },
   supervised: { permission: 'monitor.listen', dataClass: 'private', scoped: true },
+  emergencies: { permission: 'emergency.alert', dataClass: 'private' },
 };
 
 export interface Topic {

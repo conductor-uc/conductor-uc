@@ -172,6 +172,7 @@ describe('BUILT_IN_ROLES', () => {
     expect([...(receptionist?.permissions ?? [])].sort()).toEqual(
       [
         'call.control',
+        'emergency.alert',
         'monitor.calls',
         'monitor.presence',
         'org.view',

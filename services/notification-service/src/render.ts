@@ -6,7 +6,7 @@ import mjml2html from 'mjml';
 import { readableOn, safeColor, type MailBrand } from './domain/brand.js';
 
 export type TemplateName =
-  'password-reset' | 'invitation' | 'mfa-reset' | 'mfa-reset-admin' | 'voicemail';
+  'password-reset' | 'invitation' | 'mfa-reset' | 'mfa-reset-admin' | 'voicemail' | 'emergency';
 
 export interface RenderInput {
   readonly template: TemplateName;
@@ -23,6 +23,31 @@ export interface RenderInput {
   readonly about?: { readonly name: string; readonly email: string };
   /** Required for the `voicemail` template. */
   readonly voicemail?: VoicemailSummary;
+  /** Required for the `emergency` template. */
+  readonly emergency?: EmergencySummary;
+}
+
+/**
+ * An emergency call (S2-06, G-1), as the `emergency` template shows it: the number dialled, who
+ * dialled it and from where. Private-class data.
+ */
+export interface EmergencySummary {
+  readonly dialedNumber: string;
+  /** The calling extension's number; null when the caller was not an extension known here. */
+  readonly callingNumber: string | null;
+  readonly callingName: string | null;
+  readonly location: EmergencyLocation | null;
+  readonly at: Date;
+}
+
+export interface EmergencyLocation {
+  readonly label: string;
+  readonly addressLine1: string;
+  readonly addressLine2: string | null;
+  readonly city: string;
+  readonly state: string;
+  readonly postalCode: string;
+  readonly country: string;
 }
 
 /** How the recording relates to the email: it is attached, was not asked for, or was too big to attach. */
@@ -49,6 +74,7 @@ const SUBJECTS: Record<TemplateName, string> = {
   'mfa-reset': 'Your two-step verification was reset',
   'mfa-reset-admin': 'Two-step verification was reset for someone in your organization',
   voicemail: 'New voicemail',
+  emergency: 'Emergency call',
 };
 
 const TEMPLATE_DIR = new URL('./templates/', import.meta.url);
@@ -96,11 +122,11 @@ export async function renderEmail(input: RenderInput): Promise<RenderedEmail> {
   if (input.template === 'mfa-reset-admin' && input.about === undefined) {
     throw new Error('The mfa-reset-admin template needs the person it is about.');
   }
-  const voicemail = voicemailContext(input);
-  const subject = voicemail === undefined ? SUBJECTS[input.template] : voicemail.subject;
+  const specific = voicemailContext(input) ?? emergencyContext(input);
+  const subject = specific === undefined ? SUBJECTS[input.template] : specific.subject;
 
   const context = {
-    ...(voicemail === undefined ? {} : voicemail.fields),
+    ...(specific === undefined ? {} : specific.fields),
     title: subject,
     brandName: input.brand.displayName,
     primary,
@@ -195,6 +221,39 @@ function voicemailContext(
       duration: formatDuration(summary.durationMs),
       audioAttached: summary.audio === 'attached',
       audioTooLarge: summary.audio === 'too_large',
+    },
+  };
+}
+
+function emergencyContext(
+  input: RenderInput,
+): { subject: string; fields: Record<string, unknown> } | undefined {
+  if (input.template !== 'emergency') return undefined;
+  const call = input.emergency;
+  if (call === undefined) throw new Error('The emergency template needs the emergency call.');
+
+  const name = cleanCaller(call.callingName);
+  const number = cleanCaller(call.callingNumber);
+  const caller =
+    number === null ? 'an unknown extension' : name === null ? number : `${number} (${name})`;
+  const where = call.location;
+  return {
+    subject: `Emergency call: ${cleanCaller(call.dialedNumber) ?? 'an emergency number'} dialled from ${caller}`,
+    fields: {
+      dialedNumber: cleanCaller(call.dialedNumber),
+      caller,
+      at: formatReceivedAt(call.at),
+      hasLocation: where !== null,
+      locationLabel: where?.label ?? null,
+      addressLines:
+        where === null
+          ? []
+          : [
+              where.addressLine1,
+              where.addressLine2,
+              `${where.city}, ${where.state} ${where.postalCode}`,
+              where.country,
+            ].filter((line): line is string => line !== null && line.trim() !== ''),
     },
   };
 }

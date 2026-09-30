@@ -1,0 +1,25 @@
+{{#if brandName}}{{brandName}}
+
+{{/if}}EMERGENCY CALL Someone in your organization dialled an emergency number, and the call was
+sent to emergency services. This email lets people on site know. Dialled:
+{{dialedNumber}}
+From:
+{{caller}}
+At:
+{{at}}
+
+{{#if hasLocation}}Location on file:
+  {{locationLabel}}
+  {{#each addressLines}}{{this}}
+  {{/each}}{{else}}No location was found for this extension.
+{{/if}}
+Open live calls:
+{{link}}
+{{#if supportLine}}
+
+  {{supportLine}}
+{{/if}}
+{{#if legalFooter}}
+
+  {{legalFooter}}
+{{/if}}

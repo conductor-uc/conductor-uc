@@ -13,6 +13,7 @@ const REQUIRED = {
   ORG_SERVICE_URL: 'http://org-service:8080',
   IDENTITY_SERVICE_URL: 'http://identity-service:8080',
   VOICEMAIL_SERVICE_URL: 'http://voicemail-service:8080',
+  TRUNK_SERVICE_URL: 'http://trunk-service:8080',
   INTERNAL_SERVICE_TOKEN: 'token',
   SMTP_HOST: 'mail',
   PLATFORM_NOREPLY_ADDRESS: 'noreply@platform.test',
