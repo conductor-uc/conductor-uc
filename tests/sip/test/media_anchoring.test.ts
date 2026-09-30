@@ -26,7 +26,7 @@ const PERSON = 'sip-test-media-802';
 /** Each phone's RTP port, apart from its SIP port. */
 const MEDIA_PORT = ['-mp', '7000'];
 /** The edge pair's floating address facing the media nodes (compose's OPENSIPS_INTERNAL_VIP). */
-const INTERNAL_VIP = process.env['SIP_TEST_INTERNAL_VIP'] ?? '172.18.255.13';
+const INTERNAL_VIP = sipTestEnv().opensipsInternalVip;
 
 interface LiveLeg {
   readonly callUuid: string;

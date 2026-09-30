@@ -34,7 +34,7 @@ const UAS_401 = 'sip-test-recreq-uas-401';
  * The flag is kept in telephony-config's own copy (`recording_settings`, projected from
  * `recording.settings.updated`), so it holds while recording-service is down. This test **stops
  * the recording-service container** (`SIP_TEST_RECORDING_SERVICE_CONTAINER`, default
- * `conductor-uc-recording-service-1`) to make every recording decision unavailable, and always
+ * the project's `recording-service` container) to make every recording decision unavailable, and always
  * starts it again (and waits for `/readyz`) before moving on, even when an assertion fails.
  *
  * - With the flag on and recording-service up, a call no rule records is placed as usual: a

@@ -22,7 +22,7 @@ const execFileAsync = promisify(execFile);
 const skipReason = await sipInfraOrSkipReason();
 
 const CALL_CONTROL_URL = 'http://call-control:8080';
-const VIP = '172.18.255.10';
+const VIP = sipTestEnv().opensipsVip;
 const CALLER = 'sip-test-edge-801';
 const CALLER_AGAIN = 'sip-test-edge-801b';
 const PERSON = 'sip-test-edge-802';

@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
+  composeContainer,
   createSignInAdmin,
   dockerCurlJson,
   fsCli,
@@ -17,9 +18,9 @@ import {
   startUas,
   stopContainer,
   tenantAdminHeaders,
-  withSingleFsNode,
-  waitForTrunkRemoved,
   waitForProjected,
+  waitForTrunkRemoved,
+  withSingleFsNode,
   type SeedResult,
   type UasHandle,
 } from '../src/run-scenario.js';
@@ -36,7 +37,8 @@ const AGENT_CONTAINER = 'sip-test-monitor-agent';
 const CALLER_CONTAINER = 'sip-test-monitor-caller';
 const SUPERVISOR_PHONE = 'sip-test-monitor-302';
 const AGENT_LOGIN_FEATURE_CODE = '*45';
-const GATEWAY_CONTAINER = process.env['SIP_TEST_GATEWAY_CONTAINER'] ?? 'conductor-uc-api-gateway-1';
+const GATEWAY_CONTAINER =
+  process.env['SIP_TEST_GATEWAY_CONTAINER'] ?? composeContainer('api-gateway');
 const execFileAsync = promisify(execFile);
 
 /**

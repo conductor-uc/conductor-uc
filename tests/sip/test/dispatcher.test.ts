@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
+  composeProject,
   dispatcherStates,
   dockerCurlJson,
   fsCliOn,
@@ -46,8 +47,8 @@ async function sessionsSinceStartup(): Promise<Record<string, number>> {
     const status = await fsCliOn(container, 'status');
     const match = /(\d+) session\(s\) since startup/.exec(status);
     if (match === null) throw new Error(`no session count in ${container}'s status:\n${status}`);
-    // `conductor-uc-freeswitch-2-1` is node `freeswitch-2` (FS_NODES in docker-compose.yml).
-    const nodeId = container.replace(/^conductor-uc-/, '').replace(/-\d+$/, '');
+    // `{project}-freeswitch-2-1` is node `freeswitch-2` (FS_NODES in docker-compose.yml).
+    const nodeId = container.slice(`${composeProject()}-`.length).replace(/-\d+$/, '');
     counts[nodeId] = Number(match[1]);
   }
   return counts;

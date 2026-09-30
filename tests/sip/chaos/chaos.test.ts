@@ -8,6 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   activeOpensipsContainer,
   clearRegistration,
+  composeContainer,
   dispatcherStates,
   dockerCurlJson,
   internalServiceHeaders,
@@ -24,7 +25,7 @@ const skipReason = await sipInfraOrSkipReason();
 
 const CALL_CONTROL_URL = 'http://call-control:8080';
 const KEY_PREFIX = 'cuc:dev:';
-const VIP = '172.18.255.10';
+const VIP = sipTestEnv().opensipsVip;
 const RESULTS_DIR = path.resolve(new URL('..', import.meta.url).pathname, 'chaos-results');
 /** How long each failure is watched once caused. */
 const WATCH_MS = 40_000;
@@ -184,7 +185,7 @@ describe.skipIf(skipReason !== undefined)('S4-08 chaos under call load', () => {
   }
 
   async function redisGet(key: string): Promise<string> {
-    return docker('exec', 'conductor-uc-redis-1-1', 'redis-cli', '--raw', 'GET', key).catch(
+    return docker('exec', composeContainer('redis-1'), 'redis-cli', '--raw', 'GET', key).catch(
       () => '',
     );
   }
@@ -195,8 +196,8 @@ describe.skipIf(skipReason !== undefined)('S4-08 chaos under call load', () => {
       detectionTarget: 10,
       outageTarget: 10,
       kill: async () => {
-        await docker('kill', 'conductor-uc-freeswitch-2-1');
-        return 'conductor-uc-freeswitch-2-1';
+        await docker('kill', composeContainer('freeswitch-2'));
+        return composeContainer('freeswitch-2');
       },
       // call-control has declared it down, and OpenSIPs no longer sends it calls.
       detected: async () =>
@@ -241,11 +242,11 @@ describe.skipIf(skipReason !== undefined)('S4-08 chaos under call load', () => {
       detectionTarget: 10,
       outageTarget: 10,
       kill: async () => {
-        await docker('kill', 'conductor-uc-telephony-config-1');
-        return 'conductor-uc-telephony-config-1';
+        await docker('kill', composeContainer('telephony-config'));
+        return composeContainer('telephony-config');
       },
       // Nothing to fail over: the other replica answers the same name.
-      detected: async () => healthy('conductor-uc-telephony-config-2-1'),
+      detected: async () => healthy(composeContainer('telephony-config-2')),
       restore: restart,
     });
   }, 400_000);
@@ -258,7 +259,10 @@ describe.skipIf(skipReason !== undefined)('S4-08 chaos under call load', () => {
       kill: async () => {
         // The replica owning the first node (S4-03).
         const owner = await redisGet(`${KEY_PREFIX}nodeowner:freeswitch`);
-        for (const container of ['conductor-uc-call-control-1', 'conductor-uc-call-control-2-1']) {
+        for (const container of [
+          composeContainer('call-control'),
+          composeContainer('call-control-2'),
+        ]) {
           const host = await docker('inspect', '-f', '{{.Config.Hostname}}', container);
           if (owner.startsWith(`${host}:`)) {
             await docker('kill', container);
@@ -280,7 +284,11 @@ describe.skipIf(skipReason !== undefined)('S4-08 chaos under call load', () => {
   }, 400_000);
 
   it('the Redis primary dies', async () => {
-    const members = ['conductor-uc-redis-1-1', 'conductor-uc-redis-2-1', 'conductor-uc-redis-3-1'];
+    const members = [
+      composeContainer('redis-1'),
+      composeContainer('redis-2'),
+      composeContainer('redis-3'),
+    ];
     const role = (container: string) => docker('exec', container, 'redis-cli', 'role');
     await run({
       name: 'Redis primary',
@@ -304,7 +312,7 @@ describe.skipIf(skipReason !== undefined)('S4-08 chaos under call load', () => {
         );
         const balanced = await docker(
           'exec',
-          'conductor-uc-redis-1',
+          composeContainer('redis'),
           'redis-cli',
           '-h',
           '127.0.0.1',
@@ -323,7 +331,7 @@ describe.skipIf(skipReason !== undefined)('S4-08 chaos under call load', () => {
     const writer = () =>
       docker(
         'exec',
-        'conductor-uc-mariadb-1',
+        composeContainer('mariadb'),
         'mariadb',
         '--defaults-extra-file=/tmp/galera-check.cnf',
         '-h',
@@ -338,12 +346,12 @@ describe.skipIf(skipReason !== undefined)('S4-08 chaos under call load', () => {
       outageTarget: 15,
       kill: async () => {
         const member = await writer();
-        await docker('kill', `conductor-uc-${member}-1`);
-        return `conductor-uc-${member}-1`;
+        await docker('kill', composeContainer(member));
+        return composeContainer(member);
       },
       detected: async (killed) => {
         const member = await writer();
-        return member !== '' && killed !== `conductor-uc-${member}-1`;
+        return member !== '' && killed !== composeContainer(member);
       },
       restore: restart,
     });

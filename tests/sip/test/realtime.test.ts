@@ -6,6 +6,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
+  composeContainer,
   createSignInAdmin,
   dockerCurlJson,
   seedFixtures,
@@ -14,8 +15,8 @@ import {
   startUas,
   stopContainer,
   tenantAdminHeaders,
-  withSingleFsNode,
   waitForTrunkRemoved,
+  withSingleFsNode,
   type SeedResult,
 } from '../src/run-scenario.js';
 
@@ -26,7 +27,8 @@ const GATEWAY_URL = 'http://api-gateway:8080';
 const PBX_CONFIG_SERVICE_URL = 'http://pbx-config-service:8080';
 const TRUNK_SERVICE_URL = 'http://trunk-service:8080';
 const RECORDING_SERVICE_URL = 'http://recording-service:8080';
-const GATEWAY_CONTAINER = process.env['SIP_TEST_GATEWAY_CONTAINER'] ?? 'conductor-uc-api-gateway-1';
+const GATEWAY_CONTAINER =
+  process.env['SIP_TEST_GATEWAY_CONTAINER'] ?? composeContainer('api-gateway');
 const CALLER_CONTAINER = 'sip-test-rt-caller';
 const UAS_401 = 'sip-test-rt-uas-401';
 
