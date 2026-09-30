@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
+  composeContainer,
   dispatcherStates,
   fsCliOn,
   opensipsMi,
@@ -25,9 +26,9 @@ const skipReason = await sipInfraOrSkipReason();
 const PBX_CONFIG_SERVICE_URL = 'http://pbx-config-service:8080';
 const CDR_SERVICE_URL = 'http://cdr-service:8080';
 const FIRST_URI = 'sip:freeswitch:5060';
-const FIRST_CONTAINER = 'conductor-uc-freeswitch-1';
+const FIRST_CONTAINER = composeContainer('freeswitch');
 const OWNER_URI = 'sip:freeswitch-2:5060';
-const OWNER_CONTAINER = 'conductor-uc-freeswitch-2-1';
+const OWNER_CONTAINER = composeContainer('freeswitch-2');
 const CALLERS = ['sip-test-affinity-1', 'sip-test-affinity-2', 'sip-test-affinity-3'] as const;
 const FORGER = 'sip-test-affinity-forged';
 const QUEUE_CALLERS = [

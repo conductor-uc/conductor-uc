@@ -231,6 +231,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # This runner can be the machine a developer's own stack is on. Under
+      # the compose file's fixed project name the two were one project, and
+      # this job's `down -v` removed the dev stack and its volumes. ci.env
+      # gives this job's stack its own project, subnet and host ports; loaded
+      # here, compose and the suite both see it in every later step.
+      - name: Use CI's own compose project
+        run: grep -vE '^[[:space:]]*(#|$)' infra/compose/ci.env >> "$GITHUB_ENV"
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -277,11 +285,10 @@ jobs:
           # other and got the previous test's decision.
           RECORDING_POLICY_CACHE_TTL_MS: '1000'
         run: |
-          # Clean slate first. This compose project's name is fixed
-          # (`name: conductor-uc`), so every SIP job on this
-          # self-hosted runner shares one project, one network and one set
-          # of container names. The runner serializes jobs, but only just:
-          # observed live on 2026-09-22, one job started **one second**
+          # Clean slate first. Every SIP job on this self-hosted runner
+          # shares one compose project (ci.env's `conductor-uc-ci`), one
+          # network and one set of container names. The runner serializes
+          # jobs, but only just: observed live on 2026-09-22, one job started **one second**
           # after the previous job's `docker compose down -v` step
           # finished, and its whole run then failed with
           # `getaddrinfo EAI_AGAIN mariadb` — every test file, including
@@ -292,7 +299,7 @@ jobs:
           # `down -v` here is idempotent (a no-op when nothing is left) and
           # synchronous, so `up` below always starts from a settled state
           # rather than racing whatever the previous job left mid-removal.
-          docker rm -f sip-test-curl >/dev/null 2>&1 || true
+          docker rm -f "$SIP_TEST_CURL_CONTAINER" >/dev/null 2>&1 || true
           docker compose down -v --remove-orphans
           docker compose build
           docker compose up -d --wait --wait-timeout 180
@@ -326,7 +333,7 @@ jobs:
             docker exec "$container" fs_cli -H 127.0.0.1 -P 8021 \
               -p "${FS_EVENT_SOCKET_PASSWORD:-dev-event-socket-password}" -x "$1" || true
           }
-          for container in conductor-uc-freeswitch-1 conductor-uc-freeswitch-2-1; do
+          for container in "${COMPOSE_PROJECT_NAME}-freeswitch-1" "${COMPOSE_PROJECT_NAME}-freeswitch-2-1"; do
             echo "=== $container ==="
             echo '--- channels still up (a stuck call shows here) ---'
             fs "$container" 'show channels'
@@ -348,7 +355,7 @@ jobs:
         # removed by the suite itself, but not if the run was killed, and
         # while it is attached `down` cannot remove the network.
         run: |
-          docker rm -f sip-test-curl >/dev/null 2>&1 || true
+          docker rm -f "$SIP_TEST_CURL_CONTAINER" >/dev/null 2>&1 || true
           docker compose down -v
 
   # S4-08: the chaos suite. The stack on the highly available data tier
@@ -365,6 +372,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # This runner can be the machine a developer's own stack is on. Under
+      # the compose file's fixed project name the two were one project, and
+      # this job's `down -v` removed the dev stack and its volumes. ci.env
+      # gives this job's stack its own project, subnet and host ports; loaded
+      # here, compose and the suite both see it in every later step.
+      - name: Use CI's own compose project
+        run: grep -vE '^[[:space:]]*(#|$)' infra/compose/ci.env >> "$GITHUB_ENV"
+
       - uses: pnpm/action-setup@v4
 
       - uses: actions/setup-node@v4
@@ -380,7 +395,7 @@ jobs:
       - name: Build and start the chaos stack
         working-directory: infra/compose
         run: |
-          docker rm -f sip-test-curl >/dev/null 2>&1 || true
+          docker rm -f "$SIP_TEST_CURL_CONTAINER" >/dev/null 2>&1 || true
           docker compose -f docker-compose.yml -f docker-compose.chaos.yml down -v --remove-orphans
           docker compose -f docker-compose.yml -f docker-compose.chaos.yml build
           docker compose -f docker-compose.yml -f docker-compose.chaos.yml up -d --wait --wait-timeout 400
@@ -391,7 +406,7 @@ jobs:
           REQUIRE_SIP_TESTS: '1'
           # The test helpers that read a schema directly use a Galera member,
           # not the load balancer the everyday `mariadb` name now points at.
-          SIP_TEST_MARIADB_CONTAINER: conductor-uc-galera-2-1
+          SIP_TEST_MARIADB_CONTAINER: ${{ env.COMPOSE_PROJECT_NAME }}-galera-2-1
         run: pnpm chaos --reporter=verbose
 
       - name: Keep the measurements
@@ -411,7 +426,7 @@ jobs:
         if: always()
         working-directory: infra/compose
         run: |
-          docker rm -f sip-test-curl chaos-load-caller chaos-load-callee >/dev/null 2>&1 || true
+          docker rm -f "$SIP_TEST_CURL_CONTAINER" chaos-load-caller chaos-load-callee >/dev/null 2>&1 || true
           docker compose -f docker-compose.yml -f docker-compose.chaos.yml down -v --remove-orphans
 
   # The Flutter console (D-001): not a pnpm workspace member, so it has its own

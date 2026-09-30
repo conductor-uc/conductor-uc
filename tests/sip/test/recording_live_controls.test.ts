@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   clearRegistration,
+  composeContainer,
   createSignInAdmin,
   dockerCurlJson,
   fsCliAll,
@@ -26,7 +27,8 @@ const GATEWAY_URL = 'http://api-gateway:8080';
 const PBX_CONFIG_SERVICE_URL = 'http://pbx-config-service:8080';
 const RECORDING_SERVICE_URL = 'http://recording-service:8080';
 const IDENTITY_SERVICE_URL = 'http://identity-service:8080';
-const GATEWAY_CONTAINER = process.env['SIP_TEST_GATEWAY_CONTAINER'] ?? 'conductor-uc-api-gateway-1';
+const GATEWAY_CONTAINER =
+  process.env['SIP_TEST_GATEWAY_CONTAINER'] ?? composeContainer('api-gateway');
 const CALLER_CONTAINER = 'sip-test-livectl-caller';
 const UAS_401 = 'sip-test-livectl-uas-401';
 
