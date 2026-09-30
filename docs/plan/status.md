@@ -12,14 +12,14 @@ Evidence-based status of [implementation-plan.md](implementation-plan.md), judge
 | S1 Orgs, identity, single-node (16) | 16 | 0 | 0 |
 | S2 Core telephony (21) | 18 | 3 | 0 |
 | S3 Console MVP (11) | 11 | 0 | 0 |
-| S4 HA and scale (13) | 12 | 0 | 1 |
+| S4 HA and scale (13) | 13 | 0 | 0 |
 | S5 Recording, voicemail features, monitoring (16) | 15 | 0 | 1 |
 | S6 Full UC (7) | 0 | 0 | 7 |
 | S7 Extended features (7) | 0 | 0 | 7 |
 | S8 Device provisioning (4) | 0 | 3 | 1 |
 | S9 Console usability and localization (21) | 21 | 0 | 0 |
 | Release readiness (7) | 2 | 3 | 2 |
-| **Total (133)** | **105** | **9** | **19** |
+| **Total (133)** | **106** | **9** | **18** |
 
 Milestones: M1 (S1) reached. M2 (S2 + S3) reached in code, with the caveats below. M3 (S4 + S5) in progress: Stage 5 is done except transcription (S5-06), and HA is mostly not started (S4: four partial, seven not started). M4 not started.
 
@@ -115,7 +115,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 | S4-06 | Done | Two edges (`opensips`, `opensips-2`) behind a floating address moved by keepalived: `clusterer` over `bin`, the sharing tag `vip/1` on the address holder (trunk registration with `cluster_shtag`, dispatcher probing `by-shtag`, NAT pings, dialog actions), `usrloc` full sharing, dialog replication; telephony-config reloads both edges and asks the active one. Compose pins its subnet (172.18.0.0/16) for the fixed addresses. Confirmed live both ways: the call kept, the new edge active in under 4 s, a phone registered only with the dead edge reached, registrations copied back to the restarted edge. Caveats: the operations console shows the active edge only; exactly two edges |
 | S4-07 | Done | `infra/data-ha`: Galera (3, one writer through HAProxy, checked Synced), Redis with Sentinel (HAProxy follows `role:master`; a returning primary rejoins as a replica), NATS cluster (3) with `NATS_STREAM_REPLICAS` in every service; identity's role tables get primary keys (migration 010). `tests/data-ha` fails each over live with writes going on (MariaDB 6.1–6.4 s, Redis 8.2 s, NATS 5.7–6.7 s, nothing acknowledged lost) and runs every service's migrations on Galera. Caveats: one HAProxy (the keepalived pair and the data servers' manifests are S4-11); the everyday dev stack keeps single servers |
 | S4-08 | Done | `tests/sip/chaos` (`pnpm chaos`), nightly CI job `chaos` after `sip`: on `docker-compose.chaos.yml` (the stack on S4-07's data tier, a second telephony-config), kills a media node, the active edge, a telephony-config, a call-control, the Redis primary and the MariaDB writer in turn under a call a second, and records failover and outage against 04 §4 / 10 §5 targets (`chaos-results/`, job summary). First run: every target met (failovers 3.4–8.6 s; new calls failing at most 4 s). Caveat: a run on the self-hosted runner only; no SIPp load beyond one call a second |
-| S4-09 | Not started | no capacity benchmarks or sizing guide (`telephony-config/src/bench.ts` is unrelated) |
+| S4-09 | Done | `tests/sip/bench` (`pnpm bench`): four workloads of 30–40 calls with audio both ways, the CPU of every media node and the active edge sampled while all are up, and the legs on the nodes checked by codec. Three runs on the development machine (i5-9400): a media vCPU at 80% carries 145–161 G.711 calls, 118–127 recorded, 43–46 transcoded Opus↔G.711, 126–127 conference participants; an edge vCPU 111–200 two-leg calls. Published with their limits in [`docs/operations/sizing.md`](../operations/sizing.md): not run to failure, one machine, userspace media relay. Found on the way: phone INVITEs were never authenticated (G-129, fixed), and a node never transcodes a call between phones because the called leg is offered the caller's codec alone (G-134, open). |
 | S4-10 | Done | O-7 decided (owner, 2026-09-29): RTPengine on the edge pair. Each edge runs it beside OpenSIPs (external side on the floating address, internal side on a private floating address); OpenSIPs anchors every dialog between a media node and a phone or carrier, including re-INVITEs, late offers and trunk failover. The relays follow each other's calls through Redis; keepalived makes the new active one own them. Confirmed live: phones see only the edge in SDP, the media nodes only the private floating address, the audio is relayed and cleaned up, and survives an edge failover mid-call. Caveats: userspace relay (no kernel module in a container); no SRTP termination |
 | S4-11 | Done | `infra/deploy`: a Compose file per role (edge, app, data, media), a shared `platform.env` and a per-server `.env`, the released images; the release workflow (O-5: every image to ghcr.io on a version tag, the console in the gateway image). Rehearsed end to end on eight Docker-in-Docker servers (`rehearse.sh`, `tests/sip/rehearsal`): a call through the edge's floating address, then a whole edge, app and data server killed in turn, each failover in 2.4–5.8 s and the next call succeeding at once. Fixed on the way: Redis clients waited forever on a vanished connection (`socketTimeout`), a hanging readiness check hung `/readyz` (each check now has 3 s), app servers' services now use their own balancer, and the balancers redispatch a failed connection. Caveat: rehearsed, not yet run on real servers |
 | S4-12 | Done | G-124: `platform.observe`/`platform.operate`; `/statusz` on every service; `GET /v1/platform/overview`; audited drain, return and weight routes; the console's Operations section (Overview, Services, Media nodes, Signalling, Events, Data stores; History with S4-13). Confirmed live |
@@ -244,7 +244,7 @@ Services with an empty `src` (verified, no files): `analytics-service`, `chat-se
 
 ## Ten biggest gaps
 
-1. HA is built and measured (S4-02 to S4-08) but not load-tested: capacity per node is unmeasured (S4-09), and the chaos suite runs at one call a second.
+1. HA is built and measured (S4-02 to S4-08) but not load-tested: S4-09 measured what a call costs at 30–40 calls and nothing has been run to the point of failure, and the chaos suite runs at one call a second.
 2. Production deployment is rehearsed, not run: the role files (S4-11, `infra/deploy`) pass an end-to-end rehearsal on simulated servers and the release workflow (O-5) builds and publishes every image, but no real servers have run them, and the images stay private until O-6's licence steps are done.
 3. Release readiness: no security review or penetration test; backup/restore and operations are documented (`docs/operations/operations.md`) but untested, with no failover drills; O-6 still needs a contributor licence agreement and counsel's confirmation.
 4. Queues need a hand-added tier: tier assignments are not loaded into `mod_callcenter` on a running node, so distribution to agents depends on it (G-47 (a), S2-13).

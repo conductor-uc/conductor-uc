@@ -12,7 +12,7 @@ What an all-in-one server cannot do:
 
 - **No redundancy.** If the server stops, calls stop. Plan for restore time ([operations §4](operations.md#4-backups-and-restore)).
 - **One FreeSWITCH node**, so one server's call capacity. That is also the configuration in which queues, parking and conferences work reliably ([components §6](components.md#6-running-more-than-one-copy)).
-- **Capacity is not measured.** Capacity benchmarks are plan task S4-09 and have not been run. A starting point for a pilot of a few hundred extensions and a few dozen simultaneous calls is 4 vCPU, 8 GB RAM and 60 GB SSD, with recordings in hosted object storage. Watch CPU during busy hours, especially with recording and conferences, and grow from there.
+- **Capacity is measured per call, not for this layout.** [Sizing](sizing.md) gives the CPU a call costs the media server and the edge; here both share one server with everything else. A starting point for a pilot of a few hundred extensions and a few dozen simultaneous calls is 4 vCPU, 8 GB RAM and 60 GB SSD, with recordings in hosted object storage. Watch CPU during busy hours, especially with recording and conferences, and grow from there.
 
 ## 2. Server requirements
 
